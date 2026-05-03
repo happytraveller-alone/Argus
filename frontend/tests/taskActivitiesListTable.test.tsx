@@ -43,7 +43,12 @@ test("TaskActivitiesListTable mirrors project-table header and body chrome", () 
 		source,
 		/const TASK_ACTIVITIES_TABLE_BODY_CELL_CLASSNAME =\s*"border-b-2 border-border\/95 text-center"/,
 	);
-	assert.equal(source.match(/meta: createTaskActivitiesTableMeta/g)?.length, 7);
+	assert.equal(source.match(/meta: createTaskActivitiesTableMeta/g)?.length, 8);
+	assert.match(source, /showEngineColumn/);
+	assert.match(source, /id: "engine"/);
+	assert.match(source, /header: "引擎"/);
+	assert.match(source, /accessorKey: "projectName"/);
+	assert.match(source, /header: "项目"/);
 });
 
 test("TaskActivitiesListTable aligns project, duration and defect body text with status badges", () => {
@@ -70,16 +75,19 @@ test("TaskActivitiesListTable aligns project, duration and defect body text with
 test("TaskActivitiesListTable uses compact table width and column minimums", () => {
 	const source = readFileSync(taskActivitiesListTablePath, "utf8");
 
-	assert.match(source, /tableClassName="min-w-\[820px\]"/);
+	assert.match(source, /tableClassName="min-w-\[760px\]"/);
 	assert.match(source, /fillContainerWidth/);
 	assert.match(source, /width: 64/);
-	assert.match(source, /minWidth: 132/);
-	assert.match(source, /width: 128/);
-	assert.match(source, /maxWidth: 136/);
-	assert.match(source, /minWidth: 192/);
-	assert.match(source, /maxWidth: 240/);
+	assert.match(source, /width: 92/);
+	assert.match(source, /minWidth: 168/);
+	assert.match(source, /width: 116/);
+	assert.match(source, /maxWidth: 124/);
+	assert.match(source, /width: 80/);
+	assert.match(source, /minWidth: 116/);
+	assert.match(source, /minWidth: 164/);
+	assert.match(source, /maxWidth: 212/);
 	assert.match(source, /align: "center"/);
-	assert.match(source, /width: 260/);
+	assert.match(source, /width: 248/);
 	assert.doesNotMatch(source, /tableClassName="min-w-\[880px\]"/);
 });
 
@@ -90,7 +98,7 @@ test("TaskActivitiesListTable locks ten-row pagination and scrollable task table
 	assert.match(source, /pageSizeOptions: \[10, 20, 50\]/);
 	assert.match(source, /className="flex h-full min-h-0 flex-col"/);
 	assert.match(source, /containerClassName="min-h-0 flex-1 overflow-auto"/);
-	assert.match(source, /tableClassName="min-w-\[820px\]"/);
+	assert.match(source, /tableClassName="min-w-\[760px\]"/);
 
 	const tableModule = await import(
 		"../src/features/tasks/components/TaskActivitiesListTable.tsx"
@@ -124,7 +132,7 @@ test("TaskActivitiesListTable locks ten-row pagination and scrollable task table
 	assert.match(markup, /Paged Task 10/);
 	assert.doesNotMatch(markup, /Paged Task 11/);
 	assert.doesNotMatch(markup, /Paged Task 12/);
-	assert.match(markup, /min-w-\[820px\]/);
+	assert.match(markup, /min-w-\[760px\]/);
 });
 
 test("TaskActivitiesListTable renders severity summaries for agent tasks and keeps static summaries", async () => {
@@ -143,6 +151,7 @@ test("TaskActivitiesListTable renders severity summaries for agent tasks and kee
 						projectName: "Demo Intelligent",
 						kind: "intelligent_audit",
 						sourceMode: "intelligent",
+						engineLabel: null,
 						status: "completed",
 						agentFindingStats: {
 							critical: 1,
@@ -161,6 +170,7 @@ test("TaskActivitiesListTable renders severity summaries for agent tasks and kee
 						projectName: "Demo Static",
 						kind: "rule_scan",
 						sourceMode: "static",
+						engineLabel: "Opengrep",
 						status: "completed",
 						staticFindingStats: {
 							critical: 0,
@@ -178,6 +188,7 @@ test("TaskActivitiesListTable renders severity summaries for agent tasks and kee
 						projectName: "Zero Static",
 						kind: "rule_scan",
 						sourceMode: "static",
+						engineLabel: "CodeQL",
 						status: "completed",
 						staticFindingStats: {
 							critical: 0,
@@ -195,6 +206,7 @@ test("TaskActivitiesListTable renders severity summaries for agent tasks and kee
 						projectName: "Demo Agent",
 						kind: "intelligent_audit",
 						sourceMode: "intelligent",
+						engineLabel: null,
 						status: "running",
 						createdAt: "2026-03-13T12:00:00.000Z",
 						startedAt: "2026-03-13T12:01:00.000Z",
@@ -204,10 +216,14 @@ test("TaskActivitiesListTable renders severity summaries for agent tasks and kee
 				],
 				loading: false,
 				nowMs: Date.parse("2026-03-13T12:05:00.000Z"),
+				showEngineColumn: true,
 			}),
 		),
 	);
 
+	assert.match(markup, /<span class="whitespace-nowrap">引擎<\/span>/);
+	assert.match(markup, /Opengrep/);
+	assert.match(markup, /CodeQL/);
 	assert.match(markup, /严重 1 \/ 高危 1 \/ 中危 1 \/ 低危 1/);
 	assert.match(markup, /高危 2 \/ 中危 3 \/ 低危 5/);
 	assert.doesNotMatch(markup, /严重 0/);
@@ -215,9 +231,10 @@ test("TaskActivitiesListTable renders severity summaries for agent tasks and kee
 	assert.doesNotMatch(markup, /中危 0/);
 	assert.doesNotMatch(markup, /低危 0/);
 	assert.match(markup, /style="width:100%;min-width:\d+px"/);
-	assert.match(markup, /style="width:136px;min-width:136px;max-width:136px"/);
-	assert.match(markup, /style="width:240px;min-width:240px;max-width:240px"/);
+	assert.match(markup, /style="width:124px;min-width:124px;max-width:124px"/);
+	assert.match(markup, /style="width:212px;min-width:212px;max-width:212px"/);
 	assert.match(markup, /style="width:152px;min-width:152px"/);
+	assert.match(markup, /style="width:92px;min-width:92px"/);
 	assert.match(markup, /data-align="center"/);
 	assert.match(markup, /border-b-2 border-border\/95 bg-muted\/75 text-center/);
 	assert.match(markup, /class="text-sm font-medium text-foreground"/);

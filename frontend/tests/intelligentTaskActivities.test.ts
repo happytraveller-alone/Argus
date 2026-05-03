@@ -14,6 +14,7 @@ import type {
 const baseRecord: IntelligentTaskRecord = {
 	taskId: "tsk-001",
 	projectId: "proj-x",
+	projectName: "Backend Project",
 	status: "pending",
 	createdAt: "2026-05-03T00:00:00Z",
 	llmModel: "claude-opus",
@@ -23,8 +24,6 @@ const baseRecord: IntelligentTaskRecord = {
 	reportSummary: "",
 	findings: [],
 };
-
-const resolve = (id: string) => `proj-${id}`;
 
 test("mapIntelligentStatus is identity for all 5 statuses", () => {
 	const all: IntelligentTaskStatus[] = [
@@ -36,19 +35,19 @@ test("mapIntelligentStatus is identity for all 5 statuses", () => {
 	];
 	for (const status of all) {
 		assert.equal(mapIntelligentStatus(status), status);
-		const item = toIntelligentTaskActivity({ ...baseRecord, status }, resolve);
+		const item = toIntelligentTaskActivity({ ...baseRecord, status });
 		assert.equal(item.status, status);
 	}
 });
 
 test("toIntelligentTaskActivity preserves kind and sourceMode invariants", () => {
-	const item = toIntelligentTaskActivity(baseRecord, resolve);
+	const item = toIntelligentTaskActivity(baseRecord);
 	assert.equal(item.kind, "intelligent_audit");
 	assert.equal(item.sourceMode, "intelligent");
 });
 
 test("toIntelligentTaskActivity sets cancelTarget.mode === 'intelligent'", () => {
-	const item = toIntelligentTaskActivity(baseRecord, resolve);
+	const item = toIntelligentTaskActivity(baseRecord);
 	assert.deepEqual(item.cancelTarget, {
 		mode: "intelligent",
 		taskId: "tsk-001",
@@ -56,7 +55,7 @@ test("toIntelligentTaskActivity sets cancelTarget.mode === 'intelligent'", () =>
 });
 
 test("toIntelligentTaskActivity uses /agent-audit/{taskId} route shape", () => {
-	const item = toIntelligentTaskActivity(baseRecord, resolve);
+	const item = toIntelligentTaskActivity(baseRecord);
 	assert.equal(item.route, "/agent-audit/tsk-001");
 });
 
@@ -69,7 +68,7 @@ test("toIntelligentTaskActivity buckets severities and ignores unknown", () => {
 		{ id: "f5", severity: "info", summary: "", evidence: "" },
 		{ id: "f6", severity: "MEDIUM", summary: "", evidence: "" },
 	];
-	const item = toIntelligentTaskActivity({ ...baseRecord, findings }, resolve);
+	const item = toIntelligentTaskActivity({ ...baseRecord, findings });
 	assert.deepEqual(item.agentFindingStats, {
 		critical: 1,
 		high: 1,
@@ -80,22 +79,32 @@ test("toIntelligentTaskActivity buckets severities and ignores unknown", () => {
 });
 
 test("toIntelligentTaskActivity passes optional fields through with null fallback", () => {
-	const item = toIntelligentTaskActivity(baseRecord, resolve);
+	const item = toIntelligentTaskActivity(baseRecord);
 	assert.equal(item.startedAt, null);
 	assert.equal(item.completedAt, null);
 	assert.equal(item.durationMs, null);
-	assert.equal(item.projectName, "proj-proj-x");
+	assert.equal(item.projectName, "Backend Project");
 
 	const richer = toIntelligentTaskActivity(
 		{
 			...baseRecord,
+			projectName: "Backend Rich Project",
 			startedAt: "2026-05-03T00:01:00Z",
 			completedAt: "2026-05-03T00:02:00Z",
 			durationMs: 60000,
 		},
-		resolve,
 	);
+	assert.equal(richer.projectName, "Backend Rich Project");
 	assert.equal(richer.startedAt, "2026-05-03T00:01:00Z");
 	assert.equal(richer.completedAt, "2026-05-03T00:02:00Z");
 	assert.equal(richer.durationMs, 60000);
+});
+
+test("toIntelligentTaskActivity does not fall back to displaying project id", () => {
+	const item = toIntelligentTaskActivity({
+		...baseRecord,
+		projectId: "raw-project-id",
+		projectName: null,
+	});
+	assert.equal(item.projectName, "-");
 });

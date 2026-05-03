@@ -50,14 +50,14 @@ impl CubeSandboxConfig {
         Ok(defaults.merge_json(stored.other_config_json.get("cubeSandbox")))
     }
 
+    /// Validate the runtime CubeSandbox configuration excluding `template_id`.
+    ///
+    /// `template_id` is intentionally not enforced here: when empty, the backend
+    /// auto-provisions a template via the provisioner state machine. Callers
+    /// that need a concrete template id must resolve it through the provisioner.
     pub fn validate_for_execution(&self) -> Result<()> {
         if !self.enabled {
             bail!("CubeSandbox 未启用：请前往「系统配置 -> CubeSandbox」开启后再运行 CodeQL 扫描");
-        }
-        if self.template_id.trim().is_empty() {
-            bail!(
-                "CubeSandbox 模板 ID 未配置：请检查后端环境变量 CUBESANDBOX_TEMPLATE_ID"
-            );
         }
         if self.api_base_url.trim().is_empty() {
             bail!("CubeSandbox apiBaseUrl 未配置：请在「系统配置 -> CubeSandbox -> API Base URL」填写完整 http(s) 地址");

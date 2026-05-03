@@ -115,3 +115,21 @@ test("StaticAnalysis uses the CodeQL-only 6:4 split for first-run task detail", 
   assert.match(source, /showEngineColumn=\{!isCodeqlOnlyDetail\}/);
   assert.match(source, /lg:h-\[calc\(100vh-11rem\)\]/);
 });
+
+test("StaticAnalysis and CodeqlScanDetail read project names directly from backend task payloads", async () => {
+  const staticSource = await readFile(
+    new URL("../src/pages/StaticAnalysis.tsx", import.meta.url),
+    "utf8",
+  );
+  const codeqlSource = await readFile(
+    new URL("../src/pages/CodeqlScanDetail.tsx", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(staticSource, /opengrepTask\?\.project_name \|\| codeqlTask\?\.project_name/);
+  assert.match(codeqlSource, /codeqlTask\?\.project_name/);
+  assert.doesNotMatch(staticSource, /getProjectById/);
+  assert.doesNotMatch(codeqlSource, /getProjectById/);
+  assert.doesNotMatch(staticSource, /resolveStaticAnalysisProjectNameFallback/);
+  assert.doesNotMatch(codeqlSource, /resolveStaticAnalysisProjectNameFallback/);
+});

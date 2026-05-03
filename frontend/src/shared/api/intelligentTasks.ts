@@ -29,6 +29,7 @@ export interface IntelligentTaskEventLogEntry {
 export interface IntelligentTaskRecord {
 	taskId: string;
 	projectId: string;
+	projectName?: string | null;
 	status: IntelligentTaskStatus;
 	createdAt: string;
 	startedAt?: string;

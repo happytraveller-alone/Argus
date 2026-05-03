@@ -22,6 +22,8 @@ pub struct StaticTaskRecord {
     pub id: String,
     pub engine: String,
     pub project_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub project_name: Option<String>,
     pub name: String,
     pub status: String,
     pub target_path: String,

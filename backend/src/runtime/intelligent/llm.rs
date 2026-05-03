@@ -307,10 +307,7 @@ mod tests {
     fn build_endpoint_url_preserves_versioned_path_with_trailing_slash() {
         let base = Url::parse("https://gateway.example/v1/").unwrap();
         let url = build_endpoint_url(&base, "chat/completions").unwrap();
-        assert_eq!(
-            url.as_str(),
-            "https://gateway.example/v1/chat/completions",
-        );
+        assert_eq!(url.as_str(), "https://gateway.example/v1/chat/completions",);
     }
 
     #[test]

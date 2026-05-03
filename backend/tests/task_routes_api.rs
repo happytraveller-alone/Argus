@@ -627,6 +627,84 @@ where
 }
 
 #[tokio::test]
+async fn static_task_api_binds_project_name_from_backend_project_record() {
+    let config = isolated_test_config("static-project-name-binding");
+    let state = AppState::from_config(config)
+        .await
+        .expect("state should build");
+    let app = build_router(state.clone());
+    let project_id = create_project_with_name(&app, "Backend Static Project").await;
+
+    let mut snapshot = task_state::load_snapshot(&state)
+        .await
+        .expect("snapshot should load");
+    snapshot.static_tasks.insert(
+        "static-project-name-binding".to_string(),
+        task_state::StaticTaskRecord {
+            id: "static-project-name-binding".to_string(),
+            engine: "opengrep".to_string(),
+            project_id: project_id.clone(),
+            project_name: None,
+            name: "static project name binding".to_string(),
+            status: "completed".to_string(),
+            target_path: ".".to_string(),
+            created_at: "2026-05-03T00:00:00Z".to_string(),
+            extra: json!({}),
+            ..Default::default()
+        },
+    );
+    task_state::save_snapshot(&state, &snapshot)
+        .await
+        .expect("snapshot should save");
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::GET)
+                .uri("/api/v1/static-tasks/tasks/static-project-name-binding")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let payload: Value =
+        serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
+    assert_eq!(payload["project_id"].as_str(), Some(project_id.as_str()));
+    assert_eq!(
+        payload["project_name"].as_str(),
+        Some("Backend Static Project")
+    );
+
+    let list_response = app
+        .oneshot(
+            Request::builder()
+                .method(Method::GET)
+                .uri("/api/v1/static-tasks/tasks?limit=10")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(list_response.status(), StatusCode::OK);
+    let list_payload: Value = serde_json::from_slice(
+        &to_bytes(list_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        list_payload
+            .as_array()
+            .unwrap()
+            .first()
+            .and_then(|item| item["project_name"].as_str()),
+        Some("Backend Static Project")
+    );
+}
+
+#[tokio::test]
 async fn codeql_compile_sandbox_persists_plan_to_postgres_when_configured() {
     let Some(mut config) = require_db_test_config("codeql-cpp-compile-sandbox-db") else {
         return;

@@ -185,6 +185,7 @@ export default function TaskManagementStatic() {
 					onDeleteActivity={handleDeleteActivity}
 					cancellingActivityId={cancellingActivityId}
 					deletingActivityId={deletingActivityId}
+					showEngineColumn
 				/>
 			</DeferredSection>
 

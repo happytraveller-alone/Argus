@@ -44,6 +44,7 @@ export type SeverityCounts = {
 export interface TaskActivityItem {
 	id: string;
 	projectName: string;
+	engineLabel?: string | null;
 	kind: TaskActivityKind;
 	sourceMode: TaskActivitySourceMode;
 	status: string;
@@ -251,6 +252,12 @@ function toRuleScanActivities(
 		}
 
 		const isCodeqlOnly = !opengrepTask && Boolean(codeqlTask);
+		const engineLabel = [
+			opengrepTask ? "Opengrep" : null,
+			codeqlTask ? "Codeql" : null,
+		]
+			.filter(Boolean)
+			.join(" / ");
 
 		const params = new URLSearchParams();
 		params.set("muteToast", "1");
@@ -295,6 +302,7 @@ function toRuleScanActivities(
 		const item: TaskActivityItem = {
 			id: `static-${primaryTask.id}`,
 			projectName: resolveProjectName(group.projectId),
+			engineLabel,
 			kind: "rule_scan",
 			sourceMode: resolveSourceModeFromTaskMeta("rule_scan", primaryTask.name),
 			status: resolveStaticScanGroupStatus(group),
@@ -359,6 +367,7 @@ export function filterActivitiesByKind(
 	return filteredByKind.filter((activity) => {
 		return (
 			activity.projectName.toLowerCase().includes(trimmed) ||
+			(activity.engineLabel || "").toLowerCase().includes(trimmed) ||
 			kindText.includes(trimmed) ||
 			getTaskStatusText(activity.status).includes(trimmed)
 		);
@@ -374,6 +383,7 @@ function matchesActivityKeyword(
 	const kindText = getTaskKindText(activity);
 	return (
 		activity.projectName.toLowerCase().includes(trimmed) ||
+		(activity.engineLabel || "").toLowerCase().includes(trimmed) ||
 		kindText.includes(trimmed) ||
 		getTaskStatusText(activity.status).includes(trimmed)
 	);
@@ -401,6 +411,7 @@ export function filterMixedActivities(
 		const kindText = getTaskKindText(activity);
 		return (
 			activity.projectName.toLowerCase().includes(trimmed) ||
+			(activity.engineLabel || "").toLowerCase().includes(trimmed) ||
 			kindText.includes(trimmed) ||
 			getTaskStatusText(activity.status).includes(trimmed)
 		);

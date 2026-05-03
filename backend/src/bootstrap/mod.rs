@@ -431,6 +431,46 @@ async fn ensure_rust_schema(pool: &PgPool) -> Result<()> {
     .execute(pool)
     .await?;
 
+    sqlx::query(
+        r#"
+        create table if not exists rust_cubesandbox_templates (
+            id uuid primary key,
+            kind text not null,
+            status text not null,
+            template_id text,
+            artifact_id text,
+            job_id text,
+            image_ref text not null,
+            error_message text,
+            build_log_tail text not null default '',
+            created_at timestamptz not null default now(),
+            updated_at timestamptz not null default now(),
+            ready_at timestamptz
+        )
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    sqlx::query(
+        r#"
+        create unique index if not exists ux_rust_cubesandbox_templates_active_kind
+            on rust_cubesandbox_templates (kind)
+            where status in ('pending', 'building', 'ready')
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    sqlx::query(
+        r#"
+        create index if not exists ix_rust_cubesandbox_templates_kind_updated
+            on rust_cubesandbox_templates (kind, updated_at desc)
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
     Ok(())
 }
 

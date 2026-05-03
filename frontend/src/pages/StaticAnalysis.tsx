@@ -25,7 +25,6 @@ import {
   type DataTableQueryState,
   useDataTableUrlState,
 } from "@/components/data-table";
-import { api as databaseApi } from "@/shared/api/database";
 import { cn } from "@/shared/utils/utils";
 import CodeqlExplorationPanel from "./static-analysis/CodeqlExplorationPanel";
 import StaticAnalysisFindingsTable from "./static-analysis/StaticAnalysisFindingsTable";
@@ -36,12 +35,11 @@ import {
 import { useStaticAnalysisData } from "./static-analysis/useStaticAnalysisData";
 import { useTaskClock } from "@/features/tasks/hooks/useTaskClock";
 import {
-  buildStaticAnalysisHeaderSummary,
-  buildUnifiedFindingRows,
-  decodeStaticAnalysisPathParam,
-  isStaticAnalysisPollableStatus,
-  resolveStaticAnalysisProjectNameFallback,
-  type Engine,
+	buildStaticAnalysisHeaderSummary,
+	buildUnifiedFindingRows,
+	decodeStaticAnalysisPathParam,
+	isStaticAnalysisPollableStatus,
+	type Engine,
 } from "./static-analysis/viewModel";
 
 export default function StaticAnalysis() {
@@ -92,10 +90,6 @@ export default function StaticAnalysis() {
   const [tableState, setTableState] = useState<DataTableQueryState>(() =>
     createStaticAnalysisInitialTableState(initialState),
   );
-  const [resolvedProjectName, setResolvedProjectName] = useState<{
-    projectId: string;
-    name: string;
-  } | null>(null);
   const resolvedUrlState = useMemo<DataTableQueryState>(
     () => resolveStaticAnalysisTableState(initialState),
     [initialState],
@@ -159,23 +153,12 @@ export default function StaticAnalysis() {
     [codeqlTask, opengrepTask],
   );
   const nowMs = useTaskClock({ enabled: shouldTickClock, intervalMs: 1000 });
-  const staticProjectId = String(
-    opengrepTask?.project_id || codeqlTask?.project_id || "",
-  ).trim();
   const staticProjectName = String(
     opengrepTask?.project_name || codeqlTask?.project_name || "",
   ).trim();
   const fallbackProjectName = useMemo(
-    () =>
-      resolveStaticAnalysisProjectNameFallback({
-        taskProjectName: staticProjectName,
-        resolvedProjectName:
-          resolvedProjectName?.projectId === staticProjectId
-            ? resolvedProjectName.name
-            : null,
-        projectId: staticProjectId,
-      }),
-    [resolvedProjectName, staticProjectId, staticProjectName],
+    () => String(staticProjectName || "").trim() || "-",
+    [staticProjectName],
   );
   const headerSummary = useMemo(
     () =>
@@ -208,37 +191,6 @@ export default function StaticAnalysis() {
       areDataTableQueryStatesEqual(current, resolvedUrlState) ? current : resolvedUrlState,
     );
   }, [resolvedUrlState]);
-
-  useEffect(() => {
-    if (!staticProjectId || staticProjectName) {
-      setResolvedProjectName(null);
-      return;
-    }
-
-    let cancelled = false;
-    setResolvedProjectName((current) =>
-      current?.projectId === staticProjectId ? current : null,
-    );
-
-    void databaseApi.getProjectById(staticProjectId).then((project) => {
-      if (cancelled) return;
-      const name = String(project?.name || "").trim();
-      setResolvedProjectName(name ? { projectId: staticProjectId, name } : null);
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [staticProjectId, staticProjectName]);
-
-  useEffect(() => {
-    if (!usesPathTaskIdFallback) return;
-    const fallbackEngine = searchParams.get("engine") === "codeql" ? "codeql" : "opengrep";
-    console.info(
-      "[StaticAnalysis] Using path taskId fallback. Prefer explicit engine task ids in query params for stable detail resolution.",
-      { pathTaskId: taskId, engine: fallbackEngine },
-    );
-  }, [searchParams, taskId, usesPathTaskIdFallback]);
 
   const handleBack = () => {
     if (returnTo) {

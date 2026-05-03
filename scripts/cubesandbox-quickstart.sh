@@ -57,6 +57,7 @@ Usage:
   scripts/cubesandbox-quickstart.sh shell-codeql-cpp-image-wsl
   scripts/cubesandbox-quickstart.sh create-codeql-cpp-template
   scripts/cubesandbox-quickstart.sh watch-template <job_id>
+  scripts/cubesandbox-quickstart.sh provision-codeql-cpp-template
   CUBE_TEMPLATE_ID=<template_id> scripts/cubesandbox-quickstart.sh python-smoke
   CUBE_TEMPLATE_ID=<template_id> scripts/cubesandbox-quickstart.sh cc-smoke
   CUBE_TEMPLATE_ID=<template_id> scripts/cubesandbox-quickstart.sh codeql-cpp-smoke
@@ -411,13 +412,78 @@ shell_codeql_cpp_image_wsl() {
 }
 
 create_codeql_cpp_template() {
-  remote_root "cubemastercli tpl create-from-image --image '$(shell_quote "$CUBE_CODEQL_CPP_IMAGE")' --writable-layer-size '$(shell_quote "$CUBE_CODEQL_CPP_WRITABLE_LAYER_SIZE")' --expose-port 49999 --expose-port 49983 --probe 49999"
+  local raw job_id
+  raw="$(remote_root "cubemastercli tpl create-from-image --image '$(shell_quote "$CUBE_CODEQL_CPP_IMAGE")' --writable-layer-size '$(shell_quote "$CUBE_CODEQL_CPP_WRITABLE_LAYER_SIZE")' --expose-port 49999 --expose-port 49983 --probe 49999" | tee /dev/stderr)"
+  job_id="$(printf '%s\n' "$raw" | grep -Eio '\b[a-f0-9-]{32,}\b' | head -n 1 || true)"
+  if [[ -z "$job_id" ]]; then
+    job_id="$(printf '%s\n' "$raw" | sed -nE 's/.*job[_ -]?id[: ]+([a-zA-Z0-9-]+).*/\1/p' | head -n 1 || true)"
+  fi
+  [[ -n "$job_id" ]] || fail "create-codeql-cpp-template did not emit a job_id"
+  printf 'JOB_ID=%s\n' "$job_id"
 }
 
 watch_template() {
   local job_id="${1:-}"
   [[ -n "$job_id" ]] || fail "watch-template requires a job_id"
-  remote_root "cubemastercli tpl watch --job-id '$job_id'"
+  local raw template_id artifact_id status
+  raw="$(remote_root "cubemastercli tpl watch --job-id '$job_id'" | tee /dev/stderr)"
+  template_id="$(printf '%s\n' "$raw" | sed -nE 's/.*template[_ ]?id[: ]+([a-zA-Z0-9_-]+).*/\1/p' | head -n 1 || true)"
+  artifact_id="$(printf '%s\n' "$raw" | sed -nE 's/.*artifact[_ ]?id[: ]+([a-zA-Z0-9_-]+).*/\1/p' | head -n 1 || true)"
+  status="$(printf '%s\n' "$raw" | sed -nE 's/.*template[_ ]?status[: ]+([A-Za-z_]+).*/\1/p' | tail -n 1 || true)"
+  [[ -n "$status" ]] || status="UNKNOWN"
+  printf 'STATUS=%s\n' "$status"
+  [[ -n "$template_id" ]] && printf 'TEMPLATE_ID=%s\n' "$template_id"
+  [[ -n "$artifact_id" ]] && printf 'ARTIFACT_ID=%s\n' "$artifact_id"
+}
+
+provision_codeql_cpp_template() {
+  log "[provision] step 1/5 configure-docker-mirror"
+  configure_docker_mirror
+  log "[provision] step 2/5 start-local-registry"
+  start_local_registry
+  log "[provision] step 3/5 build-codeql-cpp-image"
+  build_codeql_cpp_image
+  log "[provision] step 4/5 create-codeql-cpp-template"
+  local create_output job_id
+  create_output="$(create_codeql_cpp_template)"
+  printf '%s\n' "$create_output"
+  job_id="$(printf '%s\n' "$create_output" | sed -nE 's/^JOB_ID=(.+)$/\1/p' | head -n 1 || true)"
+  [[ -n "$job_id" ]] || fail "provision: failed to capture job_id"
+  log "[provision] step 5/5 watch-template ${job_id}"
+  local watch_output template_id artifact_id status
+  watch_output="$(watch_template "$job_id")"
+  printf '%s\n' "$watch_output"
+  template_id="$(printf '%s\n' "$watch_output" | sed -nE 's/^TEMPLATE_ID=(.+)$/\1/p' | head -n 1 || true)"
+  artifact_id="$(printf '%s\n' "$watch_output" | sed -nE 's/^ARTIFACT_ID=(.+)$/\1/p' | head -n 1 || true)"
+  status="$(printf '%s\n' "$watch_output" | sed -nE 's/^STATUS=(.+)$/\1/p' | head -n 1 || true)"
+  [[ -n "$status" ]] || status="UNKNOWN"
+  python3 - "$template_id" "$artifact_id" "$status" "$job_id" "$CUBE_CODEQL_CPP_IMAGE" <<'PY'
+import json
+import sys
+
+template_id, artifact_id, status, job_id, image_ref = sys.argv[1:6]
+
+def empty_to_none(value):
+    return value if value else None
+
+print(
+    "PROVISION_RESULT="
+    + json.dumps(
+        {
+            "template_id": empty_to_none(template_id),
+            "artifact_id": empty_to_none(artifact_id),
+            "status": status or "UNKNOWN",
+            "job_id": empty_to_none(job_id),
+            "image_ref": image_ref,
+        },
+        ensure_ascii=False,
+        sort_keys=True,
+    )
+)
+PY
+  if [[ "$status" != "READY" ]]; then
+    fail "provision-codeql-cpp-template ended with status=${status}"
+  fi
 }
 
 python_smoke() {
@@ -641,6 +707,10 @@ case "$cmd" in
   watch-template)
     shift
     watch_template "$@"
+    ;;
+  provision-codeql-cpp-template)
+    no_extra_args "${@:2}"
+    provision_codeql_cpp_template
     ;;
   python-smoke)
     no_extra_args "${@:2}"

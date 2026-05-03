@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { toIntelligentTaskActivity } from "@/features/tasks/services/intelligentTaskActivities";
 import type { TaskActivityItem } from "@/features/tasks/services/taskActivities";
@@ -10,7 +10,6 @@ import {
 
 interface UseIntelligentTasksSnapshotOptions {
 	pollingIntervalMs?: number;
-	resolveProjectName?: (projectId: string) => string;
 	limit?: number;
 }
 
@@ -23,7 +22,6 @@ export function useIntelligentTasksSnapshot(
 ) {
 	const {
 		pollingIntervalMs = DEFAULT_POLLING_INTERVAL_MS,
-		resolveProjectName,
 		limit = DEFAULT_LIMIT,
 	} = options;
 
@@ -38,12 +36,6 @@ export function useIntelligentTasksSnapshot(
 	useEffect(() => {
 		recordsRef.current = records;
 	}, [records]);
-
-	const resolveName = useCallback(
-		(projectId: string) =>
-			resolveProjectName ? resolveProjectName(projectId) : projectId,
-		[resolveProjectName],
-	);
 
 	const fetchRecords = useCallback(async () => {
 		try {
@@ -134,8 +126,8 @@ export function useIntelligentTasksSnapshot(
 	}, []);
 
 	const activities = useMemo<TaskActivityItem[]>(
-		() => records.map((record) => toIntelligentTaskActivity(record, resolveName)),
-		[records, resolveName],
+		() => records.map((record) => toIntelligentTaskActivity(record)),
+		[records],
 	);
 
 	return {

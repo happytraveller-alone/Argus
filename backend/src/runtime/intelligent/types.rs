@@ -75,6 +75,8 @@ pub struct IntelligentTaskFinding {
 pub struct IntelligentTaskRecord {
     pub task_id: String,
     pub project_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub project_name: Option<String>,
     pub status: IntelligentTaskStatus,
     pub created_at: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -105,6 +107,7 @@ impl IntelligentTaskRecord {
         Self {
             task_id,
             project_id,
+            project_name: None,
             status: IntelligentTaskStatus::Pending,
             created_at: now_rfc3339(),
             started_at: None,
@@ -204,6 +207,7 @@ mod tests {
             "sha256:abc".to_string(),
         );
         assert_eq!(r.status, IntelligentTaskStatus::Pending);
+        assert!(r.project_name.is_none());
         assert!(r.event_log.is_empty());
         assert!(r.findings.is_empty());
         assert!(r.started_at.is_none());

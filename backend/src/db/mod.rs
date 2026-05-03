@@ -1,5 +1,6 @@
 pub mod codeql_build_plans;
 pub mod cubesandbox_task_state;
+pub mod cubesandbox_templates;
 pub mod intelligent_task_state;
 pub mod projects;
 pub mod prompt_skills;

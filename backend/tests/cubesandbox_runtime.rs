@@ -97,7 +97,9 @@ async fn cubesandbox_config_preserves_unknown_other_config_keys() {
         payload["otherConfig"]["cubeSandbox"]["apiBaseUrl"],
         "http://127.0.0.1:23000"
     );
-    assert!(payload["otherConfig"]["cubeSandbox"].get("templateId").is_none());
+    assert!(payload["otherConfig"]["cubeSandbox"]
+        .get("templateId")
+        .is_none());
 }
 
 #[test]

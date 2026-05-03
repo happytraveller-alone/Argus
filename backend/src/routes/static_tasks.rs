@@ -755,10 +755,21 @@ async fn create_static_task_for_engine(
         None
     };
 
+    let _guard = state.file_store_lock.lock().await;
+    let project = projects::get_project_while_locked(&state, &project_id)
+        .await
+        .map_err(internal_error)?;
+    let Some(project) = project else {
+        return Err(ApiError::NotFound(format!(
+            "project not found: {project_id}"
+        )));
+    };
+
     let mut record = task_state::StaticTaskRecord {
         id: task_id.clone(),
         engine: engine.to_string(),
         project_id: project_id.clone(),
+        project_name: None,
         name: optional_string(&payload, "name").unwrap_or_else(|| format!("{engine}-task")),
         status: "running".to_string(),
         target_path: target_path.clone(),
@@ -802,20 +813,8 @@ async fn create_static_task_for_engine(
         ai_analysis_completed_at: None,
     };
 
-    let _guard = state.file_store_lock.lock().await;
-    let project = projects::get_project_while_locked(&state, &project_id)
-        .await
-        .map_err(internal_error)?;
-    let Some(project) = project else {
-        return Err(ApiError::NotFound(format!(
-            "project not found: {project_id}"
-        )));
-    };
+    record.project_name = Some(project.name.clone());
     if let Some(extra) = record.extra.as_object_mut() {
-        extra.insert(
-            "project_name".to_string(),
-            Value::String(project.name.clone()),
-        );
         if let Some(options) = &codeql_options {
             extra.insert("requested_languages".to_string(), json!(options.languages));
             if let Some(build_mode) = &options.build_mode {
@@ -3454,14 +3453,16 @@ async fn list_static_tasks(
         })
         .collect::<Vec<_>>();
     items.sort_by(|left, right| right.created_at.cmp(&left.created_at));
-    Ok(Json(
-        items
-            .into_iter()
-            .skip(query.skip.unwrap_or(0))
-            .take(query.limit.unwrap_or(1_000))
-            .map(|record| static_task_value(&record))
-            .collect(),
-    ))
+    let mut values = Vec::new();
+    for record in items
+        .into_iter()
+        .skip(query.skip.unwrap_or(0))
+        .take(query.limit.unwrap_or(1_000))
+    {
+        let record = bind_static_task_project_name(state, record).await?;
+        values.push(static_task_value(&record));
+    }
+    Ok(Json(values))
 }
 
 async fn get_static_task(
@@ -3470,6 +3471,7 @@ async fn get_static_task(
     task_id: &str,
 ) -> Result<Json<Value>, ApiError> {
     let record = find_static_task(state, engine, task_id).await?;
+    let record = bind_static_task_project_name(state, record).await?;
     Ok(Json(static_task_value(&record)))
 }
 
@@ -3865,6 +3867,7 @@ async fn merged_opengrep_rules_from_snapshot(
 fn static_task_value(record: &task_state::StaticTaskRecord) -> Value {
     let mut value = json!({});
     let (high_count, medium_count, low_count) = visible_static_finding_severity_counts(record);
+    let project_name = record.project_name.as_deref().unwrap_or("-").trim();
     merge_json_object(&mut value, &record.extra);
     merge_json_object(
         &mut value,
@@ -3872,6 +3875,7 @@ fn static_task_value(record: &task_state::StaticTaskRecord) -> Value {
         "id": record.id,
         "engine": record.engine,
         "project_id": record.project_id,
+        "project_name": if project_name.is_empty() { "-" } else { project_name },
         "name": record.name,
         "status": record.status,
         "target_path": record.target_path,
@@ -3889,6 +3893,23 @@ fn static_task_value(record: &task_state::StaticTaskRecord) -> Value {
         }),
     );
     value
+}
+
+async fn bind_static_task_project_name(
+    state: &AppState,
+    mut record: task_state::StaticTaskRecord,
+) -> Result<task_state::StaticTaskRecord, ApiError> {
+    let project = projects::get_project(state, &record.project_id)
+        .await
+        .map_err(internal_error)?
+        .ok_or_else(|| {
+            ApiError::Conflict(format!(
+                "project binding missing for static task {}: {}",
+                record.id, record.project_id
+            ))
+        })?;
+    record.project_name = Some(project.name);
+    Ok(record)
 }
 
 fn opengrep_rule_value(record: &task_state::OpengrepRuleRecord) -> Value {
@@ -4959,6 +4980,7 @@ mod tests {
             id: "task-1".to_string(),
             engine: "opengrep".to_string(),
             project_id: "project-1".to_string(),
+            project_name: Some("Project 1".to_string()),
             name: "static scan".to_string(),
             status: "completed".to_string(),
             target_path: ".".to_string(),

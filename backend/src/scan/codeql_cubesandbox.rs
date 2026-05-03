@@ -14,12 +14,14 @@ use sha2::{Digest, Sha256};
 use tar::Builder;
 
 use crate::{
+    db::cubesandbox_templates::TemplateKind,
     runtime::cubesandbox::{
         client::{
             CubeSandboxClient, CubeSandboxClientConfig, CubeSandboxSandbox, EnvdProcessOutput,
         },
         config::CubeSandboxConfig,
         helper::{run_helper_command, should_run_local_lifecycle, CubeSandboxHelperCommand},
+        template_provisioner::{self, EnsureOutcome},
     },
     scan::codeql,
     state::AppState,
@@ -116,10 +118,11 @@ impl CodeqlSandboxSession {
     pub async fn start(state: &AppState, task_id: &str) -> Result<Self> {
         let config = CubeSandboxConfig::load_runtime(state).await?;
         config.validate_for_execution()?;
+        let template_id = ensure_template_id_or_wait(state, &config, task_id).await?;
         if take_cancel_request(task_id) {
             bail!("CodeQL CubeSandbox scan cancelled before sandbox creation for task {task_id}");
         }
-        let client = prepare_client(&config).await?;
+        let client = prepare_client(&config, &template_id).await?;
         let sandbox = client.create_sandbox().await?;
         register_active_sandbox(
             task_id,
@@ -267,7 +270,10 @@ fn take_cancel_request(task_id: &str) -> bool {
         .remove(task_id)
 }
 
-async fn prepare_client(config: &CubeSandboxConfig) -> Result<CubeSandboxClient> {
+async fn prepare_client(
+    config: &CubeSandboxConfig,
+    template_id: &str,
+) -> Result<CubeSandboxClient> {
     if should_run_local_lifecycle(config)? && config.auto_install {
         let output = run_helper_command(config, CubeSandboxHelperCommand::Install).await?;
         ensure_helper_success(CubeSandboxHelperCommand::Install, &output)?;
@@ -285,7 +291,7 @@ async fn prepare_client(config: &CubeSandboxConfig) -> Result<CubeSandboxClient>
     let client = CubeSandboxClient::new(CubeSandboxClientConfig {
         api_base_url: config.api_base_url.clone(),
         data_plane_base_url: config.data_plane_base_url.clone(),
-        template_id: config.template_id.clone(),
+        template_id: template_id.to_string(),
         execution_timeout_seconds: config.execution_timeout_seconds,
         cleanup_timeout_seconds: config.sandbox_cleanup_timeout_seconds,
         stdout_limit_bytes: config.stdout_limit_bytes,
@@ -293,6 +299,81 @@ async fn prepare_client(config: &CubeSandboxConfig) -> Result<CubeSandboxClient>
     })?;
     client.health().await?;
     Ok(client)
+}
+
+const TEMPLATE_WAIT_TIMEOUT_SECS: u64 = 1800; // up to 30 min for first-time build
+
+async fn ensure_template_id_or_wait(
+    state: &AppState,
+    config: &CubeSandboxConfig,
+    task_id: &str,
+) -> Result<String> {
+    match template_provisioner::ensure_codeql_cpp_template_ready(state, config).await? {
+        EnsureOutcome::Ready { template_id } => Ok(template_id),
+        EnsureOutcome::NotEligible { reason } => {
+            bail!("CubeSandbox 模板自动构建不可用: {reason}")
+        }
+        EnsureOutcome::InProgress { record_id: _ } => {
+            wait_for_template(state, config, task_id).await
+        }
+    }
+}
+
+async fn wait_for_template(
+    state: &AppState,
+    config: &CubeSandboxConfig,
+    task_id: &str,
+) -> Result<String> {
+    use std::time::Duration;
+    let deadline = std::time::Instant::now() + Duration::from_secs(TEMPLATE_WAIT_TIMEOUT_SECS);
+    loop {
+        if take_cancel_request(task_id) {
+            bail!(
+                "CodeQL CubeSandbox scan cancelled while waiting for template build (task {task_id})"
+            );
+        }
+        if let Some(template_id) = template_provisioner::resolve_existing_template_id(
+            state,
+            config,
+            TemplateKind::CodeqlCpp,
+        )
+        .await?
+        {
+            return Ok(template_id);
+        }
+        if let Some(record) =
+            template_provisioner::get_status(state, TemplateKind::CodeqlCpp).await?
+        {
+            use crate::db::cubesandbox_templates::TemplateStatus;
+            match record.status {
+                TemplateStatus::Ready => {
+                    if let Some(template_id) = record.template_id {
+                        return Ok(template_id);
+                    }
+                    bail!("CubeSandbox template marked ready but missing template_id");
+                }
+                TemplateStatus::Failed => {
+                    bail!(
+                        "CubeSandbox 模板构建失败: {}; 可在「CodeQL 编译探索」面板点击「重建模板」重试",
+                        record.error_message.unwrap_or_default()
+                    );
+                }
+                TemplateStatus::Invalidated => {
+                    bail!(
+                        "CubeSandbox 模板已被标记为失效, 请在「CodeQL 编译探索」面板点击「立即构建」"
+                    );
+                }
+                TemplateStatus::Pending | TemplateStatus::Building => {}
+            }
+        }
+        if std::time::Instant::now() >= deadline {
+            bail!(
+                "CubeSandbox 模板构建超时 (>{}s); 请在「CodeQL 编译探索」面板查看日志",
+                TEMPLATE_WAIT_TIMEOUT_SECS
+            );
+        }
+        tokio::time::sleep(Duration::from_secs(5)).await;
+    }
 }
 
 fn ensure_helper_success(

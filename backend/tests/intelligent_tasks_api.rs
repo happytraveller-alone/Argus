@@ -184,6 +184,10 @@ async fn read_record(state: &AppState, task_id: &str) -> Option<IntelligentTaskR
         .expect("read record")
 }
 
+async fn response_json(response: axum::response::Response) -> Value {
+    serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap()
+}
+
 async fn wait_until_terminal(
     state: &AppState,
     task_id: &str,
@@ -255,6 +259,65 @@ async fn create_returns_pending_or_running_then_completes_zero_findings() {
         .iter()
         .any(|event| event.kind == "llm_attempt"));
     assert_eq!(invoker.attempts().await, 1, "no retry expected");
+}
+
+#[tokio::test]
+async fn intelligent_task_api_binds_project_name_from_backend_project_record() {
+    let state = build_state_default("project-name-binding").await;
+    let project_id = Uuid::new_v4().to_string();
+    seed_project_with_archive(&state, &project_id).await;
+    let mut record = IntelligentTaskRecord::new_pending(
+        "task-project-name".to_string(),
+        project_id.clone(),
+        "model".to_string(),
+        "fp".to_string(),
+    );
+    record.project_name = None;
+    record.status = IntelligentTaskStatus::Completed;
+    intelligent_task_state::save_record(&state, record)
+        .await
+        .expect("save intelligent task");
+
+    let app = build_router(state);
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::GET)
+                .uri("/api/v1/intelligent-tasks/task-project-name")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let payload = response_json(response).await;
+    assert_eq!(payload["projectId"].as_str(), Some(project_id.as_str()));
+    assert_eq!(
+        payload["projectName"].as_str(),
+        Some(format!("test-{project_id}").as_str())
+    );
+
+    let list_response = app
+        .oneshot(
+            Request::builder()
+                .method(Method::GET)
+                .uri("/api/v1/intelligent-tasks?limit=10")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(list_response.status(), StatusCode::OK);
+    let list_payload = response_json(list_response).await;
+    assert_eq!(
+        list_payload
+            .as_array()
+            .unwrap()
+            .first()
+            .and_then(|item| item["projectName"].as_str()),
+        Some(format!("test-{project_id}").as_str())
+    );
 }
 
 #[tokio::test]

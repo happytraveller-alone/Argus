@@ -14,10 +14,15 @@ pub enum CubeSandboxHelperCommand {
     Install,
     CreateTemplate,
     WatchTemplate,
+    ConfigureDockerMirror,
+    StartLocalRegistry,
+    BuildCodeqlCppImage,
+    CreateCodeqlCppTemplate,
+    ProvisionCodeqlCppTemplate,
 }
 
 impl CubeSandboxHelperCommand {
-    fn as_str(self) -> &'static str {
+    pub fn as_str(self) -> &'static str {
         match self {
             Self::Doctor => "doctor",
             Self::Status => "status",
@@ -25,6 +30,11 @@ impl CubeSandboxHelperCommand {
             Self::Install => "install",
             Self::CreateTemplate => "create-template",
             Self::WatchTemplate => "watch-template",
+            Self::ConfigureDockerMirror => "configure-docker-mirror",
+            Self::StartLocalRegistry => "start-local-registry",
+            Self::BuildCodeqlCppImage => "build-codeql-cpp-image",
+            Self::CreateCodeqlCppTemplate => "create-codeql-cpp-template",
+            Self::ProvisionCodeqlCppTemplate => "provision-codeql-cpp-template",
         }
     }
 }
@@ -40,6 +50,11 @@ impl TryFrom<&str> for CubeSandboxHelperCommand {
             "install" => Ok(Self::Install),
             "create-template" => Ok(Self::CreateTemplate),
             "watch-template" => Ok(Self::WatchTemplate),
+            "configure-docker-mirror" => Ok(Self::ConfigureDockerMirror),
+            "start-local-registry" => Ok(Self::StartLocalRegistry),
+            "build-codeql-cpp-image" => Ok(Self::BuildCodeqlCppImage),
+            "create-codeql-cpp-template" => Ok(Self::CreateCodeqlCppTemplate),
+            "provision-codeql-cpp-template" => Ok(Self::ProvisionCodeqlCppTemplate),
             _ => bail!("unsupported CubeSandbox helper command: {value}"),
         }
     }
@@ -160,4 +175,101 @@ fn bounded_tail(value: &str, limit: usize) -> String {
         start += 1;
     }
     value[start..].to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn sample_config() -> CubeSandboxConfig {
+        CubeSandboxConfig {
+            enabled: true,
+            api_base_url: "http://127.0.0.1:23000".to_string(),
+            data_plane_base_url: "https://127.0.0.1:21443".to_string(),
+            template_id: "tpl-test".to_string(),
+            helper_path: "/app/scripts/cubesandbox-quickstart.sh".to_string(),
+            work_dir: ".cubesandbox".to_string(),
+            auto_start: true,
+            auto_install: true,
+            helper_timeout_seconds: 600,
+            execution_timeout_seconds: 120,
+            sandbox_cleanup_timeout_seconds: 30,
+            stdout_limit_bytes: 65_536,
+            stderr_limit_bytes: 65_536,
+        }
+    }
+
+    #[test]
+    fn helper_command_round_trip_covers_codeql_cpp_chain() {
+        let cases = [
+            ("doctor", CubeSandboxHelperCommand::Doctor),
+            ("status", CubeSandboxHelperCommand::Status),
+            (
+                "run-vm-background",
+                CubeSandboxHelperCommand::RunVmBackground,
+            ),
+            ("install", CubeSandboxHelperCommand::Install),
+            ("create-template", CubeSandboxHelperCommand::CreateTemplate),
+            ("watch-template", CubeSandboxHelperCommand::WatchTemplate),
+            (
+                "configure-docker-mirror",
+                CubeSandboxHelperCommand::ConfigureDockerMirror,
+            ),
+            (
+                "start-local-registry",
+                CubeSandboxHelperCommand::StartLocalRegistry,
+            ),
+            (
+                "build-codeql-cpp-image",
+                CubeSandboxHelperCommand::BuildCodeqlCppImage,
+            ),
+            (
+                "create-codeql-cpp-template",
+                CubeSandboxHelperCommand::CreateCodeqlCppTemplate,
+            ),
+            (
+                "provision-codeql-cpp-template",
+                CubeSandboxHelperCommand::ProvisionCodeqlCppTemplate,
+            ),
+        ];
+        for (text, variant) in cases {
+            assert_eq!(variant.as_str(), text);
+            assert_eq!(CubeSandboxHelperCommand::try_from(text).unwrap(), variant);
+            assert_eq!(text.parse::<CubeSandboxHelperCommand>().unwrap(), variant);
+        }
+    }
+
+    #[test]
+    fn build_helper_invocation_includes_codeql_cpp_commands() {
+        let config = sample_config();
+        for variant in [
+            CubeSandboxHelperCommand::ConfigureDockerMirror,
+            CubeSandboxHelperCommand::StartLocalRegistry,
+            CubeSandboxHelperCommand::BuildCodeqlCppImage,
+            CubeSandboxHelperCommand::CreateCodeqlCppTemplate,
+            CubeSandboxHelperCommand::ProvisionCodeqlCppTemplate,
+        ] {
+            let invocation = build_helper_invocation(&config, variant).expect("should build");
+            assert_eq!(invocation.command, config.helper_path);
+            assert_eq!(invocation.args, vec![variant.as_str().to_string()]);
+            assert_eq!(invocation.env.get("CUBE_WORK_DIR"), Some(&config.work_dir));
+            assert_eq!(
+                invocation.env.get("CUBE_TEMPLATE_ID"),
+                Some(&config.template_id)
+            );
+            assert_eq!(
+                invocation.env.get("CUBE_API_PORT"),
+                Some(&"23000".to_string())
+            );
+            assert_eq!(
+                invocation.env.get("CUBE_PROXY_HTTPS_PORT"),
+                Some(&"21443".to_string())
+            );
+        }
+    }
+
+    #[test]
+    fn unknown_helper_command_rejected() {
+        assert!(CubeSandboxHelperCommand::try_from("nope").is_err());
+    }
 }

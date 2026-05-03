@@ -42,6 +42,7 @@ interface TaskActivitiesListTableProps {
 	cancellingActivityId?: string | null;
 	deletingActivityId?: string | null;
 	cancelDisabledReason?: string | null;
+	showEngineColumn?: boolean;
 }
 
 const TASK_ACTIVITIES_TABLE_HEADER_CELL_CLASSNAME =
@@ -96,8 +97,9 @@ function getColumns(input: {
 	cancellingActivityId?: string | null;
 	deletingActivityId?: string | null;
 	cancelDisabledReason?: string | null;
+	showEngineColumn?: boolean;
 }): AppColumnDef<TaskActivityItem, unknown>[] {
-	return [
+	const columns: AppColumnDef<TaskActivityItem, unknown>[] = [
 		{
 			id: "rowNumber",
 			header: "序号",
@@ -119,12 +121,36 @@ function getColumns(input: {
 				);
 			},
 		},
+		input.showEngineColumn
+			? {
+					id: "engine",
+					accessorFn: (row) => row.engineLabel || "-",
+					header: "引擎",
+					meta: createTaskActivitiesTableMeta({
+						label: "引擎",
+						width: 92,
+						align: "center",
+						filterVariant: "select",
+						filterOptions: [
+							{ label: "Opengrep", value: "Opengrep" },
+							{ label: "Codeql", value: "Codeql" },
+						],
+					}),
+					cell: ({ row }) => (
+						<span
+							className={`${TASK_ACTIVITIES_TABLE_BODY_TEXT_CLASSNAME} font-medium text-foreground`}
+						>
+							{row.original.engineLabel || "-"}
+						</span>
+					),
+				}
+			: null,
 		{
 			accessorKey: "projectName",
 			header: "项目",
 			meta: createTaskActivitiesTableMeta({
 				label: "项目",
-				minWidth: 132,
+				minWidth: 168,
 				filterVariant: "text",
 				cellClassName: TASK_ACTIVITIES_TABLE_BODY_CELL_CLASSNAME,
 			}),
@@ -144,8 +170,8 @@ function getColumns(input: {
 			sortingFn: "datetime",
 			meta: createTaskActivitiesTableMeta({
 				label: "创建时间",
-				width: 128,
-				maxWidth: 136,
+				width: 116,
+				maxWidth: 124,
 			}),
 			cell: ({ row }) => (
 				<div className="text-center text-sm leading-tight text-muted-foreground">
@@ -165,7 +191,7 @@ function getColumns(input: {
 			enableColumnFilter: false,
 			meta: createTaskActivitiesTableMeta({
 				label: "用时",
-				width: 88,
+				width: 80,
 			}),
 			cell: ({ row }) => {
 				const rawDuration = getActivityDurationLabel(row.original, input.nowMs);
@@ -186,7 +212,7 @@ function getColumns(input: {
 			header: "状态",
 			meta: createTaskActivitiesTableMeta({
 				label: "状态",
-				minWidth: 132,
+				minWidth: 116,
 				filterVariant: "select",
 				filterOptions: [
 					{ label: "等待中", value: "pending" },
@@ -226,8 +252,8 @@ function getColumns(input: {
 			enableColumnFilter: false,
 			meta: createTaskActivitiesTableMeta({
 				label: "缺陷摘要",
-				minWidth: 192,
-				maxWidth: 240,
+				minWidth: 164,
+				maxWidth: 212,
 			}),
 			cell: ({ row }) => {
 				const summary = getDefectSummaryLabel(row.original);
@@ -249,7 +275,7 @@ function getColumns(input: {
 			meta: createTaskActivitiesTableMeta({
 				label: "操作",
 				align: "center",
-				width: 260,
+				width: 248,
 			}),
 			cell: ({ row }) => {
 				const canCancel = isTaskActivityCancellable(row.original);
@@ -310,6 +336,10 @@ function getColumns(input: {
 			},
 		},
 	];
+	return columns.filter(
+		(column): column is AppColumnDef<TaskActivityItem, unknown> =>
+			Boolean(column),
+	);
 }
 
 export default function TaskActivitiesListTable({
@@ -323,6 +353,7 @@ export default function TaskActivitiesListTable({
 	cancellingActivityId = null,
 	deletingActivityId = null,
 	cancelDisabledReason = null,
+	showEngineColumn = false,
 }: TaskActivitiesListTableProps) {
 	const location = useLocation();
 	const currentRoute = `${location.pathname}${location.search}`;
@@ -341,6 +372,7 @@ export default function TaskActivitiesListTable({
 				cancellingActivityId,
 				deletingActivityId,
 				cancelDisabledReason,
+				showEngineColumn,
 			}),
 		[
 			currentRoute,
@@ -348,6 +380,7 @@ export default function TaskActivitiesListTable({
 			cancellingActivityId,
 			deletingActivityId,
 			cancelDisabledReason,
+			showEngineColumn,
 		],
 	);
 
@@ -380,7 +413,7 @@ export default function TaskActivitiesListTable({
 						pageSizeOptions: [10, 20, 50],
 						infoLabel: () => `共 ${activities.length} 条`,
 					}}
-					tableClassName="min-w-[820px]"
+					tableClassName="min-w-[760px]"
 					fillContainerWidth
 				/>
 			</div>

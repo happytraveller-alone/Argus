@@ -13,8 +13,10 @@ use serde_json::{json, Value};
 use tokio::sync::broadcast;
 
 use crate::{
-    db::intelligent_task_state, error::ApiError,
-    runtime::intelligent::types::IntelligentTaskRecord, state::AppState,
+    db::{intelligent_task_state, projects},
+    error::ApiError,
+    runtime::intelligent::types::IntelligentTaskRecord,
+    state::AppState,
 };
 
 #[derive(Debug, Deserialize)]
@@ -66,11 +68,10 @@ async fn list_tasks(
     Query(query): Query<ListQuery>,
 ) -> Result<Json<Vec<IntelligentTaskRecord>>, ApiError> {
     let limit = query.limit.unwrap_or(50).clamp(1, 200);
-    Ok(Json(
-        intelligent_task_state::list_records(&state, limit)
-            .await
-            .map_err(internal_error)?,
-    ))
+    let records = intelligent_task_state::list_records(&state, limit)
+        .await
+        .map_err(internal_error)?;
+    Ok(Json(bind_project_names(&state, records).await?))
 }
 
 async fn get_task(
@@ -81,7 +82,7 @@ async fn get_task(
         .await
         .map_err(internal_error)?
         .ok_or_else(|| ApiError::NotFound(format!("Intelligent task not found: {task_id}")))?;
-    Ok(Json(record))
+    Ok(Json(bind_project_name(&state, record).await?))
 }
 
 async fn cancel_task(
@@ -94,7 +95,7 @@ async fn cancel_task(
         .await
         .map_err(internal_error)?
         .ok_or_else(|| ApiError::NotFound(format!("Intelligent task not found: {task_id}")))?;
-    Ok(Json(record))
+    Ok(Json(bind_project_name(&state, record).await?))
 }
 
 async fn delete_task(
@@ -190,4 +191,32 @@ async fn stream_task(
 
 fn internal_error(error: anyhow::Error) -> ApiError {
     ApiError::Internal(error.to_string())
+}
+
+async fn bind_project_names(
+    state: &AppState,
+    records: Vec<IntelligentTaskRecord>,
+) -> Result<Vec<IntelligentTaskRecord>, ApiError> {
+    let mut bound = Vec::with_capacity(records.len());
+    for record in records {
+        bound.push(bind_project_name(state, record).await?);
+    }
+    Ok(bound)
+}
+
+async fn bind_project_name(
+    state: &AppState,
+    mut record: IntelligentTaskRecord,
+) -> Result<IntelligentTaskRecord, ApiError> {
+    let project = projects::get_project(state, &record.project_id)
+        .await
+        .map_err(internal_error)?
+        .ok_or_else(|| {
+            ApiError::Conflict(format!(
+                "project binding missing for intelligent task {}: {}",
+                record.task_id, record.project_id
+            ))
+        })?;
+    record.project_name = Some(project.name);
+    Ok(record)
 }

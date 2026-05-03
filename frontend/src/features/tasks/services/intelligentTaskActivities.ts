@@ -32,11 +32,10 @@ function bucketSeverity(findings: IntelligentTaskFinding[]) {
 
 export function toIntelligentTaskActivity(
 	record: IntelligentTaskRecord,
-	resolveProjectName: (projectId: string) => string,
 ): TaskActivityItem {
 	return {
 		id: `intelligent-${record.taskId}`,
-		projectName: resolveProjectName(record.projectId),
+		projectName: String(record.projectName || "").trim() || "-",
 		kind: "intelligent_audit",
 		sourceMode: "intelligent",
 		status: mapIntelligentStatus(record.status),

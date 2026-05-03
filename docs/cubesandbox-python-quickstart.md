@@ -328,3 +328,43 @@ CODEQL_DB_OK True
 CODEQL_ANALYZE_OK True
 CODEQL_SARIF_OK True
 ```
+
+## 10. Argus Auto-Provisioned CodeQL C++ Template
+
+Starting from this revision the Argus backend can auto-provision the CodeQL
+C/C++ template end-to-end. The previously manual sequence
+(`configure-docker-mirror` → `start-local-registry` → `build-codeql-cpp-image`
+→ `create-codeql-cpp-template` → `watch-template`) is now wrapped by
+`scripts/cubesandbox-quickstart.sh provision-codeql-cpp-template`, which emits
+a single line `PROVISION_RESULT={...}` containing the resulting
+`template_id`, `artifact_id`, `status`, `job_id`, and `image_ref`.
+
+Backend behavior:
+
+- `CUBESANDBOX_TEMPLATE_ID` is now an **optional override**. When unset, the
+  backend resolves the template via `system_config` overrides, then via the
+  newest `ready` row in `rust_cubesandbox_templates`.
+- A CodeQL scan that finds no usable template kicks off
+  `provision-codeql-cpp-template` through the helper, persists progress in
+  `rust_cubesandbox_templates`, and resumes once `status = ready` (bounded
+  wait, default 30 minutes).
+- HTTP API:
+  - `GET /api/v1/cubesandbox/templates/codeql-cpp` — current status.
+  - `POST /api/v1/cubesandbox/templates/codeql-cpp/provision` — explicit build trigger.
+  - `POST /api/v1/cubesandbox/templates/codeql-cpp/invalidate` — mark current row invalidated to allow a rebuild.
+  - `GET /api/v1/cubesandbox/templates/codeql-cpp/stream` — SSE channel emitting the `snapshot` event followed by `event` deltas while a build is in flight.
+- Frontend:
+  - `frontend/src/pages/static-analysis/CodeqlExplorationPanel.tsx` shows a
+    template status card with `就绪 / 构建中 / 失败 / 未构建` badges, a
+    `立即构建` button when no usable template exists, and a `重建模板`
+    button (with confirmation dialog) once `status = ready`. The existing
+    `重置并重新探索` button is disabled until the template is ready.
+  - The hook `useCodeqlTemplateStatus` polls every 5 seconds and additionally
+    subscribes to the SSE stream while building.
+
+Local lifecycle requirement:
+`provision-codeql-cpp-template` only runs when both
+`CUBESANDBOX_API_BASE_URL` and `CUBESANDBOX_DATA_PLANE_BASE_URL` resolve to
+`localhost`/`127.0.0.1`. In container deployments where the backend talks to a
+host-managed CubeSandbox VM via `host.docker.internal`, run the helper from
+the host (or set `CUBESANDBOX_TEMPLATE_ID` to a pre-built template id).

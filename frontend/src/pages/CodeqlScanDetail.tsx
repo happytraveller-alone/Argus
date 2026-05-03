@@ -45,7 +45,6 @@ import {
 	formatStaticAnalysisDuration,
 	getStaticAnalysisTaskDisplayDurationMs,
 	isStaticAnalysisPollableStatus,
-	resolveStaticAnalysisProjectNameFallback,
 } from "./static-analysis/viewModel";
 
 const TERMINAL_STATUSES = new Set(["completed", "failed", "cancelled", "interrupted"]);
@@ -139,24 +138,10 @@ export default function CodeqlScanDetail() {
 	);
 	const nowMs = useTaskClock({ enabled: shouldTickClock, intervalMs: 1000 });
 
-	const [resolvedProjectName, setResolvedProjectName] = useState<{
-		projectId: string;
-		name: string;
-	} | null>(null);
-
-	const staticProjectId = String(codeqlTask?.project_id || "").trim();
 	const staticProjectName = String(codeqlTask?.project_name || "").trim();
 	const fallbackProjectName = useMemo(
-		() =>
-			resolveStaticAnalysisProjectNameFallback({
-				taskProjectName: staticProjectName,
-				resolvedProjectName:
-					resolvedProjectName?.projectId === staticProjectId
-						? resolvedProjectName.name
-						: null,
-				projectId: staticProjectId,
-			}),
-		[resolvedProjectName, staticProjectId, staticProjectName],
+		() => String(staticProjectName || "").trim() || "-",
+		[staticProjectName],
 	);
 
 	const headerSummary = useMemo(
@@ -220,28 +205,6 @@ export default function CodeqlScanDetail() {
 				: resolvedUrlState,
 		);
 	}, [resolvedUrlState]);
-
-	useEffect(() => {
-		if (!staticProjectId || staticProjectName) {
-			setResolvedProjectName(null);
-			return;
-		}
-
-		let cancelled = false;
-		setResolvedProjectName((current) =>
-			current?.projectId === staticProjectId ? current : null,
-		);
-
-		void databaseApi.getProjectById(staticProjectId).then((project) => {
-			if (cancelled) return;
-			const name = String(project?.name || "").trim();
-			setResolvedProjectName(name ? { projectId: staticProjectId, name } : null);
-		});
-
-		return () => {
-			cancelled = true;
-		};
-	}, [staticProjectId, staticProjectName]);
 
 	const handleBack = () => {
 		if (returnTo) {

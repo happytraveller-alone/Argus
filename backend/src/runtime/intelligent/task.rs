@@ -60,6 +60,11 @@ impl IntelligentTaskManager {
         }
 
         let task_id = Uuid::new_v4().to_string();
+        let project = crate::db::projects::get_project(&state, &project_id)
+            .await
+            .map_err(|error| anyhow::anyhow!(error.to_string()))?
+            .ok_or_else(|| anyhow::anyhow!("project not found: {project_id}"))?;
+        let project_name = project.name.clone();
 
         // Resolve LLM config early — on failure save a failed record and return Ok
         let system_cfg = system_config::load_current(&state).await;
@@ -83,6 +88,7 @@ impl IntelligentTaskManager {
                     String::new(),
                     String::new(),
                 );
+                record.project_name = Some(project_name.clone());
                 record.mark_failed("llm_config", err_msg);
                 intelligent_task_state::save_record(&state, record.clone()).await?;
                 Ok(record)
@@ -94,6 +100,8 @@ impl IntelligentTaskManager {
                     config.model.clone(),
                     config.fingerprint.clone(),
                 );
+                let mut record = record;
+                record.project_name = Some(project_name.clone());
                 intelligent_task_state::save_record(&state, record.clone()).await?;
 
                 let (tx, _rx) = broadcast::channel(BROADCAST_CAPACITY);
