@@ -378,40 +378,34 @@ export default function AgentAuditDetail() {
 						暂无事件
 					</p>
 				) : (
-					<div className="overflow-auto">
-						<table className="w-full min-w-[540px] border-collapse font-mono text-xs">
-							<thead>
-								<tr className="border-b border-border/60">
-									<th className="py-1.5 pr-4 text-left font-semibold uppercase tracking-wider text-foreground/60">
-										类型
-									</th>
-									<th className="py-1.5 pr-4 text-left font-semibold uppercase tracking-wider text-foreground/60">
-										时间
-									</th>
-									<th className="py-1.5 text-left font-semibold uppercase tracking-wider text-foreground/60">
-										消息
-									</th>
-								</tr>
-							</thead>
-							<tbody>
-								{eventLog.map((entry, idx) => (
-									<tr
-										key={idx}
-										className="border-b border-border/30 last:border-0"
-									>
-										<td className="py-1.5 pr-4 text-sky-300">
-											{entry.kind}
-										</td>
-										<td className="py-1.5 pr-4 text-muted-foreground">
-											{entry.timestamp}
-										</td>
-										<td className="py-1.5 text-foreground/80">
-											{entry.message ?? "-"}
-										</td>
-									</tr>
-								))}
-							</tbody>
-						</table>
+					<div className="overflow-auto font-mono text-xs">
+						<div className="min-w-[540px]">
+							<div
+								className="grid grid-cols-[6rem_10rem_minmax(0,1fr)] gap-x-4 border-b border-border/60 py-1.5 text-left font-semibold uppercase tracking-wider text-foreground/60"
+								role="row"
+							>
+								<span role="columnheader">类型</span>
+								<span role="columnheader">时间</span>
+								<span role="columnheader">消息</span>
+							</div>
+							{eventLog.map((entry, idx) => (
+								<div
+									key={idx}
+									className="grid grid-cols-[6rem_10rem_minmax(0,1fr)] gap-x-4 border-b border-border/30 py-1.5 last:border-0"
+									role="row"
+								>
+									<span className="text-sky-300" role="cell">
+										{entry.kind}
+									</span>
+									<span className="text-muted-foreground" role="cell">
+										{entry.timestamp}
+									</span>
+									<span className="text-foreground/80" role="cell">
+										{entry.message ?? "-"}
+									</span>
+								</div>
+							))}
+						</div>
 					</div>
 				)}
 			</div>

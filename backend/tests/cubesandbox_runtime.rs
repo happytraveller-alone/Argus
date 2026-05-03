@@ -221,7 +221,7 @@ async fn cubesandbox_runtime_config_rejects_disabled_missing_template_and_invali
     assert!(disabled["errorMessage"]
         .as_str()
         .unwrap_or_default()
-        .contains("disabled"));
+        .contains("未启用"));
 
     let missing_template = submit_cubesandbox_task(
         &app,

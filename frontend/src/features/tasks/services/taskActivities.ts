@@ -1,13 +1,8 @@
 import type { AgentTask } from "@/shared/api/agentTasks";
 import {
-	getCodeqlScanTasks,
 	getOpengrepScanTasks,
 	type OpengrepScanTask,
 } from "@/shared/api/opengrep";
-import {
-	listIntelligentTasks,
-	type IntelligentTaskRecord,
-} from "@/shared/api/intelligentTasks";
 import type { Project } from "@/shared/types";
 import {
 	INTERRUPTED_STATUSES,
@@ -319,75 +314,37 @@ function toRuleScanActivities(
 		.filter((item): item is TaskActivityItem => item !== null);
 }
 
-function buildIntelligentFindingStats(
-	findings: IntelligentTaskRecord["findings"],
-): TaskActivityItem["agentFindingStats"] {
-	const counts = { critical: 0, high: 0, medium: 0, low: 0, total: 0 };
-	if (!Array.isArray(findings)) return counts;
-	for (const f of findings) {
-		const sev = (f.severity ?? "").toLowerCase();
-		counts.total += 1;
-		if (sev === "critical") counts.critical += 1;
-		else if (sev === "high") counts.high += 1;
-		else if (sev === "medium") counts.medium += 1;
-		else if (sev === "low") counts.low += 1;
-	}
-	return counts;
-}
-
-function toIntelligentAuditActivities(
-	records: IntelligentTaskRecord[],
-	resolveProjectName: (projectId: string) => string,
-): TaskActivityItem[] {
-	return records.map((record): TaskActivityItem => ({
-		id: `intelligent-${record.taskId}`,
-		projectName: resolveProjectName(record.projectId),
-		kind: "intelligent_audit",
-		sourceMode: "intelligent",
-		status: record.status,
-		agentFindingStats: buildIntelligentFindingStats(record.findings),
-		createdAt: record.createdAt,
-		startedAt: record.startedAt ?? null,
-		completedAt: record.completedAt ?? null,
-		durationMs: record.durationMs ?? null,
-		route: `/agent-audit/${record.taskId}`,
-		cancelTarget: { mode: "intelligent", taskId: record.taskId },
-	}));
-}
-
 export async function fetchTaskActivities(
 	projects: Project[],
 	limit = 100,
 ): Promise<TaskActivityItem[]> {
-	const [opengrepTasks, codeqlTasks, intelligentRecords] = await Promise.allSettled([
+	const staticTasksResult = await Promise.allSettled([
 		getOpengrepScanTasks({ limit }),
-		getCodeqlScanTasks({ limit }),
-		listIntelligentTasks(limit),
 	]);
+
+	const allStaticTasks =
+		staticTasksResult[0].status === "fulfilled" ? staticTasksResult[0].value : [];
+
+	const opengrepTasks = allStaticTasks.filter(
+		(task) => task.engine !== "codeql",
+	);
+	const codeqlTasks = allStaticTasks.filter(
+		(task) => task.engine === "codeql",
+	);
 
 	const projectNameMap = mapProjectNames(projects);
 	const resolveProjectName = (projectId: string) =>
 		projectNameMap.get(projectId) || "未知项目";
 
 	const staticActivities = toRuleScanActivities(
-		opengrepTasks.status === "fulfilled" ? opengrepTasks.value : [],
-		codeqlTasks.status === "fulfilled" ? codeqlTasks.value : [],
+		opengrepTasks,
+		codeqlTasks,
 		resolveProjectName,
 	);
 
-	const intelligentActivities =
-		intelligentRecords.status === "fulfilled"
-			? toIntelligentAuditActivities(intelligentRecords.value, resolveProjectName)
-			: [];
-
-	const activities = [
-		...staticActivities,
-		...intelligentActivities,
-	].sort(
+	return staticActivities.sort(
 		(a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
 	);
-
-	return activities;
 }
 
 export function filterActivitiesByKind(

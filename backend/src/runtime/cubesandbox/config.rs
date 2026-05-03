@@ -52,10 +52,16 @@ impl CubeSandboxConfig {
 
     pub fn validate_for_execution(&self) -> Result<()> {
         if !self.enabled {
-            bail!("CubeSandbox is disabled in system config");
+            bail!("CubeSandbox 未启用：请前往「系统配置 -> CubeSandbox」开启后再运行 CodeQL 扫描");
         }
         if self.template_id.trim().is_empty() {
-            bail!("CubeSandbox templateId is required");
+            bail!("CubeSandbox 模板 ID 未配置：请在「系统配置 -> CubeSandbox -> 模板 ID」填写 templateId 后重试");
+        }
+        if self.api_base_url.trim().is_empty() {
+            bail!("CubeSandbox apiBaseUrl 未配置：请在「系统配置 -> CubeSandbox -> API Base URL」填写完整 http(s) 地址");
+        }
+        if self.data_plane_base_url.trim().is_empty() {
+            bail!("CubeSandbox dataPlaneBaseUrl 未配置：请在「系统配置 -> CubeSandbox -> Data Plane Base URL」填写完整 http(s) 地址");
         }
         parse_url(&self.api_base_url, "apiBaseUrl")?;
         parse_url(&self.data_plane_base_url, "dataPlaneBaseUrl")?;

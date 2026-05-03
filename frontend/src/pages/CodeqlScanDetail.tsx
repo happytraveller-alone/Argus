@@ -46,7 +46,6 @@ import {
 	getStaticAnalysisTaskDisplayDurationMs,
 	isStaticAnalysisPollableStatus,
 	resolveStaticAnalysisProjectNameFallback,
-	type FindingStatus,
 } from "./static-analysis/viewModel";
 
 const TERMINAL_STATUSES = new Set(["completed", "failed", "cancelled", "interrupted"]);

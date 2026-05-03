@@ -136,9 +136,9 @@ test("AgentAuditDetail renders llmFingerprint field", () => {
 // Event log table
 // ---------------------------------------------------------------------------
 
-test("AgentAuditDetail renders eventLog as a table with kind and timestamp columns", () => {
+test("AgentAuditDetail renders eventLog with kind and timestamp columns", () => {
 	assert.match(source, /eventLog/);
-	assert.match(source, /<table/);
+	assert.match(source, /role="columnheader"/);
 	assert.match(source, /entry\.kind/);
 	assert.match(source, /entry\.timestamp/);
 });

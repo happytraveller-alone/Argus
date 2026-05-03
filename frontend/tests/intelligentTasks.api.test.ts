@@ -1,15 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-// Minimal fetch mock used across all tests
-function makeFetchMock(responseData: unknown) {
-	return async (_url: string, _init?: RequestInit) => ({
-		ok: true,
-		status: 200,
-		json: async () => responseData,
-	});
-}
-
 // We test the module's URL/body shapes by intercepting axios via monkey-patching.
 // The module is ESM-imported; we validate exported shapes at the type level and
 // the URL strings through source inspection to keep this pure-TS node:test.

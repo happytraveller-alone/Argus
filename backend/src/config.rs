@@ -165,7 +165,7 @@ impl AppConfig {
                 .unwrap_or(0.0),
             opengrep_runner_cpu_limit_explicit: opengrep_runner_cpu_limit_env.is_some(),
             opengrep_runner_pids_limit: parse_u64_env("OPENGREP_RUNNER_PIDS_LIMIT", 512),
-            cubesandbox_enabled: parse_bool_env("CUBESANDBOX_ENABLED", false),
+            cubesandbox_enabled: parse_bool_env("CUBESANDBOX_ENABLED", true),
             cubesandbox_api_base_url: env::var("CUBESANDBOX_API_BASE_URL")
                 .unwrap_or_else(|_| "http://127.0.0.1:23000".to_string()),
             cubesandbox_data_plane_base_url: env::var("CUBESANDBOX_DATA_PLANE_BASE_URL")

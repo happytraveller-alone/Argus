@@ -4,7 +4,6 @@ import { Navigate, useLocation } from "react-router-dom";
 import type { I18nKey } from "@/shared/i18n";
 import type { SidebarNavGroupId } from "@/app/sidebarNavGroups";
 import { buildOpengrepRulesRedirectPath } from "@/shared/utils/legacyRouteRedirect";
-import InDevelopmentPlaceholder from "@/shared/components/InDevelopmentPlaceholder";
 
 const Dashboard = lazy(() => import("@/pages/Dashboard"));
 const DashboardMockPreview = lazy(() => import("@/pages/DashboardMockPreview"));

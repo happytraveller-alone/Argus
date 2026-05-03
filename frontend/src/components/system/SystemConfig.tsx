@@ -217,7 +217,7 @@ const DEFAULT_CONFIG: SystemConfigData = {
 	},
 	rawOtherConfig: {},
 	cubeSandbox: {
-		enabled: false,
+		enabled: true,
 		apiBaseUrl: "http://127.0.0.1:23000",
 		dataPlaneBaseUrl: "https://127.0.0.1:21443",
 		templateId: "",
