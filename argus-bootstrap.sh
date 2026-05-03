@@ -22,6 +22,23 @@ BACKEND_HEALTH_URL="${ARGUS_BACKEND_HEALTH_URL:-http://127.0.0.1:${BACKEND_PORT}
 BACKEND_IMPORT_URL="${ARGUS_BACKEND_IMPORT_URL:-http://127.0.0.1:${BACKEND_PORT}/api/v1/system-config/import-env}"
 ARGUS_RESET_IMPORT_TOKEN=""
 
+# CubeSandbox host-side bootstrap configuration.
+# These govern argus-bootstrap.sh's host-side preflight, VM startup, install,
+# and CodeQL C/C++ template provisioning. They are independent of
+# CUBESANDBOX_AUTO_START / CUBESANDBOX_AUTO_INSTALL in .env, which gate the
+# backend's in-container lazy fallback.
+CUBE_QUICKSTART="$ROOT_DIR/scripts/cubesandbox-quickstart.sh"
+CUBE_SSH_PORT_DEFAULT="${CUBE_SSH_PORT:-10022}"
+CUBE_API_PORT_DEFAULT="${CUBE_API_PORT:-23000}"
+CUBE_BOOTSTRAP_TIMEOUT="${ARGUS_CUBE_BOOTSTRAP_TIMEOUT:-1800}"
+CUBE_BOOTSTRAP_POLL_INTERVAL="${ARGUS_CUBE_BOOTSTRAP_POLL_INTERVAL:-5}"
+CUBESANDBOX_BOOTSTRAP_AUTO_DEFAULT="true"
+CUBESANDBOX_BOOTSTRAP_PROVISION_TEMPLATE_DEFAULT="true"
+SKIP_CUBESANDBOX="${ARGUS_SKIP_CUBESANDBOX:-false}"
+CUBESANDBOX_ONLY=false
+RESET_CUBESANDBOX_TEMPLATE=false
+CUBESANDBOX_STATUS=false
+
 print_banner() {
   cat <<'BANNER'
   ___
@@ -83,6 +100,31 @@ Start modes:
 
 Ports:
   Argus_FRONTEND_PORT           Frontend host port. Default: 13000
+
+CubeSandbox host-side bootstrap (WSL2-native):
+  By default argus-bootstrap.sh runs scripts/cubesandbox-quickstart.sh
+  doctor -> prepare-vm -> run-vm-background -> install ->
+  provision-codeql-cpp-template before starting Compose. Each step is
+  idempotent and skipped when its readiness check passes (SSH port for the VM,
+  CubeMaster API health for the install, non-empty CUBESANDBOX_TEMPLATE_ID
+  in .env for the template).
+
+  --skip-cubesandbox             Skip host-side cubesandbox bootstrap entirely.
+  --cubesandbox-only             Only run the cubesandbox bootstrap; skip
+                                 Compose cleanup/start/follow.
+  --cubesandbox-reset            Clear CUBESANDBOX_TEMPLATE_ID in .env before
+                                 ensure_cubesandbox so the next run re-provisions
+                                 the CodeQL C/C++ template. Does not touch the VM.
+  --cubesandbox-status           Print host, .env toggles, VM SSH, CubeMaster API,
+                                 and CodeQL template state, then exit. Read-only.
+  ARGUS_SKIP_CUBESANDBOX=true    Same effect as --skip-cubesandbox.
+  CUBESANDBOX_ENABLED=false      Disable cubesandbox in .env (also skips bootstrap).
+  CUBESANDBOX_BOOTSTRAP_AUTO=false
+                                 Disable host-side auto-bootstrap in .env.
+  CUBESANDBOX_BOOTSTRAP_PROVISION_TEMPLATE=false
+                                 Skip pre-provisioning the CodeQL C/C++ template
+                                 (backend lazy-provisions on first scan instead).
+  ARGUS_CUBE_BOOTSTRAP_TIMEOUT   Per-step wait timeout in seconds. Default: 1800.
 
 Test / verification:
   --dry-run                     Preview commands and skip Docker/curl execution.
@@ -295,6 +337,304 @@ require_real_tools() {
   command -v curl >/dev/null 2>&1 || fail "curl not found"
 }
 
+ensure_env_key_default() {
+  local key="$1"
+  local default_value="$2"
+  local comment="${3:-}"
+  local existing
+  existing="$(read_env_value "$key")"
+  if [[ -n "$existing" ]]; then
+    return 0
+  fi
+  if [[ ! -f "$ARGUS_ENV_FILE" ]]; then
+    return 0
+  fi
+  {
+    if [[ -n "$comment" ]]; then
+      printf '\n# %s\n' "$comment"
+    else
+      printf '\n'
+    fi
+    printf '%s=%s\n' "$key" "$default_value"
+  } >> "$ARGUS_ENV_FILE"
+  chmod 600 "$ARGUS_ENV_FILE" 2>/dev/null || true
+  log "Added ${key}=${default_value} to ${ARGUS_ENV_FILE} (legacy .env upgrade)."
+}
+
+ensure_root_env_keys() {
+  ensure_env_key_default \
+    "CUBESANDBOX_BOOTSTRAP_AUTO" \
+    "$CUBESANDBOX_BOOTSTRAP_AUTO_DEFAULT" \
+    "Host-side bootstrap auto-build for CubeSandbox VM + install + CodeQL C/C++ template."
+  ensure_env_key_default \
+    "CUBESANDBOX_BOOTSTRAP_PROVISION_TEMPLATE" \
+    "$CUBESANDBOX_BOOTSTRAP_PROVISION_TEMPLATE_DEFAULT" \
+    "Pre-provision the CodeQL C/C++ template during bootstrap. Set to false to keep template lazy."
+}
+
+cubesandbox_enabled_in_env() {
+  local val="${CUBESANDBOX_ENABLED:-}"
+  if [[ -z "$val" ]]; then
+    val="$(read_env_value CUBESANDBOX_ENABLED)"
+  fi
+  [[ -z "$val" ]] && val="true"
+  is_truthy "$val"
+}
+
+cubesandbox_bootstrap_auto_in_env() {
+  local val="${CUBESANDBOX_BOOTSTRAP_AUTO:-}"
+  if [[ -z "$val" ]]; then
+    val="$(read_env_value CUBESANDBOX_BOOTSTRAP_AUTO)"
+  fi
+  [[ -z "$val" ]] && val="$CUBESANDBOX_BOOTSTRAP_AUTO_DEFAULT"
+  is_truthy "$val"
+}
+
+cubesandbox_bootstrap_provision_template_in_env() {
+  local val="${CUBESANDBOX_BOOTSTRAP_PROVISION_TEMPLATE:-}"
+  if [[ -z "$val" ]]; then
+    val="$(read_env_value CUBESANDBOX_BOOTSTRAP_PROVISION_TEMPLATE)"
+  fi
+  [[ -z "$val" ]] && val="$CUBESANDBOX_BOOTSTRAP_PROVISION_TEMPLATE_DEFAULT"
+  is_truthy "$val"
+}
+
+is_wsl2_host() {
+  grep -qi microsoft /proc/version 2>/dev/null
+}
+
+cube_tcp_reachable() {
+  local port="$1"
+  ( exec 3<>"/dev/tcp/127.0.0.1/${port}" ) 2>/dev/null
+}
+
+cube_ssh_reachable() {
+  cube_tcp_reachable "${CUBE_SSH_PORT_DEFAULT}"
+}
+
+cube_api_healthy() {
+  curl -fsS --max-time 5 "http://127.0.0.1:${CUBE_API_PORT_DEFAULT}/health" >/dev/null 2>&1
+}
+
+cube_template_id_from_env() {
+  read_env_value CUBESANDBOX_TEMPLATE_ID
+}
+
+cube_run_quickstart() {
+  local subcmd="$1"
+  shift
+  if [[ ! -x "$CUBE_QUICKSTART" ]]; then
+    fail "cubesandbox quickstart helper not executable: $CUBE_QUICKSTART"
+  fi
+  if "$DRY_RUN"; then
+    printf '[dry-run] %s %s' "$CUBE_QUICKSTART" "$subcmd"
+    if [[ $# -gt 0 ]]; then
+      printf ' %s' "$*"
+    fi
+    printf '\n'
+    return 0
+  fi
+  log "cubesandbox: running $subcmd"
+  "$CUBE_QUICKSTART" "$subcmd" "$@"
+}
+
+cube_doctor_or_fail() {
+  if "$DRY_RUN"; then
+    log "[dry-run] would run: $CUBE_QUICKSTART doctor"
+    return 0
+  fi
+  if "$CUBE_QUICKSTART" doctor; then
+    return 0
+  fi
+  fail "cubesandbox host preflight failed; review remediation hints above and re-run, or pass --skip-cubesandbox / set CUBESANDBOX_BOOTSTRAP_AUTO=false in .env to bring the rest of Argus up without cubesandbox."
+}
+
+cube_wait_for_predicate() {
+  local label="$1"
+  local predicate="$2"
+  local timeout="$3"
+  if "$DRY_RUN"; then
+    log "[dry-run] would wait for cubesandbox $label"
+    return 0
+  fi
+  local start now elapsed last_heartbeat=0
+  start="$(date +%s)"
+  log "cubesandbox: waiting up to ${timeout}s for $label..."
+  while true; do
+    if "$predicate"; then
+      log "cubesandbox: $label reached."
+      return 0
+    fi
+    now="$(date +%s)"
+    elapsed=$((now - start))
+    if (( elapsed - last_heartbeat >= 60 )); then
+      log "cubesandbox: still waiting for $label (${elapsed}s/${timeout}s)..."
+      last_heartbeat=$elapsed
+    fi
+    if (( elapsed >= timeout )); then
+      fail "cubesandbox $label not reached within ${timeout}s."
+    fi
+    sleep "$CUBE_BOOTSTRAP_POLL_INTERVAL"
+  done
+}
+
+cube_ensure_vm() {
+  if cube_ssh_reachable; then
+    log "cubesandbox: VM SSH already reachable on 127.0.0.1:${CUBE_SSH_PORT_DEFAULT}; skip prepare-vm/run-vm-background."
+    return 0
+  fi
+  log "cubesandbox: VM not reachable; preparing OpenCloudOS image and starting QEMU in background."
+  cube_run_quickstart prepare-vm
+  cube_run_quickstart run-vm-background
+  cube_wait_for_predicate "VM SSH (127.0.0.1:${CUBE_SSH_PORT_DEFAULT})" cube_ssh_reachable "$CUBE_BOOTSTRAP_TIMEOUT"
+}
+
+cube_ensure_install() {
+  if cube_api_healthy; then
+    log "cubesandbox: CubeMaster API already healthy on 127.0.0.1:${CUBE_API_PORT_DEFAULT}; skip install."
+    return 0
+  fi
+  log "cubesandbox: CubeMaster API not yet healthy; running one-click install in VM (5-15 min on first run)."
+  cube_run_quickstart install
+  cube_wait_for_predicate "CubeMaster API (127.0.0.1:${CUBE_API_PORT_DEFAULT}/health)" cube_api_healthy "$CUBE_BOOTSTRAP_TIMEOUT"
+}
+
+cube_persist_template_id() {
+  local id="$1"
+  local tmp
+  tmp="$(mktemp "${ARGUS_ENV_FILE}.tmp.XXXXXX")"
+  awk -v id="$id" '
+    BEGIN { replaced = 0 }
+    /^[[:space:]]*CUBESANDBOX_TEMPLATE_ID[[:space:]]*=/ {
+      print "CUBESANDBOX_TEMPLATE_ID=" id
+      replaced = 1
+      next
+    }
+    { print }
+    END {
+      if (!replaced) {
+        print "CUBESANDBOX_TEMPLATE_ID=" id
+      }
+    }
+  ' "$ARGUS_ENV_FILE" > "$tmp"
+  mv "$tmp" "$ARGUS_ENV_FILE"
+  chmod 600 "$ARGUS_ENV_FILE" 2>/dev/null || true
+  log "Persisted CUBESANDBOX_TEMPLATE_ID=${id} in ${ARGUS_ENV_FILE}."
+}
+
+cube_reset_template_id() {
+  local current
+  current="$(cube_template_id_from_env)"
+  if [[ -z "$current" ]] || is_placeholder_value "$current"; then
+    log "cubesandbox: --cubesandbox-reset noop (CUBESANDBOX_TEMPLATE_ID already empty)."
+    return 0
+  fi
+  if "$DRY_RUN"; then
+    log "[dry-run] would clear CUBESANDBOX_TEMPLATE_ID=${current} in ${ARGUS_ENV_FILE} to force re-provision."
+    return 0
+  fi
+  log "cubesandbox: --cubesandbox-reset clearing CUBESANDBOX_TEMPLATE_ID=${current}; next provision will create a new template."
+  cube_persist_template_id ""
+}
+
+cube_ensure_template() {
+  if ! cubesandbox_bootstrap_provision_template_in_env; then
+    log "cubesandbox: CUBESANDBOX_BOOTSTRAP_PROVISION_TEMPLATE=false; skipping template pre-provision (backend will lazy-provision on first CodeQL scan)."
+    return 0
+  fi
+  local current
+  current="$(cube_template_id_from_env)"
+  if [[ -n "$current" ]] && ! is_placeholder_value "$current"; then
+    log "cubesandbox: CodeQL C/C++ template already configured (${current}); skip provision."
+    return 0
+  fi
+  log "cubesandbox: provisioning CodeQL C/C++ template (configure-docker-mirror -> start-local-registry -> build-codeql-cpp-image -> create-codeql-cpp-template -> watch). 10-30 min on first run."
+  if "$DRY_RUN"; then
+    printf '[dry-run] %s provision-codeql-cpp-template\n' "$CUBE_QUICKSTART"
+    return 0
+  fi
+  local provision_log
+  provision_log="$(mktemp -t argus-cube-provision.XXXXXX.log)"
+  local provision_rc=0
+  set +e
+  "$CUBE_QUICKSTART" provision-codeql-cpp-template 2>&1 | tee "$provision_log"
+  provision_rc=${PIPESTATUS[0]}
+  set -e
+  if (( provision_rc != 0 )); then
+    rm -f "$provision_log"
+    fail "cubesandbox provision-codeql-cpp-template exited with rc=${provision_rc}; see streamed output above."
+  fi
+  local template_id
+  template_id="$(grep -E '^PROVISION_RESULT=' "$provision_log" \
+    | tail -n 1 \
+    | sed -E 's/^PROVISION_RESULT=//' \
+    | python3 -c "import json, sys; data=json.load(sys.stdin); tid=data.get('template_id') or ''; sys.stdout.write(tid)" \
+    2>/dev/null \
+    || true)"
+  rm -f "$provision_log"
+  if [[ -z "$template_id" ]]; then
+    fail "cubesandbox provision exited 0 but no template_id was parsed; inspect the streamed log above."
+  fi
+  cube_persist_template_id "$template_id"
+}
+
+cube_status() {
+  local enabled_state auto_state provision_state vm_state api_state template_state host_state template_id
+  if is_wsl2_host; then host_state="WSL2"; else host_state="non-WSL2"; fi
+  if cubesandbox_enabled_in_env; then enabled_state="enabled"; else enabled_state="disabled"; fi
+  if cubesandbox_bootstrap_auto_in_env; then auto_state="auto-on"; else auto_state="auto-off"; fi
+  if cubesandbox_bootstrap_provision_template_in_env; then provision_state="enabled"; else provision_state="disabled"; fi
+  if cube_ssh_reachable; then vm_state="reachable (127.0.0.1:${CUBE_SSH_PORT_DEFAULT})"; else vm_state="not reachable (127.0.0.1:${CUBE_SSH_PORT_DEFAULT})"; fi
+  if cube_api_healthy; then api_state="healthy (127.0.0.1:${CUBE_API_PORT_DEFAULT}/health)"; else api_state="not healthy (127.0.0.1:${CUBE_API_PORT_DEFAULT}/health)"; fi
+  template_id="$(cube_template_id_from_env)"
+  if [[ -n "$template_id" ]] && ! is_placeholder_value "$template_id"; then
+    template_state="configured (${template_id})"
+  else
+    template_state="not configured"
+  fi
+  cat <<STATUS
+[cubesandbox status]
+  host:                   ${host_state}
+  CUBESANDBOX_ENABLED:    ${enabled_state}
+  bootstrap auto:         ${auto_state}
+  template provision:     ${provision_state}
+  VM SSH:                 ${vm_state}
+  CubeMaster API:         ${api_state}
+  CodeQL C/C++ template:  ${template_state}
+STATUS
+}
+
+ensure_cubesandbox() {
+  if "$SKIP_CUBESANDBOX"; then
+    log "Skipping cubesandbox host-side bootstrap (--skip-cubesandbox or ARGUS_SKIP_CUBESANDBOX=true)."
+    return 0
+  fi
+  if ! cubesandbox_enabled_in_env; then
+    log "cubesandbox disabled in ${ARGUS_ENV_FILE} (CUBESANDBOX_ENABLED=false); skipping bootstrap."
+    return 0
+  fi
+  if ! cubesandbox_bootstrap_auto_in_env; then
+    log "cubesandbox host-side auto-bootstrap disabled (CUBESANDBOX_BOOTSTRAP_AUTO=false); run scripts/cubesandbox-quickstart.sh manually when ready."
+    return 0
+  fi
+  if ! is_wsl2_host; then
+    log "cubesandbox host-side auto-bootstrap is only supported on WSL2 + KVM hosts. Detected non-WSL2 environment; skipping. Set CUBESANDBOX_BOOTSTRAP_AUTO=false in .env to silence this notice."
+    return 0
+  fi
+  if [[ ! -x "$CUBE_QUICKSTART" ]]; then
+    fail "cubesandbox quickstart helper not executable: $CUBE_QUICKSTART"
+  fi
+  log "cubesandbox host-side bootstrap: doctor -> VM -> install -> template (idempotent)."
+  cube_doctor_or_fail
+  cube_ensure_vm
+  cube_ensure_install
+  if "$RESET_CUBESANDBOX_TEMPLATE"; then
+    cube_reset_template_id
+  fi
+  cube_ensure_template
+  log "cubesandbox host-side bootstrap complete."
+}
+
 compose_down() {
   local volume_mode="${1:-preserve-volumes}"
   log "Stopping/removing this Argus Compose project before mode-specific cleanup."
@@ -488,6 +828,22 @@ parse_args() {
         WAIT_EXIT=true
         shift
         ;;
+      --skip-cubesandbox)
+        SKIP_CUBESANDBOX=true
+        shift
+        ;;
+      --cubesandbox-only)
+        CUBESANDBOX_ONLY=true
+        shift
+        ;;
+      --cubesandbox-reset)
+        RESET_CUBESANDBOX_TEMPLATE=true
+        shift
+        ;;
+      --cubesandbox-status)
+        CUBESANDBOX_STATUS=true
+        shift
+        ;;
       --)
         shift
         if [[ $# -eq 0 ]]; then
@@ -510,13 +866,28 @@ parse_args() {
 
 main() {
   parse_args "$@"
+  if "$CUBESANDBOX_STATUS"; then
+    print_banner
+    cube_status
+    return 0
+  fi
   print_banner
   log "Argus bootstrap beginning. Project: $PROJECT_NAME"
   log "Run mode: $RUN_MODE"
+  if "$CUBESANDBOX_ONLY"; then
+    log "--cubesandbox-only: bootstrapping CubeSandbox runtime only; skipping LLM validation and Compose lifecycle."
+    ensure_root_env_file
+    ensure_root_env_keys
+    ensure_cubesandbox
+    log "cubesandbox-only bootstrap complete."
+    return 0
+  fi
   validate_llm_config
+  ensure_root_env_keys
   require_real_tools
   generate_import_token
   cleanup_for_run_mode
+  ensure_cubesandbox
   start_stack
 }
 

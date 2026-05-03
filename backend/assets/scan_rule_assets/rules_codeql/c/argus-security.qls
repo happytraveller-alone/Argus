@@ -1,0 +1,2 @@
+- description: Argus C CodeQL security suite from official GitHub CodeQL queries
+- queries: ./queries

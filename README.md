@@ -20,6 +20,8 @@
 
 `argus-bootstrap.sh` 会在任何 Docker 清理或启动动作前调用 `scripts/validate-llm-config.sh --env-file ./.env` 校验 env/LLM 配置。校验失败时脚本会退出并提示重新配置。
 
+WSL2 主机上还会自动跑一遍 CubeSandbox 主机侧引导（doctor → prepare-vm → run-vm-background → install → provision-codeql-cpp-template），首次启动如果 VM/CubeMaster API/CodeQL C/C++ 模板缺失会自动构建；每一步都基于就绪检查（SSH/HTTP/`.env` 中的 `CUBESANDBOX_TEMPLATE_ID`）做幂等跳过。需要跳过这段流程可加 `--skip-cubesandbox` 或在 `.env` 设置 `CUBESANDBOX_BOOTSTRAP_AUTO=false`；只想构建沙箱跳过 Compose 用 `--cubesandbox-only`；想强制重建模板用 `--cubesandbox-reset`。非 WSL2 主机会自动跳过这段并打印提示。
+
 默认情况下，Compose 会把前端发布到宿主机 `13000` 端口、后端发布到 `18000` 端口，以避免和常见本地开发服务的 `3000` / `8000` 端口冲突。如需恢复旧端口，启动时设置 `Argus_FRONTEND_PORT=3000 Argus_BACKEND_PORT=8000`。
 
 后端会读取根目录 `.env`，并把 `${DOCKER_SOCKET_PATH:-/var/run/docker.sock}` 挂载给扫描 runner。本工作区的本地 `.env` 可将它覆盖为 `/run/docker-local.sock`；其他环境按需设置 `DOCKER_SOCKET_PATH`。

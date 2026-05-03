@@ -508,4 +508,57 @@ mod tests {
             );
         }
     }
+
+    #[test]
+    fn bundled_codeql_assets_include_official_c_cpp_python_queries() {
+        let assets = discover_rule_assets().expect("rule assets should load");
+        let paths = assets
+            .iter()
+            .map(|asset| asset.asset_path.as_str())
+            .collect::<BTreeSet<_>>();
+
+        for language in ["c", "cpp", "python"] {
+            assert!(
+                paths.contains(format!("rules_codeql/{language}/qlpack.yml").as_str()),
+                "expected CodeQL qlpack for {language}"
+            );
+            assert!(
+                paths.contains(format!("rules_codeql/{language}/argus-security.qls").as_str()),
+                "expected CodeQL query suite for {language}"
+            );
+            let readme_path = format!("rules_codeql/{language}/queries/README.md");
+            let readme = assets
+                .iter()
+                .find(|asset| asset.asset_path == readme_path)
+                .map(|asset| asset.content.as_str())
+                .unwrap_or_default();
+            assert!(
+                readme.contains("https://v6.gh-proxy.org/https://github.com/github/codeql"),
+                "expected mirrored official CodeQL source URL in {readme_path}"
+            );
+
+            let query_paths = paths
+                .iter()
+                .filter(|path| {
+                    path.starts_with(format!("rules_codeql/{language}/queries/").as_str())
+                        && path.ends_with(".ql")
+                })
+                .collect::<Vec<_>>();
+            assert!(
+                query_paths.len() >= 3,
+                "expected at least three bundled official CodeQL queries for {language}, got {:?}",
+                query_paths
+            );
+        }
+
+        for asset in assets.iter().filter(|asset| {
+            asset.asset_path.starts_with("rules_codeql/") && asset.asset_path.ends_with(".ql")
+        }) {
+            assert!(
+                asset.content.contains("@id ") && asset.content.contains("@kind "),
+                "expected official CodeQL metadata block in {}",
+                asset.asset_path
+            );
+        }
+    }
 }

@@ -84,30 +84,41 @@ async fn spawn_openai_mock_server() -> String {
 async fn spawn_openai_mock_server_with_retry_feedback(
     retry_after_missing_compiler: bool,
 ) -> String {
+    spawn_openai_mock_server_with_content(move |request| {
+        if request.contains("selecting a safe C/C++ build plan") {
+            if retry_after_missing_compiler && request.contains("missing compiler") {
+                r#"{"reasoning_summary":"Previous CubeSandbox output reported missing compiler; retry with the portable fallback command.","commands":["cc -c src/main.c"]}"#.to_string()
+            } else if retry_after_missing_compiler {
+                r#"{"reasoning_summary":"First try make; if CubeSandbox reports a missing compiler the next round will adjust.","commands":["make -B -j2"]}"#.to_string()
+            } else {
+                r#"{"reasoning_summary":"Makefile is present, so force a clean make build for CodeQL capture.","commands":["make -B -j2"]}"#.to_string()
+            }
+        } else {
+            "ok".to_string()
+        }
+    })
+    .await
+}
+
+async fn spawn_openai_mock_server_with_content(
+    content_for_request: impl Fn(&str) -> String + Send + Sync + 'static,
+) -> String {
     let listener = TcpListener::bind("127.0.0.1:0")
         .await
         .expect("bind mock llm server");
     let address = listener.local_addr().expect("mock llm address");
+    let content_for_request = std::sync::Arc::new(content_for_request);
     tokio::spawn(async move {
         loop {
             let Ok((mut stream, _)) = listener.accept().await else {
                 break;
             };
+            let content_for_request = content_for_request.clone();
             tokio::spawn(async move {
                 let mut buffer = [0_u8; 4096];
                 let read_len = stream.read(&mut buffer).await.unwrap_or(0);
                 let request = String::from_utf8_lossy(&buffer[..read_len]);
-                let content = if request.contains("selecting a safe C/C++ build plan") {
-                    if retry_after_missing_compiler && request.contains("missing compiler") {
-                        r#"{"reasoning_summary":"Previous CubeSandbox output reported missing compiler; retry with the portable fallback command.","commands":["cc -c src/main.c"]}"#
-                    } else if retry_after_missing_compiler {
-                        r#"{"reasoning_summary":"First try make; if CubeSandbox reports a missing compiler the next round will adjust.","commands":["make -B -j2"]}"#
-                    } else {
-                        r#"{"reasoning_summary":"Makefile is present, so force a clean make build for CodeQL capture.","commands":["make -B -j2"]}"#
-                    }
-                } else {
-                    "ok"
-                };
+                let content = content_for_request(&request);
                 let body = json!({
                     "choices": [{
                         "message": {
@@ -226,6 +237,7 @@ struct CubeSandboxTestHarness {
     helper_path: PathBuf,
     seen_commands: std::sync::Arc<std::sync::Mutex<Vec<String>>>,
     deleted_sandboxes: std::sync::Arc<std::sync::Mutex<Vec<String>>>,
+    python_headers_installed: std::sync::Arc<std::sync::Mutex<bool>>,
 }
 
 impl CubeSandboxTestHarness {
@@ -236,6 +248,7 @@ impl CubeSandboxTestHarness {
     async fn spawn_with_delay(fail_make_exploration: bool, delay_until_delete: bool) -> Self {
         let seen_commands = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
         let deleted_sandboxes = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let python_headers_installed = std::sync::Arc::new(std::sync::Mutex::new(false));
         let temp_dir = tempfile::tempdir().expect("temp helper dir");
         let helper_dir = temp_dir.keep();
         let helper_path = helper_dir.join("cubesandbox-helper.sh");
@@ -252,6 +265,7 @@ impl CubeSandboxTestHarness {
         let data_addr = spawn_cubesandbox_data_server(
             seen_commands.clone(),
             deleted_sandboxes.clone(),
+            python_headers_installed.clone(),
             fail_make_exploration,
             delay_until_delete,
         )
@@ -262,6 +276,7 @@ impl CubeSandboxTestHarness {
             helper_path,
             seen_commands,
             deleted_sandboxes,
+            python_headers_installed,
         }
     }
 
@@ -271,6 +286,10 @@ impl CubeSandboxTestHarness {
 
     fn deleted_sandboxes(&self) -> Vec<String> {
         self.deleted_sandboxes.lock().unwrap().clone()
+    }
+
+    fn python_headers_installed(&self) -> bool {
+        *self.python_headers_installed.lock().unwrap()
     }
 }
 
@@ -330,6 +349,7 @@ async fn spawn_cubesandbox_control_server(
 async fn spawn_cubesandbox_data_server(
     seen_commands: std::sync::Arc<std::sync::Mutex<Vec<String>>>,
     deleted_sandboxes: std::sync::Arc<std::sync::Mutex<Vec<String>>>,
+    python_headers_installed: std::sync::Arc<std::sync::Mutex<bool>>,
     fail_make_exploration: bool,
     delay_until_delete: bool,
 ) -> SocketAddr {
@@ -337,6 +357,10 @@ async fn spawn_cubesandbox_data_server(
         .await
         .expect("bind CubeSandbox data server");
     let address = listener.local_addr().expect("data address");
+    let uploaded_files = std::sync::Arc::new(std::sync::Mutex::new(std::collections::HashMap::<
+        String,
+        String,
+    >::new()));
     tokio::spawn(async move {
         loop {
             let Ok((mut stream, _)) = listener.accept().await else {
@@ -344,13 +368,26 @@ async fn spawn_cubesandbox_data_server(
             };
             let seen_commands = seen_commands.clone();
             let deleted_sandboxes = deleted_sandboxes.clone();
+            let python_headers_installed = python_headers_installed.clone();
+            let uploaded_files = uploaded_files.clone();
             tokio::spawn(async move {
-                let raw = read_http_request(&mut stream).await;
-                let body = raw.split("\r\n\r\n").nth(1).unwrap_or("{}");
-                let cmd = serde_json::from_str::<Value>(body)
-                    .ok()
-                    .and_then(|value| value.get("cmd").and_then(Value::as_str).map(str::to_string))
+                let raw_bytes = read_http_request_bytes(&mut stream).await;
+                let raw = String::from_utf8_lossy(&raw_bytes);
+                let first = raw.lines().next().unwrap_or_default().to_string();
+                if first.starts_with("POST /files") {
+                    if let Some(path) = extract_query_value_from_request_line(&first, "path") {
+                        uploaded_files.lock().unwrap().insert(path, raw.to_string());
+                    }
+                    let response =
+                        "HTTP/1.1 200 OK\r\ncontent-length: 0\r\nconnection: close\r\n\r\n";
+                    let _ = stream.write_all(response.as_bytes()).await;
+                    return;
+                }
+                let body = find_header_end(&raw_bytes)
+                    .map(|index| &raw_bytes[index + 4..])
                     .unwrap_or_default();
+                let raw_cmd = decode_envd_process_request_command(body).unwrap_or_default();
+                let cmd = resolve_uploaded_script_command(&raw_cmd, &uploaded_files);
                 seen_commands.lock().unwrap().push(cmd.clone());
                 if delay_until_delete {
                     for _ in 0..100 {
@@ -373,6 +410,7 @@ async fn spawn_cubesandbox_data_server(
                     fake_cubesandbox_exploration_output_for_command(
                         &exploration_command,
                         fail_make_exploration,
+                        &python_headers_installed,
                     )
                 } else if cmd.contains("CUBESANDBOX_CODEQL_SETUP_PY")
                     || cmd.contains("ARGUS_CODEQL_SETUP_RESULT")
@@ -381,25 +419,68 @@ async fn spawn_cubesandbox_data_server(
                 } else {
                     fake_cubesandbox_process_output()
                 };
-                let response_body = json!({
-                    "stdout": output,
-                    "stderr": "",
-                    "exitCode": 0,
-                })
-                .to_string();
+                let response_body = fake_envd_process_stream(&output, "", 0);
                 let response = format!(
-                    "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{}",
-                    response_body.len(),
-                    response_body
+                    "HTTP/1.1 200 OK\r\ncontent-type: application/connect+json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n",
+                    response_body.len()
                 );
                 let _ = stream.write_all(response.as_bytes()).await;
+                let _ = stream.write_all(&response_body).await;
             });
         }
     });
     address
 }
 
-async fn read_http_request(stream: &mut tokio::net::TcpStream) -> String {
+fn extract_query_value_from_request_line(first: &str, key: &str) -> Option<String> {
+    let path = first.split_whitespace().nth(1)?;
+    let query = path.split_once('?')?.1;
+    for pair in query.split('&') {
+        let (name, value) = pair.split_once('=')?;
+        if name == key {
+            return Some(percent_decode_minimal(value));
+        }
+    }
+    None
+}
+
+fn percent_decode_minimal(value: &str) -> String {
+    let bytes = value.as_bytes();
+    let mut out = Vec::new();
+    let mut index = 0;
+    while index < bytes.len() {
+        if bytes[index] == b'%' && index + 2 < bytes.len() {
+            if let Ok(hex) = u8::from_str_radix(&value[index + 1..index + 3], 16) {
+                out.push(hex);
+                index += 3;
+                continue;
+            }
+        }
+        out.push(bytes[index]);
+        index += 1;
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
+fn resolve_uploaded_script_command(
+    raw_cmd: &str,
+    uploaded_files: &std::sync::Arc<std::sync::Mutex<std::collections::HashMap<String, String>>>,
+) -> String {
+    let Some(path) = raw_cmd
+        .split_whitespace()
+        .find(|part| part.starts_with("/tmp/argus-") && part.ends_with(".sh"))
+    else {
+        return raw_cmd.to_string();
+    };
+    uploaded_files
+        .lock()
+        .unwrap()
+        .get(path)
+        .cloned()
+        .unwrap_or_else(|| raw_cmd.to_string())
+}
+
+async fn read_http_request_bytes(stream: &mut tokio::net::TcpStream) -> Vec<u8> {
     let mut buffer = Vec::new();
     let mut chunk = [0_u8; 8192];
     loop {
@@ -424,7 +505,7 @@ async fn read_http_request(stream: &mut tokio::net::TcpStream) -> String {
             }
         }
     }
-    String::from_utf8_lossy(&buffer).into_owned()
+    buffer
 }
 
 fn find_header_end(buffer: &[u8]) -> Option<usize> {
@@ -471,10 +552,90 @@ fn fake_cubesandbox_process_output() -> String {
     format!("ARGUS_CODEQL_RESULT={envelope}\n")
 }
 
+fn decode_envd_process_request_command(bytes: &[u8]) -> Option<String> {
+    if bytes.len() < 5 {
+        return None;
+    }
+    let length = u32::from_be_bytes([bytes[1], bytes[2], bytes[3], bytes[4]]) as usize;
+    if bytes.len() < 5 + length {
+        return None;
+    }
+    let value: Value = serde_json::from_slice(&bytes[5..5 + length]).ok()?;
+    let process = value.get("process")?;
+    let cmd = process
+        .get("cmd")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    let args = process
+        .get("args")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .collect::<Vec<_>>();
+    if cmd == "/bin/sh" && args.first() == Some(&"-c") {
+        return args.get(1).map(|value| (*value).to_string());
+    }
+    Some(
+        std::iter::once(cmd)
+            .chain(args)
+            .collect::<Vec<_>>()
+            .join(" "),
+    )
+}
+
+fn connect_frame(flags: u8, payload: &[u8]) -> Vec<u8> {
+    let mut out = Vec::new();
+    out.push(flags);
+    out.extend_from_slice(&(payload.len() as u32).to_be_bytes());
+    out.extend_from_slice(payload);
+    out
+}
+
+fn fake_envd_process_stream(stdout: &str, stderr: &str, exit_code: i32) -> Vec<u8> {
+    let mut out = Vec::new();
+    out.extend(connect_frame(0, br#"{"event":{"start":{"pid":42}}}"#));
+    if !stdout.is_empty() {
+        let payload = json!({
+            "event": {
+                "data": {
+                    "stdout": STANDARD.encode(stdout)
+                }
+            }
+        })
+        .to_string();
+        out.extend(connect_frame(0, payload.as_bytes()));
+    }
+    if !stderr.is_empty() {
+        let payload = json!({
+            "event": {
+                "data": {
+                    "stderr": STANDARD.encode(stderr)
+                }
+            }
+        })
+        .to_string();
+        out.extend(connect_frame(0, payload.as_bytes()));
+    }
+    let end = json!({
+        "event": {
+            "end": {
+                "exited": true,
+                "exit_code": exit_code
+            }
+        }
+    })
+    .to_string();
+    out.extend(connect_frame(0, end.as_bytes()));
+    out.extend(connect_frame(2, b"{}"));
+    out
+}
+
 fn decode_cubesandbox_exploration_command(script: &str) -> Option<String> {
     let payload_b64 = script
-        .strip_prefix("python3 - ")?
-        .split_whitespace()
+        .split("cat > \"$_ARGUS_PAYLOAD\" <<'__ARGUS_B64__'\n")
+        .nth(1)?
+        .split("\n__ARGUS_B64__")
         .next()?;
     let payload = STANDARD.decode(payload_b64).ok()?;
     let parsed: Value = serde_json::from_slice(&payload).ok()?;
@@ -484,21 +645,63 @@ fn decode_cubesandbox_exploration_command(script: &str) -> Option<String> {
         .map(str::to_string)
 }
 
+fn decoded_cubesandbox_script_commands(scripts: &[String]) -> Vec<String> {
+    scripts
+        .iter()
+        .filter_map(|script| decode_cubesandbox_exploration_command(script))
+        .collect()
+}
+
 fn fake_cubesandbox_exploration_output_for_command(
     command: &str,
     fail_make_exploration: bool,
+    python_headers_installed: &std::sync::Arc<std::sync::Mutex<bool>>,
 ) -> String {
-    let (stdout, stderr, exit_code, failure_category, dependency_detected) =
-        if command.contains("cc -c src/main.c") {
-            ("compiled", "", 0, "none", false)
-        } else if !fail_make_exploration && command.contains("make -B -j2") {
-            ("ok", "", 0, "none", false)
-        } else {
-            ("", "missing compiler for make", 127, "compile_error", true)
-        };
+    if command == "apt-get update" || command == "apt-get install -y python3-dev" {
+        if command == "apt-get install -y python3-dev" {
+            *python_headers_installed.lock().unwrap() = true;
+        }
+        let envelope = json!({
+            "command": command,
+            "stdout": "installed",
+            "stderr": "",
+            "exit_code": 0,
+            "failure_category": "none",
+            "dependency_installation": {"detected": false},
+        });
+        return format!("ARGUS_CODEQL_EXPLORATION_RESULT={envelope}\n");
+    }
+    let (stdout, stderr, exit_code, failure_category, dependency_detected) = if command
+        .contains("cc -c src/python_extension.c")
+        && !*python_headers_installed.lock().unwrap()
+    {
+        (
+            "",
+            "fatal error: Python.h: No such file or directory",
+            1,
+            "compile_error",
+            true,
+        )
+    } else if command.contains("cd 'libplist-master' &&")
+        || command.contains("cd libplist-master &&")
+        || command.contains("cc -c src/main.c")
+        || command.contains("cc -c src/python_extension.c")
+    {
+        ("compiled", "", 0, "none", false)
+    } else if !fail_make_exploration && command.contains("make -B -j2") {
+        ("ok", "", 0, "none", false)
+    } else {
+        ("", "missing compiler for make", 127, "compile_error", true)
+    };
     let envelope = json!({
-        "command": if command.contains("cc -c src/main.c") {
+        "command": if command.contains("cd 'libplist-master' &&")
+            || command.contains("cd libplist-master &&")
+        {
+            command
+        } else if command.contains("cc -c src/main.c") {
             "cc -c src/main.c"
+        } else if command.contains("cc -c src/python_extension.c") {
+            "cc -c src/python_extension.c"
         } else {
             "make -B -j2"
         },
@@ -521,6 +724,58 @@ fn cpp_test_zip_bytes() -> Vec<u8> {
         writer.write_all(b"all:\n\tcc src/main.c -o app\n").unwrap();
         writer.start_file("src/main.c", options).unwrap();
         writer.write_all(b"int main(void) { return 0; }\n").unwrap();
+        writer.finish().unwrap();
+    }
+    bytes
+}
+
+fn nested_autotools_cpp_test_zip_bytes() -> Vec<u8> {
+    let mut bytes = Vec::new();
+    {
+        let cursor = std::io::Cursor::new(&mut bytes);
+        let mut writer = zip::ZipWriter::new(cursor);
+        let options = zip::write::SimpleFileOptions::default();
+        writer
+            .start_file("libplist-master/autogen.sh", options)
+            .unwrap();
+        writer
+            .write_all(
+                b"#!/bin/sh\nprintf '#!/bin/sh\\nexit 0\\n' > configure\nchmod +x configure\n",
+            )
+            .unwrap();
+        writer
+            .start_file("libplist-master/configure.ac", options)
+            .unwrap();
+        writer.write_all(b"AC_INIT([sample],[0.0.0])\n").unwrap();
+        writer
+            .start_file("libplist-master/git-version-gen", options)
+            .unwrap();
+        writer.write_all(b"#!/bin/sh\nprintf '0.0.0\\n'\n").unwrap();
+        writer
+            .start_file("libplist-master/Makefile", options)
+            .unwrap();
+        writer.write_all(b"all:\n\tcc src/main.c -o app\n").unwrap();
+        writer
+            .start_file("libplist-master/src/main.c", options)
+            .unwrap();
+        writer.write_all(b"int main(void) { return 0; }\n").unwrap();
+        writer.finish().unwrap();
+    }
+    bytes
+}
+
+fn python_header_cpp_test_zip_bytes() -> Vec<u8> {
+    let mut bytes = Vec::new();
+    {
+        let cursor = std::io::Cursor::new(&mut bytes);
+        let mut writer = zip::ZipWriter::new(cursor);
+        let options = zip::write::SimpleFileOptions::default();
+        writer
+            .start_file("src/python_extension.c", options)
+            .unwrap();
+        writer
+            .write_all(b"#include <Python.h>\nint main(void) { return 0; }\n")
+            .unwrap();
         writer.finish().unwrap();
     }
     bytes
@@ -780,7 +1035,12 @@ async fn codeql_compile_sandbox_persists_plan_to_postgres_when_configured() {
         sleep(Duration::from_millis(50)).await;
     };
 
-    assert_eq!(final_status.status, "completed", "{final_status:?}");
+    assert_eq!(
+        final_status.status,
+        "completed",
+        "{final_status:?} commands={:?}",
+        cubesandbox.commands()
+    );
     let plan_id = final_status.extra["build_plan_record_id"]
         .as_str()
         .expect("build plan id");
@@ -865,7 +1125,12 @@ async fn codeql_task_runs_cpp_compile_sandbox_before_replay_and_persists_db_trut
         sleep(Duration::from_millis(50)).await;
     };
 
-    assert_eq!(final_status.status, "completed", "{final_status:?}");
+    assert_eq!(
+        final_status.status,
+        "completed",
+        "{final_status:?} commands={:?}",
+        cubesandbox.commands()
+    );
     assert_eq!(final_status.engine, "codeql");
     assert_eq!(final_status.extra["language"], "cpp");
     assert_eq!(
@@ -981,7 +1246,7 @@ async fn codeql_task_runs_cpp_compile_sandbox_before_replay_and_persists_db_trut
 
     let commands = cubesandbox.commands();
     assert_eq!(commands.len(), 3, "{commands:?}");
-    assert!(commands[0].starts_with("python3 - "), "{commands:?}");
+    assert!(commands[0].starts_with("set -e\n"), "{commands:?}");
     assert!(commands[0].contains(" <<'PY'"), "{commands:?}");
     assert!(
         commands
@@ -1065,7 +1330,12 @@ async fn codeql_cpp_exploration_feeds_failed_command_into_next_llm_round() {
     let task_id = payload["id"].as_str().expect("task id").to_string();
 
     let final_status = wait_static_task(&state, &task_id).await;
-    assert_eq!(final_status.status, "completed", "{final_status:?}");
+    assert_eq!(
+        final_status.status,
+        "completed",
+        "{final_status:?} commands={:?}",
+        cubesandbox.commands()
+    );
     let final_snapshot = task_state::load_snapshot(&state).await.expect("snapshot");
     let build_plan_record_id = final_status.extra["build_plan_record_id"]
         .as_str()
@@ -1143,6 +1413,254 @@ async fn codeql_cpp_exploration_feeds_failed_command_into_next_llm_round() {
         commands
             .iter()
             .all(|command| !command.contains("docker") && !command.contains("codeql-scan")),
+        "{commands:?}"
+    );
+}
+
+#[tokio::test]
+async fn codeql_cpp_exploration_installs_missing_python_headers_and_persists_plan() {
+    let _env_lock = ENV_LOCK.lock().await;
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let (config, cubesandbox) =
+        isolated_codeql_cubesandbox_test_config("codeql-cpp-python-header-install").await;
+    let scan_root = temp_dir.path().join("scan-root");
+    fs::create_dir_all(&scan_root).expect("mkdir scan root");
+
+    let _workspace_root = EnvVarGuard::set("SCAN_WORKSPACE_ROOT", scan_root.to_str().unwrap());
+    let _workspace_volume = EnvVarGuard::set("SCAN_WORKSPACE_VOLUME", "Argus_scan_workspace");
+
+    let state = AppState::from_config(config)
+        .await
+        .expect("state should build");
+    if state.db_pool.is_some() {
+        bootstrap::run(&state)
+            .await
+            .expect("startup bootstrap should create CodeQL build plan schema");
+    }
+    let app = build_router(state.clone());
+    let project_id = create_project_with_name(&app, "codeql cpp python header project").await;
+    let base_url = spawn_openai_mock_server_with_content(|request| {
+        if request.contains("selecting a safe C/C++ build plan") {
+            r#"{"reasoning_summary":"Project has no global build configuration; compile the C extension and allow backend dependency repair.","commands":["cc -c src/python_extension.c"]}"#.to_string()
+        } else {
+            "ok".to_string()
+        }
+    })
+    .await;
+    configure_verified_llm_with_base_url(&app, base_url).await;
+    fs::create_dir_all(&*state.config.zip_storage_path).expect("mkdir zip root");
+    fs::write(
+        state
+            .config
+            .zip_storage_path
+            .join(format!("{project_id}.zip")),
+        python_header_cpp_test_zip_bytes(),
+    )
+    .expect("write cpp project zip");
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/static-tasks/codeql/tasks")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "project_id": project_id,
+                        "name": "codeql cpp python header task",
+                        "target_path": "."
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let payload: Value =
+        serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
+    let task_id = payload["id"].as_str().expect("task id").to_string();
+
+    let final_status = wait_static_task(&state, &task_id).await;
+    assert_eq!(
+        final_status.status,
+        "completed",
+        "{final_status:?} commands={:?}",
+        cubesandbox.commands()
+    );
+    assert!(cubesandbox.python_headers_installed());
+    let snapshot = task_state::load_snapshot(&state).await.expect("snapshot");
+    let build_plan_record_id = final_status.extra["build_plan_record_id"]
+        .as_str()
+        .expect("build plan record id");
+    let accepted_plan = snapshot
+        .codeql_build_plans
+        .get(build_plan_record_id)
+        .expect("accepted build plan persisted");
+    assert_eq!(
+        accepted_plan.evidence_json["dependency_install_commands"],
+        json!(["apt-get update", "apt-get install -y python3-dev"])
+    );
+
+    let progress_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::GET)
+                .uri(format!(
+                    "/api/v1/static-tasks/codeql/tasks/{task_id}/progress?include_logs=true"
+                ))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(progress_response.status(), StatusCode::OK);
+    let progress_payload: Value = serde_json::from_slice(
+        &to_bytes(progress_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    let events = progress_payload["events"]
+        .as_array()
+        .expect("progress events should be returned");
+    assert!(
+        events.iter().any(|event| {
+            event["stage"] == "dependency_install_started"
+                && event["payload"]["command"] == "apt-get install -y python3-dev"
+        }),
+        "{events:?}"
+    );
+    assert!(
+        events.iter().any(|event| {
+            event["stage"] == "sandbox_command_completed"
+                && event["payload"]["command"] == "cc -c src/python_extension.c"
+                && event["payload"]["exit_code"] == 0
+                && event["payload"]["retry_after_dependency_install"] == true
+        }),
+        "{events:?}"
+    );
+
+    let commands = decoded_cubesandbox_script_commands(&cubesandbox.commands());
+    assert!(
+        commands.iter().any(|command| command == "apt-get update"),
+        "{commands:?}"
+    );
+    assert!(
+        commands
+            .iter()
+            .any(|command| command == "apt-get install -y python3-dev"),
+        "{commands:?}"
+    );
+}
+
+#[tokio::test]
+async fn codeql_cpp_nested_project_config_overrides_llm_file_compile_plan() {
+    let _env_lock = ENV_LOCK.lock().await;
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let (config, cubesandbox) =
+        isolated_codeql_cubesandbox_test_config("codeql-cpp-nested-project-config").await;
+    let scan_root = temp_dir.path().join("scan-root");
+    fs::create_dir_all(&scan_root).expect("mkdir scan root");
+
+    let _workspace_root = EnvVarGuard::set("SCAN_WORKSPACE_ROOT", scan_root.to_str().unwrap());
+    let _workspace_volume = EnvVarGuard::set("SCAN_WORKSPACE_VOLUME", "Argus_scan_workspace");
+
+    let state = AppState::from_config(config)
+        .await
+        .expect("state should build");
+    if state.db_pool.is_some() {
+        bootstrap::run(&state)
+            .await
+            .expect("startup bootstrap should create CodeQL build plan schema");
+    }
+    let app = build_router(state.clone());
+    let project_id = create_project_with_name(&app, "codeql cpp nested config project").await;
+    let base_url = spawn_openai_mock_server_with_content(|request| {
+        if request.contains("selecting a safe C/C++ build plan") {
+            r#"{"reasoning_summary":"badly attempts file compile despite project config","commands":["cc -c libplist-master/src/main.c"]}"#.to_string()
+        } else {
+            "ok".to_string()
+        }
+    })
+    .await;
+    configure_verified_llm_with_base_url(&app, base_url).await;
+    fs::create_dir_all(&*state.config.zip_storage_path).expect("mkdir zip root");
+    fs::write(
+        state
+            .config
+            .zip_storage_path
+            .join(format!("{project_id}.zip")),
+        nested_autotools_cpp_test_zip_bytes(),
+    )
+    .expect("write cpp project zip");
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/static-tasks/codeql/tasks")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "project_id": project_id,
+                        "name": "codeql cpp nested config task",
+                        "target_path": "."
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let payload: Value =
+        serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
+    let task_id = payload["id"].as_str().expect("task id").to_string();
+
+    let final_status = wait_static_task(&state, &task_id).await;
+    assert_eq!(
+        final_status.status,
+        "completed",
+        "{final_status:?} commands={:?}",
+        cubesandbox.commands()
+    );
+    let snapshot = task_state::load_snapshot(&state).await.expect("snapshot");
+    let build_plan_record_id = final_status.extra["build_plan_record_id"]
+        .as_str()
+        .expect("build plan record id");
+    let accepted_plan = snapshot
+        .codeql_build_plans
+        .get(build_plan_record_id)
+        .expect("accepted build plan persisted");
+    assert_eq!(accepted_plan.working_directory, "libplist-master");
+    assert_eq!(
+        accepted_plan.evidence_json["project_build_config"],
+        json!("autotools_versioned")
+    );
+    assert_eq!(
+        accepted_plan.commands,
+        vec![
+            "printf '0.0.0\\n' > .tarball-version && chmod +x autogen.sh git-version-gen && NOCONFIGURE=1 ./autogen.sh".to_string(),
+            "./configure".to_string(),
+            "make -B -j1".to_string()
+        ]
+    );
+
+    let commands = decoded_cubesandbox_script_commands(&cubesandbox.commands());
+    assert!(
+        commands
+            .iter()
+            .any(|command| { command.starts_with("cd 'libplist-master' && printf '0.0.0") }),
+        "{commands:?}"
+    );
+    assert!(
+        !commands
+            .iter()
+            .any(|command| command == "cc -c libplist-master/src/main.c"),
         "{commands:?}"
     );
 }
@@ -1464,7 +1982,7 @@ async fn codeql_task_honors_non_cpp_language_payloads_without_compile_sandbox() 
         let commands = cubesandbox.commands();
         assert_eq!(commands.len(), 1, "{language}: {commands:?}");
         assert!(
-            commands[0].starts_with("python3 - "),
+            commands[0].starts_with("set -e\n"),
             "{language}: {commands:?}"
         );
         assert!(commands[0].contains(" <<'PY'"), "{language}: {commands:?}");

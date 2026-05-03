@@ -1,2 +1,2 @@
-- description: Argus minimal python CodeQL security suite
+- description: Argus Python CodeQL security suite from official GitHub CodeQL queries
 - queries: ./queries

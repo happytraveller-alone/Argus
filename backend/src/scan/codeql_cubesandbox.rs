@@ -11,7 +11,7 @@ use flate2::{write::GzEncoder, Compression};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
-use tar::Builder;
+use tar::{Builder, Header};
 
 use crate::{
     db::cubesandbox_templates::TemplateKind,
@@ -170,6 +170,23 @@ impl CodeqlSandboxSession {
         if output.exit_code.unwrap_or(0) != 0 {
             bail!(
                 "CubeSandbox CodeQL exploration wrapper failed exit={:?} stdout={} stderr={}",
+                output.exit_code,
+                codeql::redact_sensitive_text(&output.stdout),
+                codeql::redact_sensitive_text(&output.stderr)
+            );
+        }
+        parse_exploration_command_output(output)
+    }
+
+    pub async fn run_dependency_install_command(
+        &self,
+        command: &str,
+    ) -> Result<CodeqlExplorationCommandOutput> {
+        let script = build_exploration_command_script(command)?;
+        let output = self.client.run_command(&self.sandbox, &script).await?;
+        if output.exit_code.unwrap_or(0) != 0 {
+            bail!(
+                "CubeSandbox CodeQL dependency install wrapper failed exit={:?} stdout={} stderr={}",
                 output.exit_code,
                 codeql::redact_sensitive_text(&output.stdout),
                 codeql::redact_sensitive_text(&output.stderr)
@@ -423,8 +440,7 @@ fn append_dir<W: Write>(builder: &mut Builder<W>, dir: &Path, archive_prefix: &s
     for path in files {
         let relative = path.strip_prefix(dir)?;
         let archive_path = Path::new(archive_prefix).join(relative);
-        builder
-            .append_path_with_name(&path, &archive_path)
+        append_file_with_normalized_mode(builder, &path, &archive_path)
             .with_context(|| format!("failed to stage {}", path.display()))?;
     }
     Ok(())
@@ -439,8 +455,72 @@ fn append_optional_file<W: Write>(
     if !path.exists() {
         return Ok(());
     }
-    builder.append_path_with_name(path, archive_path)?;
+    append_file_with_normalized_mode(builder, path, Path::new(archive_path))?;
     Ok(())
+}
+
+fn append_file_with_normalized_mode<W: Write>(
+    builder: &mut Builder<W>,
+    path: &Path,
+    archive_path: &Path,
+) -> Result<()> {
+    let bytes = std::fs::read(path)?;
+    let metadata = std::fs::metadata(path)?;
+    let mut header = Header::new_gnu();
+    header.set_size(bytes.len() as u64);
+    header.set_mode(normalized_archive_mode(path, archive_path, &metadata));
+    header.set_cksum();
+    builder.append_data(&mut header, archive_path, bytes.as_slice())?;
+    Ok(())
+}
+
+fn normalized_archive_mode(
+    source_path: &Path,
+    archive_path: &Path,
+    metadata: &std::fs::Metadata,
+) -> u32 {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mode = metadata.permissions().mode() & 0o777;
+        if mode & 0o111 != 0 || should_force_executable(source_path, archive_path) {
+            return 0o755;
+        }
+        0o644
+    }
+    #[cfg(not(unix))]
+    {
+        if should_force_executable(source_path, archive_path) {
+            0o755
+        } else {
+            0o644
+        }
+    }
+}
+
+fn should_force_executable(source_path: &Path, archive_path: &Path) -> bool {
+    let Some(name) = source_path
+        .file_name()
+        .or_else(|| archive_path.file_name())
+        .and_then(|value| value.to_str())
+    else {
+        return false;
+    };
+    matches!(
+        name,
+        "autogen.sh"
+            | "configure"
+            | "bootstrap"
+            | "bootstrap.sh"
+            | "git-version-gen"
+            | "compile"
+            | "config.guess"
+            | "config.sub"
+            | "install-sh"
+            | "missing"
+            | "depcomp"
+            | "test-driver"
+    ) || name.ends_with(".sh")
 }
 
 fn collect_files(dir: &Path, output: &mut Vec<std::path::PathBuf>) -> Result<()> {
@@ -483,7 +563,10 @@ fn build_payload_python_script(python_body: &str, payload_b64: &str) -> String {
 
 fn build_codeql_runner_script(payload: &CubeSandboxCodeqlRequest) -> Result<String> {
     let payload_b64 = STANDARD.encode(serde_json::to_vec(payload)?);
-    Ok(build_payload_python_script(CUBESANDBOX_CODEQL_PY, &payload_b64))
+    Ok(build_payload_python_script(
+        CUBESANDBOX_CODEQL_PY,
+        &payload_b64,
+    ))
 }
 
 fn build_workspace_setup_script(archive_b64: &str) -> Result<String> {
@@ -519,21 +602,22 @@ fn ensure_successful_process(label: &str, output: EnvdProcessOutput) -> Result<(
 }
 
 fn parse_codeql_output(output: EnvdProcessOutput) -> Result<CubeSandboxCodeqlOutput> {
-    if output.exit_code.unwrap_or(0) != 0 {
-        bail!(
-            "CubeSandbox CodeQL process failed exit={:?} stdout={} stderr={}",
-            output.exit_code,
-            codeql::redact_sensitive_text(&output.stdout),
-            codeql::redact_sensitive_text(&output.stderr)
-        );
-    }
-    let envelope = output
-        .stdout
-        .lines()
-        .rev()
-        .find_map(|line| line.strip_prefix("ARGUS_CODEQL_RESULT="))
-        .ok_or_else(|| anyhow::anyhow!("CubeSandbox CodeQL output missing result envelope"))?;
-    let parsed: CubeSandboxCodeqlEnvelope = serde_json::from_str(envelope)?;
+    let envelope = output.stdout.lines().rev().find_map(|line| {
+        line.strip_prefix("ARGUS_CODEQL_RESULT=")
+            .map(str::to_string)
+    });
+    let Some(envelope) = envelope else {
+        if output.exit_code.unwrap_or(0) != 0 {
+            bail!(
+                "CubeSandbox CodeQL process failed exit={:?} stdout={} stderr={}",
+                output.exit_code,
+                codeql::redact_sensitive_text(&output.stdout),
+                codeql::redact_sensitive_text(&output.stderr)
+            );
+        }
+        bail!("CubeSandbox CodeQL output missing result envelope");
+    };
+    let parsed: CubeSandboxCodeqlEnvelope = serde_json::from_str(&envelope)?;
     Ok(CubeSandboxCodeqlOutput {
         sarif_text: decode_text(&parsed.sarif_b64, "sarif")?,
         events_text: decode_text(&parsed.events_b64, "events")?,
@@ -618,7 +702,7 @@ fn sha256_text(value: &str) -> String {
     format!("sha256:{:x}", hasher.finalize())
 }
 
-const CUBESANDBOX_CODEQL_PY: &str = r#"
+const CUBESANDBOX_CODEQL_PY: &str = r##"
 import base64
 import json
 import os
@@ -665,6 +749,20 @@ def event(stage, name, message, **extra):
     payload.update(extra)
     events.append(payload)
 
+def emit_result_and_exit(status, exit_code=1, message=None):
+    final_summary = {"status": status, "engine": "codeql", "executor": "cubesandbox"}
+    if message:
+        final_summary["message"] = message
+    events_text = "\n".join(json.dumps(item, separators=(",", ":")) for item in events) + "\n"
+    result = {
+        "sarif_b64": "",
+        "events_b64": base64.b64encode(events_text.encode("utf-8")).decode("ascii"),
+        "summary": final_summary,
+        "build_plan": build_plan,
+    }
+    print("ARGUS_CODEQL_RESULT=" + json.dumps(result, separators=(",", ":")))
+    raise SystemExit(exit_code)
+
 def run(cmd, cwd=None):
     event("sandbox_command", "started", " ".join(shlex.quote(str(part)) for part in cmd), command=cmd, cwd=str(cwd or work))
     result = subprocess.run(cmd, cwd=cwd, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=900)
@@ -678,8 +776,211 @@ def run(cmd, cwd=None):
         stderr=result.stderr[-8192:],
     )
     if result.returncode != 0:
-        raise subprocess.CalledProcessError(result.returncode, cmd, result.stdout, result.stderr)
+        message = f"command failed with exit code {result.returncode}: " + " ".join(shlex.quote(str(part)) for part in cmd)
+        emit_result_and_exit("scan_failed", result.returncode, message)
     return result
+
+def run_shell(command, cwd=None, stage="sandbox_command", name="started"):
+    event(stage, name, command, command=command, cwd=str(cwd or work))
+    if stage == "dependency_install":
+        configure_apt_mirror_if_needed(command)
+        if is_apt_update_command(command):
+            result = run_apt_update_with_mirrors(command, cwd=cwd)
+        else:
+            result = subprocess.run(with_dependency_install_timeout(command), cwd=cwd, shell=True, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=900)
+    else:
+        command_to_run = command
+        result = subprocess.run(command_to_run, cwd=cwd, shell=True, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=900)
+    event(
+        stage,
+        "completed" if result.returncode == 0 else "failed",
+        "command exited",
+        command=command,
+        exit_code=result.returncode,
+        stdout=result.stdout[-8192:],
+        stderr=result.stderr[-8192:],
+    )
+    if result.returncode != 0:
+        message = f"shell command failed with exit code {result.returncode}: {command}"
+        emit_result_and_exit("scan_failed", result.returncode, message)
+    return result
+
+def build_plan_evidence(plan):
+    evidence = {}
+    for key in ["evidence_index", "evidence_json", "evidence"]:
+        value = plan.get(key) if isinstance(plan, dict) else None
+        if isinstance(value, dict):
+            evidence.update(value)
+    details = evidence.get("details")
+    if isinstance(details, dict):
+        evidence.update(details)
+    return evidence
+
+def with_dependency_install_timeout(command):
+    if is_apt_update_command(command):
+        return command
+    if not is_apt_dependency_command(command):
+        return command
+    return "timeout 300s " + command
+
+def dependency_install_commands(plan):
+    evidence = build_plan_evidence(plan)
+    commands = evidence.get("dependency_install_commands") or evidence.get("install_commands") or []
+    if not isinstance(commands, list):
+        return []
+    safe = []
+    for command in commands:
+        if not isinstance(command, str):
+            continue
+        command = command.strip()
+        if not command:
+            continue
+        safe.append(command)
+    return safe
+
+def is_apt_dependency_command(command):
+    normalized = command.strip().lower()
+    return normalized.startswith("apt-get ") or normalized.startswith("apt ")
+
+def dependency_installation_signal(output):
+    lower_output = output.lower()
+    missing_dependency_tokens = [
+        "python.h",
+        "fatal error:",
+        "command not found",
+        ": command not found",
+        "cannot find -l",
+        "no package ",
+        "package requirements",
+        "required package",
+        "missing dependency",
+        "dependency not found",
+        "pkg-config package",
+        "pkg-config could not find",
+        "not found in the pkg-config search path",
+    ]
+    if any(token in lower_output for token in missing_dependency_tokens):
+        return True
+    return False
+
+def is_apt_update_command(command):
+    normalized = " ".join(command.strip().lower().split())
+    return normalized == "apt-get update" or normalized == "apt update"
+
+APT_MIRRORS = [
+    ("mirrors.aliyun.com", "mirrors.aliyun.com"),
+    ("mirrors.tuna.tsinghua.edu.cn", "mirrors.tuna.tsinghua.edu.cn"),
+    ("mirrors.ustc.edu.cn", "mirrors.ustc.edu.cn"),
+    ("deb.debian.org", "security.debian.org"),
+]
+APT_MIRROR_CHOICE = pathlib.Path("/tmp/argus-apt-mirror-choice.json")
+
+def configure_apt_mirror_if_needed(command):
+    if not is_apt_dependency_command(command):
+        return
+    for key in ["http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY", "all_proxy", "ALL_PROXY"]:
+        os.environ.pop(key, None)
+    apt_conf = pathlib.Path("/etc/apt/apt.conf.d/99-argus-cubesandbox-network")
+    apt_conf.parent.mkdir(parents=True, exist_ok=True)
+    apt_conf.write_text(
+        'Acquire::http::Proxy "false";\n'
+        'Acquire::https::Proxy "false";\n'
+        'Acquire::Retries "5";\n'
+        'Acquire::http::Timeout "30";\n'
+        'Acquire::https::Timeout "30";\n'
+        'Acquire::ForceIPv4 "true";\n'
+    )
+    os_release = {}
+    try:
+        for line in pathlib.Path("/etc/os-release").read_text().splitlines():
+            if "=" in line:
+                key, value = line.split("=", 1)
+                os_release[key] = value.strip().strip('"')
+    except OSError:
+        pass
+    codename = os_release.get("VERSION_CODENAME") or "trixie"
+    disabled = pathlib.Path("/etc/apt/disabled-sources.list.d")
+    disabled.mkdir(parents=True, exist_ok=True)
+    for source_dir in [pathlib.Path("/etc/apt/sources.list.d")]:
+        if not source_dir.exists():
+            continue
+        for source_file in source_dir.iterdir():
+            if source_file.name.endswith((".list", ".sources")) and any(token in source_file.name for token in ["cran", "r-project", "nodesource"]):
+                try:
+                    source_file.rename(disabled / source_file.name)
+                except OSError:
+                    pass
+    source_list_dir = pathlib.Path("/etc/apt/sources.list.d")
+    if source_list_dir.exists():
+        for source_file in source_list_dir.iterdir():
+            if source_file.name.endswith((".list", ".sources")):
+                try:
+                    source_file.rename(disabled / source_file.name)
+                except OSError:
+                    pass
+    main_host, security_host = selected_apt_mirror()
+    write_apt_sources(codename, main_host, security_host)
+
+def selected_apt_mirror():
+    try:
+        choice = json.loads(APT_MIRROR_CHOICE.read_text())
+        main_host = choice.get("main_host")
+        security_host = choice.get("security_host")
+        if main_host and security_host:
+            return main_host, security_host
+    except (OSError, json.JSONDecodeError):
+        pass
+    return APT_MIRRORS[0]
+
+def write_apt_sources(codename, main_host, security_host):
+    pathlib.Path("/etc/apt/sources.list").write_text(
+        f"deb http://{main_host}/debian {codename} main\n"
+        f"deb http://{main_host}/debian {codename}-updates main\n"
+        f"deb http://{security_host}/debian-security {codename}-security main\n"
+    )
+
+def run_apt_update_with_mirrors(command, cwd=None):
+    try:
+        values = {}
+        for line in pathlib.Path("/etc/os-release").read_text().splitlines():
+            if "=" in line:
+                key, value = line.split("=", 1)
+                values[key] = value.strip().strip('"')
+        codename = values.get("VERSION_CODENAME") or "trixie"
+    except OSError:
+        codename = "trixie"
+    attempts = []
+    for main_host, security_host in APT_MIRRORS:
+        write_apt_sources(codename, main_host, security_host)
+        result = subprocess.run("timeout 90s " + command, cwd=cwd, shell=True, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=120)
+        attempts.append(
+            f"apt mirror {main_host}/{security_host} exit={result.returncode}\n"
+            + result.stdout[-4096:]
+            + result.stderr[-4096:]
+        )
+        if result.returncode == 0:
+            APT_MIRROR_CHOICE.write_text(json.dumps({"main_host": main_host, "security_host": security_host}))
+            return result
+    return subprocess.CompletedProcess(command, 124, "\n".join(attempts)[-8192:], "")
+
+def resolve_working_directory(working_directory):
+    raw = str(working_directory or ".").strip() or "."
+    build_cwd = (source / raw).resolve()
+    source_root = source.resolve()
+    if build_cwd != source_root and source_root not in build_cwd.parents:
+        raise SystemExit("manual build plan working_directory escapes source root")
+    if not build_cwd.exists():
+        raise SystemExit(f"manual build plan working_directory does not exist: {raw}")
+    return build_cwd
+
+def write_manual_build_script(commands, build_cwd):
+    build_script = work / "argus-codeql-build.sh"
+    script = ["#!/usr/bin/env bash", "set -euo pipefail"]
+    for command in commands:
+        script.append("( cd " + shlex.quote(str(build_cwd)) + " && " + command + " )")
+    build_script.write_text("\n".join(script) + "\n")
+    build_script.chmod(0o755)
+    return build_script
 
 language = payload.get("language") or "cpp"
 build_mode = payload.get("build_mode")
@@ -701,8 +1002,7 @@ for index, round_payload in enumerate(exploration_rounds, start=1):
     event("llm_round", "started", reasoning_summary, round=index, reasoning_summary=reasoning_summary, commands=commands)
     for command in commands:
         result = subprocess.run(command, cwd=source, shell=True, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=900)
-        lower_output = (result.stdout + "\n" + result.stderr).lower()
-        dependency_detected = any(token in lower_output for token in ["not found", "no such file", "missing", "dependency", "package"])
+        dependency_detected = dependency_installation_signal(result.stdout + "\n" + result.stderr)
         event(
             "sandbox_command",
             "completed" if result.returncode == 0 else "failed",
@@ -723,22 +1023,21 @@ if build_plan:
     mode = build_plan.get("build_mode") or "none"
     commands = build_plan.get("commands") or []
     working_directory = build_plan.get("working_directory") or "."
+    for index, command in enumerate(dependency_install_commands(build_plan), start=1):
+        event("dependency_install", "started", f"installing dependency step {index}", command=command, step=index)
+        run_shell(command, cwd=source, stage="dependency_install", name="started")
+        event("dependency_install", "completed", f"installed dependency step {index}", command=command, step=index)
     if mode == "manual":
         if not commands:
             raise SystemExit("manual build plan requires commands")
-        if working_directory != ".":
-            raise SystemExit("non-root working_directory is not supported in CubeSandbox CodeQL scan")
-        if len(commands) == 1:
-            create_cmd.extend(["--command", commands[0]])
-            run(create_cmd, cwd=source)
-        else:
-            init_cmd = ["codeql", "database", "init", str(database), f"--language={language}", f"--source-root={source}", "--overwrite"]
-            run(init_cmd, cwd=source)
-            for index, command in enumerate(commands, start=1):
-                event("database_trace_command", "started", f"tracing build step {index}", command=command, step=index)
-                run(["codeql", "database", "trace-command", str(database), "--working-dir", str(source), "--command", command], cwd=source)
-                event("database_trace_command", "completed", f"traced build step {index}", command=command, step=index)
-            run(["codeql", "database", "finalize", str(database)], cwd=source)
+        build_cwd = resolve_working_directory(working_directory)
+        build_script = write_manual_build_script(commands, build_cwd)
+        init_cmd = ["codeql", "database", "init", str(database), f"--language={language}", f"--source-root={source}", "--overwrite"]
+        run(init_cmd, cwd=source)
+        event("database_trace_command", "started", "tracing full manual build plan", command=str(build_script), step=1, build_commands=commands, working_directory=str(build_cwd))
+        run(["codeql", "database", "trace-command", "--working-dir", str(build_cwd), "--", str(database), str(build_script)], cwd=source)
+        event("database_trace_command", "completed", "traced full manual build plan", command=str(build_script), step=1, build_commands=commands, working_directory=str(build_cwd))
+        run(["codeql", "database", "finalize", str(database)], cwd=source)
     elif mode == "autobuild":
         create_cmd.append("--build-mode=autobuild")
         run(create_cmd, cwd=source)
@@ -766,11 +1065,12 @@ result = {
     "build_plan": build_plan,
 }
 print("ARGUS_CODEQL_RESULT=" + json.dumps(result, separators=(",", ":")))
-"#;
+"##;
 
 const CUBESANDBOX_CODEQL_SETUP_PY: &str = r#"
 import base64
 import json
+import os
 import pathlib
 import subprocess
 import sys
@@ -798,6 +1098,7 @@ print("ARGUS_CODEQL_SETUP_RESULT=" + json.dumps({"status": "ok"}, separators=(",
 const CUBESANDBOX_CODEQL_EXPLORE_PY: &str = r#"
 import base64
 import json
+import os
 import pathlib
 import subprocess
 import sys
@@ -809,8 +1110,146 @@ command = payload["command"]
 source = pathlib.Path("/tmp/argus-codeql-work/source")
 if not source.exists():
     raise SystemExit("CodeQL exploration workspace has not been staged")
+
+def is_apt_dependency_command(command):
+    normalized = command.strip().lower()
+    return normalized.startswith("apt-get ") or normalized.startswith("apt ")
+
+def dependency_installation_signal(output):
+    lower_output = output.lower()
+    missing_dependency_tokens = [
+        "python.h",
+        "fatal error:",
+        "command not found",
+        ": command not found",
+        "cannot find -l",
+        "no package ",
+        "package requirements",
+        "required package",
+        "missing dependency",
+        "dependency not found",
+        "pkg-config package",
+        "pkg-config could not find",
+        "not found in the pkg-config search path",
+    ]
+    if any(token in lower_output for token in missing_dependency_tokens):
+        return True
+    return False
+
+def is_apt_update_command(command):
+    normalized = " ".join(command.strip().lower().split())
+    return normalized == "apt-get update" or normalized == "apt update"
+
+APT_MIRRORS = [
+    ("mirrors.aliyun.com", "mirrors.aliyun.com"),
+    ("mirrors.tuna.tsinghua.edu.cn", "mirrors.tuna.tsinghua.edu.cn"),
+    ("mirrors.ustc.edu.cn", "mirrors.ustc.edu.cn"),
+    ("deb.debian.org", "security.debian.org"),
+]
+APT_MIRROR_CHOICE = pathlib.Path("/tmp/argus-apt-mirror-choice.json")
+
+def configure_apt_mirror_if_needed(command):
+    if not is_apt_dependency_command(command):
+        return
+    for key in ["http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY", "all_proxy", "ALL_PROXY"]:
+        os.environ.pop(key, None)
+    apt_conf = pathlib.Path("/etc/apt/apt.conf.d/99-argus-cubesandbox-network")
+    apt_conf.parent.mkdir(parents=True, exist_ok=True)
+    apt_conf.write_text(
+        'Acquire::http::Proxy "false";\n'
+        'Acquire::https::Proxy "false";\n'
+        'Acquire::Retries "5";\n'
+        'Acquire::http::Timeout "30";\n'
+        'Acquire::https::Timeout "30";\n'
+        'Acquire::ForceIPv4 "true";\n'
+    )
+    os_release = {}
+    try:
+        for line in pathlib.Path("/etc/os-release").read_text().splitlines():
+            if "=" in line:
+                key, value = line.split("=", 1)
+                os_release[key] = value.strip().strip('"')
+    except OSError:
+        pass
+    codename = os_release.get("VERSION_CODENAME") or "trixie"
+    disabled = pathlib.Path("/etc/apt/disabled-sources.list.d")
+    disabled.mkdir(parents=True, exist_ok=True)
+    source_list_dir = pathlib.Path("/etc/apt/sources.list.d")
+    if source_list_dir.exists():
+        for source_file in source_list_dir.iterdir():
+            if source_file.name.endswith((".list", ".sources")) and any(token in source_file.name for token in ["cran", "r-project", "nodesource"]):
+                try:
+                    source_file.rename(disabled / source_file.name)
+                except OSError:
+                    pass
+    if source_list_dir.exists():
+        for source_file in source_list_dir.iterdir():
+            if source_file.name.endswith((".list", ".sources")):
+                try:
+                    source_file.rename(disabled / source_file.name)
+                except OSError:
+                    pass
+    main_host, security_host = selected_apt_mirror()
+    write_apt_sources(codename, main_host, security_host)
+
+def selected_apt_mirror():
+    try:
+        choice = json.loads(APT_MIRROR_CHOICE.read_text())
+        main_host = choice.get("main_host")
+        security_host = choice.get("security_host")
+        if main_host and security_host:
+            return main_host, security_host
+    except (OSError, json.JSONDecodeError):
+        pass
+    return APT_MIRRORS[0]
+
+def current_debian_codename():
+    try:
+        values = {}
+        for line in pathlib.Path("/etc/os-release").read_text().splitlines():
+            if "=" in line:
+                key, value = line.split("=", 1)
+                values[key] = value.strip().strip('"')
+        return values.get("VERSION_CODENAME") or "trixie"
+    except OSError:
+        return "trixie"
+
+def write_apt_sources(codename, main_host, security_host):
+    pathlib.Path("/etc/apt/sources.list").write_text(
+        f"deb http://{main_host}/debian {codename} main\n"
+        f"deb http://{main_host}/debian {codename}-updates main\n"
+        f"deb http://{security_host}/debian-security {codename}-security main\n"
+    )
+
+def run_apt_update_with_mirrors(command, cwd=None):
+    codename = current_debian_codename()
+    attempts = []
+    for main_host, security_host in APT_MIRRORS:
+        write_apt_sources(codename, main_host, security_host)
+        result = subprocess.run("timeout 90s " + command, cwd=cwd, shell=True, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=120)
+        attempts.append(
+            f"apt mirror {main_host}/{security_host} exit={result.returncode}\n"
+            + result.stdout[-4096:]
+            + result.stderr[-4096:]
+        )
+        if result.returncode == 0:
+            APT_MIRROR_CHOICE.write_text(json.dumps({"main_host": main_host, "security_host": security_host}))
+            return result
+    return subprocess.CompletedProcess(command, 124, "\n".join(attempts)[-8192:], "")
+
+def with_dependency_install_timeout(command):
+    if is_apt_update_command(command):
+        return command
+    if not is_apt_dependency_command(command):
+        return command
+    return "timeout 300s " + command
+
 try:
-    result = subprocess.run(command, cwd=source, shell=True, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=900)
+    configure_apt_mirror_if_needed(command)
+    if is_apt_update_command(command):
+        result = run_apt_update_with_mirrors(command, cwd=source)
+    else:
+        result = subprocess.run(with_dependency_install_timeout(command), cwd=source, shell=True, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=900)
     stdout = result.stdout[-8192:]
     stderr = result.stderr[-8192:]
     exit_code = result.returncode
@@ -818,8 +1257,7 @@ except subprocess.TimeoutExpired as error:
     stdout = (error.stdout or "")[-8192:] if isinstance(error.stdout, str) else ""
     stderr = (error.stderr or "")[-8192:] if isinstance(error.stderr, str) else "command timed out"
     exit_code = 124
-lower_output = (stdout + "\n" + stderr).lower()
-dependency_detected = any(token in lower_output for token in ["not found", "no such file", "missing", "dependency", "package"])
+dependency_detected = dependency_installation_signal(stdout + "\n" + stderr)
 payload = {
     "command": command,
     "stdout": stdout,
@@ -849,9 +1287,50 @@ mod tests {
         })
         .expect("script should build");
 
-        assert!(script.starts_with("python3 - "));
-        assert!(script.contains(" <<'PY'\n"));
-        assert!(script.ends_with("\nPY"));
+        assert!(script.starts_with("set -e\n"));
+        assert!(script.contains("python3 - \"$_ARGUS_PAYLOAD\" <<'PY'"));
+        assert!(script.ends_with("exit $_ARGUS_RC\n"));
+    }
+
+    fn decode_embedded_payload(script: &str) -> Value {
+        let payload_b64 = script
+            .split("cat > \"$_ARGUS_PAYLOAD\" <<'__ARGUS_B64__'\n")
+            .nth(1)
+            .and_then(|tail| tail.split("\n__ARGUS_B64__").next())
+            .expect("script should contain embedded payload");
+        let payload = STANDARD
+            .decode(payload_b64)
+            .expect("payload should be valid base64");
+        serde_json::from_slice(&payload).expect("payload should be valid JSON")
+    }
+
+    #[test]
+    fn workspace_archive_restores_build_script_execute_bits() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        let source = temp.path().join("source");
+        let queries = temp.path().join("queries");
+        std::fs::create_dir_all(&source).expect("source dir");
+        std::fs::create_dir_all(&queries).expect("queries dir");
+        std::fs::write(source.join("autogen.sh"), "#!/bin/sh\n").expect("autogen");
+        std::fs::write(source.join("git-version-gen"), "#!/bin/sh\n").expect("version helper");
+        std::fs::write(source.join("README.md"), "plain\n").expect("readme");
+        std::fs::write(queries.join("qlpack.yml"), "name: test\n").expect("qlpack");
+
+        let archive_b64 = create_workspace_archive_b64(temp.path(), &source, &queries)
+            .expect("workspace archive should build");
+        let archive = STANDARD.decode(archive_b64).expect("archive base64");
+        let decoder = flate2::read::GzDecoder::new(archive.as_slice());
+        let mut archive = tar::Archive::new(decoder);
+        let mut modes = std::collections::BTreeMap::new();
+        for entry in archive.entries().expect("entries") {
+            let entry = entry.expect("entry");
+            let path = entry.path().expect("path").display().to_string();
+            modes.insert(path, entry.header().mode().expect("mode"));
+        }
+
+        assert_eq!(modes.get("source/autogen.sh"), Some(&0o755));
+        assert_eq!(modes.get("source/git-version-gen"), Some(&0o755));
+        assert_eq!(modes.get("source/README.md"), Some(&0o644));
     }
 
     #[test]
@@ -880,6 +1359,184 @@ mod tests {
         assert!(script.contains("database\", \"init\""));
         assert!(script.contains("database\", \"trace-command\""));
         assert!(script.contains("database\", \"finalize\""));
+    }
+
+    #[test]
+    fn codeql_runner_script_traces_shell_wrapped_manual_plan_once() {
+        let script = build_codeql_runner_script(&CubeSandboxCodeqlRequest {
+            archive_b64: "YXJjaGl2ZQ==".to_string(),
+            language: "cpp".to_string(),
+            build_mode: None,
+            build_plan: Some(json!({
+                "build_mode": "manual",
+                "commands": ["cmake -S . -B build", "cmake --build build"],
+                "working_directory": ".",
+            })),
+            exploration_rounds: Vec::new(),
+            threads: 0,
+            ram_mb: 1024,
+            allow_network: false,
+        })
+        .expect("script should build");
+
+        assert!(script.contains("build_script.write_text"));
+        assert!(script.contains("for command in commands:"));
+        assert!(script.contains("script.append(\"( cd \""));
+        assert!(script.contains("database\", \"trace-command\""));
+        assert!(script.contains("\"--\", str(database), str(build_script)"));
+        assert!(!script.contains("--command\", str(build_script)"));
+        assert!(!script.contains("for index, command in enumerate(commands"));
+    }
+
+    #[test]
+    fn codeql_runner_script_supports_project_config_working_directory() {
+        let script = build_codeql_runner_script(&CubeSandboxCodeqlRequest {
+            archive_b64: "YXJjaGl2ZQ==".to_string(),
+            language: "cpp".to_string(),
+            build_mode: None,
+            build_plan: Some(json!({
+                "build_mode": "manual",
+                "commands": ["./configure", "make -B -j2"],
+                "working_directory": "libplist-master",
+            })),
+            exploration_rounds: Vec::new(),
+            threads: 0,
+            ram_mb: 1024,
+            allow_network: false,
+        })
+        .expect("script should build");
+
+        assert!(script.contains("def resolve_working_directory"));
+        assert!(script.contains("build_cwd = resolve_working_directory(working_directory)"));
+        assert!(script.contains("f\"--source-root={source}\""));
+        assert!(script.contains("\"--working-dir\", str(build_cwd)"));
+        assert!(!script.contains("non-root working_directory is not supported"));
+    }
+
+    #[test]
+    fn codeql_runner_script_emits_events_when_capture_command_fails() {
+        let script = build_codeql_runner_script(&CubeSandboxCodeqlRequest {
+            archive_b64: "YXJjaGl2ZQ==".to_string(),
+            language: "cpp".to_string(),
+            build_mode: None,
+            build_plan: Some(json!({
+                "build_mode": "manual",
+                "commands": ["make -B -j2"],
+                "working_directory": ".",
+            })),
+            exploration_rounds: Vec::new(),
+            threads: 0,
+            ram_mb: 1024,
+            allow_network: false,
+        })
+        .expect("script should build");
+
+        assert!(script.contains("def emit_result_and_exit"));
+        assert!(script.contains("\"events_b64\""));
+        assert!(script.contains("\"scan_failed\""));
+        assert!(script.contains("ARGUS_CODEQL_RESULT="));
+    }
+
+    #[test]
+    fn parse_codeql_output_preserves_failure_event_envelope() {
+        let events = serde_json::to_string(&json!({
+            "stage": "database_trace_command",
+            "event": "failed",
+            "stderr": "trace-command failed",
+        }))
+        .expect("event json");
+        let events_b64 = STANDARD.encode(events);
+        let envelope = json!({
+            "sarif_b64": "",
+            "events_b64": events_b64,
+            "summary": {"status": "scan_failed", "message": "trace command failed"},
+            "build_plan": {"build_mode": "manual"},
+        });
+        let output = EnvdProcessOutput {
+            exit_code: Some(2),
+            stdout: format!("ARGUS_CODEQL_RESULT={envelope}\n"),
+            stderr: "python wrapper exited".to_string(),
+            stdout_truncated: false,
+            stderr_truncated: false,
+        };
+
+        let parsed = parse_codeql_output(output).expect("failure envelope should parse");
+
+        assert_eq!(parsed.summary_json["status"], "scan_failed");
+        assert!(parsed.events_text.contains("database_trace_command"));
+        assert_eq!(parsed.sarif_text, "");
+    }
+
+    #[test]
+    fn codeql_runner_script_installs_persisted_dependency_commands_before_capture() {
+        let script = build_codeql_runner_script(&CubeSandboxCodeqlRequest {
+            archive_b64: "YXJjaGl2ZQ==".to_string(),
+            language: "cpp".to_string(),
+            build_mode: None,
+            build_plan: Some(json!({
+                "build_mode": "manual",
+                "commands": ["make -B -j2"],
+                "working_directory": ".",
+                "evidence_index": {
+                    "dependency_install_commands": ["apt-get update", "apt-get install -y python3-dev"]
+                }
+            })),
+            exploration_rounds: Vec::new(),
+            threads: 0,
+            ram_mb: 1024,
+            allow_network: true,
+        })
+        .expect("script should build");
+
+        assert!(script.contains("dependency_install_commands"));
+        assert!(script.contains("dependency_install\", \"started\""));
+        assert!(script.contains("configure_apt_mirror_if_needed(command)"));
+        assert!(script.contains("timeout 300s "));
+        assert!(script.contains("run_apt_update_with_mirrors"));
+        assert!(script.contains("mirrors.aliyun.com"));
+        assert!(script.contains("mirrors.tuna.tsinghua.edu.cn"));
+        assert!(script.contains("mirrors.ustc.edu.cn"));
+        assert!(script.contains("deb http://{main_host}/debian"));
+        assert!(script.contains("deb http://{security_host}/debian-security"));
+        let payload = decode_embedded_payload(&script);
+        assert_eq!(
+            payload["build_plan"]["evidence_index"]["dependency_install_commands"][0],
+            "apt-get update"
+        );
+        assert_eq!(
+            payload["build_plan"]["evidence_index"]["dependency_install_commands"][1],
+            "apt-get install -y python3-dev"
+        );
+    }
+
+    #[test]
+    fn codeql_exploration_script_mirrors_apt_dependency_installs() {
+        let script =
+            build_exploration_command_script("apt-get update").expect("script should build");
+
+        assert!(script.contains("configure_apt_mirror_if_needed(command)"));
+        assert!(script.contains("run_apt_update_with_mirrors"));
+        assert!(script.contains("timeout 90s "));
+        assert!(script.contains("mirrors.aliyun.com"));
+        assert!(script.contains("mirrors.tuna.tsinghua.edu.cn"));
+        assert!(script.contains("mirrors.ustc.edu.cn"));
+        assert!(script.contains("deb http://{main_host}/debian"));
+        assert!(script.contains("deb http://{security_host}/debian-security"));
+        let payload = decode_embedded_payload(&script);
+        assert_eq!(payload["command"], "apt-get update");
+    }
+
+    #[test]
+    fn codeql_exploration_script_does_not_treat_autotools_version_as_dependency() {
+        let script = build_exploration_command_script("./autogen.sh").expect("script should build");
+
+        assert!(script.contains("def dependency_installation_signal"));
+        assert!(!script.contains("\"package\"]"));
+        assert!(!script.contains("\"no such file or directory\""));
+        assert!(script.contains("\"required package\""));
+        assert!(script.contains("\"pkg-config package\""));
+        assert!(script.contains("\"not found in the pkg-config search path\""));
+        assert!(script.contains("\"python.h\""));
     }
 
     #[tokio::test]

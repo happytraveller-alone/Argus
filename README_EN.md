@@ -18,6 +18,8 @@ This release branch keeps only the slim-source files required to run Argus. Reco
 
 `argus-bootstrap.sh` calls `scripts/validate-llm-config.sh --env-file ./.env` before any Docker cleanup or startup action. If env/LLM validation fails, bootstrap exits and asks you to reconfigure.
 
+On WSL2 hosts the script also runs the CubeSandbox host-side bootstrap (doctor → prepare-vm → run-vm-background → install → provision-codeql-cpp-template). On a fresh clone where the VM, CubeMaster API, or CodeQL C/C++ template is missing, each step builds itself; on subsequent runs each step is skipped via its readiness check (SSH port, HTTP `/health`, or `CUBESANDBOX_TEMPLATE_ID` in `.env`). Skip this stage with `--skip-cubesandbox` or set `CUBESANDBOX_BOOTSTRAP_AUTO=false` in `.env`; run only the cubesandbox stage with `--cubesandbox-only`; force a template rebuild with `--cubesandbox-reset`. Non-WSL2 hosts skip the stage with a notice.
+
 By default, Compose publishes the frontend on host port `13000` and the backend on `18000` to avoid collisions with common local development services on `3000` / `8000`. Set `Argus_FRONTEND_PORT=3000 Argus_BACKEND_PORT=8000` when starting the stack if you need the old host ports.
 
 The backend reads the root `.env` and mounts `${DOCKER_SOCKET_PATH:-/var/run/docker.sock}` so it can launch scan runners. This workspace can override it to `/run/docker-local.sock` through the local `.env`; set `DOCKER_SOCKET_PATH` as needed in other environments.

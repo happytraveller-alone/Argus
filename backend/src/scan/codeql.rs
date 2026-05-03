@@ -86,14 +86,23 @@ pub async fn load_query_assets_for_languages(
         .iter()
         .map(|language| normalize_language(language))
         .collect::<BTreeSet<_>>();
+    let effective_requested = expand_requested_codeql_languages(&requested);
     let filtered = all
         .into_iter()
         .filter(|asset| {
             extract_language_from_asset_path(&asset.asset_path)
-                .is_some_and(|language| requested.contains(&language))
+                .is_some_and(|language| effective_requested.contains(&language))
         })
         .collect::<Vec<_>>();
     Ok(filtered)
+}
+
+fn expand_requested_codeql_languages(languages: &BTreeSet<String>) -> BTreeSet<String> {
+    let mut expanded = languages.clone();
+    if languages.contains("cpp") {
+        expanded.insert("c".to_string());
+    }
+    expanded
 }
 
 pub async fn materialize_query_assets(
@@ -433,6 +442,11 @@ pub fn build_plan_record_from_compile_plan(
     now: String,
 ) -> task_state::CodeqlBuildPlanRecord {
     let build_plan = compile_sandbox_plan_to_build_plan(plan);
+    let dependency_install_commands = plan
+        .evidence_json
+        .get("dependency_install_commands")
+        .cloned()
+        .unwrap_or_else(|| json!([]));
     task_state::CodeqlBuildPlanRecord {
         id,
         project_id,
@@ -452,6 +466,7 @@ pub fn build_plan_record_from_compile_plan(
             "fingerprint": build_plan_fingerprint(&build_plan),
             "allow_network": plan.allow_network,
             "artifact_missing": false,
+            "dependency_install_commands": dependency_install_commands,
             "details": plan.evidence_json,
         }),
         created_at: now,
@@ -831,6 +846,38 @@ mod tests {
             .expect("materialize")
             .expect("query dir");
         assert!(query_dir.join("python/qlpack.yml").exists());
+        let _ = fs::remove_dir_all(&workspace).await;
+    }
+
+    #[tokio::test]
+    async fn materializes_c_and_cpp_query_assets_for_codeql_cpp_language() {
+        let state = AppState::from_config(AppConfig::for_tests())
+            .await
+            .expect("state");
+        let assets = load_query_assets_for_languages(&state, &["C++".to_string()])
+            .await
+            .expect("assets");
+        assert!(
+            assets
+                .iter()
+                .any(|asset| asset.asset_path.starts_with("rules_codeql/c/")),
+            "expected C query assets to be included with CodeQL cpp language scans"
+        );
+        assert!(
+            assets
+                .iter()
+                .any(|asset| asset.asset_path.starts_with("rules_codeql/cpp/")),
+            "expected C++ query assets to be included with CodeQL cpp language scans"
+        );
+
+        let workspace =
+            std::env::temp_dir().join(format!("codeql-c-cpp-materialize-{}", Uuid::new_v4()));
+        let query_dir = materialize_query_assets(&workspace, assets)
+            .await
+            .expect("materialize")
+            .expect("query dir");
+        assert!(query_dir.join("c/qlpack.yml").exists());
+        assert!(query_dir.join("cpp/qlpack.yml").exists());
         let _ = fs::remove_dir_all(&workspace).await;
     }
 

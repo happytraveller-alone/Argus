@@ -18,6 +18,11 @@ const ENVD_USERNAME: &str = "root";
 const ENVD_PROCESS_START_PATH: &str = "process.Process/Start";
 const ENVD_FILES_PATH: &str = "files";
 const SCRIPT_INLINE_LIMIT: usize = 32 * 1024;
+const ENVD_PROCESS_TIMEOUT_SECONDS: u64 = 900;
+
+fn envd_process_timeout_seconds(configured_seconds: u64) -> u64 {
+    configured_seconds.max(ENVD_PROCESS_TIMEOUT_SECONDS)
+}
 
 #[derive(Clone, Debug)]
 pub struct CubeSandboxClientConfig {
@@ -181,10 +186,7 @@ impl CubeSandboxClient {
         url.query_pairs_mut()
             .append_pair("path", path)
             .append_pair("username", ENVD_USERNAME);
-        let form = Form::new().part(
-            "file",
-            Part::bytes(content).file_name(path.to_string()),
-        );
+        let form = Form::new().part("file", Part::bytes(content).file_name(path.to_string()));
         let response = self
             .http_client
             .post(url)
@@ -242,19 +244,27 @@ impl CubeSandboxClient {
             "Basic {}",
             BASE64_STANDARD.encode(format!("{ENVD_USERNAME}:").as_bytes())
         );
+        let url = self.envd_url(ENVD_PROCESS_START_PATH)?;
+        let host = self.envd_host(&sandbox.sandbox_id, sandbox.domain.as_deref())?;
         let response = self
             .http_client
-            .post(self.envd_url(ENVD_PROCESS_START_PATH)?)
-            .header(
-                HOST,
-                self.envd_host(&sandbox.sandbox_id, sandbox.domain.as_deref())?,
-            )
+            .post(url.clone())
+            .header(HOST, host.clone())
             .header("Content-Type", "application/connect+json")
             .header("Connect-Protocol-Version", "1")
             .header("Authorization", &auth)
+            .timeout(Duration::from_secs(envd_process_timeout_seconds(
+                self.config.execution_timeout_seconds,
+            )))
             .body(framed)
             .send()
-            .await?;
+            .await
+            .with_context(|| {
+                format!(
+                    "CubeSandbox envd process request failed sandbox_id={} host={} url={}",
+                    sandbox.sandbox_id, host, url
+                )
+            })?;
         if !response.status().is_success() {
             let status = response.status();
             let body = response.text().await.unwrap_or_default();
@@ -358,10 +368,7 @@ fn parse_connect_process_stream(bytes: &[u8]) -> Result<ProcessStreamAggregate> 
         if flags & 0x02 != 0 {
             // Trailer frame: may contain an error code/message.
             if let Some(err) = value.get("error") {
-                let code = err
-                    .get("code")
-                    .and_then(Value::as_str)
-                    .unwrap_or("unknown");
+                let code = err.get("code").and_then(Value::as_str).unwrap_or("unknown");
                 let message = err
                     .get("message")
                     .and_then(Value::as_str)
@@ -438,14 +445,8 @@ mod tests {
     fn parses_envd_process_stream_with_stdout_and_exit() {
         let mut buf = Vec::new();
         buf.extend(frame(0, br#"{"event":{"start":{"pid":42}}}"#));
-        buf.extend(frame(
-            0,
-            br#"{"event":{"data":{"stdout":"aGVsbG8K"}}}"#,
-        ));
-        buf.extend(frame(
-            0,
-            br#"{"event":{"data":{"stderr":"d2Fybgo="}}}"#,
-        ));
+        buf.extend(frame(0, br#"{"event":{"data":{"stdout":"aGVsbG8K"}}}"#));
+        buf.extend(frame(0, br#"{"event":{"data":{"stderr":"d2Fybgo="}}}"#));
         buf.extend(frame(
             0,
             br#"{"event":{"end":{"exited":true,"status":"exit status 0"}}}"#,
@@ -475,5 +476,11 @@ mod tests {
         assert_eq!(parse_exit_status("exit status 127"), Some(127));
         assert_eq!(parse_exit_status(""), Some(0));
         assert_eq!(parse_exit_status("signal: terminated"), None);
+    }
+
+    #[test]
+    fn envd_process_timeout_is_long_enough_for_dependency_install_and_capture() {
+        assert_eq!(envd_process_timeout_seconds(120), 900);
+        assert_eq!(envd_process_timeout_seconds(1_200), 1_200);
     }
 }
