@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import {
+	AlertCircle,
 	ArrowLeft,
 	Ban,
 	Loader2,
@@ -38,6 +39,7 @@ import { useStaticAnalysisData } from "./static-analysis/useStaticAnalysisData";
 import { useTaskClock } from "@/features/tasks/hooks/useTaskClock";
 import {
 	buildStaticAnalysisHeaderSummary,
+	buildStaticAnalysisTaskStatusSummary,
 	buildUnifiedFindingRows,
 	countCodeqlReasoningRounds,
 	formatStaticAnalysisDuration,
@@ -195,6 +197,19 @@ export default function CodeqlScanDetail() {
 		[headerSummary, durationMs, llmModel, reasoningCount],
 	);
 
+	const failureReasons = useMemo(
+		() =>
+			buildStaticAnalysisTaskStatusSummary({
+				opengrepTask: null,
+				codeqlTask,
+			}).failureReasons,
+		[codeqlTask],
+	);
+	const codeqlFailureReason = useMemo(
+		() => failureReasons.find((reason) => reason.engine === "codeql") ?? null,
+		[failureReasons],
+	);
+
 	useEffect(() => {
 		syncStateToUrl(tableState);
 	}, [syncStateToUrl, tableState]);
@@ -301,6 +316,25 @@ export default function CodeqlScanDetail() {
 					</Button>
 				</div>
 			</div>
+
+			{codeqlFailureReason ? (
+				<div className="cyber-card flex items-start gap-3 border border-rose-500/30 bg-rose-500/10 p-4">
+					<AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-rose-400" />
+					<div className="min-w-0 flex-1 space-y-1">
+						<h2 className="text-sm font-semibold text-rose-200">
+							CodeQL 任务失败
+						</h2>
+						<pre className="whitespace-pre-wrap break-words text-xs leading-5 text-rose-100/90">
+							{codeqlFailureReason.message}
+						</pre>
+						{canResetCodeqlBuildPlan ? (
+							<p className="pt-1 text-[11px] text-rose-200/70">
+								可在右侧"CodeQL 编译探索"面板点击"重置并重新探索"重新触发构建方案探索。
+							</p>
+						) : null}
+					</div>
+				</div>
+			) : null}
 
 			{/* 60/40 split layout */}
 			<div className="grid min-h-0 gap-5 lg:h-[calc(100vh-11rem)] lg:grid-cols-[minmax(0,6fr)_minmax(0,4fr)]">

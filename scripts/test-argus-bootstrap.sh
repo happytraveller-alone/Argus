@@ -501,6 +501,18 @@ fi
 
 assert_not_contains "$ROOT_DIR/.github/workflows/docker-publish.yml" "argus-codeql-runner"
 assert_not_contains "$ROOT_DIR/.github/workflows/docker-publish.yml" "docker/codeql-runner.Dockerfile"
+for retired_codeql_docker_path in \
+  docker/codeql-runner.Dockerfile \
+  docker/codeql-scan.sh \
+  docker/codeql-compile-sandbox.sh \
+  docker/test-codeql-diagnostics.sh
+do
+  if [ -e "$ROOT_DIR/$retired_codeql_docker_path" ]; then
+    fail "$retired_codeql_docker_path should not exist in the Docker tree"
+  fi
+done
+assert_contains "$ROOT_DIR/scripts/cubesandbox-quickstart.sh" "build-codeql-cpp-image"
+assert_contains "$ROOT_DIR/oci/cubesandbox/README.md" "codeql-cpp.Dockerfile"
 
 # Aggressive dry-run exposes the destructive plan without executing it.
 dry_aggressive_dir="$(new_fixture dry-aggressive)"

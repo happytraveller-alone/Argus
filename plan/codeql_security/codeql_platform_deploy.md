@@ -1,5 +1,7 @@
 # AuditTool CodeQL 平台实施部署手册（平台原生 + Docker + 全链路）
 
+> **状态（2026-05-03）：已被 CubeSandbox CodeQL 主路径取代。** 本文保留为历史设计档，下面关于 `docker/codeql-runner.Dockerfile`、`SCANNER_CODEQL_IMAGE`、CodeQL Docker runner 构建/发布/回滚的内容不再是当前实现合同。当前 CodeQL 执行入口是 `backend/src/scan/codeql_cubesandbox.rs` + `oci/cubesandbox/codeql-cpp.Dockerfile` + `scripts/cubesandbox-quickstart.sh`，Docker Compose/发布流水线不再构建 CodeQL runner 镜像。
+
 > 文档定位：本手册用于把 CodeQL 作为 AuditTool 平台内置静态审计能力落地，不是单纯 CI 示例。  
 > 参考来源：`/root/AuditTool/codeql.md`（官方摘要）与 `/root/AuditTool/codeql_standard_implementation.md`（标准化实现规格，主参考）。
 
@@ -648,4 +650,3 @@ docker compose logs backend | rg -n "preflight|codeql"
 # 4) 通过 API 创建一次 codeql 任务（示意）
 # curl -X POST http://localhost:8000/api/v1/static-tasks/codeql/scan ...
 ```
-

@@ -355,6 +355,8 @@ export interface OpengrepScanTask {
     lines_scanned: number;
     created_at: string;
     updated_at?: string | null;
+    error_message?: string | null;
+    diagnostics_summary?: string | null;
 }
 
 export interface OpengrepScanProgressLog {
