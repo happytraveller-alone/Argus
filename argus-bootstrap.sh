@@ -18,6 +18,8 @@ WAIT_TIMEOUT="${ARGUS_WAIT_TIMEOUT:-120}"
 WAIT_INTERVAL="${ARGUS_WAIT_INTERVAL:-2}"
 FRONTEND_PORT="${Argus_FRONTEND_PORT:-13000}"
 BACKEND_PORT="${Argus_BACKEND_PORT:-18000}"
+ARGUS_PORT_AUTO_FREE="${ARGUS_PORT_AUTO_FREE:-true}"
+ARGUS_PORT_FREE_GRACE="${ARGUS_PORT_FREE_GRACE:-2}"
 BACKEND_HEALTH_URL="${ARGUS_BACKEND_HEALTH_URL:-http://127.0.0.1:${BACKEND_PORT}/health}"
 BACKEND_IMPORT_URL="${ARGUS_BACKEND_IMPORT_URL:-http://127.0.0.1:${BACKEND_PORT}/api/v1/system-config/import-env}"
 ARGUS_RESET_IMPORT_TOKEN=""
@@ -100,6 +102,15 @@ Start modes:
 
 Ports:
   Argus_FRONTEND_PORT           Frontend host port. Default: 13000
+  Argus_BACKEND_PORT            Backend host port. Default: 18000
+  ARGUS_PORT_AUTO_FREE          After Compose down, auto-free FRONTEND/BACKEND
+                                ports if still busy: stop Docker containers
+                                publishing them, then SIGTERM/SIGKILL host
+                                processes via lsof/ss/fuser. Default: true.
+                                Set to false to disable (script will fail loudly
+                                on busy ports instead of clearing them).
+  ARGUS_PORT_FREE_GRACE         Seconds to wait between SIGTERM and SIGKILL
+                                for processes holding Argus ports. Default: 2.
 
 CubeSandbox host-side bootstrap (WSL2-native):
   By default argus-bootstrap.sh runs scripts/cubesandbox-quickstart.sh
@@ -645,6 +656,104 @@ compose_down() {
   fi
 }
 
+port_is_busy() {
+  local port="$1"
+  if command -v ss >/dev/null 2>&1; then
+    ss -lnt "sport = :${port}" 2>/dev/null | awk 'NR>1 {found=1} END {exit !found}'
+    return $?
+  fi
+  if command -v lsof >/dev/null 2>&1; then
+    lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1
+    return $?
+  fi
+  if command -v netstat >/dev/null 2>&1; then
+    netstat -lnt 2>/dev/null | awk -v p=":${port}\$" '$4 ~ p {found=1} END {exit !found}'
+    return $?
+  fi
+  ( exec 3<>"/dev/tcp/127.0.0.1/${port}" ) 2>/dev/null
+}
+
+port_listener_pids() {
+  local port="$1"
+  if command -v lsof >/dev/null 2>&1; then
+    lsof -nP -tiTCP:"$port" -sTCP:LISTEN 2>/dev/null | sort -u
+    return 0
+  fi
+  if command -v ss >/dev/null 2>&1; then
+    ss -lntp "sport = :${port}" 2>/dev/null \
+      | awk -F'pid=' 'NR>1 && NF>1 {split($2,a,","); if (a[1] ~ /^[0-9]+$/) print a[1]}' \
+      | sort -u
+    return 0
+  fi
+  if command -v fuser >/dev/null 2>&1; then
+    fuser -n tcp "$port" 2>/dev/null | tr -s ' ' '\n' | grep -E '^[0-9]+$' | sort -u
+    return 0
+  fi
+}
+
+free_port_if_busy() {
+  local port="$1"
+  local label="${2:-port}"
+  if ! port_is_busy "$port"; then
+    return 0
+  fi
+  log "Port ${port} (${label}) is busy; attempting auto-free (set ARGUS_PORT_AUTO_FREE=false to disable)."
+
+  if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
+    local cids
+    cids="$(docker ps --filter "publish=${port}" --format '{{.ID}}' 2>/dev/null || true)"
+    if [[ -n "$cids" ]]; then
+      log "Stopping docker containers publishing port ${port}: $(printf '%s ' $cids)"
+      # shellcheck disable=SC2086
+      docker stop $cids >/dev/null 2>&1 || true
+      # shellcheck disable=SC2086
+      docker rm -f $cids >/dev/null 2>&1 || true
+    fi
+  fi
+
+  if ! port_is_busy "$port"; then
+    log "Port ${port} freed via docker container stop."
+    return 0
+  fi
+
+  local pids pid
+  pids="$(port_listener_pids "$port" || true)"
+  if [[ -n "$pids" ]]; then
+    log "Sending SIGTERM to host processes holding port ${port}: $(printf '%s ' $pids)"
+    for pid in $pids; do
+      kill -TERM "$pid" 2>/dev/null || true
+    done
+    sleep "$ARGUS_PORT_FREE_GRACE"
+    pids="$(port_listener_pids "$port" || true)"
+    if [[ -n "$pids" ]]; then
+      log "Sending SIGKILL to lingering processes on port ${port}: $(printf '%s ' $pids)"
+      for pid in $pids; do
+        kill -KILL "$pid" 2>/dev/null || true
+      done
+      sleep 1
+    fi
+  fi
+
+  if port_is_busy "$port"; then
+    fail "Port ${port} (${label}) still busy after auto-free attempts. Inspect with: ss -lntp 'sport = :${port}' or lsof -iTCP:${port} -sTCP:LISTEN. Override with ARGUS_PORT_AUTO_FREE=false to skip."
+  fi
+  log "Port ${port} (${label}) freed."
+}
+
+ensure_argus_ports_free() {
+  if "$DRY_RUN" || is_truthy "$STUB_DOCKER"; then
+    log "Dry-run/stub: skipping busy-port auto-free."
+    return 0
+  fi
+  if ! is_truthy "$ARGUS_PORT_AUTO_FREE"; then
+    log "ARGUS_PORT_AUTO_FREE=false; skipping host-port auto-free preflight."
+    return 0
+  fi
+  log "Preflight: ensuring Argus host ports are free (frontend=${FRONTEND_PORT}, backend=${BACKEND_PORT})."
+  free_port_if_busy "$FRONTEND_PORT" "frontend"
+  free_port_if_busy "$BACKEND_PORT" "backend"
+}
+
 prune_docker_system() {
   if is_falsey "$DOCKER_SYSTEM_PRUNE"; then
     log "Skipping global Docker prune because ARGUS_DOCKER_SYSTEM_PRUNE=false."
@@ -887,6 +996,7 @@ main() {
   require_real_tools
   generate_import_token
   cleanup_for_run_mode
+  ensure_argus_ports_free
   ensure_cubesandbox
   start_stack
 }
