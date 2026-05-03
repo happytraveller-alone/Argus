@@ -1,6 +1,7 @@
 import type { AgentTask } from "@/shared/api/agentTasks";
 import {
 	getOpengrepScanTasks,
+	getCodeqlScanTasks,
 	type OpengrepScanTask,
 } from "@/shared/api/opengrep";
 import type { Project } from "@/shared/types";
@@ -318,19 +319,15 @@ export async function fetchTaskActivities(
 	projects: Project[],
 	limit = 100,
 ): Promise<TaskActivityItem[]> {
-	const staticTasksResult = await Promise.allSettled([
+	const [opengrepTasksResult, codeqlTasksResult] = await Promise.allSettled([
 		getOpengrepScanTasks({ limit }),
+		getCodeqlScanTasks({ limit }),
 	]);
 
-	const allStaticTasks =
-		staticTasksResult[0].status === "fulfilled" ? staticTasksResult[0].value : [];
-
-	const opengrepTasks = allStaticTasks.filter(
-		(task) => task.engine !== "codeql",
-	);
-	const codeqlTasks = allStaticTasks.filter(
-		(task) => task.engine === "codeql",
-	);
+	const opengrepTasks =
+		opengrepTasksResult.status === "fulfilled" ? opengrepTasksResult.value : [];
+	const codeqlTasks =
+		codeqlTasksResult.status === "fulfilled" ? codeqlTasksResult.value : [];
 
 	const projectNameMap = mapProjectNames(projects);
 	const resolveProjectName = (projectId: string) =>

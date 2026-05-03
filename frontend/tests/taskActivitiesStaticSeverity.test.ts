@@ -178,6 +178,28 @@ test("fetchTaskActivities does not request retired agent task or removed static 
 				],
 			};
 		}
+		if (url.startsWith("/static-tasks/codeql/tasks")) {
+			return {
+				data: [
+					{
+						id: "cq-3",
+						project_id: "project-3",
+						name: appendStaticScanBatchMarker("静态分析-CodeQL", batchId),
+						status: "completed",
+						target_path: ".",
+						total_findings: 2,
+						error_count: 0,
+						warning_count: 2,
+						scan_duration_ms: 1500,
+						files_scanned: 3,
+						lines_scanned: 30,
+						created_at: "2026-03-13T12:02:00.000Z",
+						updated_at: "2026-03-13T12:03:00.000Z",
+						engine: "codeql",
+					},
+				],
+			};
+		}
 		throw new Error(`Unexpected apiClient.get call: ${url}`);
 	}) as typeof apiClient.get;
 
@@ -195,7 +217,80 @@ test("fetchTaskActivities does not request retired agent task or removed static 
 			medium: 0,
 			low: 1,
 		});
-		assert.deepEqual(calls, ["/static-tasks/tasks?limit=20"]);
+		assert.equal(
+			activities[0]?.route,
+			"/static-analysis/og-3?muteToast=1&opengrepTaskId=og-3&codeqlTaskId=cq-3&engine=codeql",
+		);
+		assert.deepEqual(activities[0]?.cancelTarget, {
+			mode: "static",
+			engine: "opengrep",
+			taskId: "og-3",
+		});
+		assert.deepEqual(calls, [
+			"/static-tasks/tasks?limit=20",
+			"/static-tasks/codeql/tasks?limit=20",
+		]);
+	} finally {
+		apiClient.get = originalGet;
+	}
+});
+
+test("static task management activity source includes both opengrep and codeql tasks", async () => {
+	const originalGet = apiClient.get;
+	const calls: string[] = [];
+
+	apiClient.get = (async (url: string) => {
+		calls.push(url);
+		if (url.startsWith("/static-tasks/codeql/tasks")) {
+			return {
+				data: [
+					{
+						id: "cq-4",
+						project_id: "project-4",
+						name: appendStaticScanBatchMarker("静态分析-CodeQL", "static-batch-4"),
+						status: "completed",
+						target_path: ".",
+						total_findings: 1,
+						error_count: 0,
+						warning_count: 1,
+						scan_duration_ms: 1200,
+						files_scanned: 4,
+						lines_scanned: 40,
+						created_at: "2026-03-13T13:02:00.000Z",
+						updated_at: "2026-03-13T13:03:00.000Z",
+						engine: "codeql",
+					},
+				],
+			};
+		}
+		if (url.startsWith("/static-tasks/tasks")) {
+			return {
+				data: [],
+			};
+		}
+		throw new Error(`Unexpected apiClient.get call: ${url}`);
+	}) as typeof apiClient.get;
+
+	try {
+		const activities = await fetchTaskActivities(
+			[{ id: "project-4", name: "Mixed Project" }] as any,
+			20,
+		);
+
+		assert.equal(activities.length, 1);
+		assert.equal(
+			activities[0]?.route,
+			"/codeql-analysis/cq-4?muteToast=1&codeqlTaskId=cq-4&engine=codeql",
+		);
+		assert.deepEqual(activities[0]?.cancelTarget, {
+			mode: "static",
+			engine: "codeql",
+			taskId: "cq-4",
+		});
+		assert.deepEqual(calls, [
+			"/static-tasks/tasks?limit=20",
+			"/static-tasks/codeql/tasks?limit=20",
+		]);
 	} finally {
 		apiClient.get = originalGet;
 	}

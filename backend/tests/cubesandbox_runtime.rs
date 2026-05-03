@@ -34,7 +34,7 @@ fn isolated_test_config(scope: &str) -> AppConfig {
 }
 
 #[tokio::test]
-async fn cubesandbox_defaults_are_exposed_in_system_config() {
+async fn cubesandbox_defaults_expose_only_runtime_controls() {
     let state = AppState::from_config(isolated_test_config("cubesandbox-defaults"))
         .await
         .expect("state should build");
@@ -52,19 +52,7 @@ async fn cubesandbox_defaults_are_exposed_in_system_config() {
     assert_eq!(response.status(), StatusCode::OK);
     let payload: Value =
         serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
-    assert_eq!(payload["otherConfig"]["cubeSandbox"]["enabled"], false);
-    assert_eq!(
-        payload["otherConfig"]["cubeSandbox"]["apiBaseUrl"],
-        "http://127.0.0.1:23000"
-    );
-    assert_eq!(
-        payload["otherConfig"]["cubeSandbox"]["dataPlaneBaseUrl"],
-        "https://127.0.0.1:21443"
-    );
-    assert_eq!(
-        payload["otherConfig"]["cubeSandbox"]["helperPath"],
-        "scripts/cubesandbox-quickstart.sh"
-    );
+    assert!(payload["otherConfig"].get("cubeSandbox").is_none());
 }
 
 #[tokio::test]
@@ -85,8 +73,7 @@ async fn cubesandbox_config_preserves_unknown_other_config_keys() {
             "cubeSandbox": {
                 "enabled": true,
                 "apiBaseUrl": "http://127.0.0.1:23000",
-                "dataPlaneBaseUrl": "https://127.0.0.1:21443",
-                "templateId": "tpl-test"
+                "dataPlaneBaseUrl": "https://127.0.0.1:21443"
             }
         }
     });
@@ -107,9 +94,10 @@ async fn cubesandbox_config_preserves_unknown_other_config_keys() {
         serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
     assert_eq!(payload["otherConfig"]["someFutureKey"]["kept"], true);
     assert_eq!(
-        payload["otherConfig"]["cubeSandbox"]["templateId"],
-        "tpl-test"
+        payload["otherConfig"]["cubeSandbox"]["apiBaseUrl"],
+        "http://127.0.0.1:23000"
     );
+    assert!(payload["otherConfig"]["cubeSandbox"].get("templateId").is_none());
 }
 
 #[test]
@@ -201,7 +189,47 @@ fn cubesandbox_lifecycle_runs_only_for_local_control_and_data_plane_urls() {
 
 #[tokio::test]
 async fn cubesandbox_runtime_config_rejects_disabled_missing_template_and_invalid_urls() {
-    let state = AppState::from_config(isolated_test_config("cubesandbox-config-failures"))
+    let mut config = isolated_test_config("cubesandbox-config-failures");
+    let helper_dir = tempfile::tempdir().expect("helper tempdir");
+    let helper_path = helper_dir.path().join("cubesandbox-helper.sh");
+    fs::write(&helper_path, "#!/bin/sh\nprintf 'status ok\\n'\nexit 0\n")
+        .expect("helper script should write");
+    let mut permissions = fs::metadata(&helper_path)
+        .expect("helper metadata")
+        .permissions();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        permissions.set_mode(0o755);
+        fs::set_permissions(&helper_path, permissions).expect("helper chmod");
+    }
+    config.cubesandbox_helper_path = helper_path.to_string_lossy().to_string();
+    config.cubesandbox_auto_start = false;
+    let control_seen = RecordedRequests::default();
+    let data_seen = RecordedRequests::default();
+    let control_addr = spawn_json_server(
+        control_seen.clone(),
+        vec![
+            (StatusCode::OK, r#"{"status":"ok"}"#.to_string()),
+            (
+                StatusCode::CREATED,
+                r#"{"sandboxID":"sbx-fallback","templateID":"tpl-test","clientID":"client-1","envdVersion":"0.1","domain":"cube.app"}"#.to_string(),
+            ),
+            (StatusCode::OK, r#"{"connected":true}"#.to_string()),
+            (StatusCode::NO_CONTENT, String::new()),
+        ],
+    );
+    let data_addr = spawn_json_server(
+        data_seen,
+        vec![(
+            StatusCode::OK,
+            r#"{"stdout":"45\n","stderr":"","exitCode":0}"#.to_string(),
+        )],
+    );
+    config.cubesandbox_api_base_url = format!("http://{control_addr}");
+    config.cubesandbox_data_plane_base_url = format!("http://{data_addr}");
+
+    let state = AppState::from_config(config)
         .await
         .expect("state should build");
     let app = build_router(state);
@@ -211,8 +239,7 @@ async fn cubesandbox_runtime_config_rejects_disabled_missing_template_and_invali
         json!({
             "enabled": false,
             "apiBaseUrl": "http://127.0.0.1:23000",
-            "dataPlaneBaseUrl": "https://127.0.0.1:21443",
-            "templateId": "tpl-test"
+            "dataPlaneBaseUrl": "https://127.0.0.1:21443"
         }),
     )
     .await;
@@ -223,29 +250,28 @@ async fn cubesandbox_runtime_config_rejects_disabled_missing_template_and_invali
         .unwrap_or_default()
         .contains("未启用"));
 
-    let missing_template = submit_cubesandbox_task(
+    let fallback_template = submit_cubesandbox_task(
         &app,
         json!({
             "enabled": true,
-            "apiBaseUrl": "http://127.0.0.1:23000",
-            "dataPlaneBaseUrl": "https://127.0.0.1:21443",
-            "templateId": ""
+            "apiBaseUrl": format!("http://{control_addr}"),
+            "dataPlaneBaseUrl": format!("http://{data_addr}")
         }),
     )
     .await;
-    assert_eq!(missing_template["status"], "failed");
-    assert!(missing_template["errorMessage"]
-        .as_str()
-        .unwrap_or_default()
-        .contains("templateId"));
+    assert_eq!(fallback_template["status"], "completed");
+    assert_eq!(fallback_template["stdout"], "45\n");
+    assert_eq!(
+        control_seen.paths().last().map(String::as_str),
+        Some("/sandboxes/sbx-fallback")
+    );
 
     let invalid_url = submit_cubesandbox_task(
         &app,
         json!({
             "enabled": true,
             "apiBaseUrl": "not-a-url",
-            "dataPlaneBaseUrl": "https://127.0.0.1:21443",
-            "templateId": "tpl-test"
+            "dataPlaneBaseUrl": format!("http://{data_addr}")
         }),
     )
     .await;
@@ -423,10 +449,7 @@ async fn cubesandbox_task_route_smoke_returns_45() {
             "cubeSandbox": {
                 "enabled": true,
                 "apiBaseUrl": format!("http://{control_addr}"),
-                "dataPlaneBaseUrl": format!("http://{data_addr}"),
-                "templateId": "tpl-test",
-                "helperPath": helper_path.to_string_lossy(),
-                "autoStart": false
+                "dataPlaneBaseUrl": format!("http://{data_addr}")
             }
         }),
         json!({}),
@@ -532,9 +555,6 @@ async fn cubesandbox_task_route_uses_remote_api_without_local_helper() {
                 "enabled": true,
                 "apiBaseUrl": format!("http://{control_addr}"),
                 "dataPlaneBaseUrl": format!("http://{data_addr}"),
-                "templateId": "tpl-test",
-                "helperPath": "/missing/cubesandbox-helper.sh",
-                "autoStart": true,
                 "autoInstall": true
             }
         }),

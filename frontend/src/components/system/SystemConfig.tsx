@@ -133,10 +133,7 @@ interface CubeSandboxConfigData {
 	enabled: boolean;
 	apiBaseUrl: string;
 	dataPlaneBaseUrl: string;
-	templateId: string;
-	helperPath: string;
 	workDir: string;
-	autoStart: boolean;
 	autoInstall: boolean;
 	helperTimeoutSeconds: number;
 	executionTimeoutSeconds: number;
@@ -220,10 +217,7 @@ const DEFAULT_CONFIG: SystemConfigData = {
 		enabled: true,
 		apiBaseUrl: "http://127.0.0.1:23000",
 		dataPlaneBaseUrl: "https://127.0.0.1:21443",
-		templateId: "",
-		helperPath: "scripts/cubesandbox-quickstart.sh",
 		workDir: ".cubesandbox",
-		autoStart: true,
 		autoInstall: false,
 		helperTimeoutSeconds: 600,
 		executionTimeoutSeconds: 120,
@@ -261,10 +255,7 @@ const normalizeCubeSandboxConfig = (raw: unknown): CubeSandboxConfigData => {
 		enabled: normalizeBoolean(value.enabled, DEFAULT_CONFIG.cubeSandbox.enabled),
 		apiBaseUrl: normalizeString(value.apiBaseUrl, DEFAULT_CONFIG.cubeSandbox.apiBaseUrl),
 		dataPlaneBaseUrl: normalizeString(value.dataPlaneBaseUrl, DEFAULT_CONFIG.cubeSandbox.dataPlaneBaseUrl),
-		templateId: normalizeString(value.templateId, DEFAULT_CONFIG.cubeSandbox.templateId),
-		helperPath: normalizeString(value.helperPath, DEFAULT_CONFIG.cubeSandbox.helperPath),
 		workDir: normalizeString(value.workDir, DEFAULT_CONFIG.cubeSandbox.workDir),
-		autoStart: normalizeBoolean(value.autoStart, DEFAULT_CONFIG.cubeSandbox.autoStart),
 		autoInstall: normalizeBoolean(value.autoInstall, DEFAULT_CONFIG.cubeSandbox.autoInstall),
 		helperTimeoutSeconds: normalizeNumber(value.helperTimeoutSeconds, DEFAULT_CONFIG.cubeSandbox.helperTimeoutSeconds),
 		executionTimeoutSeconds: normalizeNumber(value.executionTimeoutSeconds, DEFAULT_CONFIG.cubeSandbox.executionTimeoutSeconds),
@@ -726,14 +717,14 @@ export function SystemConfig({
 								</div>
 							</div>
 								<div className="overflow-x-auto rounded-lg border border-border">
-									<Table className="table-fixed text-base" containerClassName="overflow-x-auto rounded-lg">
+									<Table className="table-fixed text-base text-center" containerClassName="overflow-x-auto rounded-lg">
 										<TableHeader>
 											<TableRow className="border-b border-border/70 bg-muted/40 text-sm font-bold uppercase tracking-[0.12em] text-muted-foreground">
-												<TableHead className="w-16 px-3 py-2 text-left font-bold whitespace-nowrap border-r border-border/30">序号</TableHead>
-												<TableHead className="w-[120px] px-3 py-2 text-left font-bold whitespace-nowrap border-r border-border/30">模型供应商</TableHead>
-												<TableHead className="w-[200px] px-3 py-2 text-left font-bold whitespace-nowrap border-r border-border/30">地址</TableHead>
-												<TableHead className="w-[200px] px-3 py-2 text-left font-bold whitespace-nowrap border-r border-border/30">模型</TableHead>
-												<TableHead className="w-[240px] px-3 py-2 text-left font-bold whitespace-nowrap border-r border-border/30">状态</TableHead>
+												<TableHead className="w-16 px-3 py-2 text-center font-bold whitespace-nowrap border-r border-border/30">序号</TableHead>
+												<TableHead className="w-[120px] px-3 py-2 text-center font-bold whitespace-nowrap border-r border-border/30">模型供应商</TableHead>
+												<TableHead className="w-[200px] px-3 py-2 text-center font-bold whitespace-nowrap border-r border-border/30">地址</TableHead>
+												<TableHead className="w-[160px] px-3 py-2 text-center font-bold whitespace-nowrap border-r border-border/30">模型</TableHead>
+												<TableHead className="w-[300px] px-3 py-2 text-center font-bold whitespace-nowrap border-r border-border/30">状态</TableHead>
 												<TableHead className="w-[320px] px-3 py-2 text-center font-bold whitespace-nowrap">操作</TableHead>
 											</TableRow>
 										</TableHeader>
@@ -741,11 +732,11 @@ export function SystemConfig({
 											{rows.map((row) => {
 												const status = rowStatusText(row, config.llmConfig.latestPreflightRun.winningRowId);
 												return <TableRow key={row.id} className="border-b border-border/70">
-													<TableCell className="px-3 py-3 text-left font-mono text-base whitespace-nowrap border-r border-border/30">{row.priority}</TableCell>
-													<TableCell className="px-3 py-3 text-left text-base whitespace-nowrap border-r border-border/30">{(getLlmProviderInfo(providerOptions, row.provider)?.name || row.provider).replace(" 兼容", "")}</TableCell>
-													<TableCell className="px-3 py-3 text-left font-mono text-base break-all border-r border-border/30" title={row.baseUrl}>{row.baseUrl || "--"}</TableCell>
-													<TableCell className="px-3 py-3 text-left font-mono text-base whitespace-nowrap border-r border-border/30" title={row.model}>{row.model || "--"}</TableCell>
-													<TableCell className="px-3 py-3 text-left border-r border-border/30"><div className="flex flex-wrap gap-1">{status.map((item) => <span key={item} className={cn("rounded border px-2 py-0.5 text-xs whitespace-nowrap", item.includes("失败") || item.includes("缺少") ? "border-rose-500/40 text-rose-300" : item.includes("通过") || item.includes("命中") || item.includes("已配置") ? "border-emerald-500/40 text-emerald-300" : "border-border text-muted-foreground")}>{item}</span>)}</div></TableCell>
+													<TableCell className="px-3 py-3 text-center font-mono text-base whitespace-nowrap border-r border-border/30">{row.priority}</TableCell>
+													<TableCell className="px-3 py-3 text-center text-base whitespace-nowrap border-r border-border/30">{(getLlmProviderInfo(providerOptions, row.provider)?.name || row.provider).replace(" 兼容", "")}</TableCell>
+													<TableCell className="px-3 py-3 text-center font-mono text-base break-all border-r border-border/30" title={row.baseUrl}>{row.baseUrl || "--"}</TableCell>
+													<TableCell className="px-3 py-3 text-center font-mono text-base whitespace-nowrap border-r border-border/30" title={row.model}>{row.model || "--"}</TableCell>
+													<TableCell className="px-3 py-3 text-center border-r border-border/30"><div className="flex flex-wrap justify-center gap-1">{status.map((item) => <span key={item} className={cn("rounded border px-2 py-0.5 text-xs whitespace-nowrap", item.includes("失败") || item.includes("缺少") ? "border-rose-500/40 text-rose-300" : item.includes("通过") || item.includes("命中") || item.includes("已配置") ? "border-emerald-500/40 text-emerald-300" : "border-border text-muted-foreground")}>{item}</span>)}</div></TableCell>
 													<TableCell className="px-3 py-3"><div className="flex flex-nowrap gap-1 justify-center"><Button type="button" variant="outline" size="sm" className="cyber-btn-ghost h-8" disabled={savingLLM || testingLLM} onClick={() => handleSaveAndTestRow(row)}>验证</Button><Button type="button" variant="outline" size="sm" className="cyber-btn-ghost h-8" onClick={() => openEditDialog(row)}>编辑</Button><Button type="button" variant="outline" size="sm" className={cn("cyber-btn-ghost h-8", row.enabled ? "border-emerald-500/40 text-emerald-300" : "border-amber-500/40 text-amber-300")} onClick={() => updateRows(rows.map((r) => r.id === row.id ? { ...r, enabled: !r.enabled } : r))}>{row.enabled ? "禁用" : "启用"}</Button><Button type="button" variant="outline" size="sm" className="cyber-btn-ghost h-8 border-rose-500/40 text-rose-300" onClick={() => deleteRow(row)}>删除</Button><Button type="button" variant="outline" size="sm" className="cyber-btn-ghost h-8" disabled={row.priority === 1} onClick={() => moveRow(row, -1)}><ArrowUp className="h-3 w-3" /></Button><Button type="button" variant="outline" size="sm" className="cyber-btn-ghost h-8" disabled={row.priority === rows.length} onClick={() => moveRow(row, 1)}><ArrowDown className="h-3 w-3" /></Button></div></TableCell>
 												</TableRow>;
 											})}
@@ -767,18 +758,15 @@ export function SystemConfig({
 						<div className="cyber-card p-6 space-y-6">
 							<div className="space-y-1">
 								<h3 className="font-mono font-bold uppercase text-sm text-muted-foreground">CubeSandbox 运行时</h3>
-								<p className="text-xs text-muted-foreground">保存到 otherConfig.cubeSandbox；CUBESANDBOX_DATA_PLANE_BASE_URL 只作为默认种子。</p>
+								<p className="text-xs text-muted-foreground">CubeSandbox 运行时参数由后端统一管理；此页仅保留可编辑的连接与资源参数。</p>
 							</div>
 							<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 								<label className="space-y-2"><span className="text-xs font-bold text-muted-foreground uppercase">启用</span><Select value={config.cubeSandbox.enabled ? "enabled" : "disabled"} onValueChange={(value) => { setConfig((prev) => prev ? { ...prev, cubeSandbox: { ...prev.cubeSandbox, enabled: value === "enabled" } } : prev); setHasChanges(true); }}><SelectTrigger className="cyber-input h-10"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="enabled">启用</SelectItem><SelectItem value="disabled">禁用</SelectItem></SelectContent></Select></label>
-								<label className="space-y-2"><span className="text-xs font-bold text-muted-foreground uppercase">自动启动 VM</span><Select value={config.cubeSandbox.autoStart ? "enabled" : "disabled"} onValueChange={(value) => { setConfig((prev) => prev ? { ...prev, cubeSandbox: { ...prev.cubeSandbox, autoStart: value === "enabled" } } : prev); setHasChanges(true); }}><SelectTrigger className="cyber-input h-10"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="enabled">启用</SelectItem><SelectItem value="disabled">禁用</SelectItem></SelectContent></Select></label>
 								{([
 									["apiBaseUrl", "CubeAPI 控制面地址"],
 									["dataPlaneBaseUrl", "CubeProxy/envd 数据面地址"],
-									["templateId", "模板 ID"],
-									["helperPath", "生命周期 Helper"],
 									["workDir", "工作目录"],
-								] as Array<[keyof Pick<CubeSandboxConfigData, "apiBaseUrl" | "dataPlaneBaseUrl" | "templateId" | "helperPath" | "workDir">, string]>).map(([key, label]) => <label key={key} className="space-y-2"><span className="text-xs font-bold text-muted-foreground uppercase">{label}</span><Input value={config.cubeSandbox[key]} onChange={(event) => { setConfig((prev) => prev ? { ...prev, cubeSandbox: { ...prev.cubeSandbox, [key]: event.target.value } } : prev); setHasChanges(true); }} className="h-10 cyber-input" /></label>)}
+								] as Array<[keyof Pick<CubeSandboxConfigData, "apiBaseUrl" | "dataPlaneBaseUrl" | "workDir">, string]>).map(([key, label]) => <label key={key} className="space-y-2"><span className="text-xs font-bold text-muted-foreground uppercase">{label}</span><Input value={config.cubeSandbox[key]} onChange={(event) => { setConfig((prev) => prev ? { ...prev, cubeSandbox: { ...prev.cubeSandbox, [key]: event.target.value } } : prev); setHasChanges(true); }} className="h-10 cyber-input" /></label>)}
 								{([
 									["helperTimeoutSeconds", "Helper 超时 (秒)"],
 									["executionTimeoutSeconds", "执行超时 (秒)"],

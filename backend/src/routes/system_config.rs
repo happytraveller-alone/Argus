@@ -24,7 +24,6 @@ use crate::{
         ProviderCatalogItem as LlmProviderItem,
     },
     routes::llm_config_set,
-    runtime::cubesandbox::config::CubeSandboxConfig,
     state::{AppState, StoredSystemConfig},
 };
 
@@ -1127,7 +1126,6 @@ pub fn default_config(config: &AppConfig) -> SystemConfigPayload {
             "maxAnalyzeFiles": config.max_analyze_files,
             "llmConcurrency": config.llm_concurrency,
             "llmGapMs": config.llm_gap_ms,
-            "cubeSandbox": CubeSandboxConfig::defaults(config).to_public_json()
         }),
         llm_test_metadata: json!({}),
     }

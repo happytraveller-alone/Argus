@@ -7,14 +7,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import TaskActivitiesListTable from "@/features/tasks/components/TaskActivitiesListTable";
 import { Badge } from "@/components/ui/badge";
-import { useTaskActivitiesSnapshot } from "@/features/tasks/hooks/useTaskActivitiesSnapshot";
+import { useIntelligentTasksSnapshot } from "@/features/tasks/hooks/useIntelligentTasksSnapshot";
 import { useTaskClock } from "@/features/tasks/hooks/useTaskClock";
+import { deleteIntelligentTask } from "@/shared/api/intelligentTasks";
 import {
-	cancelIntelligentTask,
-	deleteIntelligentTask,
-} from "@/shared/api/intelligentTasks";
-import {
-	filterActivitiesByKind,
+	getTaskStatusText,
 	type TaskActivityItem,
 } from "@/features/tasks/services/taskActivities";
 
@@ -23,11 +20,10 @@ const CreateProjectScanDialog = lazy(
 );
 
 export default function TaskManagementIntelligent() {
-	const { activities, loading, error, refresh } = useTaskActivitiesSnapshot({
-		forceInitial: true,
-		pollingIntervalMs: 5000,
-		idlePollingIntervalMs: 15_000,
-	});
+	const { activities, loading, error, refresh, cancel } =
+		useIntelligentTasksSnapshot({
+			pollingIntervalMs: 3000,
+		});
 	const [keyword, setKeyword] = useState("");
 	const [showCreateDialog, setShowCreateDialog] = useState(false);
 	const [cancellingActivityId, setCancellingActivityId] = useState<string | null>(null);
@@ -53,14 +49,18 @@ export default function TaskManagementIntelligent() {
 	);
 	const nowMs = useTaskClock({ enabled: shouldTickClock, intervalMs: 5000 });
 
-	const intelligentActivities = useMemo(
-		() => filterActivitiesByKind(activities, "intelligent_audit", ""),
-		[activities],
-	);
-	const filteredIntelligentActivities = useMemo(
-		() => filterActivitiesByKind(activities, "intelligent_audit", keyword),
-		[activities, keyword],
-	);
+	const filteredIntelligentActivities = useMemo(() => {
+		const trimmed = keyword.trim().toLowerCase();
+		if (!trimmed) return activities;
+		const kindText = "智能审计";
+		return activities.filter((activity) => {
+			return (
+				activity.projectName.toLowerCase().includes(trimmed) ||
+				kindText.includes(trimmed) ||
+				getTaskStatusText(activity.status).toLowerCase().includes(trimmed)
+			);
+		});
+	}, [activities, keyword]);
 
 	const handleCancelActivity = async (activity: TaskActivityItem) => {
 		if (activity.cancelTarget?.mode !== "intelligent") {
@@ -69,9 +69,8 @@ export default function TaskManagementIntelligent() {
 		}
 		setCancellingActivityId(activity.id);
 		try {
-			await cancelIntelligentTask(activity.cancelTarget.taskId);
+			await cancel(activity.cancelTarget.taskId);
 			toast.success("已提交智能审计任务中止请求");
-			await refresh();
 		} catch (error) {
 			toast.error(`中止任务失败：${error instanceof Error ? error.message : "未知错误"}`);
 		} finally {
@@ -97,7 +96,7 @@ export default function TaskManagementIntelligent() {
 	};
 
 	const stats = useMemo(() => {
-		return intelligentActivities.reduce(
+		return activities.reduce(
 			(acc, activity) => {
 				acc.total += 1;
 				if (activity.status === "completed") {
@@ -113,7 +112,7 @@ export default function TaskManagementIntelligent() {
 			},
 			{ total: 0, completed: 0, running: 0, failed: 0 },
 		);
-	}, [intelligentActivities]);
+	}, [activities]);
 
 	return (
 		<div className="relative flex h-screen flex-col gap-6 overflow-hidden bg-background p-6 font-mono">

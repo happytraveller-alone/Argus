@@ -27,8 +27,7 @@ function isTerminal(status: string): boolean {
 function StatusPill({ status }: { status: string }) {
 	let className = "font-mono text-xs";
 	if (status === "completed") {
-		className +=
-			" border-emerald-500/30 bg-emerald-500/10 text-emerald-300";
+		className += " border-emerald-500/30 bg-emerald-500/10 text-emerald-300";
 	} else if (status === "running" || status === "pending") {
 		className += " border-sky-500/30 bg-sky-500/10 text-sky-300";
 	} else if (status === "failed") {
@@ -101,7 +100,6 @@ export default function AgentAuditDetail() {
 		void fetchRecord();
 	}, [taskId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-	// Polling: 3s while non-terminal
 	useEffect(() => {
 		if (!record) return;
 		if (isTerminal(record.status)) {
@@ -175,7 +173,6 @@ export default function AgentAuditDetail() {
 	const findings = Array.isArray(record.findings) ? record.findings : [];
 	const eventLog = Array.isArray(record.eventLog) ? record.eventLog : [];
 
-	// Derive severity counts from findings
 	const findingsBySeverity = findings.reduce<Record<string, number>>(
 		(acc, f) => {
 			const sev = (f.severity ?? "unknown").toLowerCase();
@@ -249,34 +246,151 @@ export default function AgentAuditDetail() {
 				</div>
 			</div>
 
-			{/* Step progress */}
-			{(sseEvents.length > 0 || (!taskTerminal && !sseComplete)) && (
-				<div className="relative rounded-lg border border-border/60 bg-card/40 p-4">
-					<SectionTitle>执行进度</SectionTitle>
-					<StepProgressIndicator
-						events={
-							sseEvents.length > 0
-								? sseEvents
-								: (eventLog as typeof sseEvents)
-						}
-					/>
+			{/* Two-column main grid: left = findings (6); right = progress + LLM + event log (4) */}
+			<div className="relative grid min-h-0 gap-5 lg:h-[calc(100vh-11rem)] lg:grid-cols-[minmax(0,6fr)_minmax(0,4fr)]">
+				{/* Left column: findings */}
+				<div className="flex min-h-[28rem] min-w-0 flex-col gap-3 overflow-y-auto pr-1 lg:h-full">
+					<div className="rounded-lg border border-border/60 bg-card/40 p-4">
+						{/* Mini header: count + severity chips */}
+						<div className="mb-3 flex flex-wrap items-center gap-3">
+							<h3 className="font-mono text-xs font-semibold uppercase tracking-widest text-foreground/60">
+								发现问题 ({findings.length})
+							</h3>
+							{Object.keys(findingsBySeverity).length > 0 && (
+								<div className="flex flex-wrap gap-2">
+									{Object.entries(findingsBySeverity).map(
+										([sev, count]) => (
+											<Badge
+												key={sev}
+												variant="outline"
+												className="font-mono text-xs"
+											>
+												{sev}: {count}
+											</Badge>
+										),
+									)}
+								</div>
+							)}
+						</div>
+						{findings.length === 0 ? (
+							<p className="font-mono text-xs text-muted-foreground">
+								0 findings (lifecycle proof captured)
+							</p>
+						) : (
+							<div className="flex flex-col gap-2">
+								{findings.map((finding) => (
+									<div
+										key={finding.id}
+										className="rounded border border-border/50 bg-muted/20 p-3"
+									>
+										<div className="flex items-center gap-2">
+											<Badge
+												variant="outline"
+												className="font-mono text-xs"
+											>
+												{finding.severity}
+											</Badge>
+											<span className="font-mono text-xs text-muted-foreground">
+												{finding.id}
+											</span>
+										</div>
+										<p className="mt-1 text-sm text-foreground/90">
+											{finding.summary}
+										</p>
+										{finding.evidence && (
+											<p className="mt-1 font-mono text-xs text-muted-foreground">
+												{finding.evidence}
+											</p>
+										)}
+									</div>
+								))}
+							</div>
+						)}
+					</div>
 				</div>
-			)}
 
-			{/* LLM Reasoning */}
-			{(sseEvents.length > 0 || eventLog.length > 0) && (
-				<div className="relative rounded-lg border border-purple-500/20 bg-card/40 p-4">
-					<SectionTitle>LLM 推理过程</SectionTitle>
-					<LlmReasoningPanel
-						events={
-							sseEvents.length > 0
-								? sseEvents
-								: (eventLog as typeof sseEvents)
-						}
-						isStreaming={sseConnected && !sseComplete}
-					/>
+				{/* Right column: progress + LLM + event log */}
+				<div className="flex min-h-[28rem] min-w-0 flex-col gap-5 overflow-y-auto pr-1 lg:h-full">
+					{/* Mini header: status chip */}
+					<div className="flex items-center gap-2">
+						<span className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
+							运行状态
+						</span>
+						<StatusPill status={record.status} />
+					</div>
+
+					{/* Step progress section */}
+					{(sseEvents.length > 0 || (!taskTerminal && !sseComplete)) && (
+						<div className="rounded-lg border border-border/60 bg-card/40 p-4">
+							<SectionTitle>执行进度</SectionTitle>
+							<StepProgressIndicator
+								events={
+									sseEvents.length > 0
+										? sseEvents
+										: (eventLog as typeof sseEvents)
+								}
+							/>
+						</div>
+					)}
+
+					{/* LLM Reasoning section */}
+					{(sseEvents.length > 0 || eventLog.length > 0) && (
+						<div className="rounded-lg border border-purple-500/20 bg-card/40 p-4">
+							<SectionTitle>LLM 推理过程</SectionTitle>
+							<LlmReasoningPanel
+								events={
+									sseEvents.length > 0
+										? sseEvents
+										: (eventLog as typeof sseEvents)
+								}
+								isStreaming={sseConnected && !sseComplete}
+							/>
+						</div>
+					)}
+
+					{/* Event log */}
+					<div className="rounded-lg border border-border/60 bg-card/40 p-4">
+						<SectionTitle>事件日志 ({eventLog.length})</SectionTitle>
+						{eventLog.length === 0 ? (
+							<p className="font-mono text-xs text-muted-foreground">
+								暂无事件
+							</p>
+						) : (
+							<div className="overflow-auto font-mono text-xs">
+								<div className="min-w-[540px]">
+									<div
+										className="grid grid-cols-[6rem_10rem_minmax(0,1fr)] gap-x-4 border-b border-border/60 py-1.5 text-left font-semibold uppercase tracking-wider text-foreground/60"
+										role="row"
+									>
+										<span role="columnheader">类型</span>
+										<span role="columnheader">时间</span>
+										<span role="columnheader">消息</span>
+									</div>
+									{eventLog.map((entry, idx) => (
+										<div
+											key={idx}
+											className="grid grid-cols-[6rem_10rem_minmax(0,1fr)] gap-x-4 border-b border-border/30 py-1.5 last:border-0"
+											role="row"
+										>
+											<span className="text-sky-300" role="cell">
+												{entry.kind}
+											</span>
+											<span className="text-muted-foreground" role="cell">
+												{entry.timestamp}
+											</span>
+											<span className="text-foreground/80" role="cell">
+												{entry.message ?? "-"}
+											</span>
+										</div>
+									))}
+								</div>
+							</div>
+						)}
+					</div>
 				</div>
-			)}
+			</div>
+
+			{/* Below the grid (full width) */}
 
 			{/* Failure info */}
 			{record.status === "failed" && (
@@ -309,105 +423,6 @@ export default function AgentAuditDetail() {
 				<p className="text-sm text-foreground/90">
 					{record.reportSummary || "-"}
 				</p>
-			</div>
-
-			{/* Findings */}
-			<div className="relative rounded-lg border border-border/60 bg-card/40 p-4">
-				<SectionTitle>
-					发现问题 ({findings.length})
-				</SectionTitle>
-				{findings.length === 0 ? (
-					<p className="font-mono text-xs text-muted-foreground">
-						0 findings (lifecycle proof captured)
-					</p>
-				) : (
-					<>
-						{/* Severity summary */}
-						{Object.keys(findingsBySeverity).length > 0 && (
-							<div className="mb-3 flex flex-wrap gap-2">
-								{Object.entries(findingsBySeverity).map(
-									([sev, count]) => (
-										<Badge
-											key={sev}
-											variant="outline"
-											className="font-mono text-xs"
-										>
-											{sev}: {count}
-										</Badge>
-									),
-								)}
-							</div>
-						)}
-						<div className="flex flex-col gap-2">
-							{findings.map((finding) => (
-								<div
-									key={finding.id}
-									className="rounded border border-border/50 bg-muted/20 p-3"
-								>
-									<div className="flex items-center gap-2">
-										<Badge
-											variant="outline"
-											className="font-mono text-xs"
-										>
-											{finding.severity}
-										</Badge>
-										<span className="font-mono text-xs text-muted-foreground">
-											{finding.id}
-										</span>
-									</div>
-									<p className="mt-1 text-sm text-foreground/90">
-										{finding.summary}
-									</p>
-									{finding.evidence && (
-										<p className="mt-1 font-mono text-xs text-muted-foreground">
-											{finding.evidence}
-										</p>
-									)}
-								</div>
-							))}
-						</div>
-					</>
-				)}
-			</div>
-
-			{/* Event log */}
-			<div className="relative rounded-lg border border-border/60 bg-card/40 p-4">
-				<SectionTitle>事件日志 ({eventLog.length})</SectionTitle>
-				{eventLog.length === 0 ? (
-					<p className="font-mono text-xs text-muted-foreground">
-						暂无事件
-					</p>
-				) : (
-					<div className="overflow-auto font-mono text-xs">
-						<div className="min-w-[540px]">
-							<div
-								className="grid grid-cols-[6rem_10rem_minmax(0,1fr)] gap-x-4 border-b border-border/60 py-1.5 text-left font-semibold uppercase tracking-wider text-foreground/60"
-								role="row"
-							>
-								<span role="columnheader">类型</span>
-								<span role="columnheader">时间</span>
-								<span role="columnheader">消息</span>
-							</div>
-							{eventLog.map((entry, idx) => (
-								<div
-									key={idx}
-									className="grid grid-cols-[6rem_10rem_minmax(0,1fr)] gap-x-4 border-b border-border/30 py-1.5 last:border-0"
-									role="row"
-								>
-									<span className="text-sky-300" role="cell">
-										{entry.kind}
-									</span>
-									<span className="text-muted-foreground" role="cell">
-										{entry.timestamp}
-									</span>
-									<span className="text-foreground/80" role="cell">
-										{entry.message ?? "-"}
-									</span>
-								</div>
-							))}
-						</div>
-					</div>
-				)}
 			</div>
 		</div>
 	);

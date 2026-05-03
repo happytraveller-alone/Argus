@@ -55,7 +55,9 @@ impl CubeSandboxConfig {
             bail!("CubeSandbox 未启用：请前往「系统配置 -> CubeSandbox」开启后再运行 CodeQL 扫描");
         }
         if self.template_id.trim().is_empty() {
-            bail!("CubeSandbox 模板 ID 未配置：请在「系统配置 -> CubeSandbox -> 模板 ID」填写 templateId 后重试");
+            bail!(
+                "CubeSandbox 模板 ID 未配置：请检查后端环境变量 CUBESANDBOX_TEMPLATE_ID"
+            );
         }
         if self.api_base_url.trim().is_empty() {
             bail!("CubeSandbox apiBaseUrl 未配置：请在「系统配置 -> CubeSandbox -> API Base URL」填写完整 http(s) 地址");
@@ -81,17 +83,8 @@ impl CubeSandboxConfig {
         if let Some(value) = read_string(map.get("dataPlaneBaseUrl")) {
             self.data_plane_base_url = value;
         }
-        if let Some(value) = read_string(map.get("templateId")) {
-            self.template_id = value;
-        }
-        if let Some(value) = read_string(map.get("helperPath")) {
-            self.helper_path = value;
-        }
         if let Some(value) = read_string(map.get("workDir")) {
             self.work_dir = value;
-        }
-        if let Some(value) = map.get("autoStart").and_then(Value::as_bool) {
-            self.auto_start = value;
         }
         if let Some(value) = map.get("autoInstall").and_then(Value::as_bool) {
             self.auto_install = value;
@@ -119,10 +112,7 @@ impl CubeSandboxConfig {
             "enabled": self.enabled,
             "apiBaseUrl": self.api_base_url,
             "dataPlaneBaseUrl": self.data_plane_base_url,
-            "templateId": self.template_id,
-            "helperPath": self.helper_path,
             "workDir": self.work_dir,
-            "autoStart": self.auto_start,
             "autoInstall": self.auto_install,
             "helperTimeoutSeconds": self.helper_timeout_seconds,
             "executionTimeoutSeconds": self.execution_timeout_seconds,

@@ -21,8 +21,12 @@ test("SystemConfig renders required multi-provider table columns and actions", (
 
 test("SystemConfig uses updated grid columns and enlarged fonts", () => {
 	const source = readFileSync(systemConfigPath, "utf8");
-	assert.match(source, /<Table className="table-fixed text-base"/);
+	assert.match(source, /<Table className="table-fixed text-base text-center"/);
 	assert.match(source, /TableHead className="w-16/);
+	assert.match(source, /TableHead className="w-\[160px\].*模型/);
+	assert.match(source, /TableHead className="w-\[300px\].*状态/);
+	assert.match(source, /text-center font-bold whitespace-nowrap border-r border-border\/30">模型供应商/);
+	assert.match(source, /justify-center gap-1/);
 	assert.match(source, /showInlineSaveButtons/);
 });
 
@@ -87,5 +91,4 @@ test("SystemConfig preserves raw otherConfig while saving CubeSandbox settings",
 	assert.match(source, /dataPlaneBaseUrl/);
 	assert.match(source, /\.\.\.config\.rawOtherConfig/);
 	assert.match(source, /CubeSandbox 运行时/);
-	assert.match(source, /CUBESANDBOX_DATA_PLANE_BASE_URL/);
 });

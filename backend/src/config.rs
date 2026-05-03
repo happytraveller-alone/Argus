@@ -265,7 +265,7 @@ impl AppConfig {
             cubesandbox_enabled: false,
             cubesandbox_api_base_url: "http://127.0.0.1:23000".to_string(),
             cubesandbox_data_plane_base_url: "https://127.0.0.1:21443".to_string(),
-            cubesandbox_template_id: String::new(),
+            cubesandbox_template_id: "tpl-test".to_string(),
             cubesandbox_helper_path: "scripts/cubesandbox-quickstart.sh".to_string(),
             cubesandbox_work_dir: ".cubesandbox".to_string(),
             cubesandbox_auto_start: true,

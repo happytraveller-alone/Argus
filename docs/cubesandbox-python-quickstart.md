@@ -202,8 +202,7 @@ Keep `CUBESANDBOX_AUTO_START=false` for that deployment shape; local lifecycle
 helper commands are only used when both CubeSandbox control and data-plane URLs
 target localhost.
 
-In the System Config page, enable CubeSandbox and save the `templateId`
-created above. Then submit a Python task:
+Then submit a Python task:
 
 ```bash
 curl -sS -X POST http://localhost:18000/api/v1/cubesandbox-tasks \
