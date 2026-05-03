@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use reqwest::Client;
+use reqwest::{Client, Url};
 use serde_json::json;
 
 use crate::runtime::intelligent::{
@@ -35,6 +35,23 @@ pub trait IntelligentLlmInvoker {
         prompt: &str,
         config: &IntelligentLlmConfig,
     ) -> Result<IntelligentLlmInvocation, IntelligentLlmInvocationError>;
+}
+
+/// Append a fixed endpoint segment to the configured `base_url`.
+///
+/// `Url::join` follows RFC 3986 §5.3 — when the base URL has no trailing slash,
+/// its last path segment is **replaced** instead of preserved. Concretely,
+/// `Url::parse("https://host/v1").join("chat/completions")` resolves to
+/// `https://host/chat/completions` (the `/v1` is dropped). The preflight path
+/// in `crate::llm::tester` avoids this by trimming the trailing slash and
+/// appending `"/<endpoint>"` via `format!`. This helper keeps both code paths
+/// in sync so a base URL such as `https://gateway/v1` (without trailing slash)
+/// still hits `https://gateway/v1/chat/completions` like the preflight does.
+fn build_endpoint_url(base_url: &Url, endpoint: &str) -> Result<Url, String> {
+    let trimmed_base = base_url.as_str().trim_end_matches('/');
+    let trimmed_endpoint = endpoint.trim_start_matches('/');
+    let combined = format!("{trimmed_base}/{trimmed_endpoint}");
+    Url::parse(&combined).map_err(|e| e.to_string())
 }
 
 /// Redact sensitive values from a string before it enters logs or event records.
@@ -139,10 +156,8 @@ impl HttpIntelligentLlmInvoker {
         config: &IntelligentLlmConfig,
         timeout: std::time::Duration,
     ) -> Result<String, String> {
-        let url = config
-            .base_url
-            .join("chat/completions")
-            .map_err(|e| redact_for_logging(&e.to_string(), config))?;
+        let url = build_endpoint_url(&config.base_url, "chat/completions")
+            .map_err(|e| redact_for_logging(&e, config))?;
 
         let body = json!({
             "model": config.model,
@@ -185,10 +200,8 @@ impl HttpIntelligentLlmInvoker {
         config: &IntelligentLlmConfig,
         timeout: std::time::Duration,
     ) -> Result<String, String> {
-        let url = config
-            .base_url
-            .join("v1/messages")
-            .map_err(|e| redact_for_logging(&e.to_string(), config))?;
+        let url = build_endpoint_url(&config.base_url, "messages")
+            .map_err(|e| redact_for_logging(&e, config))?;
 
         let body = json!({
             "model": config.model,
@@ -277,5 +290,51 @@ mod tests {
         let raw = "some error message";
         let redacted = redact_for_logging(raw, &config);
         assert_eq!(redacted, raw);
+    }
+
+    #[test]
+    fn build_endpoint_url_preserves_versioned_path_without_trailing_slash() {
+        let base = Url::parse("https://gateway.example/v1").unwrap();
+        let url = build_endpoint_url(&base, "chat/completions").unwrap();
+        assert_eq!(
+            url.as_str(),
+            "https://gateway.example/v1/chat/completions",
+            "base without trailing slash must keep /v1 in the resolved URL",
+        );
+    }
+
+    #[test]
+    fn build_endpoint_url_preserves_versioned_path_with_trailing_slash() {
+        let base = Url::parse("https://gateway.example/v1/").unwrap();
+        let url = build_endpoint_url(&base, "chat/completions").unwrap();
+        assert_eq!(
+            url.as_str(),
+            "https://gateway.example/v1/chat/completions",
+        );
+    }
+
+    #[test]
+    fn build_endpoint_url_handles_root_base() {
+        let base = Url::parse("https://gateway.example").unwrap();
+        let url = build_endpoint_url(&base, "chat/completions").unwrap();
+        assert_eq!(url.as_str(), "https://gateway.example/chat/completions");
+    }
+
+    #[test]
+    fn build_endpoint_url_strips_leading_slash_in_endpoint() {
+        let base = Url::parse("https://gateway.example/v1").unwrap();
+        let url = build_endpoint_url(&base, "/chat/completions").unwrap();
+        assert_eq!(
+            url.as_str(),
+            "https://gateway.example/v1/chat/completions",
+            "leading slash in endpoint must not produce a double slash",
+        );
+    }
+
+    #[test]
+    fn build_endpoint_url_matches_preflight_anthropic_messages() {
+        let base = Url::parse("https://api.anthropic.com/v1").unwrap();
+        let url = build_endpoint_url(&base, "messages").unwrap();
+        assert_eq!(url.as_str(), "https://api.anthropic.com/v1/messages");
     }
 }
