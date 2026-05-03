@@ -61,7 +61,7 @@ RUN --mount=type=cache,id=argus-opengrep-runner-apt-lists,target=/var/lib/apt/li
   output="$1"; \
   shift; \
   for url in "$@"; do \
-  if curl -fL --connect-timeout 8 --max-time 60 "${url}" -o "${output}.tmp"; then \
+  if curl -fL --connect-timeout 15 --max-time 600 --retry 2 --retry-delay 3 --retry-connrefused "${url}" -o "${output}.tmp"; then \
   mv "${output}.tmp" "${output}"; \
   return 0; \
   fi; \

@@ -20,6 +20,8 @@ FRONTEND_PORT="${Argus_FRONTEND_PORT:-13000}"
 BACKEND_PORT="${Argus_BACKEND_PORT:-18000}"
 ARGUS_PORT_AUTO_FREE="${ARGUS_PORT_AUTO_FREE:-true}"
 ARGUS_PORT_FREE_GRACE="${ARGUS_PORT_FREE_GRACE:-2}"
+CUBE_PORT_AUTO_FREE="${CUBE_PORT_AUTO_FREE:-true}"
+CUBE_DISABLE_WEBUI="${CUBE_DISABLE_WEBUI:-true}"
 BACKEND_HEALTH_URL="${ARGUS_BACKEND_HEALTH_URL:-http://127.0.0.1:${BACKEND_PORT}/health}"
 BACKEND_IMPORT_URL="${ARGUS_BACKEND_IMPORT_URL:-http://127.0.0.1:${BACKEND_PORT}/api/v1/system-config/import-env}"
 ARGUS_RESET_IMPORT_TOKEN=""
@@ -32,6 +34,9 @@ ARGUS_RESET_IMPORT_TOKEN=""
 CUBE_QUICKSTART="$ROOT_DIR/scripts/cubesandbox-quickstart.sh"
 CUBE_SSH_PORT_DEFAULT="${CUBE_SSH_PORT:-10022}"
 CUBE_API_PORT_DEFAULT="${CUBE_API_PORT:-23000}"
+CUBE_PROXY_HTTP_PORT_DEFAULT="${CUBE_PROXY_HTTP_PORT:-21080}"
+CUBE_PROXY_HTTPS_PORT_DEFAULT="${CUBE_PROXY_HTTPS_PORT:-21443}"
+CUBE_WEB_UI_PORT_DEFAULT="${CUBE_WEB_UI_PORT:-22088}"
 CUBE_BOOTSTRAP_TIMEOUT="${ARGUS_CUBE_BOOTSTRAP_TIMEOUT:-1800}"
 CUBE_BOOTSTRAP_POLL_INTERVAL="${ARGUS_CUBE_BOOTSTRAP_POLL_INTERVAL:-5}"
 CUBESANDBOX_BOOTSTRAP_AUTO_DEFAULT="true"
@@ -111,6 +116,25 @@ Ports:
                                 on busy ports instead of clearing them).
   ARGUS_PORT_FREE_GRACE         Seconds to wait between SIGTERM and SIGKILL
                                 for processes holding Argus ports. Default: 2.
+  CUBE_PORT_AUTO_FREE           Before cubesandbox doctor preflight, auto-free
+                                CubeSandbox host ports if busy: SSH (10022),
+                                CubeMaster API (23000), proxy HTTP (21080),
+                                proxy HTTPS (21443), WebUI (22088). Stops
+                                publishing Docker containers, then
+                                SIGTERM/SIGKILL host processes via
+                                lsof/ss/fuser. Reuses ARGUS_PORT_FREE_GRACE.
+                                Default: true. Set to false to keep
+                                cubesandbox's own lifecycle in charge of
+                                these ports (script will fail loudly on
+                                doctor's busy-port report instead).
+  CUBE_DISABLE_WEBUI            Skip CubeSandbox WebUI (host port 22088, guest
+                                12088). When true (default), quickstart.sh
+                                patches dev-env/run_vm.sh after each
+                                fetch_upstream to drop the WebUI hostfwd, and
+                                doctor / port-auto-free skip 22088 entirely
+                                (guest WebUI service still runs in-VM but is
+                                not exposed to the host). Set to false to
+                                restore the WebUI host port forward.
 
 CubeSandbox host-side bootstrap (WSL2-native):
   By default argus-bootstrap.sh runs scripts/cubesandbox-quickstart.sh
@@ -420,7 +444,18 @@ cube_tcp_reachable() {
 }
 
 cube_ssh_reachable() {
-  cube_tcp_reachable "${CUBE_SSH_PORT_DEFAULT}"
+  # QEMU usernet (`-nic user,hostfwd=...`) accepts TCP on the host as soon as
+  # the VM boots, well before guest sshd is listening — a pure TCP probe would
+  # return "ready" too early, and the next install/ssh call would fail with
+  # "Connection timed out during banner exchange". Connect once and wait for
+  # the SSH banner ("SSH-2.0-...") to confirm guest sshd is actually up.
+  local banner
+  banner="$(
+    exec 3<>"/dev/tcp/127.0.0.1/${CUBE_SSH_PORT_DEFAULT}" 2>/dev/null || exit 1
+    IFS= read -r -t 4 banner <&3 2>/dev/null || true
+    printf '%s' "${banner:-}"
+  )"
+  [[ "$banner" == SSH-* ]]
 }
 
 cube_api_healthy() {
@@ -636,6 +671,22 @@ ensure_cubesandbox() {
     fail "cubesandbox quickstart helper not executable: $CUBE_QUICKSTART"
   fi
   log "cubesandbox host-side bootstrap: doctor -> VM -> install -> template (idempotent)."
+  # Fast path: if a CubeSandbox VM is already healthy on this host (SSH banner
+  # exchange + CubeMaster API health), the busy ports belong to OUR own VM —
+  # don't let ensure_cube_ports_free SIGTERM it, don't let doctor fail on
+  # those ports, and don't redo prepare-vm/install. Just run the idempotent
+  # template provisioning (which itself skips when CUBESANDBOX_TEMPLATE_ID is
+  # set and reachable).
+  if cube_ssh_reachable && cube_api_healthy; then
+    log "cubesandbox: VM already healthy (SSH banner OK, CubeMaster API OK); skipping doctor/VM/install, running template provisioning only."
+    if "$RESET_CUBESANDBOX_TEMPLATE"; then
+      cube_reset_template_id
+    fi
+    cube_ensure_template
+    log "cubesandbox host-side bootstrap complete (fast path)."
+    return 0
+  fi
+  ensure_cube_ports_free
   cube_doctor_or_fail
   cube_ensure_vm
   cube_ensure_install
@@ -694,10 +745,11 @@ port_listener_pids() {
 free_port_if_busy() {
   local port="$1"
   local label="${2:-port}"
+  local disable_hint="${3:-ARGUS_PORT_AUTO_FREE=false}"
   if ! port_is_busy "$port"; then
     return 0
   fi
-  log "Port ${port} (${label}) is busy; attempting auto-free (set ARGUS_PORT_AUTO_FREE=false to disable)."
+  log "Port ${port} (${label}) is busy; attempting auto-free (set ${disable_hint} to disable)."
 
   if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
     local cids
@@ -735,7 +787,7 @@ free_port_if_busy() {
   fi
 
   if port_is_busy "$port"; then
-    fail "Port ${port} (${label}) still busy after auto-free attempts. Inspect with: ss -lntp 'sport = :${port}' or lsof -iTCP:${port} -sTCP:LISTEN. Override with ARGUS_PORT_AUTO_FREE=false to skip."
+    fail "Port ${port} (${label}) still busy after auto-free attempts. Inspect with: ss -lntp 'sport = :${port}' or lsof -iTCP:${port} -sTCP:LISTEN. Override with ${disable_hint} to skip."
   fi
   log "Port ${port} (${label}) freed."
 }
@@ -752,6 +804,32 @@ ensure_argus_ports_free() {
   log "Preflight: ensuring Argus host ports are free (frontend=${FRONTEND_PORT}, backend=${BACKEND_PORT})."
   free_port_if_busy "$FRONTEND_PORT" "frontend"
   free_port_if_busy "$BACKEND_PORT" "backend"
+}
+
+ensure_cube_ports_free() {
+  if "$DRY_RUN" || is_truthy "$STUB_DOCKER"; then
+    log "Dry-run/stub: skipping cubesandbox busy-port auto-free."
+    return 0
+  fi
+  if ! is_truthy "$CUBE_PORT_AUTO_FREE"; then
+    log "CUBE_PORT_AUTO_FREE=false; leaving cubesandbox host ports to its own lifecycle (doctor will fail loudly if any are busy)."
+    return 0
+  fi
+  local webui_msg
+  if is_truthy "$CUBE_DISABLE_WEBUI"; then
+    webui_msg="webui=skipped(CUBE_DISABLE_WEBUI=true)"
+  else
+    webui_msg="webui=${CUBE_WEB_UI_PORT_DEFAULT}"
+  fi
+  log "Preflight: ensuring CubeSandbox host ports are free (ssh=${CUBE_SSH_PORT_DEFAULT}, api=${CUBE_API_PORT_DEFAULT}, proxy-http=${CUBE_PROXY_HTTP_PORT_DEFAULT}, proxy-https=${CUBE_PROXY_HTTPS_PORT_DEFAULT}, ${webui_msg})."
+  local hint="CUBE_PORT_AUTO_FREE=false"
+  free_port_if_busy "$CUBE_SSH_PORT_DEFAULT"        "cubesandbox ssh"         "$hint"
+  free_port_if_busy "$CUBE_API_PORT_DEFAULT"        "cubesandbox api"         "$hint"
+  free_port_if_busy "$CUBE_PROXY_HTTP_PORT_DEFAULT" "cubesandbox proxy-http"  "$hint"
+  free_port_if_busy "$CUBE_PROXY_HTTPS_PORT_DEFAULT" "cubesandbox proxy-https" "$hint"
+  if ! is_truthy "$CUBE_DISABLE_WEBUI"; then
+    free_port_if_busy "$CUBE_WEB_UI_PORT_DEFAULT"   "cubesandbox webui"       "$hint"
+  fi
 }
 
 prune_docker_system() {

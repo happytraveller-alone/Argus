@@ -12,6 +12,7 @@ CUBE_API_PORT="${CUBE_API_PORT:-23000}"
 CUBE_PROXY_HTTP_PORT="${CUBE_PROXY_HTTP_PORT:-21080}"
 CUBE_PROXY_HTTPS_PORT="${CUBE_PROXY_HTTPS_PORT:-21443}"
 CUBE_WEB_UI_PORT="${CUBE_WEB_UI_PORT:-22088}"
+CUBE_DISABLE_WEBUI="${CUBE_DISABLE_WEBUI:-true}"
 CUBE_SSH_PORT="${CUBE_SSH_PORT:-10022}"
 CUBE_SSH_HOST="${CUBE_SSH_HOST:-127.0.0.1}"
 CUBE_VM_USER="${CUBE_VM_USER:-opencloudos}"
@@ -202,7 +203,11 @@ doctor() {
   check_tcp_port_free "$CUBE_API_PORT" || failed=1
   check_tcp_port_free "$CUBE_PROXY_HTTP_PORT" || failed=1
   check_tcp_port_free "$CUBE_PROXY_HTTPS_PORT" || failed=1
-  check_tcp_port_free "$CUBE_WEB_UI_PORT" || failed=1
+  if is_truthy "${CUBE_DISABLE_WEBUI:-}"; then
+    printf 'ok   port    %-22s skipped (CUBE_DISABLE_WEBUI=true)\n' "$CUBE_WEB_UI_PORT"
+  else
+    check_tcp_port_free "$CUBE_WEB_UI_PORT" || failed=1
+  fi
   check_tcp_port_free "$CUBE_SSH_PORT" || failed=1
 
   if [[ "$failed" -ne 0 ]]; then
@@ -223,17 +228,33 @@ doctor() {
   log "host prerequisites look ready"
 }
 
+patch_run_vm_disable_webui() {
+  # When CUBE_DISABLE_WEBUI=true, strip the WebUI hostfwd from the upstream
+  # dev-env/run_vm.sh (it's invoked by run-vm / run-vm-background after
+  # fetch_upstream). Each fetch_upstream does a `git checkout -B ... FETCH_HEAD`
+  # which discards prior local edits, so we re-apply this patch every time.
+  is_truthy "${CUBE_DISABLE_WEBUI:-}" || return 0
+  local f="${CUBE_REPO_DIR}/dev-env/run_vm.sh"
+  [[ -f "$f" ]] || return 0
+  if grep -qF ',hostfwd=tcp::"${WEB_UI_PORT}"-:12088' "$f"; then
+    log "patching $f to drop WebUI hostfwd (CUBE_DISABLE_WEBUI=true; host port ${CUBE_WEB_UI_PORT} not exposed)"
+    sed -i 's|,hostfwd=tcp::"${WEB_UI_PORT}"-:12088||g' "$f"
+  fi
+}
+
 fetch_upstream() {
   need_cmd git
   mkdir -p "$CUBE_WORK_DIR"
   if [[ ! -d "$CUBE_REPO_DIR/.git" ]]; then
     log "cloning CubeSandbox into $CUBE_REPO_DIR"
     git clone --depth 1 --branch "$CUBE_REPO_BRANCH" "$CUBE_REPO_URL" "$CUBE_REPO_DIR"
+    patch_run_vm_disable_webui
     return
   fi
   log "updating CubeSandbox checkout in $CUBE_REPO_DIR"
   git -C "$CUBE_REPO_DIR" fetch --depth 1 origin "$CUBE_REPO_BRANCH"
   git -C "$CUBE_REPO_DIR" checkout -B "$CUBE_REPO_BRANCH" FETCH_HEAD
+  patch_run_vm_disable_webui
 }
 
 dev_env_dir() {
@@ -376,6 +397,13 @@ build_codeql_cpp_image() {
   registry_image_q="$(shell_quote "$CUBE_LOCAL_REGISTRY_IMAGE")"
   dockerfile_q="$(shell_quote "$(basename "$CUBE_CODEQL_CPP_DOCKERFILE")")"
   dockerfile_b64="$(base64 -w 0 "$CUBE_CODEQL_CPP_DOCKERFILE")"
+  # NOTE: Keep the docker build invocation on a SINGLE line. When this heredoc
+  # is piped to the guest via `ssh ... "sudo -i bash -s" <<<"$command"`,
+  # backslash-newline line continuations have been observed to be dropped in
+  # transit (the first line becomes `docker build --pull=false` with no PATH,
+  # and the remaining flags get parsed as separate commands), producing:
+  #   "docker: 'docker build' requires 1 argument".
+  # A single-line invocation sidesteps that pathology entirely.
   remote_root "$(cat <<REMOTE
 set -Eeuo pipefail
 mkdir -p /root/cubesandbox-codeql-cpp-build
@@ -383,11 +411,7 @@ cd /root/cubesandbox-codeql-cpp-build
 printf '%s' '${dockerfile_b64}' | base64 -d > ${dockerfile_q}
 
 docker pull ${registry_image_q}
-DOCKER_BUILDKIT=0 docker build --pull=false \\
-  --build-arg CUBE_LOCAL_REGISTRY_IMAGE=${registry_image_q} \\
-  --build-arg CUBE_CODEQL_BUNDLE_URL=${bundle_url_q} \\
-  -f ${dockerfile_q} \\
-  -t ${image_q} .
+DOCKER_BUILDKIT=0 docker build --pull=false --build-arg CUBE_LOCAL_REGISTRY_IMAGE=${registry_image_q} --build-arg CUBE_CODEQL_BUNDLE_URL=${bundle_url_q} -f ${dockerfile_q} -t ${image_q} .
 docker push ${image_q}
 REMOTE
 )"
