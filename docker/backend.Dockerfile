@@ -178,8 +178,8 @@ RUN --mount=type=cache,id=argus-backend-runtime-apt-lists,target=/var/lib/apt/li
 
 RUN groupadd --gid 1001 appgroup \
   && useradd --uid 1001 --gid appgroup --no-create-home --shell /usr/sbin/nologin appuser \
-  && mkdir -p /app/assets /app/scripts /app/uploads/zip_files /app/data/runtime/xdg-data /app/data/runtime/xdg-cache /app/data/runtime/xdg-config \
-  && chown -R appuser:appgroup /app/uploads /app/data
+  && mkdir -p /app/assets /app/scripts /app/uploads/zip_files /app/data/runtime/xdg-data /app/data/runtime/xdg-cache /app/data/runtime/xdg-config /app/.cubesandbox \
+  && chown -R appuser:appgroup /app/uploads /app/data /app/.cubesandbox
 
 WORKDIR /app
 

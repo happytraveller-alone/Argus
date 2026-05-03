@@ -457,19 +457,42 @@ fn collect_files(dir: &Path, output: &mut Vec<std::path::PathBuf>) -> Result<()>
     Ok(())
 }
 
+/// Wrap a Python program + base64 payload into a shell script.
+///
+/// The payload is embedded inline via a `cat <<'__ARGUS_B64__' ... __ARGUS_B64__`
+/// heredoc, written to a temp file, then passed by path to `python3 -`.
+/// This avoids `argv` size limits when the payload is multi-megabyte.
+fn build_payload_python_script(python_body: &str, payload_b64: &str) -> String {
+    let unique = uuid::Uuid::new_v4();
+    let mut script = String::new();
+    script.push_str("set -e\n");
+    script.push_str(&format!(
+        "_ARGUS_PAYLOAD=\"/tmp/argus-payload-{unique}.b64\"\n"
+    ));
+    script.push_str("cat > \"$_ARGUS_PAYLOAD\" <<'__ARGUS_B64__'\n");
+    script.push_str(payload_b64);
+    script.push_str("\n__ARGUS_B64__\n");
+    script.push_str("_ARGUS_RC=0\n");
+    script.push_str("python3 - \"$_ARGUS_PAYLOAD\" <<'PY' || _ARGUS_RC=$?\n");
+    script.push_str(python_body);
+    script.push_str("\nPY\n");
+    script.push_str("rm -f \"$_ARGUS_PAYLOAD\"\n");
+    script.push_str("exit $_ARGUS_RC\n");
+    script
+}
+
 fn build_codeql_runner_script(payload: &CubeSandboxCodeqlRequest) -> Result<String> {
     let payload_b64 = STANDARD.encode(serde_json::to_vec(payload)?);
-    Ok(format!(
-        "python3 - {payload_b64} <<'PY'\n{CUBESANDBOX_CODEQL_PY}\nPY"
-    ))
+    Ok(build_payload_python_script(CUBESANDBOX_CODEQL_PY, &payload_b64))
 }
 
 fn build_workspace_setup_script(archive_b64: &str) -> Result<String> {
     let payload_b64 = STANDARD.encode(serde_json::to_vec(&json!({
         "archive_b64": archive_b64,
     }))?);
-    Ok(format!(
-        "python3 - {payload_b64} <<'PY'\n{CUBESANDBOX_CODEQL_SETUP_PY}\nPY"
+    Ok(build_payload_python_script(
+        CUBESANDBOX_CODEQL_SETUP_PY,
+        &payload_b64,
     ))
 }
 
@@ -477,8 +500,9 @@ fn build_exploration_command_script(command: &str) -> Result<String> {
     let payload_b64 = STANDARD.encode(serde_json::to_vec(&json!({
         "command": command,
     }))?);
-    Ok(format!(
-        "python3 - {payload_b64} <<'PY'\n{CUBESANDBOX_CODEQL_EXPLORE_PY}\nPY"
+    Ok(build_payload_python_script(
+        CUBESANDBOX_CODEQL_EXPLORE_PY,
+        &payload_b64,
     ))
 }
 
@@ -605,7 +629,9 @@ import sys
 import tarfile
 import time
 
-payload = json.loads(base64.b64decode(sys.argv[1]).decode("utf-8"))
+with open(sys.argv[1], "rb") as _argus_payload_fh:
+    _argus_payload_b64 = _argus_payload_fh.read().strip()
+payload = json.loads(base64.b64decode(_argus_payload_b64).decode("utf-8"))
 work = pathlib.Path("/tmp/argus-codeql-work")
 if work.exists():
     subprocess.run(["rm", "-rf", str(work)], check=True)
@@ -750,7 +776,9 @@ import subprocess
 import sys
 import tarfile
 
-payload = json.loads(base64.b64decode(sys.argv[1]).decode("utf-8"))
+with open(sys.argv[1], "rb") as _argus_payload_fh:
+    _argus_payload_b64 = _argus_payload_fh.read().strip()
+payload = json.loads(base64.b64decode(_argus_payload_b64).decode("utf-8"))
 work = pathlib.Path("/tmp/argus-codeql-work")
 if work.exists():
     subprocess.run(["rm", "-rf", str(work)], check=True)
@@ -774,7 +802,9 @@ import pathlib
 import subprocess
 import sys
 
-payload = json.loads(base64.b64decode(sys.argv[1]).decode("utf-8"))
+with open(sys.argv[1], "rb") as _argus_payload_fh:
+    _argus_payload_b64 = _argus_payload_fh.read().strip()
+payload = json.loads(base64.b64decode(_argus_payload_b64).decode("utf-8"))
 command = payload["command"]
 source = pathlib.Path("/tmp/argus-codeql-work/source")
 if not source.exists():

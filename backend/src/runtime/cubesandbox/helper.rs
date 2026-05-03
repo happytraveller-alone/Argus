@@ -98,6 +98,9 @@ pub fn build_helper_invocation(
     if let Some(port) = local_url_port(&config.data_plane_base_url, true)? {
         env.insert("CUBE_PROXY_HTTPS_PORT".to_string(), port.to_string());
     }
+    if let Some(host) = url_lifecycle_host(&config.api_base_url)? {
+        env.insert("CUBE_SSH_HOST".to_string(), host);
+    }
 
     Ok(CubeSandboxHelperInvocation {
         command: config.helper_path.clone(),
@@ -144,13 +147,22 @@ pub async fn run_helper_command(
     })
 }
 
+fn is_lifecycle_eligible_host(host: &str) -> bool {
+    matches!(
+        host,
+        "127.0.0.1" | "localhost" | "::1" | "host.docker.internal"
+    )
+}
+
 fn local_url_port(value: &str, require_https: bool) -> Result<Option<u16>> {
     let parsed = Url::parse(value)?;
     let Some(host) = parsed.host_str() else {
         return Ok(None);
     };
-    if host != "127.0.0.1" && host != "localhost" {
-        bail!("remote_lifecycle_not_supported: lifecycle URLs must target localhost");
+    if !is_lifecycle_eligible_host(host) {
+        bail!(
+            "remote_lifecycle_not_supported: lifecycle URLs must target localhost or host.docker.internal"
+        );
     }
     if require_https && parsed.scheme() != "https" {
         return Ok(None);
@@ -163,7 +175,22 @@ fn url_targets_localhost(value: &str) -> Result<bool> {
     let Some(host) = parsed.host_str() else {
         return Ok(false);
     };
-    Ok(matches!(host, "127.0.0.1" | "localhost" | "::1"))
+    Ok(is_lifecycle_eligible_host(host))
+}
+
+fn url_lifecycle_host(value: &str) -> Result<Option<String>> {
+    let parsed = Url::parse(value)?;
+    let Some(host) = parsed.host_str() else {
+        return Ok(None);
+    };
+    if !is_lifecycle_eligible_host(host) {
+        return Ok(None);
+    }
+    if host == "host.docker.internal" {
+        Ok(Some(host.to_string()))
+    } else {
+        Ok(None)
+    }
 }
 
 fn bounded_tail(value: &str, limit: usize) -> String {
@@ -271,5 +298,47 @@ mod tests {
     #[test]
     fn unknown_helper_command_rejected() {
         assert!(CubeSandboxHelperCommand::try_from("nope").is_err());
+    }
+
+    #[test]
+    fn build_helper_invocation_injects_cube_ssh_host_for_host_docker_internal() {
+        let mut config = sample_config();
+        config.api_base_url = "http://host.docker.internal:23000".to_string();
+        config.data_plane_base_url = "https://host.docker.internal:21443".to_string();
+        let invocation = build_helper_invocation(
+            &config,
+            CubeSandboxHelperCommand::ProvisionCodeqlCppTemplate,
+        )
+        .expect("should build");
+        assert_eq!(
+            invocation.env.get("CUBE_SSH_HOST"),
+            Some(&"host.docker.internal".to_string())
+        );
+        assert_eq!(
+            invocation.env.get("CUBE_API_PORT"),
+            Some(&"23000".to_string())
+        );
+    }
+
+    #[test]
+    fn build_helper_invocation_omits_ssh_host_for_localhost() {
+        let config = sample_config();
+        let invocation = build_helper_invocation(
+            &config,
+            CubeSandboxHelperCommand::ProvisionCodeqlCppTemplate,
+        )
+        .expect("should build");
+        assert!(invocation.env.get("CUBE_SSH_HOST").is_none());
+    }
+
+    #[test]
+    fn lifecycle_check_rejects_remote_hosts() {
+        let mut config = sample_config();
+        config.api_base_url = "http://example.com:23000".to_string();
+        let result = build_helper_invocation(
+            &config,
+            CubeSandboxHelperCommand::ProvisionCodeqlCppTemplate,
+        );
+        assert!(result.is_err());
     }
 }

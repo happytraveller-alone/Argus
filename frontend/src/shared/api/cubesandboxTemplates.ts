@@ -26,25 +26,25 @@ export interface CubesandboxTemplateRecord {
 
 export async function getCodeqlCppTemplateStatus(): Promise<CubesandboxTemplateRecord> {
   const response = await apiClient.get<CubesandboxTemplateRecord>(
-    "/api/v1/cubesandbox/templates/codeql-cpp",
+    "/cubesandbox/templates/codeql-cpp",
   );
   return response.data;
 }
 
 export async function provisionCodeqlCppTemplate(): Promise<CubesandboxTemplateRecord> {
   const response = await apiClient.post<CubesandboxTemplateRecord>(
-    "/api/v1/cubesandbox/templates/codeql-cpp/provision",
+    "/cubesandbox/templates/codeql-cpp/provision",
   );
   return response.data;
 }
 
 export async function invalidateCodeqlCppTemplate(): Promise<{ affected: number }> {
   const response = await apiClient.post<{ affected: number }>(
-    "/api/v1/cubesandbox/templates/codeql-cpp/invalidate",
+    "/cubesandbox/templates/codeql-cpp/invalidate",
   );
   return response.data;
 }
 
 export function getCodeqlCppTemplateStreamUrl(): string {
-  return `${getApiBaseUrl()}/api/v1/cubesandbox/templates/codeql-cpp/stream`;
+  return `${getApiBaseUrl()}/cubesandbox/templates/codeql-cpp/stream`;
 }

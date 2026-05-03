@@ -80,19 +80,20 @@ services:
     env_file:
       - path: ${ARGUS_ENV_FILE:-./.env}
         required: true
+    network_mode: host
     volumes:
       - backend_uploads:/app/uploads
       - backend_runtime_data:/app/data/runtime
+      - backend_cubesandbox_data:/app/.cubesandbox
+      - ./oci:/app/oci:ro
+      - ./scripts/cubesandbox-quickstart.sh:/app/scripts/cubesandbox-quickstart.sh:ro
       - scan_workspace:/tmp/Argus/scans
       - ${DOCKER_SOCKET_PATH:-/var/run/docker.sock}:/var/run/docker.sock
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    ports:
-      - "${Argus_BACKEND_PORT:-18000}:8000"
     environment:
-      DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/${POSTGRES_DB:-Argus}
-      ASYNCPG_DSN: postgresql://postgres:postgres@db:5432/${POSTGRES_DB:-Argus}
-      REDIS_URL: redis://redis:6379/0
+      BIND_ADDR: 0.0.0.0:${Argus_BACKEND_PORT:-18000}
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@127.0.0.1:5432/${POSTGRES_DB:-Argus}
+      ASYNCPG_DSN: postgresql://postgres:postgres@127.0.0.1:5432/${POSTGRES_DB:-Argus}
+      REDIS_URL: redis://127.0.0.1:6379/0
       GHCR_REGISTRY: ${GHCR_REGISTRY:-ghcr.io}
       Argus_IMAGE_NAMESPACE: ${Argus_IMAGE_NAMESPACE:-happytraveller-alone}
       Argus_IMAGE_TAG: ${Argus_IMAGE_TAG:-latest}
@@ -149,7 +150,7 @@ services:
         - "CMD"
         - "curl"
         - "-fsS"
-        - "http://127.0.0.1:8000/health"
+        - "http://127.0.0.1:${Argus_BACKEND_PORT:-18000}/health"
       interval: 5s
       timeout: 5s
       start_period: 180s
@@ -159,8 +160,6 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    networks:
-      - argus-network
 
   frontend:
     build:
@@ -189,13 +188,15 @@ services:
       NO_PROXY: "*"
       FRONTEND_PUBLIC_URL: ${FRONTEND_PUBLIC_URL:-http://localhost:13000}
       VITE_API_BASE_URL: /api/v1
-      VITE_API_TARGET: ${VITE_API_TARGET:-http://backend:8000}
+      VITE_API_TARGET: ${VITE_API_TARGET:-http://host.docker.internal:18000}
       BACKEND_PUBLIC_URL: ${BACKEND_PUBLIC_URL:-http://localhost:18000}
       VITE_HMR_HOST: ${VITE_HMR_HOST:-localhost}
       VITE_HMR_PORT: ${VITE_HMR_PORT:-13000}
     depends_on:
       backend:
         condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     networks:
       - argus-network
 
@@ -236,6 +237,7 @@ volumes:
   postgres_data:
   backend_uploads:
   backend_runtime_data:
+  backend_cubesandbox_data:
   scan_workspace:
     name: ${SCAN_WORKSPACE_VOLUME:-Argus_scan_workspace}
   redis_data:

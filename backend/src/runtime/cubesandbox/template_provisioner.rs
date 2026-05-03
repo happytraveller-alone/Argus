@@ -101,7 +101,7 @@ pub async fn ensure_codeql_cpp_template_ready(
     }
     if !should_run_local_lifecycle(config)? {
         return Ok(EnsureOutcome::NotEligible {
-            reason: "CubeSandbox 控制面/数据面 URL 未指向本地, 无法自动构建模板; 请运维手动构建并设置 CUBESANDBOX_TEMPLATE_ID".to_string(),
+            reason: "CubeSandbox 控制面/数据面 URL 必须指向 localhost 或 host.docker.internal 才能自动构建; 请运维手动构建并设置 CUBESANDBOX_TEMPLATE_ID".to_string(),
         });
     }
     let record = start_provision_internal(state, config, TemplateKind::CodeqlCpp).await?;
@@ -138,7 +138,9 @@ pub async fn start_provision(
         }
     }
     if !should_run_local_lifecycle(config)? {
-        bail!("CubeSandbox 控制面/数据面 URL 未指向本地, 无法自动构建模板");
+        bail!(
+            "CubeSandbox 控制面/数据面 URL 必须指向 localhost 或 host.docker.internal 才能自动构建"
+        );
     }
     start_provision_internal(state, config, kind).await
 }

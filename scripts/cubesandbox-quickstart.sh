@@ -413,10 +413,10 @@ shell_codeql_cpp_image_wsl() {
 
 create_codeql_cpp_template() {
   local raw job_id
-  raw="$(remote_root "cubemastercli tpl create-from-image --image '$(shell_quote "$CUBE_CODEQL_CPP_IMAGE")' --writable-layer-size '$(shell_quote "$CUBE_CODEQL_CPP_WRITABLE_LAYER_SIZE")' --expose-port 49999 --expose-port 49983 --probe 49999" | tee /dev/stderr)"
-  job_id="$(printf '%s\n' "$raw" | grep -Eio '\b[a-f0-9-]{32,}\b' | head -n 1 || true)"
+  raw="$(remote_root "cubemastercli tpl create-from-image --image '$(shell_quote "$CUBE_CODEQL_CPP_IMAGE")' --writable-layer-size '$(shell_quote "$CUBE_CODEQL_CPP_WRITABLE_LAYER_SIZE")' --expose-port 49999 --expose-port 49983 --probe 49999 2>&1" | tee /dev/stderr)"
+  job_id="$(printf '%s\n' "$raw" | sed -nE 's/.*job[_ -]?id[: ]+([0-9a-fA-F-]+).*/\1/p' | head -n 1 || true)"
   if [[ -z "$job_id" ]]; then
-    job_id="$(printf '%s\n' "$raw" | sed -nE 's/.*job[_ -]?id[: ]+([a-zA-Z0-9-]+).*/\1/p' | head -n 1 || true)"
+    job_id="$(printf '%s\n' "$raw" | grep -Eio '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' | head -n 1 || true)"
   fi
   [[ -n "$job_id" ]] || fail "create-codeql-cpp-template did not emit a job_id"
   printf 'JOB_ID=%s\n' "$job_id"
@@ -426,10 +426,10 @@ watch_template() {
   local job_id="${1:-}"
   [[ -n "$job_id" ]] || fail "watch-template requires a job_id"
   local raw template_id artifact_id status
-  raw="$(remote_root "cubemastercli tpl watch --job-id '$job_id'" | tee /dev/stderr)"
+  raw="$(remote_root "cubemastercli tpl watch --job-id '$job_id' 2>&1" | tee /dev/stderr)"
   template_id="$(printf '%s\n' "$raw" | sed -nE 's/.*template[_ ]?id[: ]+([a-zA-Z0-9_-]+).*/\1/p' | head -n 1 || true)"
   artifact_id="$(printf '%s\n' "$raw" | sed -nE 's/.*artifact[_ ]?id[: ]+([a-zA-Z0-9_-]+).*/\1/p' | head -n 1 || true)"
-  status="$(printf '%s\n' "$raw" | sed -nE 's/.*template[_ ]?status[: ]+([A-Za-z_]+).*/\1/p' | tail -n 1 || true)"
+  status="$(printf '%s\n' "$raw" | sed -nE 's/.*(template[_ ]?)?status[: ]+([A-Za-z_]+).*/\2/p' | tail -n 1 || true)"
   [[ -n "$status" ]] || status="UNKNOWN"
   printf 'STATUS=%s\n' "$status"
   [[ -n "$template_id" ]] && printf 'TEMPLATE_ID=%s\n' "$template_id"
