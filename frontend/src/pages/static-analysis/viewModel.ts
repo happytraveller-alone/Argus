@@ -117,6 +117,26 @@ export function countCodeqlReasoningRounds(
   return seen.size;
 }
 
+export function resolveStaticAnalysisDetailTaskIds(input: {
+  taskId: string;
+  searchParams: URLSearchParams;
+}): { opengrepTaskId: string; codeqlTaskId: string } {
+  const explicitOpengrepTaskId = input.searchParams.get("opengrepTaskId")?.trim() || "";
+  const explicitCodeqlTaskId = input.searchParams.get("codeqlTaskId")?.trim() || "";
+
+  if (explicitOpengrepTaskId || explicitCodeqlTaskId) {
+    return {
+      opengrepTaskId: explicitOpengrepTaskId,
+      codeqlTaskId: explicitCodeqlTaskId,
+    };
+  }
+
+  return {
+    opengrepTaskId: input.taskId,
+    codeqlTaskId: "",
+  };
+}
+
 export function resolveStaticAnalysisProjectNameFallback(input: {
   taskProjectName?: string | null;
   resolvedProjectName?: string | null;

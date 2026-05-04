@@ -10,6 +10,7 @@ import {
   buildCodeqlExplorationTimelineRows,
   buildUnifiedFindingRows,
   formatStaticAnalysisDuration,
+  resolveStaticAnalysisDetailTaskIds,
 } from "../src/pages/static-analysis/viewModel.ts";
 
 const staticAnalysisPageSource = readFileSync(
@@ -67,6 +68,30 @@ test("buildUnifiedFindingRows normalizes opengrep and codeql rows", () => {
   assert.equal(rows[1]?.taskId, "task-cq");
   assert.equal(rows[1]?.rule, "cpp/sql-injection");
   assert.equal(rows[1]?.filePath, "src/main.cpp");
+});
+
+test("resolveStaticAnalysisDetailTaskIds treats engine as a table filter, not a CodeQL detail selector", () => {
+  assert.deepEqual(
+    resolveStaticAnalysisDetailTaskIds({
+      taskId: "og-1",
+      searchParams: new URLSearchParams("engine=codeql"),
+    }),
+    { opengrepTaskId: "og-1", codeqlTaskId: "" },
+  );
+  assert.deepEqual(
+    resolveStaticAnalysisDetailTaskIds({
+      taskId: "og-1",
+      searchParams: new URLSearchParams("opengrepTaskId=og-2&engine=codeql"),
+    }),
+    { opengrepTaskId: "og-2", codeqlTaskId: "" },
+  );
+  assert.deepEqual(
+    resolveStaticAnalysisDetailTaskIds({
+      taskId: "cq-1",
+      searchParams: new URLSearchParams("codeqlTaskId=cq-2&engine=codeql"),
+    }),
+    { opengrepTaskId: "", codeqlTaskId: "cq-2" },
+  );
 });
 
 test("static analysis completion refresh gate only fires once per completed task", () => {

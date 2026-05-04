@@ -38,6 +38,7 @@ CUBE_OPENGREP_BASE_IMAGE="${CUBE_OPENGREP_BASE_IMAGE:-${CUBE_DOCKERHUB_MIRROR_IM
 CUBE_ENVD_BASE_IMAGE="${CUBE_ENVD_BASE_IMAGE:-ghcr.nju.edu.cn/tencentcloud/cubesandbox-base:2026.16}"
 CUBE_OPENGREP_WRITABLE_LAYER_SIZE="${CUBE_OPENGREP_WRITABLE_LAYER_SIZE:-1Gi}"
 CUBE_OPENGREP_DOCKERFILE="${CUBE_OPENGREP_DOCKERFILE:-${ROOT_DIR}/oci/cubesandbox/opengrep.Dockerfile}"
+CUBE_OPENGREP_RULES_ARCHIVE="${CUBE_OPENGREP_RULES_ARCHIVE:-}"
 CUBE_RELEASE_VERSION="${CUBE_RELEASE_VERSION:-v0.1.2}"
 CUBE_RELEASE_ASSET="${CUBE_RELEASE_ASSET:-cube-sandbox-one-click-aa8d642.tar.gz}"
 CUBE_RELEASE_URL="${CUBE_RELEASE_URL:-${CUBE_GITHUB_MIRROR_PREFIX}https://github.com/TencentCloud/CubeSandbox/releases/download/${CUBE_RELEASE_VERSION}/${CUBE_RELEASE_ASSET}}"
@@ -429,9 +430,32 @@ REMOTE
 )"
 }
 
+normalize_opengrep_rules_archive() {
+  local source_archive="$1"
+  need_cmd tar
+  need_cmd mktemp
+  local temp_dir normalized_archive
+  temp_dir="$(mktemp -d "${TMPDIR:-/tmp}/argus-opengrep-rules.XXXXXX")"
+  tar -xzf "$source_archive" -C "$temp_dir"
+  if [[ -d "$temp_dir/rules_opengrep" ]]; then
+    tar -C "$temp_dir" -czf - rules_opengrep
+  elif [[ -d "$temp_dir/scan_rule_assets/rules_opengrep" ]]; then
+    tar -C "$temp_dir/scan_rule_assets" -czf - rules_opengrep
+  else
+    rm -rf "$temp_dir"
+    fail "opengrep rules archive missing rules_opengrep root: $source_archive"
+  fi
+  rm -rf "$temp_dir"
+}
+
 build_opengrep_image() {
   [[ -f "$CUBE_OPENGREP_DOCKERFILE" ]] || fail "missing OCI image config: $CUBE_OPENGREP_DOCKERFILE"
   [[ -f "${ROOT_DIR}/docker/opengrep-scan.sh" ]] || fail "missing opengrep scan wrapper: ${ROOT_DIR}/docker/opengrep-scan.sh"
+  if [[ -n "$CUBE_OPENGREP_RULES_ARCHIVE" ]]; then
+    [[ -f "$CUBE_OPENGREP_RULES_ARCHIVE" ]] || fail "missing opengrep rules archive: $CUBE_OPENGREP_RULES_ARCHIVE"
+  else
+    [[ -d "${ROOT_DIR}/backend/assets/scan_rule_assets/rules_opengrep" ]] || fail "missing opengrep rules root: ${ROOT_DIR}/backend/assets/scan_rule_assets/rules_opengrep"
+  fi
   need_cmd base64
   local image_q registry_image_q base_image_q envd_base_image_q dockerfile_q dockerfile_b64 scan_script_b64 rules_tar_b64
   image_q="$(shell_quote "$CUBE_OPENGREP_IMAGE")"
@@ -441,9 +465,13 @@ build_opengrep_image() {
   dockerfile_q="$(shell_quote "$(basename "$CUBE_OPENGREP_DOCKERFILE")")"
   dockerfile_b64="$(base64 -w 0 "$CUBE_OPENGREP_DOCKERFILE")"
   scan_script_b64="$(base64 -w 0 "${ROOT_DIR}/docker/opengrep-scan.sh")"
-  rules_tar_b64="$(
-    tar -C "${ROOT_DIR}/backend/assets/scan_rule_assets" -czf - rules_opengrep | base64 -w 0
-  )"
+  if [[ -n "$CUBE_OPENGREP_RULES_ARCHIVE" ]]; then
+    rules_tar_b64="$(normalize_opengrep_rules_archive "$CUBE_OPENGREP_RULES_ARCHIVE" | base64 -w 0)"
+  else
+    rules_tar_b64="$(
+      tar -C "${ROOT_DIR}/backend/assets/scan_rule_assets" -czf - rules_opengrep | base64 -w 0
+    )"
+  fi
   remote_root "$(cat <<REMOTE
 set -Eeuo pipefail
 mkdir -p /root/cubesandbox-opengrep-build/context

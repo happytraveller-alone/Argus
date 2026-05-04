@@ -110,6 +110,11 @@ pub fn build_helper_invocation(
     if let Some(host) = url_lifecycle_host(&config.api_base_url)? {
         env.insert("CUBE_SSH_HOST".to_string(), host);
     }
+    if let Ok(rules_archive) = std::env::var("CUBE_OPENGREP_RULES_ARCHIVE") {
+        if !rules_archive.trim().is_empty() {
+            env.insert("CUBE_OPENGREP_RULES_ARCHIVE".to_string(), rules_archive);
+        }
+    }
 
     Ok(CubeSandboxHelperInvocation {
         command: config.helper_path.clone(),
@@ -355,6 +360,24 @@ mod tests {
         )
         .expect("should build");
         assert!(invocation.env.get("CUBE_SSH_HOST").is_none());
+    }
+
+    #[test]
+    fn build_helper_invocation_forwards_opengrep_rules_archive() {
+        std::env::set_var(
+            "CUBE_OPENGREP_RULES_ARCHIVE",
+            "/app/assets/scan_rule_assets.tar.gz",
+        );
+        let config = sample_config();
+        let invocation =
+            build_helper_invocation(&config, CubeSandboxHelperCommand::ProvisionOpengrepTemplate)
+                .expect("should build");
+        std::env::remove_var("CUBE_OPENGREP_RULES_ARCHIVE");
+
+        assert_eq!(
+            invocation.env.get("CUBE_OPENGREP_RULES_ARCHIVE"),
+            Some(&"/app/assets/scan_rule_assets.tar.gz".to_string())
+        );
     }
 
     #[test]

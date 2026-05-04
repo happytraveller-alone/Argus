@@ -35,7 +35,7 @@ RUN set -eux; \
       -e 's#https://security.debian.org/debian-security#http://mirrors.aliyun.com/debian-security#g'; \
     apt-get update; \
     DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-      ca-certificates curl bash python3-minimal tar tini; \
+      ca-certificates curl bash python3 tar tini; \
     rm -rf /var/lib/apt/lists/*; \
     mkdir -p /opt/opengrep /scan /var/log
 

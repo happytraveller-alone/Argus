@@ -39,6 +39,7 @@ import {
 	buildUnifiedFindingRows,
 	decodeStaticAnalysisPathParam,
 	isStaticAnalysisPollableStatus,
+	resolveStaticAnalysisDetailTaskIds,
 	type Engine,
 } from "./static-analysis/viewModel";
 
@@ -64,19 +65,10 @@ export default function StaticAnalysis() {
   const currentRoute = `${location.pathname}${location.search}`;
   const { initialState, syncStateToUrl } = useDataTableUrlState(true);
 
-  const opengrepTaskId = useMemo(() => {
-    const explicit = searchParams.get("opengrepTaskId");
-    if (explicit) return explicit;
-    if (searchParams.get("engine") === "codeql") return "";
-    return taskId;
-  }, [searchParams, taskId]);
-
-  const codeqlTaskId = useMemo(() => {
-    const explicit = searchParams.get("codeqlTaskId");
-    if (explicit) return explicit;
-    if (searchParams.get("engine") === "codeql") return taskId;
-    return "";
-  }, [searchParams, taskId]);
+  const { opengrepTaskId, codeqlTaskId } = useMemo(
+    () => resolveStaticAnalysisDetailTaskIds({ taskId, searchParams }),
+    [searchParams, taskId],
+  );
 
   const hasEnabledEngine = Boolean(opengrepTaskId || codeqlTaskId);
   const [tableState, setTableState] = useState<DataTableQueryState>(() =>

@@ -402,6 +402,19 @@ docker run --rm argus/cubesandbox-opengrep:latest opengrep --version
 docker run --rm argus/cubesandbox-opengrep:latest opengrep-scan --self-test
 ```
 
+Deployment invariants for this path:
+
+- The backend container or release image that runs `provision-opengrep-template`
+  must expose `docker/opengrep-scan.sh` at `/app/docker/opengrep-scan.sh`; the
+  helper packages that wrapper into the CubeSandbox image as `opengrep-scan`.
+- The backend should provide `CUBE_OPENGREP_RULES_ARCHIVE=/app/assets/scan_rule_assets.tar.gz`
+  when using the packaged rule assets archive. The quickstart script normalizes
+  the packaged `scan_rule_assets/rules_opengrep/...` archive root into the
+  `rules_opengrep/...` layout expected by the OCI image.
+- The final Opengrep CubeSandbox image must install full `python3` rather than
+  `python3-minimal`, because the envd runner path imports Python standard
+  library modules such as `tarfile` during scan execution.
+
 Defaults:
 
 - VM-local image: `127.0.0.1:5000/cubesandbox-opengrep:latest`

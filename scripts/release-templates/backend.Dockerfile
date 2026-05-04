@@ -38,6 +38,14 @@ RUN CARGO_HTTP_TIMEOUT="${BACKEND_CARGO_HTTP_TIMEOUT_SECONDS}" \
 
 FROM ${DOCKER_CLI_IMAGE} AS docker-cli-src
 
+FROM builder AS backend-assets-archive
+
+COPY backend/assets/scan_rule_assets /tmp/scan_rule_assets
+
+RUN mkdir -p /opt/backend-assets \
+  && tar -C /tmp -czf /opt/backend-assets/scan_rule_assets.tar.gz scan_rule_assets \
+  && tar -tzf /opt/backend-assets/scan_rule_assets.tar.gz >/dev/null
+
 FROM ${DOCKERHUB_LIBRARY_MIRROR}/debian:trixie-slim AS runtime-base
 
 RUN apt-get update \
@@ -46,13 +54,15 @@ RUN apt-get update \
 
 RUN groupadd --gid 1001 appgroup \
   && useradd --uid 1001 --gid appgroup --no-create-home --shell /usr/sbin/nologin appuser \
-  && mkdir -p /app/scripts /app/uploads/zip_files /app/data/runtime/xdg-data /app/data/runtime/xdg-cache /app/data/runtime/xdg-config
+  && mkdir -p /app/assets /app/docker /app/scripts /app/uploads/zip_files /app/data/runtime/xdg-data /app/data/runtime/xdg-cache /app/data/runtime/xdg-config
 
 WORKDIR /app
 
 COPY --from=builder /app/target/release/backend-rust /usr/local/bin/backend
 COPY --from=docker-cli-src /usr/local/bin/docker /usr/local/bin/docker
+COPY --from=backend-assets-archive /opt/backend-assets/scan_rule_assets.tar.gz /app/assets/scan_rule_assets.tar.gz
 COPY --chmod=755 scripts/cubesandbox-quickstart.sh /app/scripts/cubesandbox-quickstart.sh
+COPY --chmod=755 docker/opengrep-scan.sh /app/docker/opengrep-scan.sh
 
 RUN chown -R appuser:appgroup /app
 

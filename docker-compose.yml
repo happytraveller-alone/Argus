@@ -86,6 +86,7 @@ services:
       - backend_runtime_data:/app/data/runtime
       - backend_cubesandbox_data:/app/.cubesandbox
       - ./oci:/app/oci:ro
+      - ./docker/opengrep-scan.sh:/app/docker/opengrep-scan.sh:ro
       - ./scripts/cubesandbox-quickstart.sh:/app/scripts/cubesandbox-quickstart.sh:ro
       - scan_workspace:/tmp/Argus/scans
       - ${DOCKER_SOCKET_PATH:-/var/run/docker.sock}:/var/run/docker.sock
@@ -107,6 +108,7 @@ services:
       OPENGREP_RUNNER_MEMORY_LIMIT_MB: "${OPENGREP_RUNNER_MEMORY_LIMIT_MB:-2048}"
       OPENGREP_RUNNER_CPU_LIMIT: "${OPENGREP_RUNNER_CPU_LIMIT:-0}"
       OPENGREP_AVAILABLE_CORES: "${OPENGREP_AVAILABLE_CORES:-}"
+      CUBE_OPENGREP_RULES_ARCHIVE: /app/assets/scan_rule_assets.tar.gz
       SCAN_WORKSPACE_ROOT: ${SCAN_WORKSPACE_ROOT:-/tmp/Argus/scans}
       SCAN_WORKSPACE_VOLUME: ${SCAN_WORKSPACE_VOLUME:-Argus_scan_workspace}
       RUNNER_PREFLIGHT_ENABLED: "${RUNNER_PREFLIGHT_ENABLED:-true}"
