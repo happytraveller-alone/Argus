@@ -313,14 +313,7 @@ export default function StaticAnalysis() {
               onReset={handleResetCodeqlBuildPlan}
             />
           </div>
-        ) : (
-          <CodeqlExplorationPanel
-            events={codeqlExplorationEvents}
-            canReset={canResetCodeqlBuildPlan}
-            resetting={resettingCodeqlPlan}
-            onReset={handleResetCodeqlBuildPlan}
-          />
-        )}
+        ) : null}
       </div>
 
       <AlertDialog
