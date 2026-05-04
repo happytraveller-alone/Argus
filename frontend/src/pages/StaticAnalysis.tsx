@@ -78,14 +78,6 @@ export default function StaticAnalysis() {
     return "";
   }, [searchParams, taskId]);
 
-  const usesPathTaskIdFallback = useMemo(() => {
-    return (
-      !searchParams.get("opengrepTaskId") &&
-      !searchParams.get("codeqlTaskId") &&
-      Boolean(taskId)
-    );
-  }, [searchParams, taskId]);
-
   const hasEnabledEngine = Boolean(opengrepTaskId || codeqlTaskId);
   const [tableState, setTableState] = useState<DataTableQueryState>(() =>
     createStaticAnalysisInitialTableState(initialState),

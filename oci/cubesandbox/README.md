@@ -38,6 +38,30 @@ scripts/cubesandbox-quickstart.sh build-codeql-cpp-image-wsl
 scripts/cubesandbox-quickstart.sh shell-codeql-cpp-image-wsl
 ```
 
+## `opengrep.Dockerfile`
+
+Builds the CubeSandbox Opengrep template image used when a static audit task
+selects `OCI CubeSandbox 沙箱` in the Opengrep advanced configuration.
+
+The image uses the same CubeSandbox base as `codeql-cpp.Dockerfile`, installs
+the pinned Opengrep CLI, copies Argus's `docker/opengrep-scan.sh` wrapper, and
+embeds the checked-in `backend/assets/scan_rule_assets/rules_opengrep` rule
+bundle as `/opt/opengrep/rules.tar.gz`.
+
+Runtime defaults are injected by `scripts/cubesandbox-quickstart.sh`:
+
+- `CUBE_OPENGREP_IMAGE`
+- `CUBE_OPENGREP_WSL_IMAGE`
+- `CUBE_OPENGREP_WRITABLE_LAYER_SIZE`
+- `CUBE_OPENGREP_DOCKERFILE`
+
+For WSL-local inspection without the CubeSandbox VM registry, use:
+
+```bash
+scripts/cubesandbox-quickstart.sh build-opengrep-image-wsl
+scripts/cubesandbox-quickstart.sh shell-opengrep-image-wsl
+```
+
 ## `sandbox-code:latest` Source Trace
 
 `codeql-cpp.Dockerfile` extends

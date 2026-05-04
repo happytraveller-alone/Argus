@@ -12,6 +12,7 @@ use crate::{
     db::cubesandbox_templates::{self, CubesandboxTemplateRecord, TemplateKind, TemplateStatus},
     runtime::cubesandbox::{
         config::CubeSandboxConfig,
+        cubemaster_client::{CubemasterClient, CubemasterClientConfig},
         helper::{
             run_helper_command, should_run_local_lifecycle, CubeSandboxHelperCommand,
             CubeSandboxHelperOutput,
@@ -20,7 +21,8 @@ use crate::{
     state::AppState,
 };
 
-const DEFAULT_IMAGE_REF: &str = "argus/cubesandbox-codeql-cpp:auto";
+const DEFAULT_CODEQL_CPP_IMAGE_REF: &str = "argus/cubesandbox-codeql-cpp:auto";
+const DEFAULT_OPENGREP_IMAGE_REF: &str = "argus/cubesandbox-opengrep:auto";
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
@@ -78,6 +80,21 @@ pub async fn resolve_existing_template_id(
     if !config.template_id.trim().is_empty() {
         return Ok(Some(config.template_id.trim().to_string()));
     }
+    if kind == TemplateKind::Opengrep
+        && !state
+            .config
+            .cubesandbox_opengrep_template_id
+            .trim()
+            .is_empty()
+    {
+        return Ok(Some(
+            state
+                .config
+                .cubesandbox_opengrep_template_id
+                .trim()
+                .to_string(),
+        ));
+    }
     let active = cubesandbox_templates::get_active(state, kind).await?;
     if let Some(record) = active {
         if record.status == TemplateStatus::Ready {
@@ -105,6 +122,27 @@ pub async fn ensure_codeql_cpp_template_ready(
         });
     }
     let record = start_provision_internal(state, config, TemplateKind::CodeqlCpp).await?;
+    Ok(EnsureOutcome::InProgress {
+        record_id: record.id,
+    })
+}
+
+/// Ensure that an Opengrep template is ready. If not, kick off provisioning.
+pub async fn ensure_opengrep_template_ready(
+    state: &AppState,
+    config: &CubeSandboxConfig,
+) -> Result<EnsureOutcome> {
+    if let Some(template_id) =
+        resolve_existing_template_id(state, config, TemplateKind::Opengrep).await?
+    {
+        return Ok(EnsureOutcome::Ready { template_id });
+    }
+    if !should_run_local_lifecycle(config)? {
+        return Ok(EnsureOutcome::NotEligible {
+            reason: "CubeSandbox 控制面/数据面 URL 必须指向 localhost 或 host.docker.internal 才能自动构建 Opengrep 模板; 请运维手动构建并设置 CUBESANDBOX_OPENGREP_TEMPLATE_ID".to_string(),
+        });
+    }
+    let record = start_provision_internal(state, config, TemplateKind::Opengrep).await?;
     Ok(EnsureOutcome::InProgress {
         record_id: record.id,
     })
@@ -159,7 +197,8 @@ async fn start_provision_internal(
     kind: TemplateKind,
 ) -> Result<CubesandboxTemplateRecord> {
     let image_ref = match kind {
-        TemplateKind::CodeqlCpp => DEFAULT_IMAGE_REF.to_string(),
+        TemplateKind::CodeqlCpp => DEFAULT_CODEQL_CPP_IMAGE_REF.to_string(),
+        TemplateKind::Opengrep => DEFAULT_OPENGREP_IMAGE_REF.to_string(),
     };
     let record = cubesandbox_templates::insert_pending(state, kind, &image_ref).await?;
 
@@ -176,6 +215,7 @@ async fn start_provision_internal(
 
     let helper_command = match kind {
         TemplateKind::CodeqlCpp => CubeSandboxHelperCommand::ProvisionCodeqlCppTemplate,
+        TemplateKind::Opengrep => CubeSandboxHelperCommand::ProvisionOpengrepTemplate,
     };
     let state_clone = state.clone();
     let config_clone = config.clone();
@@ -185,7 +225,7 @@ async fn start_provision_internal(
     tokio::spawn(async move {
         if let Err(error) = drive_provision(
             state_clone.clone(),
-            config_clone,
+            config_clone.clone(),
             kind,
             record_id.clone(),
             helper_command,
@@ -193,7 +233,55 @@ async fn start_provision_internal(
         )
         .await
         {
-            let message = format!("{error:#}");
+            let mut message = format!("{error:#}");
+
+            // Fail-fast cubemaster template cleanup on any provision failure.
+            // Look up the partial template_id from the DB record (set by
+            // update_to_building/ready on partial progress). If present, delete
+            // it from CubeMaster so it does not linger as an orphan.
+            if let Ok(Some(record)) =
+                cubesandbox_templates::load_by_id(&state_clone, &record_id).await
+            {
+                if let Some(tpl_id) = record.template_id.as_deref() {
+                    match build_cubemaster_client(&config_clone) {
+                        Ok(cm) => match cm.delete_template(tpl_id).await {
+                            Ok(()) => {
+                                tracing::info!(
+                                    template_id = %tpl_id,
+                                    record_id = %record_id,
+                                    "cubemaster template cleaned up after provision failure"
+                                );
+                            }
+                            Err(cleanup_err) => {
+                                tracing::error!(
+                                    template_id = %tpl_id,
+                                    record_id = %record_id,
+                                    error = %cleanup_err,
+                                    "cubemaster template cleanup failed after provision failure"
+                                );
+                                message = format!(
+                                    "{message}\ncubemaster cleanup failed: {cleanup_err:#}"
+                                );
+                            }
+                        },
+                        Err(build_err) => {
+                            tracing::error!(
+                                record_id = %record_id,
+                                error = %build_err,
+                                "failed to build cubemaster client for cleanup"
+                            );
+                            message =
+                                format!("{message}\ncubemaster client init failed: {build_err:#}");
+                        }
+                    }
+                } else {
+                    tracing::info!(
+                        record_id = %record_id,
+                        "failure before template_id was recorded — nothing to clean up in cubemaster"
+                    );
+                }
+            }
+
             let _ =
                 cubesandbox_templates::update_to_failed(&state_clone, &record_id, &message).await;
             let _ = sender.send(ProvisionEvent {
@@ -312,6 +400,14 @@ impl ProvisionResult {
             Some(format!("status={}", self.status))
         }
     }
+}
+
+fn build_cubemaster_client(config: &CubeSandboxConfig) -> Result<CubemasterClient> {
+    CubemasterClient::new(CubemasterClientConfig {
+        base_url: config.cubemaster_base_url.clone(),
+        cleanup_timeout_seconds: config.cubemaster_cleanup_timeout_seconds,
+        instance_type: "cubebox".to_string(),
+    })
 }
 
 fn parse_provision_result(stdout: &str) -> Option<ProvisionResult> {

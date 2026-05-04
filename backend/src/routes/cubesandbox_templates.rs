@@ -22,6 +22,10 @@ pub fn router() -> Router<AppState> {
         .route("/codeql-cpp/provision", post(provision_codeql_cpp))
         .route("/codeql-cpp/invalidate", post(invalidate_codeql_cpp))
         .route("/codeql-cpp/stream", get(stream_codeql_cpp))
+        .route("/opengrep", get(get_opengrep_status))
+        .route("/opengrep/provision", post(provision_opengrep))
+        .route("/opengrep/invalidate", post(invalidate_opengrep))
+        .route("/opengrep/stream", get(stream_opengrep))
 }
 
 async fn get_codeql_cpp_status(State(state): State<AppState>) -> Result<Json<Value>, ApiError> {
@@ -34,7 +38,8 @@ async fn get_codeql_cpp_status(State(state): State<AppState>) -> Result<Json<Val
 async fn provision_codeql_cpp(State(state): State<AppState>) -> Result<Json<Value>, ApiError> {
     let config = CubeSandboxConfig::load_runtime(&state)
         .await
-        .map_err(internal_error)?;
+        .map_err(internal_error)?
+        .for_template_kind(TemplateKind::CodeqlCpp, state.config.as_ref());
     if !config.enabled {
         return Err(ApiError::BadRequest(
             "CubeSandbox 未启用; 请先在系统配置中开启".to_string(),
@@ -54,11 +59,49 @@ async fn invalidate_codeql_cpp(State(state): State<AppState>) -> Result<Json<Val
 }
 
 async fn stream_codeql_cpp(State(state): State<AppState>) -> impl IntoResponse {
-    let initial_record = template_provisioner::get_status(&state, TemplateKind::CodeqlCpp)
+    stream_template_kind(state, TemplateKind::CodeqlCpp).await
+}
+
+async fn get_opengrep_status(State(state): State<AppState>) -> Result<Json<Value>, ApiError> {
+    let record = template_provisioner::get_status(&state, TemplateKind::Opengrep)
+        .await
+        .map_err(internal_error)?;
+    Ok(Json(serialize_status(record.as_ref())))
+}
+
+async fn provision_opengrep(State(state): State<AppState>) -> Result<Json<Value>, ApiError> {
+    let config = CubeSandboxConfig::load_runtime(&state)
+        .await
+        .map_err(internal_error)?
+        .for_template_kind(TemplateKind::Opengrep, state.config.as_ref());
+    if !config.enabled {
+        return Err(ApiError::BadRequest(
+            "CubeSandbox 未启用; 请先在系统配置中开启".to_string(),
+        ));
+    }
+    let record = template_provisioner::start_provision(&state, &config, TemplateKind::Opengrep)
+        .await
+        .map_err(|error| ApiError::BadRequest(format!("{error:#}")))?;
+    Ok(Json(serialize_status(Some(&record))))
+}
+
+async fn invalidate_opengrep(State(state): State<AppState>) -> Result<Json<Value>, ApiError> {
+    let affected = template_provisioner::invalidate(&state, TemplateKind::Opengrep)
+        .await
+        .map_err(internal_error)?;
+    Ok(Json(json!({ "affected": affected })))
+}
+
+async fn stream_opengrep(State(state): State<AppState>) -> impl IntoResponse {
+    stream_template_kind(state, TemplateKind::Opengrep).await
+}
+
+async fn stream_template_kind(state: AppState, kind: TemplateKind) -> impl IntoResponse {
+    let initial_record = template_provisioner::get_status(&state, kind)
         .await
         .ok()
         .flatten();
-    let receiver = template_provisioner::subscribe(TemplateKind::CodeqlCpp).await;
+    let receiver = template_provisioner::subscribe(kind).await;
     let output = stream! {
         if let Some(record) = initial_record.as_ref() {
             if let Ok(data) = serde_json::to_string(&serialize_status(Some(record))) {

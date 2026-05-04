@@ -13,6 +13,7 @@ import { Brain, Loader2, Settings2, Shield, TerminalSquare, Upload } from "lucid
 import type { Project } from "@/shared/types";
 import { SUPPORTED_ARCHIVE_INPUT_ACCEPT } from "@/features/projects/services/repoZipScan";
 import type { StaticTool } from "@/components/agent/AgentModeSelector";
+import type { OpengrepSandboxMode } from "@/shared/api/opengrep";
 import StaticEngineConfigDialog from "@/components/scan/create-scan-task/StaticEngineConfigDialog";
 
 type StaticEngineItem = {
@@ -48,6 +49,8 @@ export default function CreateProjectScanDialogContent({
 	handleNewProjectFileSelect,
 	opengrepEnabled,
 	setOpengrepEnabled,
+	opengrepSandbox,
+	setOpengrepSandbox,
 	codeqlEnabled,
 	setCodeqlEnabled,
 	showReturnButton,
@@ -90,6 +93,8 @@ export default function CreateProjectScanDialogContent({
 	handleNewProjectFileSelect: (event: ChangeEvent<HTMLInputElement>) => void;
 	opengrepEnabled: boolean;
 	setOpengrepEnabled: (enabled: boolean) => void;
+	opengrepSandbox: OpengrepSandboxMode;
+	setOpengrepSandbox: (mode: OpengrepSandboxMode) => void;
 	codeqlEnabled: boolean;
 	setCodeqlEnabled: (enabled: boolean) => void;
 	showReturnButton: boolean;
@@ -534,6 +539,8 @@ export default function CreateProjectScanDialogContent({
 				}
 				creating={creating}
 				blockedReason={null}
+				opengrepSandbox={opengrepSandbox}
+				onOpengrepSandboxChange={setOpengrepSandbox}
 				onNavigateToEngineConfig={onNavigateToEngineConfig}
 			/>
 		</>

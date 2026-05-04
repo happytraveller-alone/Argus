@@ -10,18 +10,21 @@ use crate::state::AppState;
 #[serde(rename_all = "snake_case")]
 pub enum TemplateKind {
     CodeqlCpp,
+    Opengrep,
 }
 
 impl TemplateKind {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::CodeqlCpp => "codeql_cpp",
+            Self::Opengrep => "opengrep",
         }
     }
 
     pub fn from_str(value: &str) -> Result<Self> {
         match value {
             "codeql_cpp" => Ok(Self::CodeqlCpp),
+            "opengrep" => Ok(Self::Opengrep),
             other => anyhow::bail!("unknown cubesandbox template kind: {other}"),
         }
     }

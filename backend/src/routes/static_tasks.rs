@@ -34,7 +34,7 @@ use crate::{
         llm::{HttpIntelligentLlmInvoker, IntelligentLlmInvoker},
     },
     runtime::runner::{self, RunnerSpec},
-    scan::{codeql, codeql_cubesandbox, opengrep, scope_filters},
+    scan::{codeql, codeql_cubesandbox, opengrep, opengrep_cubesandbox, scope_filters},
     state::AppState,
 };
 
@@ -47,6 +47,38 @@ struct CodeqlTaskOptions {
     build_mode: Option<String>,
     allow_network: Option<bool>,
     reset_build_plan: bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum OpengrepSandboxKind {
+    DockerfileContainer,
+    OciCubesandbox,
+}
+
+impl OpengrepSandboxKind {
+    fn from_value(value: Option<&str>) -> Self {
+        match value
+            .unwrap_or_default()
+            .trim()
+            .to_ascii_lowercase()
+            .as_str()
+        {
+            "oci_cubesandbox" | "cubesandbox" | "oci-cubesandbox" => Self::OciCubesandbox,
+            _ => Self::DockerfileContainer,
+        }
+    }
+
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::DockerfileContainer => "dockerfile_container",
+            Self::OciCubesandbox => "oci_cubesandbox",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct OpengrepTaskOptions {
+    sandbox: OpengrepSandboxKind,
 }
 
 pub fn router() -> Router<AppState> {
@@ -754,6 +786,11 @@ async fn create_static_task_for_engine(
     } else {
         None
     };
+    let opengrep_options = if engine.eq_ignore_ascii_case("opengrep") {
+        Some(extract_opengrep_task_options(&payload))
+    } else {
+        None
+    };
 
     let _guard = state.file_store_lock.lock().await;
     let project = projects::get_project_while_locked(&state, &project_id)
@@ -833,6 +870,12 @@ async fn create_static_task_for_engine(
                 extra.insert("requested_build_plan_reset".to_string(), Value::Bool(true));
             }
         }
+        if let Some(options) = &opengrep_options {
+            extra.insert(
+                "requested_opengrep_sandbox".to_string(),
+                Value::String(options.sandbox.as_str().to_string()),
+            );
+        }
     }
     let mut snapshot = task_state::load_snapshot_unlocked(&state)
         .await
@@ -861,7 +904,17 @@ async fn create_static_task_for_engine(
             )
             .await;
         } else {
-            run_opengrep_scan(bg_state, bg_task_id, project_id, target_path, rule_ids).await;
+            run_opengrep_scan(
+                bg_state,
+                bg_task_id,
+                project_id,
+                target_path,
+                rule_ids,
+                opengrep_options.unwrap_or(OpengrepTaskOptions {
+                    sandbox: OpengrepSandboxKind::DockerfileContainer,
+                }),
+            )
+            .await;
         }
     });
 
@@ -893,6 +946,7 @@ async fn interrupt_opengrep_task(
     State(state): State<AppState>,
     AxumPath(task_id): AxumPath<String>,
 ) -> Result<Json<Value>, ApiError> {
+    let _ = opengrep_cubesandbox::cancel_opengrep_scan(&task_id).await;
     interrupt_static_task(&state, "opengrep", &task_id).await
 }
 
@@ -1290,9 +1344,12 @@ async fn run_opengrep_scan(
     project_id: String,
     _target_path: String,
     rule_ids: Vec<String>,
+    options: OpengrepTaskOptions,
 ) {
     let started_at = std::time::Instant::now();
-    if let Err(error) = run_opengrep_scan_inner(&state, &task_id, &project_id, &rule_ids).await {
+    if let Err(error) =
+        run_opengrep_scan_inner(&state, &task_id, &project_id, &rule_ids, options).await
+    {
         let elapsed_ms = started_at.elapsed().as_millis() as i64;
         let _ = update_scan_task_failed(&state, &task_id, &error.to_string(), elapsed_ms).await;
     }
@@ -2136,6 +2193,15 @@ fn extract_codeql_task_options(payload: &Value) -> CodeqlTaskOptions {
         build_mode,
         allow_network: optional_bool(payload, "allow_network"),
         reset_build_plan: optional_bool(payload, "reset_build_plan").unwrap_or(false),
+    }
+}
+
+fn extract_opengrep_task_options(payload: &Value) -> OpengrepTaskOptions {
+    let sandbox = optional_string(payload, "opengrep_sandbox")
+        .or_else(|| optional_string(payload, "sandbox"))
+        .or_else(|| optional_string(payload, "sandbox_mode"));
+    OpengrepTaskOptions {
+        sandbox: OpengrepSandboxKind::from_value(sandbox.as_deref()),
     }
 }
 
@@ -3271,6 +3337,7 @@ async fn run_opengrep_scan_inner(
     task_id: &str,
     project_id: &str,
     rule_ids: &[String],
+    options: OpengrepTaskOptions,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let started_at = std::time::Instant::now();
 
@@ -3385,48 +3452,102 @@ async fn run_opengrep_scan_inner(
     )
     .await;
 
-    let scanner_image = state.config.scanner_opengrep_image.clone();
-    let container_source_dir = "/scan/source";
-
     let known_paths = scan_input_paths;
-    let config_container_path = rule_inputs
-        .workspace_rules_dir
-        .as_ref()
-        .map(|path| workspace_container_path(&workspace_dir, path))
-        .transpose()?;
     let output_rel_path = format!("output/results-{}.json", Uuid::new_v4());
     let summary_rel_path = format!("output/summary-{}.json", Uuid::new_v4());
     let log_rel_path = format!("output/log-{}.txt", Uuid::new_v4());
     let stdout_rel_path = format!("output/stdout-{}.txt", Uuid::new_v4());
     let stderr_rel_path = format!("output/stderr-{}.txt", Uuid::new_v4());
-    let output_container_path = format!("/scan/{output_rel_path}");
-    let summary_container_path = format!("/scan/{summary_rel_path}");
-    let log_container_path = format!("/scan/{log_rel_path}");
-    let spec = build_opengrep_runner_spec(
-        &state.config,
-        scanner_image,
-        &workspace_dir,
-        runner_resources,
-        OpengrepRunnerPaths {
-            container_source_dir,
-            config_container_path: config_container_path.as_deref(),
-            output_container_path: &output_container_path,
-            summary_rel_path: &summary_rel_path,
-            summary_container_path: &summary_container_path,
-            log_container_path: &log_container_path,
-            stdout_rel_path: &stdout_rel_path,
-            stderr_rel_path: &stderr_rel_path,
-        },
-    );
+    let sandbox_label = options.sandbox.as_str();
+    match options.sandbox {
+        OpengrepSandboxKind::DockerfileContainer => {
+            let scanner_image = state.config.scanner_opengrep_image.clone();
+            let container_source_dir = "/scan/source";
+            let config_container_path = rule_inputs
+                .workspace_rules_dir
+                .as_ref()
+                .map(|path| workspace_container_path(&workspace_dir, path))
+                .transpose()?;
+            let output_container_path = format!("/scan/{output_rel_path}");
+            let summary_container_path = format!("/scan/{summary_rel_path}");
+            let log_container_path = format!("/scan/{log_rel_path}");
+            let spec = build_opengrep_runner_spec(
+                &state.config,
+                scanner_image,
+                &workspace_dir,
+                runner_resources,
+                OpengrepRunnerPaths {
+                    container_source_dir,
+                    config_container_path: config_container_path.as_deref(),
+                    output_container_path: &output_container_path,
+                    summary_rel_path: &summary_rel_path,
+                    summary_container_path: &summary_container_path,
+                    log_container_path: &log_container_path,
+                    stdout_rel_path: &stdout_rel_path,
+                    stderr_rel_path: &stderr_rel_path,
+                },
+            );
 
-    let runner_result = tokio::task::spawn_blocking(move || runner::execute(spec)).await?;
-    drop(resource_permit);
-    if !runner_result.success {
-        let error_msg =
-            format_opengrep_runner_error(&runner_result, Some(&workspace_dir.join(&log_rel_path)))
+            let runner_result = tokio::task::spawn_blocking(move || runner::execute(spec)).await?;
+            drop(resource_permit);
+            if !runner_result.success {
+                let error_msg = format_opengrep_runner_error(
+                    &runner_result,
+                    Some(&workspace_dir.join(&log_rel_path)),
+                )
                 .await;
-        let _ = tokio::fs::remove_dir_all(&workspace_dir).await;
-        return Err(format!("opengrep scan failed: {error_msg}").into());
+                let _ = tokio::fs::remove_dir_all(&workspace_dir).await;
+                return Err(format!("opengrep scan failed: {error_msg}").into());
+            }
+        }
+        OpengrepSandboxKind::OciCubesandbox => {
+            let rules_dir = rule_inputs
+                .workspace_rules_dir
+                .as_ref()
+                .ok_or("opengrep CubeSandbox scan requires materialized rules directory")?;
+            let scan_output = opengrep_cubesandbox::run_opengrep_scan(
+                state,
+                opengrep_cubesandbox::CubeSandboxOpengrepInput {
+                    task_id,
+                    workspace_dir: &workspace_dir,
+                    source_dir: &source_dir,
+                    rules_dir,
+                    jobs: runner_resources.jobs,
+                    max_memory_mb: state.config.opengrep_scan_max_memory_mb,
+                },
+            )
+            .await?;
+            drop(resource_permit);
+            tokio::fs::write(
+                workspace_dir.join(&output_rel_path),
+                scan_output.results_text,
+            )
+            .await?;
+            tokio::fs::write(
+                workspace_dir.join(&summary_rel_path),
+                serde_json::to_string(&scan_output.summary_json)?,
+            )
+            .await?;
+            tokio::fs::write(workspace_dir.join(&log_rel_path), scan_output.log_text).await?;
+            tokio::fs::write(
+                workspace_dir.join(&stdout_rel_path),
+                scan_output.stdout_text,
+            )
+            .await?;
+            tokio::fs::write(
+                workspace_dir.join(&stderr_rel_path),
+                scan_output.stderr_text,
+            )
+            .await?;
+            if scan_output.scan_exit_code != 0 && scan_output.scan_exit_code != 1 {
+                let _ = tokio::fs::remove_dir_all(&workspace_dir).await;
+                return Err(format!(
+                    "opengrep CubeSandbox scan failed: exit_code={}",
+                    scan_output.scan_exit_code
+                )
+                .into());
+            }
+        }
     }
 
     let summary_path = workspace_dir.join(&summary_rel_path);
@@ -3506,6 +3627,8 @@ async fn run_opengrep_scan_inner(
         record.files_scanned = files_scanned as i64;
         record.updated_at = Some(now.clone());
         record.extra = json!({
+            "engine": "opengrep",
+            "opengrep_sandbox": sandbox_label,
             "error_count": error_count,
             "warning_count": warning_count,
             "high_confidence_count": high_confidence_count,
@@ -5459,9 +5582,10 @@ mod tests {
     use super::{
         build_opengrep_runner_spec, choose_cubesandbox_cpp_build_plan,
         dependency_install_commands_from_plan_with_failures, extract_highest_rule_severity,
-        format_opengrep_runner_error, normalize_codeql_task_languages,
-        parse_codeql_llm_build_plan_response, read_opengrep_results_text, static_task_value,
-        OpengrepResourceScheduler, OpengrepRunnerPaths, OpengrepRunnerResources,
+        extract_opengrep_task_options, format_opengrep_runner_error,
+        normalize_codeql_task_languages, parse_codeql_llm_build_plan_response,
+        read_opengrep_results_text, static_task_value, OpengrepResourceScheduler,
+        OpengrepRunnerPaths, OpengrepRunnerResources, OpengrepSandboxKind,
     };
     use serde_json::json;
     use std::{collections::BTreeSet, sync::mpsc, time::Duration};
@@ -5908,6 +6032,42 @@ rules:
                 jobs: 8,
                 max_memory_mb: 2048,
             })
+        );
+    }
+
+    #[test]
+    fn opengrep_task_options_default_to_dockerfile_container_and_accept_oci_cubesandbox() {
+        let default_options = extract_opengrep_task_options(&json!({}));
+        assert_eq!(
+            default_options.sandbox,
+            OpengrepSandboxKind::DockerfileContainer
+        );
+
+        let cubesandbox_options = extract_opengrep_task_options(&json!({
+            "opengrep_sandbox": "oci_cubesandbox",
+        }));
+        assert_eq!(
+            cubesandbox_options.sandbox,
+            OpengrepSandboxKind::OciCubesandbox
+        );
+    }
+
+    #[test]
+    fn opengrep_task_options_tolerate_legacy_sandbox_key_and_unknown_values() {
+        let legacy_options = extract_opengrep_task_options(&json!({
+            "sandbox": "dockerfile_container",
+        }));
+        assert_eq!(
+            legacy_options.sandbox,
+            OpengrepSandboxKind::DockerfileContainer
+        );
+
+        let unknown_options = extract_opengrep_task_options(&json!({
+            "opengrep_sandbox": "surprise",
+        }));
+        assert_eq!(
+            unknown_options.sandbox,
+            OpengrepSandboxKind::DockerfileContainer
         );
     }
 

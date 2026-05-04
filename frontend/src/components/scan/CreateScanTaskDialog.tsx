@@ -30,6 +30,7 @@ import {
 	createOpengrepScanTask,
 	createCodeqlScanTask,
 	getAllOpengrepRules,
+	type OpengrepSandboxMode,
 	type OpengrepRule,
 } from "@/shared/api/opengrep";
 import {
@@ -124,6 +125,8 @@ export default function CreateScanTaskDialog({
 	const [staticRules, setStaticRules] = useState<OpengrepRule[]>([]);
 	const [selectedRuleIds, setSelectedRuleIds] = useState<string[]>([]);
 	const [configEngine, setConfigEngine] = useState<StaticTool | null>(null);
+	const [opengrepSandbox, setOpengrepSandbox] =
+		useState<OpengrepSandboxMode>("dockerfile_container");
 
 	const { projects, loading, loadProjects } = useProjects();
 	const selectedProject = projects.find((p) => p.id === selectedProjectId);
@@ -192,6 +195,7 @@ export default function CreateScanTaskDialog({
 				codeql: false,
 			});
 			setConfigEngine(null);
+			setOpengrepSandbox("dockerfile_container");
 			setSourceMode("existing");
 			setNewProjectName("");
 			setNewProjectFile(null);
@@ -298,6 +302,7 @@ export default function CreateScanTaskDialog({
 					),
 					rule_ids: activeRuleIds,
 					target_path: ".",
+					opengrep_sandbox: opengrepSandbox,
 				});
 			} catch (error) {
 				const apiMsg = extractCreateScanTaskApiErrorMessage(error);
@@ -327,6 +332,7 @@ export default function CreateScanTaskDialog({
 					),
 					rule_ids: retryRuleIds,
 					target_path: ".",
+					opengrep_sandbox: opengrepSandbox,
 				});
 			}
 		}
@@ -482,6 +488,7 @@ export default function CreateScanTaskDialog({
 		effectiveTargetFiles,
 		staticTools.opengrep,
 		staticTools.codeql,
+		opengrepSandbox,
 	]);
 
 	const handleStaticToolsChange = (next: StaticToolSelection) => {
@@ -798,6 +805,8 @@ export default function CreateScanTaskDialog({
 				enabled={configEngine ? staticTools[configEngine] : false}
 				creating={creating}
 				blockedReason={null}
+				opengrepSandbox={opengrepSandbox}
+				onOpengrepSandboxChange={setOpengrepSandbox}
 				onNavigateToEngineConfig={(engine) => handleNavigateToEngineConfig(engine)}
 			/>
 

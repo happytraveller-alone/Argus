@@ -62,6 +62,7 @@ pub struct AppConfig {
     pub cubesandbox_api_base_url: String,
     pub cubesandbox_data_plane_base_url: String,
     pub cubesandbox_template_id: String,
+    pub cubesandbox_opengrep_template_id: String,
     pub cubesandbox_helper_path: String,
     pub cubesandbox_work_dir: String,
     pub cubesandbox_auto_start: bool,
@@ -71,6 +72,12 @@ pub struct AppConfig {
     pub cubesandbox_cleanup_timeout_seconds: u64,
     pub cubesandbox_stdout_limit_bytes: usize,
     pub cubesandbox_stderr_limit_bytes: usize,
+    /// Base URL for CubeMaster control-plane API (template lifecycle delete).
+    /// Empty string means "fall back to cubesandbox_api_base_url" — see
+    /// CubeSandboxConfig::defaults.
+    pub cubesandbox_cubemaster_base_url: String,
+    /// Timeout in seconds for cubemaster template-deletion HTTP requests.
+    pub cubesandbox_cubemaster_cleanup_timeout_seconds: u64,
 }
 
 impl AppConfig {
@@ -171,6 +178,8 @@ impl AppConfig {
             cubesandbox_data_plane_base_url: env::var("CUBESANDBOX_DATA_PLANE_BASE_URL")
                 .unwrap_or_else(|_| "https://127.0.0.1:21443".to_string()),
             cubesandbox_template_id: env::var("CUBESANDBOX_TEMPLATE_ID").unwrap_or_default(),
+            cubesandbox_opengrep_template_id: env::var("CUBESANDBOX_OPENGREP_TEMPLATE_ID")
+                .unwrap_or_default(),
             cubesandbox_helper_path: env::var("CUBESANDBOX_HELPER_PATH")
                 .unwrap_or_else(|_| "scripts/cubesandbox-quickstart.sh".to_string()),
             cubesandbox_work_dir: env::var("CUBESANDBOX_WORK_DIR")
@@ -196,6 +205,11 @@ impl AppConfig {
             cubesandbox_stderr_limit_bytes: parse_usize_env(
                 "CUBESANDBOX_STDERR_LIMIT_BYTES",
                 65_536,
+            ),
+            cubesandbox_cubemaster_base_url: env::var("CUBE_MASTER_BASE_URL").unwrap_or_default(),
+            cubesandbox_cubemaster_cleanup_timeout_seconds: parse_u64_env(
+                "CUBESANDBOX_CUBEMASTER_CLEANUP_TIMEOUT_SECONDS",
+                30,
             ),
         })
     }
@@ -266,6 +280,7 @@ impl AppConfig {
             cubesandbox_api_base_url: "http://127.0.0.1:23000".to_string(),
             cubesandbox_data_plane_base_url: "https://127.0.0.1:21443".to_string(),
             cubesandbox_template_id: "tpl-test".to_string(),
+            cubesandbox_opengrep_template_id: "tpl-opengrep-test".to_string(),
             cubesandbox_helper_path: "scripts/cubesandbox-quickstart.sh".to_string(),
             cubesandbox_work_dir: ".cubesandbox".to_string(),
             cubesandbox_auto_start: true,
@@ -275,6 +290,8 @@ impl AppConfig {
             cubesandbox_cleanup_timeout_seconds: 30,
             cubesandbox_stdout_limit_bytes: 65_536,
             cubesandbox_stderr_limit_bytes: 65_536,
+            cubesandbox_cubemaster_base_url: String::new(),
+            cubesandbox_cubemaster_cleanup_timeout_seconds: 30,
         }
     }
 }

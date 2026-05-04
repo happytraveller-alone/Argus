@@ -30,8 +30,12 @@ CUBE_CODEQL_VERSION="${CUBE_CODEQL_VERSION:-2.20.5}"
 CUBE_CODEQL_BUNDLE_URL="${CUBE_CODEQL_BUNDLE_URL:-${CUBE_GITHUB_MIRROR_PREFIX}https://github.com/github/codeql-action/releases/download/codeql-bundle-v${CUBE_CODEQL_VERSION}/codeql-bundle-linux64.tar.zst}"
 CUBE_CODEQL_CPP_IMAGE="${CUBE_CODEQL_CPP_IMAGE:-127.0.0.1:${CUBE_LOCAL_REGISTRY_PORT}/cubesandbox-codeql-cpp:latest}"
 CUBE_CODEQL_CPP_WSL_IMAGE="${CUBE_CODEQL_CPP_WSL_IMAGE:-argus/cubesandbox-codeql-cpp:latest}"
-CUBE_CODEQL_CPP_WRITABLE_LAYER_SIZE="${CUBE_CODEQL_CPP_WRITABLE_LAYER_SIZE:-4G}"
+CUBE_CODEQL_CPP_WRITABLE_LAYER_SIZE="${CUBE_CODEQL_CPP_WRITABLE_LAYER_SIZE:-4Gi}"
 CUBE_CODEQL_CPP_DOCKERFILE="${CUBE_CODEQL_CPP_DOCKERFILE:-${ROOT_DIR}/oci/cubesandbox/codeql-cpp.Dockerfile}"
+CUBE_OPENGREP_IMAGE="${CUBE_OPENGREP_IMAGE:-127.0.0.1:${CUBE_LOCAL_REGISTRY_PORT}/cubesandbox-opengrep:latest}"
+CUBE_OPENGREP_WSL_IMAGE="${CUBE_OPENGREP_WSL_IMAGE:-argus/cubesandbox-opengrep:latest}"
+CUBE_OPENGREP_WRITABLE_LAYER_SIZE="${CUBE_OPENGREP_WRITABLE_LAYER_SIZE:-2Gi}"
+CUBE_OPENGREP_DOCKERFILE="${CUBE_OPENGREP_DOCKERFILE:-${ROOT_DIR}/oci/cubesandbox/opengrep.Dockerfile}"
 CUBE_RELEASE_VERSION="${CUBE_RELEASE_VERSION:-v0.1.2}"
 CUBE_RELEASE_ASSET="${CUBE_RELEASE_ASSET:-cube-sandbox-one-click-aa8d642.tar.gz}"
 CUBE_RELEASE_URL="${CUBE_RELEASE_URL:-${CUBE_GITHUB_MIRROR_PREFIX}https://github.com/TencentCloud/CubeSandbox/releases/download/${CUBE_RELEASE_VERSION}/${CUBE_RELEASE_ASSET}}"
@@ -57,8 +61,14 @@ Usage:
   scripts/cubesandbox-quickstart.sh build-codeql-cpp-image-wsl
   scripts/cubesandbox-quickstart.sh shell-codeql-cpp-image-wsl
   scripts/cubesandbox-quickstart.sh create-codeql-cpp-template
+  scripts/cubesandbox-quickstart.sh build-opengrep-image
+  scripts/cubesandbox-quickstart.sh build-opengrep-image-wsl
+  scripts/cubesandbox-quickstart.sh shell-opengrep-image-wsl
+  scripts/cubesandbox-quickstart.sh create-opengrep-template
   scripts/cubesandbox-quickstart.sh watch-template <job_id>
   scripts/cubesandbox-quickstart.sh provision-codeql-cpp-template
+  scripts/cubesandbox-quickstart.sh provision-opengrep-template
+  scripts/cubesandbox-quickstart.sh clean-provision-state
   CUBE_TEMPLATE_ID=<template_id> scripts/cubesandbox-quickstart.sh python-smoke
   CUBE_TEMPLATE_ID=<template_id> scripts/cubesandbox-quickstart.sh cc-smoke
   CUBE_TEMPLATE_ID=<template_id> scripts/cubesandbox-quickstart.sh codeql-cpp-smoke
@@ -417,6 +427,58 @@ REMOTE
 )"
 }
 
+build_opengrep_image() {
+  [[ -f "$CUBE_OPENGREP_DOCKERFILE" ]] || fail "missing OCI image config: $CUBE_OPENGREP_DOCKERFILE"
+  [[ -f "${ROOT_DIR}/docker/opengrep-scan.sh" ]] || fail "missing opengrep scan wrapper: ${ROOT_DIR}/docker/opengrep-scan.sh"
+  need_cmd base64
+  local image_q registry_image_q dockerfile_q dockerfile_b64 scan_script_b64 rules_tar_b64
+  image_q="$(shell_quote "$CUBE_OPENGREP_IMAGE")"
+  registry_image_q="$(shell_quote "$CUBE_LOCAL_REGISTRY_IMAGE")"
+  dockerfile_q="$(shell_quote "$(basename "$CUBE_OPENGREP_DOCKERFILE")")"
+  dockerfile_b64="$(base64 -w 0 "$CUBE_OPENGREP_DOCKERFILE")"
+  scan_script_b64="$(base64 -w 0 "${ROOT_DIR}/docker/opengrep-scan.sh")"
+  rules_tar_b64="$(
+    tar -C "${ROOT_DIR}/backend/assets/scan_rule_assets" -czf - rules_opengrep | base64 -w 0
+  )"
+  remote_root "$(cat <<REMOTE
+set -Eeuo pipefail
+mkdir -p /root/cubesandbox-opengrep-build/context
+cd /root/cubesandbox-opengrep-build
+printf '%s' '${dockerfile_b64}' | base64 -d > ${dockerfile_q}
+printf '%s' '${scan_script_b64}' | base64 -d > context/opengrep-scan.sh
+mkdir -p context
+printf '%s' '${rules_tar_b64}' | base64 -d > context/rules.tar.gz
+
+docker pull ${registry_image_q}
+DOCKER_BUILDKIT=0 docker build --pull=false --build-arg CUBE_LOCAL_REGISTRY_IMAGE=${registry_image_q} -f ${dockerfile_q} -t ${image_q} context
+docker push ${image_q}
+REMOTE
+)"
+}
+
+build_opengrep_image_wsl() {
+  [[ -f "$CUBE_OPENGREP_DOCKERFILE" ]] || fail "missing OCI image config: $CUBE_OPENGREP_DOCKERFILE"
+  need_cmd docker
+  local temp_dir
+  temp_dir="$(mktemp -d "${TMPDIR:-/tmp}/argus-cube-opengrep-build.XXXXXX")"
+  trap 'rm -rf "$temp_dir"' RETURN
+  cp "$CUBE_OPENGREP_DOCKERFILE" "$temp_dir/opengrep.Dockerfile"
+  cp "${ROOT_DIR}/docker/opengrep-scan.sh" "$temp_dir/opengrep-scan.sh"
+  tar -C "${ROOT_DIR}/backend/assets/scan_rule_assets" -czf "$temp_dir/rules.tar.gz" rules_opengrep
+  docker build --pull=false \
+    --build-arg CUBE_LOCAL_REGISTRY_IMAGE="$CUBE_LOCAL_REGISTRY_IMAGE" \
+    -f "$temp_dir/opengrep.Dockerfile" \
+    -t "$CUBE_OPENGREP_WSL_IMAGE" \
+    "$temp_dir"
+}
+
+shell_opengrep_image_wsl() {
+  need_cmd docker
+  docker run --rm -it \
+    --entrypoint /bin/bash \
+    "$CUBE_OPENGREP_WSL_IMAGE"
+}
+
 build_codeql_cpp_image_wsl() {
   [[ -f "$CUBE_CODEQL_CPP_DOCKERFILE" ]] || fail "missing OCI image config: $CUBE_CODEQL_CPP_DOCKERFILE"
   need_cmd docker
@@ -446,6 +508,17 @@ create_codeql_cpp_template() {
   printf 'JOB_ID=%s\n' "$job_id"
 }
 
+create_opengrep_template() {
+  local raw job_id
+  raw="$(remote_root "cubemastercli tpl create-from-image --image '$(shell_quote "$CUBE_OPENGREP_IMAGE")' --writable-layer-size '$(shell_quote "$CUBE_OPENGREP_WRITABLE_LAYER_SIZE")' --expose-port 49999 --expose-port 49983 --probe 49999 2>&1" | tee /dev/stderr)"
+  job_id="$(printf '%s\n' "$raw" | sed -nE 's/.*job[_ -]?id[: ]+([0-9a-fA-F-]+).*/\1/p' | head -n 1 || true)"
+  if [[ -z "$job_id" ]]; then
+    job_id="$(printf '%s\n' "$raw" | grep -Eio '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' | head -n 1 || true)"
+  fi
+  [[ -n "$job_id" ]] || fail "create-opengrep-template did not emit a job_id"
+  printf 'JOB_ID=%s\n' "$job_id"
+}
+
 watch_template() {
   local job_id="${1:-}"
   [[ -n "$job_id" ]] || fail "watch-template requires a job_id"
@@ -460,7 +533,174 @@ watch_template() {
   [[ -n "$artifact_id" ]] && printf 'ARTIFACT_ID=%s\n' "$artifact_id"
 }
 
+clean_cube_provision_state() {
+  # ── step 0a: cubemaster template registry sweep (FAILED + orphaned) ──────
+  log "[clean] step 0a: cubemaster template registry sweep (FAILED + orphaned)"
+
+  # Fetch template list from cubemaster registry (tolerates CLI errors).
+  local list_raw
+  list_raw=$(remote_root "cubemastercli tpl list 2>&1" || fail "template list failed")
+
+  # Parse with python3 (already a host dependency per doctor check).
+  # CLI output may be tabular or JSON depending on version — probe both.
+  # Extract FAILED template_ids and all template_ids for orphan check.
+  local failed_ids all_ids
+  failed_ids=$(printf '%s' "$list_raw" | python3 - <<'PY'
+import json, sys
+raw = sys.stdin.read()
+try:
+    data = json.loads(raw)
+    if isinstance(data, dict):
+        data = data.get("data", [])
+    print("\n".join(t["template_id"] for t in data if t.get("status", "").upper() == "FAILED"))
+except Exception:
+    # Fallback: tabular parse — columns "TEMPLATE_ID  STATUS  ..."
+    for line in raw.splitlines():
+        parts = line.split()
+        if len(parts) >= 2 and parts[1].upper() == "FAILED":
+            print(parts[0])
+PY
+)
+  all_ids=$(printf '%s' "$list_raw" | python3 - <<'PY'
+import json, sys
+raw = sys.stdin.read()
+try:
+    data = json.loads(raw)
+    if isinstance(data, dict):
+        data = data.get("data", [])
+    print("\n".join(t["template_id"] for t in data))
+except Exception:
+    for line in raw.splitlines():
+        parts = line.split()
+        if parts and parts[0] not in ("TEMPLATE_ID", ""):
+            print(parts[0])
+PY
+)
+
+  # Orphan detection: template_ids in cubemaster but absent from backend's
+  # rust_cubesandbox_templates Postgres table. Gracefully degrades if DB unset.
+  # Both sides are trimmed and lowercased before `comm` so case/whitespace
+  # variants do not mis-classify a live template as an orphan.
+  local db_url="${DATABASE_URL:-${ARGUS_DATABASE_URL:-}}"
+  local orphan_ids=""
+  if [[ -n "${db_url:-}" && -n "${all_ids:-}" ]]; then
+    local known_ids psql_status
+    known_ids=$(psql "$db_url" -tAc \
+      "SELECT template_id FROM rust_cubesandbox_templates WHERE template_id IS NOT NULL" \
+      2>/dev/null)
+    psql_status=$?
+    if [[ ${psql_status} -ne 0 ]]; then
+      # Treat psql failure as DB-unreachable: skip orphan detection rather than
+      # silently treating every cubemaster template as orphaned.
+      log "[clean] psql query failed (rc=${psql_status}); skipping orphan detection"
+    elif [[ -z "${known_ids// /}" ]]; then
+      # Empty result set is dangerous: every cubemaster template would be
+      # classified orphan. Refuse unless the operator explicitly opts in.
+      if [[ "${CUBE_ALLOW_EMPTY_KNOWN_TEMPLATES:-0}" == "1" ]]; then
+        log "[clean] backend reports zero known templates; treating all cubemaster templates as orphans (CUBE_ALLOW_EMPTY_KNOWN_TEMPLATES=1)"
+        orphan_ids=$(printf '%s\n' "$all_ids" \
+          | awk 'NF { print tolower($1) }' | sort -u)
+      else
+        log "[clean] backend reports zero known templates; refusing orphan sweep (set CUBE_ALLOW_EMPTY_KNOWN_TEMPLATES=1 to override)"
+      fi
+    else
+      orphan_ids=$(comm -23 \
+        <(printf '%s\n' "$all_ids"   | awk 'NF { print tolower($1) }' | sort -u) \
+        <(printf '%s\n' "$known_ids" | awk 'NF { print tolower($1) }' | sort -u) \
+        || true)
+    fi
+  else
+    log "[clean] DATABASE_URL unset — skipping orphan detection"
+  fi
+
+  # Dedupe FAILED + orphaned; empty lines filtered out.
+  local to_delete
+  to_delete=$(printf '%s\n%s\n' "${failed_ids:-}" "${orphan_ids:-}" \
+    | sort -u | grep -v '^$' || true)
+
+  local before_count delete_count=0
+  before_count=$(printf '%s' "${all_ids:-}" | grep -c . || true)
+
+  if [[ -n "${to_delete:-}" ]]; then
+    log "[clean] deleting $(printf '%s\n' "$to_delete" | grep -c . || true) stale template(s) from cubemaster"
+    while IFS= read -r tid; do
+      [[ -z "${tid:-}" ]] && continue
+      # Defense-in-depth: refuse template_ids that could break out of single
+      # quotes when interpolated into the remote sudo bash payload.
+      if [[ ! "${tid}" =~ ^[A-Za-z0-9][A-Za-z0-9_-]{2,127}$ ]]; then
+        fail "[clean] refusing to delete: template id '$tid' fails safety regex"
+      fi
+      log "[clean]   delete $tid"
+      if ! remote_root "cubemastercli template delete --template-id '$tid'" >/tmp/.cm_del 2>&1; then
+        if grep -qiE 'not found|does not exist' /tmp/.cm_del 2>/dev/null; then
+          log "[clean]   already gone: $tid"
+        else
+          cat /tmp/.cm_del >&2 2>/dev/null || true
+          fail "[clean] cubemaster template delete failed for $tid (fail-fast)"
+        fi
+      fi
+      delete_count=$((delete_count + 1))
+    done <<< "$to_delete"
+  else
+    log "[clean] no stale templates to delete"
+  fi
+
+  # Disk space report from guest VM.
+  local disk_info
+  disk_info=$(remote_root "df -h /var/lib/containerd 2>/dev/null | tail -1" 2>/dev/null || echo "unavailable")
+  log "[clean] template sweep done: before=${before_count} deleted=${delete_count} disk=${disk_info}"
+
+  # ── step 0b (existing): purge rootfs-artifacts + docker dangling ─────────
+  # Each create-codeql-cpp-template run leaves a /tmp/cubemaster-rootfs-artifacts/rfs-<id>/
+  # directory in the guest VM holding a .tmp-rootfs.tar* (multi-GB). Without
+  # cleanup these accumulate across runs and eventually exhaust guest /tmp,
+  # breaking subsequent provisions with:
+  #   "write /tmp/cubemaster-rootfs-artifacts/rfs-.../.tmp-rootfs.tar...: no space left on device"
+  # We unconditionally drop those artifact dirs (they are transient build
+  # scratch — published templates live in cubemaster's own data store) and
+  # prune dangling docker containers/images to keep guest rootfs lean.
+  log "[clean] purging stale guest provision scratch (rootfs-artifacts + docker dangling)"
+  remote_root "$(cat <<'REMOTE'
+set -Eeuo pipefail
+artifact_dir=/tmp/cubemaster-rootfs-artifacts
+if [ -d "$artifact_dir" ]; then
+  before=$(du -sh "$artifact_dir" 2>/dev/null | awk '{print $1}' || echo '?')
+  find "$artifact_dir" -mindepth 1 -maxdepth 1 -name 'rfs-*' -exec rm -rf {} + 2>/dev/null || true
+  find "$artifact_dir" -mindepth 1 -maxdepth 1 -name '.tmp-rootfs.tar*' -delete 2>/dev/null || true
+  after=$(du -sh "$artifact_dir" 2>/dev/null | awk '{print $1}' || echo '?')
+  echo "[clean] $artifact_dir: ${before} -> ${after}"
+else
+  echo "[clean] $artifact_dir not present (skip)"
+fi
+echo "[clean] disk before:"
+df -h / 2>/dev/null | awk 'NR==1 || /\/$/'
+echo "[clean] docker container prune"
+docker container prune -f >/dev/null 2>&1 || true
+echo "[clean] docker image prune (dangling only)"
+docker image prune -f >/dev/null 2>&1 || true
+# Each start-local-registry creates a new docker volume backing the registry
+# data. When containers are recreated, the old volumes become orphans holding
+# multi-GB blobs. Without volume prune we accumulate 10+ GB per provision
+# cycle. Only unused (non-mounted) volumes are removed; active registry
+# volumes are preserved.
+echo "[clean] docker volume prune (unused only)"
+docker volume prune -f >/dev/null 2>&1 || true
+# NOTE: We deliberately do NOT prune docker builder cache here. The build
+# cache for the codeql-cpp image is small (a few hundred MB) but its absence
+# forces a full re-download of the codeql-bundle (~1GB), which on slow
+# networks can hang long enough for the legacy docker builder to drop
+# the build container with "unexpected EOF". Volume + image prune above
+# already reclaim >10GB; the marginal gain from builder prune is not worth
+# the rebuild risk.
+echo "[clean] disk after:"
+df -h / 2>/dev/null | awk 'NR==1 || /\/$/'
+REMOTE
+)"
+}
+
 provision_codeql_cpp_template() {
+  log "[provision] step 0/5 clean-provision-state (purge stale artifacts so /tmp does not exhaust)"
+  clean_cube_provision_state
   log "[provision] step 1/5 configure-docker-mirror"
   configure_docker_mirror
   log "[provision] step 2/5 start-local-registry"
@@ -507,6 +747,58 @@ print(
 PY
   if [[ "$status" != "READY" ]]; then
     fail "provision-codeql-cpp-template ended with status=${status}"
+  fi
+}
+
+provision_opengrep_template() {
+  log "[provision] step 0/5 clean-provision-state (purge stale artifacts so /tmp does not exhaust)"
+  clean_cube_provision_state
+  log "[provision] step 1/5 configure-docker-mirror"
+  configure_docker_mirror
+  log "[provision] step 2/5 start-local-registry"
+  start_local_registry
+  log "[provision] step 3/5 build-opengrep-image"
+  build_opengrep_image
+  log "[provision] step 4/5 create-opengrep-template"
+  local create_output job_id
+  create_output="$(create_opengrep_template)"
+  printf '%s\n' "$create_output"
+  job_id="$(printf '%s\n' "$create_output" | sed -nE 's/^JOB_ID=(.+)$/\1/p' | head -n 1 || true)"
+  [[ -n "$job_id" ]] || fail "provision: failed to capture job_id"
+  log "[provision] step 5/5 watch-template ${job_id}"
+  local watch_output template_id artifact_id status
+  watch_output="$(watch_template "$job_id")"
+  printf '%s\n' "$watch_output"
+  template_id="$(printf '%s\n' "$watch_output" | sed -nE 's/^TEMPLATE_ID=(.+)$/\1/p' | head -n 1 || true)"
+  artifact_id="$(printf '%s\n' "$watch_output" | sed -nE 's/^ARTIFACT_ID=(.+)$/\1/p' | head -n 1 || true)"
+  status="$(printf '%s\n' "$watch_output" | sed -nE 's/^STATUS=(.+)$/\1/p' | head -n 1 || true)"
+  [[ -n "$status" ]] || status="UNKNOWN"
+  python3 - "$template_id" "$artifact_id" "$status" "$job_id" "$CUBE_OPENGREP_IMAGE" <<'PY'
+import json
+import sys
+
+template_id, artifact_id, status, job_id, image_ref = sys.argv[1:6]
+
+def empty_to_none(value):
+    return value if value else None
+
+print(
+    "PROVISION_RESULT="
+    + json.dumps(
+        {
+            "template_id": empty_to_none(template_id),
+            "artifact_id": empty_to_none(artifact_id),
+            "status": status or "UNKNOWN",
+            "job_id": empty_to_none(job_id),
+            "image_ref": image_ref,
+        },
+        ensure_ascii=False,
+        sort_keys=True,
+    )
+)
+PY
+  if [[ "$status" != "READY" ]]; then
+    fail "provision-opengrep-template ended with status=${status}"
   fi
 }
 
@@ -724,17 +1016,41 @@ case "$cmd" in
     no_extra_args "${@:2}"
     shell_codeql_cpp_image_wsl
     ;;
+  build-opengrep-image)
+    no_extra_args "${@:2}"
+    build_opengrep_image
+    ;;
+  build-opengrep-image-wsl)
+    no_extra_args "${@:2}"
+    build_opengrep_image_wsl
+    ;;
+  shell-opengrep-image-wsl)
+    no_extra_args "${@:2}"
+    shell_opengrep_image_wsl
+    ;;
   create-codeql-cpp-template)
     no_extra_args "${@:2}"
     create_codeql_cpp_template
+    ;;
+  create-opengrep-template)
+    no_extra_args "${@:2}"
+    create_opengrep_template
     ;;
   watch-template)
     shift
     watch_template "$@"
     ;;
+  clean-provision-state)
+    no_extra_args "${@:2}"
+    clean_cube_provision_state
+    ;;
   provision-codeql-cpp-template)
     no_extra_args "${@:2}"
     provision_codeql_cpp_template
+    ;;
+  provision-opengrep-template)
+    no_extra_args "${@:2}"
+    provision_opengrep_template
     ;;
   python-smoke)
     no_extra_args "${@:2}"

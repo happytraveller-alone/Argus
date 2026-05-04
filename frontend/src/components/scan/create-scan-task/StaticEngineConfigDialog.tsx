@@ -8,6 +8,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { buildScanEngineConfigRoute, type ScanEngineTab } from "@/shared/constants/scanEngines";
+import type { OpengrepSandboxMode } from "@/shared/api/opengrep";
 
 export interface StaticEngineConfigDialogContentProps {
   engine: ScanEngineTab;
@@ -16,6 +17,8 @@ export interface StaticEngineConfigDialogContentProps {
   blockedReason: string | null;
   creating: boolean;
   onNavigateToEngineConfig: (engine: ScanEngineTab) => void;
+  opengrepSandbox?: OpengrepSandboxMode;
+  onOpengrepSandboxChange?: (mode: OpengrepSandboxMode) => void;
   onRequestClose?: () => void;
 }
 
@@ -25,7 +28,7 @@ export interface StaticEngineConfigDialogProps extends StaticEngineConfigDialogC
 }
 
 const PLACEHOLDER_COPY: Record<ScanEngineTab, string> = {
-  opengrep: "后续将支持按规则集、严重级别等任务级配置。",
+  opengrep: "选择本次 Opengrep 任务使用 Dockerfile 容器还是 OCI CubeSandbox 沙箱。",
   codeql: "后续将支持语言、查询包和构建命令等任务级配置。",
 };
 
@@ -42,6 +45,8 @@ export function StaticEngineConfigDialogContent({
   engine,
   enabled,
   blockedReason,
+  opengrepSandbox = "dockerfile_container",
+  onOpengrepSandboxChange,
   onNavigateToEngineConfig,
   onRequestClose,
 }: StaticEngineConfigDialogContentProps) {
@@ -56,7 +61,9 @@ export function StaticEngineConfigDialogContent({
             <h2 className="font-mono text-base font-bold uppercase tracking-wider text-foreground">
               {engineTitle} 配置
             </h2>
-            <p className="text-xs text-muted-foreground">该引擎的任务级配置即将开放。</p>
+            <p className="text-xs text-muted-foreground">
+              {engine === "opengrep" ? "选择本次任务的沙箱执行方式。" : "该引擎的任务级配置即将开放。"}
+            </p>
           </div>
           <Badge className={enabled ? "cyber-badge-success" : "cyber-badge-muted"}>
             {enabled ? "已启用" : "未启用"}
@@ -72,15 +79,69 @@ export function StaticEngineConfigDialogContent({
           </div>
         ) : null}
 
-        <div className="rounded-md border border-border/60 bg-muted/20 p-4 text-sm text-muted-foreground">
-          <div className="flex items-start gap-2">
-            <Info className="mt-0.5 h-4 w-4 text-sky-300" />
-            <div>
-              <p className="text-foreground">任务级配置即将开放</p>
-              <p className="mt-1">{PLACEHOLDER_COPY[engine]}</p>
+        {engine === "opengrep" ? (
+          <div className="space-y-3 rounded-md border border-border/60 bg-muted/20 p-4">
+            <div className="flex items-start gap-2 text-sm text-muted-foreground">
+              <Info className="mt-0.5 h-4 w-4 text-sky-300" />
+              <div>
+                <p className="text-foreground">沙箱选择</p>
+                <p className="mt-1">{PLACEHOLDER_COPY[engine]}</p>
+              </div>
+            </div>
+            <div className="grid gap-2 md:grid-cols-2">
+              {[
+                {
+                  value: "dockerfile_container" as const,
+                  title: "Dockerfile 容器",
+                  description: "使用 docker/opengrep-runner.Dockerfile 构建的当前默认容器。",
+                },
+                {
+                  value: "oci_cubesandbox" as const,
+                  title: "OCI CubeSandbox 沙箱",
+                  description: "使用 oci/cubesandbox/opengrep.Dockerfile 构建的隔离沙箱模板。",
+                },
+              ].map((item) => {
+                const selected = opengrepSandbox === item.value;
+                return (
+                  <button
+                    key={item.value}
+                    type="button"
+                    aria-pressed={selected}
+                    onClick={() => onOpengrepSandboxChange?.(item.value)}
+                    className={`rounded-md border p-3 text-left transition-colors ${
+                      selected
+                        ? "border-sky-500/60 bg-sky-500/10"
+                        : "border-border bg-background/40 hover:border-sky-500/30"
+                    }`}
+                  >
+                    <span className="flex items-center gap-2">
+                      <span
+                        aria-hidden="true"
+                        className={`h-3 w-3 rounded-full border ${
+                          selected ? "border-sky-300 bg-sky-400" : "border-muted-foreground"
+                        }`}
+                      />
+                      <span className="text-sm font-semibold text-foreground">{item.title}</span>
+                    </span>
+                    <span className="mt-1 block text-xs leading-5 text-muted-foreground">
+                      {item.description}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           </div>
-        </div>
+        ) : (
+          <div className="rounded-md border border-border/60 bg-muted/20 p-4 text-sm text-muted-foreground">
+            <div className="flex items-start gap-2">
+              <Info className="mt-0.5 h-4 w-4 text-sky-300" />
+              <div>
+                <p className="text-foreground">任务级配置即将开放</p>
+                <p className="mt-1">{PLACEHOLDER_COPY[engine]}</p>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="flex flex-wrap justify-end gap-3 px-5 py-4 bg-muted border-t border-border">

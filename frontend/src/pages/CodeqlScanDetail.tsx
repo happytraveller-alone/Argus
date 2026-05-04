@@ -28,7 +28,6 @@ import { LlmReasoningPanel } from "@/components/scan/LlmReasoningPanel";
 import { StepProgressIndicator } from "@/components/scan/StepProgressIndicator";
 import { useSseStream } from "@/hooks/useSseStream";
 import { getApiBaseUrl } from "@/shared/api/apiBase";
-import { api as databaseApi } from "@/shared/api/database";
 import CodeqlExplorationPanel from "./static-analysis/CodeqlExplorationPanel";
 import StaticAnalysisFindingsTable from "./static-analysis/StaticAnalysisFindingsTable";
 import {

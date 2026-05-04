@@ -436,15 +436,12 @@ test("resolveStaticAnalysisProjectNameFallback applies task, lookup, id fallback
   );
 });
 
-test("StaticAnalysis page performs cancellable display-only project lookup for id fallback", () => {
-  assert.match(staticAnalysisPageSource, /api as databaseApi/);
+test("StaticAnalysis page uses backend task project names for the display fallback", () => {
+  assert.doesNotMatch(staticAnalysisPageSource, /getProjectById/);
   assert.match(
     staticAnalysisPageSource,
-    /databaseApi\.getProjectById\(staticProjectId\)/,
+    /opengrepTask\?\.project_name \|\| codeqlTask\?\.project_name/,
   );
-  assert.match(staticAnalysisPageSource, /let cancelled = false/);
-  assert.match(staticAnalysisPageSource, /if \(cancelled\) return/);
-  assert.match(staticAnalysisPageSource, /current\?\.projectId === staticProjectId/);
   assert.match(staticAnalysisPageSource, /staticProjectName/);
   assert.match(staticAnalysisPageSource, /fallbackProjectName/);
   assert.match(staticAnalysisPageSource, /codeqlTaskId/);

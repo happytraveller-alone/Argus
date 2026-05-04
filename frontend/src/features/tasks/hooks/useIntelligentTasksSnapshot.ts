@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { toIntelligentTaskActivity } from "@/features/tasks/services/intelligentTaskActivities";
 import type { TaskActivityItem } from "@/features/tasks/services/taskActivities";

@@ -16,7 +16,7 @@
 
 ### 静态审计
 
-- **是什么**：当前稳定主线由 Opengrep 承担的规则扫描体验，产品层显示为“静态审计”。CodeQL 隔离扫描已有基础骨架：C/C++ 使用 CubeSandbox CodeQL capture 闭环，Python/JavaScript-TypeScript/Java 可通过显式 `languages` payload 在 CubeSandbox 内进入 `build-mode=none`，Go 进入 `build-mode=autobuild`。
+- **是什么**：当前稳定主线由 Opengrep 承担的规则扫描体验，产品层显示为“静态审计”。Opengrep 默认使用 Dockerfile runner 容器，也可以在高级配置里把单次任务切到 `opengrep_sandbox=oci_cubesandbox` 的 OCI CubeSandbox 模板。CodeQL 隔离扫描已有基础骨架：C/C++ 使用 CubeSandbox CodeQL capture 闭环，Python/JavaScript-TypeScript/Java 可通过显式 `languages` payload 在 CubeSandbox 内进入 `build-mode=none`，Go 进入 `build-mode=autobuild`。
 - **不是什么**：历史多引擎静态审计集合；退役兼容、防回归测试或旧前端 API 残留不应重新成为当前入口。CodeQL 计划也不是把旧多引擎路由复活。
 - **主要入口**：`backend/src/routes/static_tasks.rs`、`frontend/src/shared/api/opengrep.ts`、`frontend/src/pages/StaticAnalysis.tsx`。
 
@@ -39,12 +39,12 @@
 
 ### CubeSandbox 模板自动构建（template provisioner）
 
-- **是什么**：2026-05-03 引入的后端状态机，为 CodeQL C/C++ 扫描自动构建可复用的 CubeSandbox 模板。`CUBESANDBOX_TEMPLATE_ID` 由强制配置降级为可选覆写：未设置时后端调用 `scripts/cubesandbox-quickstart.sh provision-codeql-cpp-template` 串接 `configure-docker-mirror → start-local-registry → build-codeql-cpp-image → create-codeql-cpp-template → watch-template`，watch 终态后将 `template_id`、`artifact_id`、`status`、`build_log_tail` 写入 `rust_cubesandbox_templates` 表；后续扫描的 `ensure_codeql_cpp_template_ready` 优先取 env 覆写，其次取 `system_config.cubeSandbox.templateId`，最后取 DB active ready 记录。状态机生命周期：`pending → building → ready / failed / invalidated`，同 kind 同时只允许一条 active（部分唯一索引保证）。
-- **不是什么**：CubeSandbox 控制面 / VM 自身的安装器（VM/QEMU 仍由 host 的 `cube-sandbox-oneclick` systemd unit 拉起），也不是替代 `oci/cubesandbox/codeql-cpp.Dockerfile`：provisioner 只是把镜像构建 + 模板注册的串行 helper 调用纳入后端编排和 UI 反馈。
-- **HTTP API**：`GET /api/v1/cubesandbox/templates/codeql-cpp`（状态）、`POST .../provision`（触发）、`POST .../invalidate`（标记失效以便重建）、`GET .../stream`（SSE 推送状态变更和 build log）。
-- **前端入口**：`frontend/src/pages/static-analysis/CodeqlExplorationPanel.tsx` 顶部状态卡（就绪 / 构建中 / 失败 / 未构建）+ 立即构建 / 重建模板（带二次确认）/ 查看日志按钮；模板未就绪时禁用「重置并重新探索」。Hook 与 API 客户端：`frontend/src/hooks/useCodeqlTemplateStatus.ts`、`frontend/src/shared/api/cubesandboxTemplates.ts`。
+- **是什么**：2026-05-03 引入的后端状态机，最初为 CodeQL C/C++ 扫描自动构建可复用的 CubeSandbox 模板，2026-05-04 扩展到 Opengrep 模板。`CUBESANDBOX_TEMPLATE_ID` 仍是 CodeQL 可选覆写；Opengrep 使用独立的 `CUBESANDBOX_OPENGREP_TEMPLATE_ID` 可选覆写。未设置时后端分别调用 `scripts/cubesandbox-quickstart.sh provision-codeql-cpp-template` 或 `provision-opengrep-template`，串接 `configure-docker-mirror → start-local-registry → build-*image → create-*template → watch-template`，watch 终态后将 `template_id`、`artifact_id`、`status`、`build_log_tail` 写入 `rust_cubesandbox_templates` 表；后续扫描按 template kind 取 DB active ready 记录。状态机生命周期：`pending → building → ready / failed / invalidated`，同 kind 同时只允许一条 active（部分唯一索引保证）。
+- **不是什么**：CubeSandbox 控制面 / VM 自身的安装器（VM/QEMU 仍由 host 的 `cube-sandbox-oneclick` systemd unit 拉起），也不是替代 `oci/cubesandbox/codeql-cpp.Dockerfile` 或 `oci/cubesandbox/opengrep.Dockerfile`：provisioner 只是把镜像构建 + 模板注册的串行 helper 调用纳入后端编排和状态反馈。
+- **HTTP API**：`GET /api/v1/cubesandbox/templates/codeql-cpp` 与 `GET /api/v1/cubesandbox/templates/opengrep`（状态）、`POST .../provision`（触发）、`POST .../invalidate`（标记失效以便重建）、`GET .../stream`（SSE 推送状态变更和 build log）。
+- **前端入口**：CodeQL 模板有 `frontend/src/pages/static-analysis/CodeqlExplorationPanel.tsx` 顶部状态卡（就绪 / 构建中 / 失败 / 未构建）+ 立即构建 / 重建模板（带二次确认）/ 查看日志按钮；模板未就绪时禁用「重置并重新探索」。Opengrep 模板由后端在用户选择 `OCI CubeSandbox 沙箱` 时按需确保，目前前端只在 `StaticEngineConfigDialog` 暴露执行方式选择，不展示独立模板状态卡。Hook 与 API 客户端：`frontend/src/hooks/useCodeqlTemplateStatus.ts`、`frontend/src/shared/api/cubesandboxTemplates.ts`。
 - **运维约束**：自动构建仅在 `CUBESANDBOX_API_BASE_URL` / `CUBESANDBOX_DATA_PLANE_BASE_URL` 指向 `localhost`/`127.0.0.1`/`::1`/`host.docker.internal` 之一时启用（其它远端 URL 由 `should_run_local_lifecycle` 拒绝）；helper SSH 用 `CUBE_SSH_HOST=host.docker.internal` 当 URL 走 docker host gateway。
-- **主要入口**：`backend/src/runtime/cubesandbox/template_provisioner.rs`、`backend/src/db/cubesandbox_templates.rs`、`backend/src/routes/cubesandbox_templates.rs`、`backend/src/runtime/cubesandbox/client.rs`、`backend/src/runtime/cubesandbox/helper.rs`、`scripts/cubesandbox-quickstart.sh`。
+- **主要入口**：`backend/src/runtime/cubesandbox/template_provisioner.rs`、`backend/src/db/cubesandbox_templates.rs`、`backend/src/routes/cubesandbox_templates.rs`、`backend/src/runtime/cubesandbox/client.rs`、`backend/src/runtime/cubesandbox/helper.rs`、`oci/cubesandbox/{codeql-cpp,opengrep}.Dockerfile`、`scripts/cubesandbox-quickstart.sh`。
 
 ### 智能审计
 
@@ -67,9 +67,9 @@
 
 ### Opengrep runner
 
-- **是什么**：执行静态审计规则扫描的隔离 runner；`docker-compose.yml` 中的 `opengrep-runner` 只是 `runner-build` profile 镜像构建目标，默认启动不会保留服务容器。
-- **不是什么**：旧多引擎静态审计调度器，也不是 CodeQL 扫描主路径。
-- **主要入口**：`docker/opengrep-runner.Dockerfile`、`docker/opengrep-scan.sh`、`backend/src/scan/opengrep.rs`；backend 按任务动态创建临时 runner 容器，任务结束后删除。
+- **是什么**：执行静态审计规则扫描的隔离 runner。默认路径是 `docker/opengrep-runner.Dockerfile` 构建的临时 Docker 容器；静态审计 Opengrep 高级配置也可选择 `OCI CubeSandbox 沙箱`，由 `oci/cubesandbox/opengrep.Dockerfile` 构建模板并通过 `backend/src/scan/opengrep_cubesandbox.rs` 执行同一 `opengrep-scan` 包装器。
+- **不是什么**：旧多引擎静态审计调度器，也不是 CodeQL 扫描主路径；CubeSandbox 选项不是默认值，未传或未知 `opengrep_sandbox` 仍回落到 Dockerfile 容器。
+- **主要入口**：`docker/opengrep-runner.Dockerfile`、`docker/opengrep-scan.sh`、`backend/src/scan/opengrep.rs`、`backend/src/scan/opengrep_cubesandbox.rs`、`oci/cubesandbox/opengrep.Dockerfile`、`frontend/src/components/scan/create-scan-task/StaticEngineConfigDialog.tsx`；backend 按任务动态创建临时 runner 容器或 CubeSandbox sandbox，任务结束后清理。
 
 ### agent preflight
 

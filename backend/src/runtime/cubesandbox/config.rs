@@ -3,7 +3,11 @@ use reqwest::Url;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::{config::AppConfig, db::system_config, state::AppState};
+use crate::{
+    config::AppConfig,
+    db::{cubesandbox_templates::TemplateKind, system_config},
+    state::AppState,
+};
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CubeSandboxConfig {
@@ -20,6 +24,13 @@ pub struct CubeSandboxConfig {
     pub sandbox_cleanup_timeout_seconds: u64,
     pub stdout_limit_bytes: usize,
     pub stderr_limit_bytes: usize,
+    /// Base URL of the CubeMaster control-plane service used to delete templates
+    /// on provision failure. Sourced from env `CUBE_MASTER_BASE_URL`; if unset,
+    /// defaults to `api_base_url` because CubeMaster and CubeAPI share the same
+    /// host/port (http://127.0.0.1:23000) in the default single-node deployment.
+    pub cubemaster_base_url: String,
+    /// Timeout in seconds for cubemaster template-deletion HTTP requests.
+    pub cubemaster_cleanup_timeout_seconds: u64,
 }
 
 impl CubeSandboxConfig {
@@ -38,7 +49,37 @@ impl CubeSandboxConfig {
             sandbox_cleanup_timeout_seconds: config.cubesandbox_cleanup_timeout_seconds,
             stdout_limit_bytes: config.cubesandbox_stdout_limit_bytes,
             stderr_limit_bytes: config.cubesandbox_stderr_limit_bytes,
+            // Default: same host as api_base_url (CubeMaster co-located with CubeAPI on port 23000).
+            // Override with CUBE_MASTER_BASE_URL env var or system_config JSON if deployed
+            // separately. AppConfig holds the env-resolved value; an empty string means
+            // "fall back to api_base_url".
+            cubemaster_base_url: if config.cubesandbox_cubemaster_base_url.trim().is_empty() {
+                config.cubesandbox_api_base_url.clone()
+            } else {
+                config.cubesandbox_cubemaster_base_url.clone()
+            },
+            cubemaster_cleanup_timeout_seconds: config
+                .cubesandbox_cubemaster_cleanup_timeout_seconds,
         }
+    }
+
+    pub fn for_template_kind(&self, kind: TemplateKind, app_config: &AppConfig) -> Self {
+        let mut next = self.clone();
+        // Exhaustive match: adding a new TemplateKind variant becomes a compile
+        // error here, forcing the author to decide which template_id to thread.
+        match kind {
+            TemplateKind::CodeqlCpp => {
+                // The default `template_id` already carries the codeql template;
+                // no override needed.
+            }
+            TemplateKind::Opengrep => {
+                next.template_id = app_config
+                    .cubesandbox_opengrep_template_id
+                    .trim()
+                    .to_string();
+            }
+        }
+        next
     }
 
     pub async fn load_runtime(state: &AppState) -> Result<Self> {
@@ -104,6 +145,12 @@ impl CubeSandboxConfig {
         if let Some(value) = read_usize(map.get("stderrLimitBytes")) {
             self.stderr_limit_bytes = value;
         }
+        if let Some(value) = read_string(map.get("cubemasterBaseUrl")) {
+            self.cubemaster_base_url = value;
+        }
+        if let Some(value) = read_u64(map.get("cubemasterCleanupTimeoutSeconds")) {
+            self.cubemaster_cleanup_timeout_seconds = value;
+        }
         self
     }
 
@@ -118,7 +165,9 @@ impl CubeSandboxConfig {
             "executionTimeoutSeconds": self.execution_timeout_seconds,
             "sandboxCleanupTimeoutSeconds": self.sandbox_cleanup_timeout_seconds,
             "stdoutLimitBytes": self.stdout_limit_bytes,
-            "stderrLimitBytes": self.stderr_limit_bytes
+            "stderrLimitBytes": self.stderr_limit_bytes,
+            "cubemasterBaseUrl": self.cubemaster_base_url,
+            "cubemasterCleanupTimeoutSeconds": self.cubemaster_cleanup_timeout_seconds
         })
     }
 }

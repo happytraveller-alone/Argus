@@ -19,6 +19,9 @@ pub enum CubeSandboxHelperCommand {
     BuildCodeqlCppImage,
     CreateCodeqlCppTemplate,
     ProvisionCodeqlCppTemplate,
+    BuildOpengrepImage,
+    CreateOpengrepTemplate,
+    ProvisionOpengrepTemplate,
 }
 
 impl CubeSandboxHelperCommand {
@@ -35,6 +38,9 @@ impl CubeSandboxHelperCommand {
             Self::BuildCodeqlCppImage => "build-codeql-cpp-image",
             Self::CreateCodeqlCppTemplate => "create-codeql-cpp-template",
             Self::ProvisionCodeqlCppTemplate => "provision-codeql-cpp-template",
+            Self::BuildOpengrepImage => "build-opengrep-image",
+            Self::CreateOpengrepTemplate => "create-opengrep-template",
+            Self::ProvisionOpengrepTemplate => "provision-opengrep-template",
         }
     }
 }
@@ -55,6 +61,9 @@ impl TryFrom<&str> for CubeSandboxHelperCommand {
             "build-codeql-cpp-image" => Ok(Self::BuildCodeqlCppImage),
             "create-codeql-cpp-template" => Ok(Self::CreateCodeqlCppTemplate),
             "provision-codeql-cpp-template" => Ok(Self::ProvisionCodeqlCppTemplate),
+            "build-opengrep-image" => Ok(Self::BuildOpengrepImage),
+            "create-opengrep-template" => Ok(Self::CreateOpengrepTemplate),
+            "provision-opengrep-template" => Ok(Self::ProvisionOpengrepTemplate),
             _ => bail!("unsupported CubeSandbox helper command: {value}"),
         }
     }
@@ -223,6 +232,8 @@ mod tests {
             sandbox_cleanup_timeout_seconds: 30,
             stdout_limit_bytes: 65_536,
             stderr_limit_bytes: 65_536,
+            cubemaster_base_url: "http://127.0.0.1:23000".to_string(),
+            cubemaster_cleanup_timeout_seconds: 30,
         }
     }
 

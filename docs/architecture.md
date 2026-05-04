@@ -16,6 +16,8 @@
 >
 > 2026-05-03 CodeQL 查询资产补充：`backend/assets/scan_rule_assets/rules_codeql` 现在为 `c`、`cpp`、`python` 提供真实查询包，不再是占位目录。C/C++ 资产来自官方 `github/codeql` 仓库的 C/C++ security queries；Python 资产来自同一官方仓库的 Python security queries。所有语言 README 都记录镜像来源 `https://v6.gh-proxy.org/https://github.com/github/codeql`、固定 commit 和 MIT license；`codeql.rs` 在请求 `cpp` 时会同时物化 `c` 与 `cpp` 查询资产，以覆盖 CodeQL 的 C/C++ 统一 extractor。
 >
+> 2026-05-04 OpenGrep CubeSandbox 补充：Opengrep 默认仍走 Dockerfile runner 动态容器；静态审计高级配置新增 `opengrep_sandbox`，可选 `dockerfile_container` 或 `oci_cubesandbox`。选择 OCI CubeSandbox 时，后端使用 `backend/src/scan/opengrep_cubesandbox.rs` 把源码与已物化规则打包进 `opengrep` CubeSandbox 模板，通过同一 envd Connect-RPC 执行 `opengrep-scan`，并把 results/summary/log/stdout/stderr 写回原有静态任务 workspace。模板镜像定义在 `oci/cubesandbox/opengrep.Dockerfile`，由 `scripts/cubesandbox-quickstart.sh provision-opengrep-template` 或 `/api/v1/cubesandbox/templates/opengrep/*` 生命周期 API 构建；`CUBESANDBOX_OPENGREP_TEMPLATE_ID` 是可选覆写。
+>
 > 2026-05-02 智能审计过渡状态：当前 Rust gateway 不再挂载 `/api/v1/agent-tasks`，`backend/src/runtime/mod.rs` 也不再导出 `runtime/agentflow`；前端 `/agent-audit/:taskId` 已改为 `InDevelopmentPlaceholder` 占位。`vendor/agentflow-src/` 删除已提交但尚未推送；`backend/agentflow/` 仅保留历史 pipeline/schema/fixture 资产，`/api/v1/system-config/agent-preflight` 仍作为 LLM 配置与 runner readiness 门禁存在。`backend/src/runtime/intelligent/config.rs` 现在只提供 claw-code 迁移的基础 LLM 配置适配，不代表智能审计任务执行链已恢复。不要把保留的历史资产写成 AgentFlow 执行链已重新接入。
 
 这份文档面向第一次接手 Argus 的开发者：先建立系统主线，再告诉你从哪些文件开始读代码。接口字段逐项说明、数据库逐表说明和未来规划不放在这里。
@@ -36,7 +38,7 @@ Argus 是一个以 `Project` 为中心的代码安全审计工作台。
 - **Frontend**：`frontend/`，React + Vite + TypeScript，页面路由在 `frontend/src/app/routes.tsx`。
 - **Backend**：`backend/`，Rust + Axum，服务入口在 `backend/src/main.rs`，路由聚合在 `backend/src/routes/mod.rs`。
 - **Database**：PostgreSQL，通过 `sqlx` 访问，主要状态代码在 `backend/src/db/`；CodeQL C/C++ 的 accepted build plan 由 `rust_codeql_build_plans` 表承载，file/task-state 只作状态投影或 fallback。
-- **Runner/Sandbox**：Opengrep 仍使用 Docker runner 动态容器执行；CodeQL 扫描主路径使用 CubeSandbox CodeQL 模板，通过 envd Connect-RPC `/process.Process/Start`（Basic auth 用户 `root`、framed `application/connect+json`）执行 CodeQL capture/analyze；大 workspace 通过 envd `/files` multipart 上传后引用文件路径，避免 argv 上限。Docker runner preflight 只验证 Opengrep runner；CodeQL readiness 归 CubeSandbox 配置、模板镜像和 smoke 检查。`docker-compose.yml` 中的 runner service 仅作为 `runner-build` profile 镜像构建目标，默认启动不保留 runner service 容器。历史 AgentFlow runner service 当前不在 compose 主线中。
+- **Runner/Sandbox**：Opengrep 默认使用 Docker runner 动态容器执行；静态审计高级配置可把单次 Opengrep 任务切到 OCI CubeSandbox 模板（`opengrep_sandbox=oci_cubesandbox`），但 `dockerfile_container` 仍是默认值。CodeQL 扫描主路径使用 CubeSandbox CodeQL 模板，通过 envd Connect-RPC `/process.Process/Start`（Basic auth 用户 `root`、framed `application/connect+json`）执行 CodeQL capture/analyze；大 workspace 通过 envd `/files` multipart 上传后引用文件路径，避免 argv 上限。Docker runner preflight 只验证默认 Opengrep runner；CubeSandbox readiness 归 CubeSandbox 配置、模板镜像和 smoke 检查。`docker-compose.yml` 中的 runner service 仅作为 `runner-build` profile 镜像构建目标，默认启动不保留 runner service 容器。历史 AgentFlow runner service 当前不在 compose 主线中。
 
 如果只记一句话：**Argus 把一个 ZIP 项目归档成 `Project`，再围绕它启动静态审计，并把结果汇总回前端；智能审计执行链当前处于占位/重构过渡，仅基础 LLM 配置适配已开始落地。**
 
@@ -44,7 +46,7 @@ Argus 是一个以 `Project` 为中心的代码安全审计工作台。
 
 ### 静态审计
 
-当前稳定静态审计主线仍是 **Opengrep**。CodeQL 隔离扫描已有基础骨架：`StaticTaskRecord.engine` 可分流 `codeql`，查询资产位于 `backend/assets/scan_rule_assets/rules_codeql`。其中 `c`、`cpp`、`python` 已包含来自官方 `github/codeql` 仓库的真实安全查询文件；README 以 `https://v6.gh-proxy.org/https://github.com/github/codeql` 镜像 URL 记录来源、commit 和 license。
+当前稳定静态审计主线仍是 **Opengrep**，默认执行方式仍是 Dockerfile runner 动态容器。创建静态审计时，Opengrep 高级配置会把 `opengrep_sandbox` 传给后端：`dockerfile_container` 保持原默认路径，`oci_cubesandbox` 使用 `opengrep` CubeSandbox 模板执行同一 `opengrep-scan` 包装器。CodeQL 隔离扫描已有基础骨架：`StaticTaskRecord.engine` 可分流 `codeql`，查询资产位于 `backend/assets/scan_rule_assets/rules_codeql`。其中 `c`、`cpp`、`python` 已包含来自官方 `github/codeql` 仓库的真实安全查询文件；README 以 `https://v6.gh-proxy.org/https://github.com/github/codeql` 镜像 URL 记录来源、commit 和 license。
 
 **CodeQL CubeSandbox 架构**（2026-05-02 C/C++ 切片）：
 
@@ -59,18 +61,28 @@ CodeQL C/C++ 任务进度除 legacy logs 外，还会投影 typed exploration ev
 
 SARIF 解析映射到现有静态 finding 形态。当前可执行能力包括：C/C++ CubeSandbox capture 闭环、以及 Python/JavaScript-TypeScript/Java/Go 的显式语言 payload 到 CubeSandbox CodeQL build-mode 分流。CodeQL 五类语言真实 CLI 样例端到端全绿前，不得标记为完整首版完成。
 
+**Opengrep sandbox 选择**（2026-05-04）：
+
+1. 前端 `StaticEngineConfigDialog` 只在 Opengrep 高级配置里展示两种执行方式：`Dockerfile 容器` 与 `OCI CubeSandbox 沙箱`。
+2. `frontend/src/shared/api/opengrep.ts` 将选择序列化为 `opengrep_sandbox`；后端还兼容旧键 `sandbox` / `sandbox_mode`，未知值回落到 `dockerfile_container`。
+3. Dockerfile 默认路径继续使用 `docker/opengrep-runner.Dockerfile` + `docker/opengrep-scan.sh`，按任务创建临时 runner 容器，任务结束删除。
+4. CubeSandbox 路径通过 `backend/src/scan/opengrep_cubesandbox.rs` 创建 `opengrep` 模板沙箱，上传源码与规则 tarball，执行模板内的 `opengrep-scan`，再把 results/summary/log/stdout/stderr 写回与 Docker 路径相同的 workspace 输出文件。
+5. 任务状态 `extra.opengrep_sandbox` 记录实际执行选择，便于 UI/日志/排障区分。
+
 - 后端路由：`backend/src/routes/static_tasks.rs`
 - 前端 API：`frontend/src/shared/api/opengrep.ts`
 - 前端结果页：`frontend/src/pages/StaticAnalysis.tsx`
 - 任务管理聚合：`frontend/src/features/tasks/services/taskActivities.ts`
 - Opengrep runner 脚本：`docker/opengrep-scan.sh`
 - Opengrep runner 镜像：`docker/opengrep-runner.Dockerfile`
+- Opengrep CubeSandbox 执行模块：`backend/src/scan/opengrep_cubesandbox.rs`
+- Opengrep CubeSandbox 模板镜像定义：`oci/cubesandbox/opengrep.Dockerfile`
 - CodeQL CubeSandbox 执行模块：`backend/src/scan/codeql_cubesandbox.rs`
 - CodeQL 解析/验证模块：`backend/src/scan/codeql.rs`
 - CubeSandbox envd Connect-RPC 客户端：`backend/src/runtime/cubesandbox/client.rs`
 - CubeSandbox 模板自动构建状态机：`backend/src/runtime/cubesandbox/template_provisioner.rs`
 - CubeSandbox 模板 DB 持久化：`backend/src/db/cubesandbox_templates.rs`（`rust_cubesandbox_templates` 表）
-- CubeSandbox 模板生命周期 HTTP API：`backend/src/routes/cubesandbox_templates.rs`
+- CubeSandbox 模板生命周期 HTTP API：`backend/src/routes/cubesandbox_templates.rs`（`/codeql-cpp/*` 与 `/opengrep/*`）
 - 前端模板状态卡 + 立即构建/重建按钮：`frontend/src/pages/static-analysis/CodeqlExplorationPanel.tsx`、`frontend/src/hooks/useCodeqlTemplateStatus.ts`、`frontend/src/shared/api/cubesandboxTemplates.ts`
 - CodeQL CubeSandbox 模板镜像定义：`oci/cubesandbox/codeql-cpp.Dockerfile`
 
@@ -127,8 +139,8 @@ Opengrep 静态任务和 finding 由 Rust backend 管理，前端在产品层把
 ### 创建静态审计
 
 1. 前端入口是 `frontend/src/components/scan/CreateProjectScanDialog.tsx` 和 `frontend/src/components/scan/CreateScanTaskDialog.tsx`。静态模式当前只暴露 Opengrep 与 CodeQL 两个主引擎，二者在创建入口互斥；CodeQL 创建后以 `engine=codeql` 和 `codeqlTaskId` 路由到同一静态审计详情体验。
-2. 前端调用 `frontend/src/shared/api/opengrep.ts`。
-3. 后端 `backend/src/routes/static_tasks.rs` 创建任务：默认 Opengrep 调度 `docker/opengrep-scan.sh`；`engine="codeql"` 会把源码、查询资产和 build plan 交给 CubeSandbox CodeQL 模板执行 `database create/analyze`。
+2. 前端调用 `frontend/src/shared/api/opengrep.ts`；Opengrep 高级配置会随创建 payload 传 `opengrep_sandbox`，默认 `dockerfile_container`，可选 `oci_cubesandbox`。
+3. 后端 `backend/src/routes/static_tasks.rs` 创建任务：默认 Opengrep 调度 `docker/opengrep-scan.sh`；选择 `oci_cubesandbox` 时走 `backend/src/scan/opengrep_cubesandbox.rs` 和 `opengrep` CubeSandbox 模板；`engine="codeql"` 会把源码、查询资产和 build plan 交给 CubeSandbox CodeQL 模板执行 `database create/analyze`。
 4. 结果回到 `StaticAnalysis` 详情页和任务管理页。
 
 ## 前端 UI 共享边界
@@ -188,7 +200,10 @@ Opengrep 静态任务和 finding 由 Rust backend 管理，前端在产品层把
 
 - `backend/src/routes/static_tasks.rs`
 - `backend/src/scan/opengrep.rs`
+- `backend/src/scan/opengrep_cubesandbox.rs`
 - `docker/opengrep-scan.sh`
+- `oci/cubesandbox/opengrep.Dockerfile`
+- `frontend/src/components/scan/create-scan-task/StaticEngineConfigDialog.tsx`
 - `frontend/src/shared/api/opengrep.ts`
 - `frontend/src/pages/StaticAnalysis.tsx`
 

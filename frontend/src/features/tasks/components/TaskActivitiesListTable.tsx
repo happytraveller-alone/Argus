@@ -121,30 +121,6 @@ function getColumns(input: {
 				);
 			},
 		},
-		input.showEngineColumn
-			? {
-					id: "engine",
-					accessorFn: (row) => row.engineLabel || "-",
-					header: "引擎",
-					meta: createTaskActivitiesTableMeta({
-						label: "引擎",
-						width: 92,
-						align: "center",
-						filterVariant: "select",
-						filterOptions: [
-							{ label: "Opengrep", value: "Opengrep" },
-							{ label: "Codeql", value: "Codeql" },
-						],
-					}),
-					cell: ({ row }) => (
-						<span
-							className={`${TASK_ACTIVITIES_TABLE_BODY_TEXT_CLASSNAME} font-medium text-foreground`}
-						>
-							{row.original.engineLabel || "-"}
-						</span>
-					),
-				}
-			: null,
 		{
 			accessorKey: "projectName",
 			header: "项目",
@@ -336,10 +312,31 @@ function getColumns(input: {
 			},
 		},
 	];
-	return columns.filter(
-		(column): column is AppColumnDef<TaskActivityItem, unknown> =>
-			Boolean(column),
-	);
+	if (input.showEngineColumn) {
+		columns.splice(1, 0, {
+			id: "engine",
+			accessorFn: (row) => row.engineLabel || "-",
+			header: "引擎",
+			meta: createTaskActivitiesTableMeta({
+				label: "引擎",
+				width: 92,
+				align: "center",
+				filterVariant: "select",
+				filterOptions: [
+					{ label: "Opengrep", value: "Opengrep" },
+					{ label: "Codeql", value: "Codeql" },
+				],
+			}),
+			cell: ({ row }) => (
+				<span
+					className={`${TASK_ACTIVITIES_TABLE_BODY_TEXT_CLASSNAME} font-medium text-foreground`}
+				>
+					{row.original.engineLabel || "-"}
+				</span>
+			),
+		});
+	}
+	return columns;
 }
 
 export default function TaskActivitiesListTable({

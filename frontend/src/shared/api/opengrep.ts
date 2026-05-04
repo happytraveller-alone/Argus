@@ -333,6 +333,7 @@ export async function updateOpengrepRule(
 }
 
 export type StaticScanEngine = "opengrep" | "codeql";
+export type OpengrepSandboxMode = "dockerfile_container" | "oci_cubesandbox";
 
 export interface OpengrepScanTask {
     id: string;
@@ -357,6 +358,7 @@ export interface OpengrepScanTask {
     updated_at?: string | null;
     error_message?: string | null;
     diagnostics_summary?: string | null;
+    opengrep_sandbox?: OpengrepSandboxMode | null;
 }
 
 export interface OpengrepScanProgressLog {
@@ -447,6 +449,7 @@ export async function createOpengrepScanTask(params: {
     name?: string;
     rule_ids: string[];
     target_path?: string;
+    opengrep_sandbox?: OpengrepSandboxMode;
 }): Promise<OpengrepScanTask> {
     const response = await apiClient.post(`/static-tasks/tasks`, params);
     return response.data;

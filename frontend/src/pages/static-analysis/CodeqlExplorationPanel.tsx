@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactElement } from "react";
 import {
   AlertCircle,
   CheckCircle2,
@@ -78,7 +78,7 @@ function TimelineRow({ row }: { row: CodeqlExplorationTimelineRow }) {
 interface TemplateStatusBadge {
   label: string;
   className: string;
-  icon: JSX.Element;
+  icon: ReactElement;
 }
 
 function describeTemplateStatus(

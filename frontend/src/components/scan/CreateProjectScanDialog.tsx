@@ -8,6 +8,7 @@ import {
 	createCodeqlScanTask,
 	createOpengrepScanTask,
 	getAllOpengrepRules,
+	type OpengrepSandboxMode,
 	type OpengrepRule,
 } from "@/shared/api/opengrep";
 import { getZipFileInfo, uploadZipFile } from "@/shared/utils/zipStorage";
@@ -94,6 +95,8 @@ export default function CreateProjectScanDialog({
 	const [newProjectName, setNewProjectName] = useState("");
 	const [newProjectFile, setNewProjectFile] = useState<File | null>(null);
 	const [opengrepEnabled, setOpengrepEnabled] = useState(true);
+	const [opengrepSandbox, setOpengrepSandbox] =
+		useState<OpengrepSandboxMode>("dockerfile_container");
 	const [codeqlEnabled, setCodeqlEnabled] = useState(false);
 	const [configEngine, setConfigEngine] = useState<StaticTool | null>(null);
 	const [activeRules, setActiveRules] = useState<OpengrepRule[]>([]);
@@ -140,6 +143,7 @@ export default function CreateProjectScanDialog({
 		setNewProjectName("");
 		setNewProjectFile(null);
 		setOpengrepEnabled(true);
+		setOpengrepSandbox("dockerfile_container");
 		setCodeqlEnabled(false);
 		setConfigEngine(null);
 
@@ -231,6 +235,7 @@ export default function CreateProjectScanDialog({
 		newProjectFile,
 		selectedProject,
 		opengrepEnabled,
+		opengrepSandbox,
 		codeqlEnabled,
 	]);
 
@@ -262,10 +267,11 @@ export default function CreateProjectScanDialog({
 				name: appendStaticScanBatchMarker(
 					`${taskNamePrefix}-Opengrep-${project.name}`,
 					staticBatchId,
-				),
-				rule_ids: ruleIds,
-				target_path: ".",
-			});
+					),
+					rule_ids: ruleIds,
+					target_path: ".",
+					opengrep_sandbox: opengrepSandbox,
+				});
 		}
 		if (codeqlEnabled) {
 			const codeqlLanguages = normalizeCodeqlLanguages(
@@ -476,6 +482,8 @@ export default function CreateProjectScanDialog({
 			handleNewProjectFileSelect={handleNewProjectFileSelect}
 			opengrepEnabled={opengrepEnabled}
 			setOpengrepEnabled={handleOpengrepEnabledChange}
+			opengrepSandbox={opengrepSandbox}
+			setOpengrepSandbox={setOpengrepSandbox}
 			codeqlEnabled={codeqlEnabled}
 			setCodeqlEnabled={handleCodeqlEnabledChange}
 			showReturnButton={showReturnButton}

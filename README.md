@@ -33,9 +33,9 @@ WSL2 主机上还会自动跑一遍 CubeSandbox 主机侧引导（doctor → pre
 - 项目级 agent 指令由 `AGENTS.md` 统一承载；repo-local skills 从 `.codex/skills/` 加载。里程碑收尾可使用 `neat-freak` 同步项目文档与 agent 知识。
 - `.gitignore` 会忽略 `.codex/`；如果需要让其他环境复用某个本地 skill，请重新安装该 skill 或显式调整版本控制策略。
 
-## CubeSandbox Python / C++ / CodeQL 试运行
+## CubeSandbox Python / C++ / CodeQL / OpenGrep 试运行
 
-CubeSandbox 需要 WSL2 原生 KVM/QEMU，并通过独立开发 VM 跑 E2B-compatible API；它不属于 Argus 默认 compose 主线，也不再通过 Docker helper 容器运行 QEMU。按 [docs/cubesandbox-python-quickstart.md](docs/cubesandbox-python-quickstart.md) 使用 `scripts/cubesandbox-quickstart.sh` 配置和运行 Python、C、C++、Make、CMake、CodeQL smoke。脚本默认把 CubeSandbox API 转发到 `127.0.0.1:23000`，避免占用 Argus 前端默认端口 `13000`；所有 GitHub 地址默认走 `https://v6.gh-proxy.org/https://github.com/...` 镜像，Docker Hub 镜像可显式替换为 `m.daocloud.io/docker.io/...`。
+CubeSandbox 需要 WSL2 原生 KVM/QEMU，并通过独立开发 VM 跑 E2B-compatible API；它不属于 Argus 默认 compose 主线，也不再通过 Docker helper 容器运行 QEMU。按 [docs/cubesandbox-python-quickstart.md](docs/cubesandbox-python-quickstart.md) 使用 `scripts/cubesandbox-quickstart.sh` 配置和运行 Python、C、C++、Make、CMake、CodeQL smoke，也可构建 `oci/cubesandbox/opengrep.Dockerfile` 供静态审计 Opengrep 高级配置中的 `OCI CubeSandbox 沙箱` 选项使用。脚本默认把 CubeSandbox API 转发到 `127.0.0.1:23000`，避免占用 Argus 前端默认端口 `13000`；所有 GitHub 地址默认走 `https://v6.gh-proxy.org/https://github.com/...` 镜像，Docker Hub 镜像可显式替换为 `m.daocloud.io/docker.io/...`。
 
 ## GHCR 镜像命名
 

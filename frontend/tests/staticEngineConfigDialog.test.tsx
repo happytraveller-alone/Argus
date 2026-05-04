@@ -33,11 +33,15 @@ test("StaticEngineConfigDialogContent renders placeholder text for opengrep", ()
       enabled: false,
       creating: false,
       blockedReason: null,
+      opengrepSandbox: "oci_cubesandbox",
+      onOpengrepSandboxChange: () => {},
       onNavigateToEngineConfig: () => {},
       onRequestClose: () => {},
     }),
   );
 
   assert.match(markup, /Opengrep 配置/);
-  assert.match(markup, /任务级配置即将开放/);
+  assert.match(markup, /Dockerfile 容器/);
+  assert.match(markup, /OCI CubeSandbox 沙箱/);
+  assert.match(markup, /aria-pressed="true"[^>]*><span[^>]*><span[^>]*><\/span><span[^>]*>OCI CubeSandbox 沙箱/);
 });

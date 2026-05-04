@@ -368,3 +368,59 @@ Local lifecycle requirement:
 `localhost`/`127.0.0.1`. In container deployments where the backend talks to a
 host-managed CubeSandbox VM via `host.docker.internal`, run the helper from
 the host (or set `CUBESANDBOX_TEMPLATE_ID` to a pre-built template id).
+
+## 11. Argus Optional Opengrep CubeSandbox Template
+
+Opengrep still defaults to the Dockerfile runner container. The optional
+CubeSandbox lane is selected per static-audit task through the Opengrep
+advanced config (`opengrep_sandbox=oci_cubesandbox`). Build the template image
+from `oci/cubesandbox/opengrep.Dockerfile`, push it to the CubeSandbox VM-local
+registry, and create the template with:
+
+```bash
+scripts/cubesandbox-quickstart.sh configure-docker-mirror
+scripts/cubesandbox-quickstart.sh start-local-registry
+scripts/cubesandbox-quickstart.sh build-opengrep-image
+scripts/cubesandbox-quickstart.sh create-opengrep-template
+scripts/cubesandbox-quickstart.sh watch-template <job_id>
+```
+
+The WSL-local inspection path builds the same image without touching the
+CubeSandbox VM-local registry:
+
+```bash
+scripts/cubesandbox-quickstart.sh build-opengrep-image-wsl
+docker run --rm argus/cubesandbox-opengrep:latest opengrep --version
+docker run --rm argus/cubesandbox-opengrep:latest opengrep-scan --self-test
+```
+
+Defaults:
+
+- VM-local image: `127.0.0.1:5000/cubesandbox-opengrep:latest`
+- WSL-local image: `argus/cubesandbox-opengrep:latest`
+- Dockerfile: `oci/cubesandbox/opengrep.Dockerfile`
+- Writable layer size: `2Gi`
+
+For backend-driven provisioning, use:
+
+```bash
+scripts/cubesandbox-quickstart.sh provision-opengrep-template
+```
+
+Like the CodeQL provision command, it emits one
+`PROVISION_RESULT={"template_id":...,"artifact_id":...,"status":...,"job_id":...,"image_ref":...}`
+line. The backend stores this as kind `opengrep` in
+`rust_cubesandbox_templates`. A static task that selects
+`opengrep_sandbox=oci_cubesandbox` resolves templates in this order:
+
+1. `CUBESANDBOX_OPENGREP_TEMPLATE_ID` environment override.
+2. Newest DB `ready` row for template kind `opengrep`.
+3. Local auto-provision through `provision-opengrep-template` when the
+   CubeSandbox control/data-plane URLs are local or `host.docker.internal`.
+
+The matching lifecycle API is `/api/v1/cubesandbox/templates/opengrep` with the
+same `/provision`, `/invalidate`, and `/stream` suffixes as the CodeQL template
+API. The Opengrep frontend does not currently show a dedicated template status
+panel; users pick Dockerfile container vs OCI CubeSandbox in
+`StaticEngineConfigDialog`, and the backend surfaces provisioning or execution
+errors on the static task if the template cannot be readied.
