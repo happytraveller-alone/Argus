@@ -78,6 +78,12 @@ impl CubeSandboxConfig {
                     .trim()
                     .to_string();
             }
+            TemplateKind::OpengrepDedicated => {
+                next.template_id = app_config
+                    .cubesandbox_opengrep_template_id
+                    .trim()
+                    .to_string();
+            }
         }
         next
     }
@@ -169,6 +175,28 @@ impl CubeSandboxConfig {
             "cubemasterBaseUrl": self.cubemaster_base_url,
             "cubemasterCleanupTimeoutSeconds": self.cubemaster_cleanup_timeout_seconds
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn for_template_kind_preserves_codeql_and_maps_dedicated_opengrep_override() {
+        let app_config = AppConfig::for_tests();
+        let base = CubeSandboxConfig::defaults(&app_config);
+
+        assert_eq!(
+            base.for_template_kind(TemplateKind::CodeqlCpp, &app_config)
+                .template_id,
+            app_config.cubesandbox_template_id
+        );
+        assert_eq!(
+            base.for_template_kind(TemplateKind::current_opengrep(), &app_config)
+                .template_id,
+            app_config.cubesandbox_opengrep_template_id
+        );
     }
 }
 

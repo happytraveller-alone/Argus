@@ -1,6 +1,8 @@
 ARG CUBE_LOCAL_REGISTRY_IMAGE=m.daocloud.io/docker.io/library/registry:2
+ARG CUBE_OPENGREP_BASE_IMAGE=m.daocloud.io/docker.io/library/debian:trixie-slim
 FROM ${CUBE_LOCAL_REGISTRY_IMAGE} AS dockerhub_mirror_probe
-FROM ccr.ccs.tencentyun.com/ags-image/sandbox-code:latest
+
+FROM ${CUBE_OPENGREP_BASE_IMAGE}
 
 ARG OPENGREP_VERSION=v1.20.0
 ARG TARGETARCH
@@ -16,17 +18,17 @@ RUN set -eux; \
     find /etc/apt/sources.list.d -maxdepth 1 -type f \( -name '*cran*' -o -name '*r-project*' -o -name '*nodesource*' \) -exec mv {} /etc/apt/disabled-sources.list.d/ \; 2>/dev/null || true; \
     if [ -f /etc/apt/sources.list ]; then \
       sed -i \
-        -e 's#http://deb.debian.org/debian#https://mirrors.aliyun.com/debian#g' \
-        -e 's#https://deb.debian.org/debian#https://mirrors.aliyun.com/debian#g' \
-        -e 's#http://security.debian.org/debian-security#https://mirrors.aliyun.com/debian-security#g' \
-        -e 's#https://security.debian.org/debian-security#https://mirrors.aliyun.com/debian-security#g' \
+        -e 's#http://deb.debian.org/debian#http://mirrors.aliyun.com/debian#g' \
+        -e 's#https://deb.debian.org/debian#http://mirrors.aliyun.com/debian#g' \
+        -e 's#http://security.debian.org/debian-security#http://mirrors.aliyun.com/debian-security#g' \
+        -e 's#https://security.debian.org/debian-security#http://mirrors.aliyun.com/debian-security#g' \
         /etc/apt/sources.list; \
     fi; \
     find /etc/apt/sources.list.d -type f \( -name '*.list' -o -name '*.sources' \) -print0 2>/dev/null | xargs -0 -r sed -i \
-      -e 's#http://deb.debian.org/debian#https://mirrors.aliyun.com/debian#g' \
-      -e 's#https://deb.debian.org/debian#https://mirrors.aliyun.com/debian#g' \
-      -e 's#http://security.debian.org/debian-security#https://mirrors.aliyun.com/debian-security#g' \
-      -e 's#https://security.debian.org/debian-security#https://mirrors.aliyun.com/debian-security#g'; \
+      -e 's#http://deb.debian.org/debian#http://mirrors.aliyun.com/debian#g' \
+      -e 's#https://deb.debian.org/debian#http://mirrors.aliyun.com/debian#g' \
+      -e 's#http://security.debian.org/debian-security#http://mirrors.aliyun.com/debian-security#g' \
+      -e 's#https://security.debian.org/debian-security#http://mirrors.aliyun.com/debian-security#g'; \
     apt-get update; \
     DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
       ca-certificates curl bash python3-minimal tar; \

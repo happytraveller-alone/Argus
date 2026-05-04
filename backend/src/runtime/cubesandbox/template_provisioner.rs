@@ -80,7 +80,7 @@ pub async fn resolve_existing_template_id(
     if !config.template_id.trim().is_empty() {
         return Ok(Some(config.template_id.trim().to_string()));
     }
-    if kind == TemplateKind::Opengrep
+    if kind == TemplateKind::current_opengrep()
         && !state
             .config
             .cubesandbox_opengrep_template_id
@@ -133,7 +133,7 @@ pub async fn ensure_opengrep_template_ready(
     config: &CubeSandboxConfig,
 ) -> Result<EnsureOutcome> {
     if let Some(template_id) =
-        resolve_existing_template_id(state, config, TemplateKind::Opengrep).await?
+        resolve_existing_template_id(state, config, current_opengrep_provision_kind()).await?
     {
         return Ok(EnsureOutcome::Ready { template_id });
     }
@@ -142,7 +142,7 @@ pub async fn ensure_opengrep_template_ready(
             reason: "CubeSandbox 控制面/数据面 URL 必须指向 localhost 或 host.docker.internal 才能自动构建 Opengrep 模板; 请运维手动构建并设置 CUBESANDBOX_OPENGREP_TEMPLATE_ID".to_string(),
         });
     }
-    let record = start_provision_internal(state, config, TemplateKind::Opengrep).await?;
+    let record = start_provision_internal(state, config, current_opengrep_provision_kind()).await?;
     Ok(EnsureOutcome::InProgress {
         record_id: record.id,
     })
@@ -196,10 +196,7 @@ async fn start_provision_internal(
     config: &CubeSandboxConfig,
     kind: TemplateKind,
 ) -> Result<CubesandboxTemplateRecord> {
-    let image_ref = match kind {
-        TemplateKind::CodeqlCpp => DEFAULT_CODEQL_CPP_IMAGE_REF.to_string(),
-        TemplateKind::Opengrep => DEFAULT_OPENGREP_IMAGE_REF.to_string(),
-    };
+    let image_ref = template_image_ref(kind).to_string();
     let record = cubesandbox_templates::insert_pending(state, kind, &image_ref).await?;
 
     let lock = in_flight();
@@ -213,10 +210,7 @@ async fn start_provision_internal(
     map.insert(kind, channel.clone());
     drop(map);
 
-    let helper_command = match kind {
-        TemplateKind::CodeqlCpp => CubeSandboxHelperCommand::ProvisionCodeqlCppTemplate,
-        TemplateKind::Opengrep => CubeSandboxHelperCommand::ProvisionOpengrepTemplate,
-    };
+    let helper_command = template_helper_command(kind);
     let state_clone = state.clone();
     let config_clone = config.clone();
     let record_id = record.id.clone();
@@ -298,6 +292,26 @@ async fn start_provision_internal(
     });
 
     Ok(record)
+}
+
+pub fn template_image_ref(kind: TemplateKind) -> &'static str {
+    match kind {
+        TemplateKind::CodeqlCpp => DEFAULT_CODEQL_CPP_IMAGE_REF,
+        TemplateKind::Opengrep | TemplateKind::OpengrepDedicated => DEFAULT_OPENGREP_IMAGE_REF,
+    }
+}
+
+pub fn template_helper_command(kind: TemplateKind) -> CubeSandboxHelperCommand {
+    match kind {
+        TemplateKind::CodeqlCpp => CubeSandboxHelperCommand::ProvisionCodeqlCppTemplate,
+        TemplateKind::Opengrep | TemplateKind::OpengrepDedicated => {
+            CubeSandboxHelperCommand::ProvisionOpengrepTemplate
+        }
+    }
+}
+
+pub fn current_opengrep_provision_kind() -> TemplateKind {
+    TemplateKind::current_opengrep()
 }
 
 async fn drive_provision(
@@ -460,5 +474,34 @@ mod tests {
         let parsed = parse_provision_result(stdout).expect("should parse");
         assert_eq!(parsed.template_id.as_deref(), Some("new"));
         assert_eq!(parsed.status, "READY");
+    }
+
+    #[test]
+    fn provision_mapping_keeps_codeql_and_maps_dedicated_opengrep() {
+        assert_eq!(
+            template_image_ref(TemplateKind::CodeqlCpp),
+            DEFAULT_CODEQL_CPP_IMAGE_REF
+        );
+        assert_eq!(
+            template_helper_command(TemplateKind::CodeqlCpp),
+            CubeSandboxHelperCommand::ProvisionCodeqlCppTemplate
+        );
+        assert_eq!(
+            template_image_ref(TemplateKind::current_opengrep()),
+            DEFAULT_OPENGREP_IMAGE_REF
+        );
+        assert_eq!(
+            template_helper_command(TemplateKind::current_opengrep()),
+            CubeSandboxHelperCommand::ProvisionOpengrepTemplate
+        );
+    }
+
+    #[test]
+    fn opengrep_provision_current_kind_is_dedicated() {
+        assert_eq!(
+            current_opengrep_provision_kind(),
+            TemplateKind::OpengrepDedicated
+        );
+        assert_ne!(current_opengrep_provision_kind(), TemplateKind::Opengrep);
     }
 }

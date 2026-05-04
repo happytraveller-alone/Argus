@@ -238,7 +238,7 @@ mod tests {
     }
 
     #[test]
-    fn helper_command_round_trip_covers_codeql_cpp_chain() {
+    fn helper_command_round_trip_covers_template_lifecycle_chain() {
         let cases = [
             ("doctor", CubeSandboxHelperCommand::Doctor),
             ("status", CubeSandboxHelperCommand::Status),
@@ -269,6 +269,18 @@ mod tests {
                 "provision-codeql-cpp-template",
                 CubeSandboxHelperCommand::ProvisionCodeqlCppTemplate,
             ),
+            (
+                "build-opengrep-image",
+                CubeSandboxHelperCommand::BuildOpengrepImage,
+            ),
+            (
+                "create-opengrep-template",
+                CubeSandboxHelperCommand::CreateOpengrepTemplate,
+            ),
+            (
+                "provision-opengrep-template",
+                CubeSandboxHelperCommand::ProvisionOpengrepTemplate,
+            ),
         ];
         for (text, variant) in cases {
             assert_eq!(variant.as_str(), text);
@@ -278,7 +290,7 @@ mod tests {
     }
 
     #[test]
-    fn build_helper_invocation_includes_codeql_cpp_commands() {
+    fn build_helper_invocation_includes_template_commands() {
         let config = sample_config();
         for variant in [
             CubeSandboxHelperCommand::ConfigureDockerMirror,
@@ -286,6 +298,9 @@ mod tests {
             CubeSandboxHelperCommand::BuildCodeqlCppImage,
             CubeSandboxHelperCommand::CreateCodeqlCppTemplate,
             CubeSandboxHelperCommand::ProvisionCodeqlCppTemplate,
+            CubeSandboxHelperCommand::BuildOpengrepImage,
+            CubeSandboxHelperCommand::CreateOpengrepTemplate,
+            CubeSandboxHelperCommand::ProvisionOpengrepTemplate,
         ] {
             let invocation = build_helper_invocation(&config, variant).expect("should build");
             assert_eq!(invocation.command, config.helper_path);

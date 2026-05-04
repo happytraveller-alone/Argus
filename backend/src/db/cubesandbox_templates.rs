@@ -11,13 +11,19 @@ use crate::state::AppState;
 pub enum TemplateKind {
     CodeqlCpp,
     Opengrep,
+    OpengrepDedicated,
 }
 
 impl TemplateKind {
+    pub const fn current_opengrep() -> Self {
+        Self::OpengrepDedicated
+    }
+
     pub fn as_str(self) -> &'static str {
         match self {
             Self::CodeqlCpp => "codeql_cpp",
             Self::Opengrep => "opengrep",
+            Self::OpengrepDedicated => "opengrep_dedicated",
         }
     }
 
@@ -25,6 +31,7 @@ impl TemplateKind {
         match value {
             "codeql_cpp" => Ok(Self::CodeqlCpp),
             "opengrep" => Ok(Self::Opengrep),
+            "opengrep_dedicated" => Ok(Self::OpengrepDedicated),
             other => anyhow::bail!("unknown cubesandbox template kind: {other}"),
         }
     }
@@ -340,4 +347,28 @@ fn format_timestamp(value: OffsetDateTime) -> String {
     value
         .format(&Rfc3339)
         .unwrap_or_else(|_| value.unix_timestamp().to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn template_kind_round_trip_keeps_legacy_and_dedicated_opengrep() {
+        let cases = [
+            ("codeql_cpp", TemplateKind::CodeqlCpp),
+            ("opengrep", TemplateKind::Opengrep),
+            ("opengrep_dedicated", TemplateKind::OpengrepDedicated),
+        ];
+
+        for (text, kind) in cases {
+            assert_eq!(kind.as_str(), text);
+            assert_eq!(TemplateKind::from_str(text).unwrap(), kind);
+        }
+        assert_eq!(
+            TemplateKind::current_opengrep(),
+            TemplateKind::OpengrepDedicated
+        );
+        assert!(TemplateKind::from_str("opengrep-surprise").is_err());
+    }
 }

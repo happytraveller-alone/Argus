@@ -9,7 +9,7 @@ use anyhow::{bail, Context, Result};
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use flate2::{write::GzEncoder, Compression};
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::Value;
 use tar::{Builder, Header};
 
 use crate::{
@@ -85,7 +85,7 @@ impl OpengrepSandboxSession {
     pub async fn start(state: &AppState, task_id: &str) -> Result<Self> {
         let config = CubeSandboxConfig::load_runtime(state)
             .await?
-            .for_template_kind(TemplateKind::Opengrep, state.config.as_ref());
+            .for_template_kind(opengrep_template_kind(), state.config.as_ref());
         config.validate_for_execution()?;
         let template_id = ensure_template_id_or_wait(state, &config, task_id).await?;
         if take_cancel_request(task_id) {
@@ -265,14 +265,14 @@ async fn wait_for_template(
         if let Some(template_id) = template_provisioner::resolve_existing_template_id(
             state,
             config,
-            TemplateKind::Opengrep,
+            opengrep_template_kind(),
         )
         .await?
         {
             return Ok(template_id);
         }
         if let Some(record) =
-            template_provisioner::get_status(state, TemplateKind::Opengrep).await?
+            template_provisioner::get_status(state, opengrep_template_kind()).await?
         {
             match record.status {
                 TemplateStatus::Ready => {
@@ -301,6 +301,10 @@ async fn wait_for_template(
         }
         tokio::time::sleep(Duration::from_secs(5)).await;
     }
+}
+
+pub fn opengrep_template_kind() -> TemplateKind {
+    TemplateKind::current_opengrep()
 }
 
 fn ensure_helper_success(
@@ -557,6 +561,12 @@ print("ARGUS_OPENGREP_RESULT=" + json.dumps(envelope, separators=(",", ":")))
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn opengrep_cubesandbox_uses_dedicated_template_kind() {
+        assert_eq!(opengrep_template_kind(), TemplateKind::OpengrepDedicated);
+    }
 
     #[test]
     fn opengrep_runner_script_passes_payload_as_python_argument() {

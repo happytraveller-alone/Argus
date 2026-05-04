@@ -373,9 +373,14 @@ the host (or set `CUBESANDBOX_TEMPLATE_ID` to a pre-built template id).
 
 Opengrep still defaults to the Dockerfile runner container. The optional
 CubeSandbox lane is selected per static-audit task through the Opengrep
-advanced config (`opengrep_sandbox=oci_cubesandbox`). Build the template image
-from `oci/cubesandbox/opengrep.Dockerfile`, push it to the CubeSandbox VM-local
-registry, and create the template with:
+advanced config (`opengrep_sandbox=oci_cubesandbox`). The public selector and
+template lifecycle route remain `/opengrep` for compatibility, but current
+backend records use the dedicated internal template kind `opengrep_dedicated`.
+Historical rows stored as `kind='opengrep'` are not migrated and are not used by
+the current resolution path.
+
+Build the dedicated template image from `oci/cubesandbox/opengrep.Dockerfile`,
+push it to the CubeSandbox VM-local registry, and create the template with:
 
 ```bash
 scripts/cubesandbox-quickstart.sh configure-docker-mirror
@@ -398,8 +403,10 @@ Defaults:
 
 - VM-local image: `127.0.0.1:5000/cubesandbox-opengrep:latest`
 - WSL-local image: `argus/cubesandbox-opengrep:latest`
-- Dockerfile: `oci/cubesandbox/opengrep.Dockerfile`
-- Writable layer size: `2Gi`
+- Dockerfile: `oci/cubesandbox/opengrep.Dockerfile`, based on an independent
+  Debian slim runtime (`CUBE_OPENGREP_BASE_IMAGE`), not the CodeQL
+  `sandbox-code` base.
+- Writable layer size: `1Gi`
 
 For backend-driven provisioning, use:
 
@@ -409,18 +416,21 @@ scripts/cubesandbox-quickstart.sh provision-opengrep-template
 
 Like the CodeQL provision command, it emits one
 `PROVISION_RESULT={"template_id":...,"artifact_id":...,"status":...,"job_id":...,"image_ref":...}`
-line. The backend stores this as kind `opengrep` in
-`rust_cubesandbox_templates`. A static task that selects
-`opengrep_sandbox=oci_cubesandbox` resolves templates in this order:
+line. The backend stores current Opengrep lifecycle records in
+`rust_cubesandbox_templates` as `kind='opengrep_dedicated'`. A static task that
+selects `opengrep_sandbox=oci_cubesandbox` resolves templates in this order:
 
-1. `CUBESANDBOX_OPENGREP_TEMPLATE_ID` environment override.
-2. Newest DB `ready` row for template kind `opengrep`.
+1. `CUBESANDBOX_OPENGREP_TEMPLATE_ID` environment override. If set, it must
+   point to a template built from the dedicated Opengrep image path.
+2. Newest DB `ready` row for template kind `opengrep_dedicated`.
 3. Local auto-provision through `provision-opengrep-template` when the
    CubeSandbox control/data-plane URLs are local or `host.docker.internal`.
 
 The matching lifecycle API is `/api/v1/cubesandbox/templates/opengrep` with the
 same `/provision`, `/invalidate`, and `/stream` suffixes as the CodeQL template
-API. The Opengrep frontend does not currently show a dedicated template status
-panel; users pick Dockerfile container vs OCI CubeSandbox in
+API. JSON responses keep public `kind: "opengrep"` while exposing the stored
+record kind as `recordKind: "opengrep_dedicated"`. The Opengrep frontend does
+not currently show a dedicated template status panel; users pick Dockerfile
+container vs OCI CubeSandbox in
 `StaticEngineConfigDialog`, and the backend surfaces provisioning or execution
 errors on the static task if the template cannot be readied.

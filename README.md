@@ -20,7 +20,7 @@
 
 `argus-bootstrap.sh` 会在任何 Docker 清理或启动动作前调用 `scripts/validate-llm-config.sh --env-file ./.env` 校验 env/LLM 配置。校验失败时脚本会退出并提示重新配置。
 
-WSL2 主机上还会自动跑一遍 CubeSandbox 主机侧引导（doctor → prepare-vm → run-vm-background → install → provision-codeql-cpp-template），首次启动如果 VM/CubeMaster API/CodeQL C/C++ 模板缺失会自动构建；每一步都基于就绪检查（SSH/HTTP/`.env` 中的 `CUBESANDBOX_TEMPLATE_ID`）做幂等跳过。需要跳过这段流程可加 `--skip-cubesandbox` 或在 `.env` 设置 `CUBESANDBOX_BOOTSTRAP_AUTO=false`；只想构建沙箱跳过 Compose 用 `--cubesandbox-only`；想强制重建模板用 `--cubesandbox-reset`。非 WSL2 主机会自动跳过这段并打印提示。
+WSL2 主机上还会自动跑一遍 CubeSandbox 主机侧引导（doctor → prepare-vm → run-vm-background → install → provision-codeql-cpp-template），首次启动如果 VM/CubeMaster API/CodeQL C/C++ 模板缺失会自动构建；每一步都基于就绪检查（SSH/HTTP/`.env` 中的 `CUBESANDBOX_TEMPLATE_ID`）做幂等跳过。Opengrep 的 CubeSandbox 模板不复用 CodeQL/sandbox-code 镜像，选择 `opengrep_sandbox=oci_cubesandbox` 时会通过 `/api/v1/cubesandbox/templates/opengrep/*` 和 `opengrep_dedicated` 内部记录按需构建独立模板。需要跳过主机侧引导可加 `--skip-cubesandbox` 或在 `.env` 设置 `CUBESANDBOX_BOOTSTRAP_AUTO=false`；只想构建沙箱跳过 Compose 用 `--cubesandbox-only`；想强制重建模板用 `--cubesandbox-reset`。非 WSL2 主机会自动跳过这段并打印提示。
 
 默认情况下，Compose 会把前端发布到宿主机 `13000` 端口、后端发布到 `18000` 端口，以避免和常见本地开发服务的 `3000` / `8000` 端口冲突。如需恢复旧端口，启动时设置 `Argus_FRONTEND_PORT=3000 Argus_BACKEND_PORT=8000`。
 
@@ -35,7 +35,7 @@ WSL2 主机上还会自动跑一遍 CubeSandbox 主机侧引导（doctor → pre
 
 ## CubeSandbox Python / C++ / CodeQL / OpenGrep 试运行
 
-CubeSandbox 需要 WSL2 原生 KVM/QEMU，并通过独立开发 VM 跑 E2B-compatible API；它不属于 Argus 默认 compose 主线，也不再通过 Docker helper 容器运行 QEMU。按 [docs/cubesandbox-python-quickstart.md](docs/cubesandbox-python-quickstart.md) 使用 `scripts/cubesandbox-quickstart.sh` 配置和运行 Python、C、C++、Make、CMake、CodeQL smoke，也可构建 `oci/cubesandbox/opengrep.Dockerfile` 供静态审计 Opengrep 高级配置中的 `OCI CubeSandbox 沙箱` 选项使用。脚本默认把 CubeSandbox API 转发到 `127.0.0.1:23000`，避免占用 Argus 前端默认端口 `13000`；所有 GitHub 地址默认走 `https://v6.gh-proxy.org/https://github.com/...` 镜像，Docker Hub 镜像可显式替换为 `m.daocloud.io/docker.io/...`。
+CubeSandbox 需要 WSL2 原生 KVM/QEMU，并通过独立开发 VM 跑 E2B-compatible API；它不属于 Argus 默认 compose 主线，也不再通过 Docker helper 容器运行 QEMU。按 [docs/cubesandbox-python-quickstart.md](docs/cubesandbox-python-quickstart.md) 使用 `scripts/cubesandbox-quickstart.sh` 配置和运行 Python、C、C++、Make、CMake、CodeQL smoke，也可构建基于独立 Debian slim base 的 `oci/cubesandbox/opengrep.Dockerfile`，供静态审计 Opengrep 高级配置中的 `OCI CubeSandbox 沙箱` 选项使用；公共 API 仍是 `/opengrep`，内部模板 kind 为 `opengrep_dedicated`。脚本默认把 CubeSandbox API 转发到 `127.0.0.1:23000`，避免占用 Argus 前端默认端口 `13000`；所有 GitHub 地址默认走 `https://v6.gh-proxy.org/https://github.com/...` 镜像，Docker Hub 镜像可显式替换为 `m.daocloud.io/docker.io/...`。
 
 ## GHCR 镜像命名
 

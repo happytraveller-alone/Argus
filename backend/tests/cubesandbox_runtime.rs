@@ -6,7 +6,11 @@ use backend_rust::{
     app::build_router,
     bootstrap,
     config::AppConfig,
-    db::{cubesandbox_task_state, system_config},
+    db::{
+        cubesandbox_task_state,
+        cubesandbox_templates::{self, TemplateKind},
+        system_config,
+    },
     runtime::cubesandbox::{
         client::{CubeSandboxClient, CubeSandboxClientConfig},
         config::CubeSandboxConfig,
@@ -15,6 +19,7 @@ use backend_rust::{
     },
     state::AppState,
 };
+use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
 use serde_json::{json, Value};
 use std::{
     fs,
@@ -31,6 +36,27 @@ fn isolated_test_config(scope: &str) -> AppConfig {
     config.zip_storage_path =
         std::env::temp_dir().join(format!("argus-rust-{scope}-{}", Uuid::new_v4()));
     config
+}
+
+fn optional_db_test_config(scope: &str) -> Option<AppConfig> {
+    let database_url = std::env::var("RUST_DATABASE_URL")
+        .or_else(|_| std::env::var("DATABASE_URL"))
+        .ok()?;
+    let mut config = isolated_test_config(scope);
+    config.rust_database_url = Some(database_url);
+    Some(config)
+}
+
+fn require_db_test_config(scope: &str) -> Option<AppConfig> {
+    match optional_db_test_config(scope) {
+        Some(config) => Some(config),
+        None => {
+            eprintln!(
+                "skipping DB-backed CubeSandbox template assertion without RUST_DATABASE_URL/DATABASE_URL"
+            );
+            None
+        }
+    }
 }
 
 #[tokio::test]
@@ -118,6 +144,8 @@ fn cubesandbox_helper_allowlist_and_env_mapping_are_bounded() {
         sandbox_cleanup_timeout_seconds: 30,
         stdout_limit_bytes: 65_536,
         stderr_limit_bytes: 65_536,
+        cubemaster_base_url: "http://127.0.0.1:23000".to_string(),
+        cubemaster_cleanup_timeout_seconds: 30,
     };
 
     let invocation =
@@ -173,6 +201,8 @@ fn cubesandbox_lifecycle_runs_only_for_local_control_and_data_plane_urls() {
         sandbox_cleanup_timeout_seconds: 30,
         stdout_limit_bytes: 65_536,
         stderr_limit_bytes: 65_536,
+        cubemaster_base_url: "http://127.0.0.1:23000".to_string(),
+        cubemaster_cleanup_timeout_seconds: 30,
     };
     assert!(should_run_local_lifecycle(&local).expect("local urls should parse"));
 
@@ -221,13 +251,7 @@ async fn cubesandbox_runtime_config_rejects_disabled_missing_template_and_invali
             (StatusCode::NO_CONTENT, String::new()),
         ],
     );
-    let data_addr = spawn_json_server(
-        data_seen,
-        vec![(
-            StatusCode::OK,
-            r#"{"stdout":"45\n","stderr":"","exitCode":0}"#.to_string(),
-        )],
-    );
+    let data_addr = spawn_json_server(data_seen, vec![(StatusCode::OK, envd_stdout_frame("45\n"))]);
     config.cubesandbox_api_base_url = format!("http://{control_addr}");
     config.cubesandbox_data_plane_base_url = format!("http://{data_addr}");
 
@@ -306,10 +330,7 @@ async fn cubesandbox_client_separates_control_plane_from_data_plane() {
     );
     let data_addr = spawn_json_server(
         data_seen.clone(),
-        vec![(
-            StatusCode::OK,
-            r#"{"stdout":"45\n","stderr":"","exitCode":0}"#.to_string(),
-        )],
+        vec![(StatusCode::OK, envd_stdout_frame("45\n"))],
     );
     let client = CubeSandboxClient::new(CubeSandboxClientConfig {
         api_base_url: format!("http://{control_addr}"),
@@ -366,7 +387,7 @@ async fn cubesandbox_client_truncates_output_and_exposes_non_zero_exit() {
         data_seen,
         vec![(
             StatusCode::OK,
-            r#"{"stdout":"abcdef","stderr":"uvwxyz","exitCode":2}"#.to_string(),
+            envd_process_frame("abcdef", "uvwxyz", Some(2)),
         )],
     );
     let client = CubeSandboxClient::new(CubeSandboxClientConfig {
@@ -430,13 +451,7 @@ async fn cubesandbox_task_route_smoke_returns_45() {
             (StatusCode::NO_CONTENT, String::new()),
         ],
     );
-    let data_addr = spawn_json_server(
-        data_seen,
-        vec![(
-            StatusCode::OK,
-            r#"{"stdout":"45\n","stderr":"","exitCode":0}"#.to_string(),
-        )],
-    );
+    let data_addr = spawn_json_server(data_seen, vec![(StatusCode::OK, envd_stdout_frame("45\n"))]);
     config.cubesandbox_api_base_url = format!("http://{control_addr}");
     config.cubesandbox_data_plane_base_url = format!("http://{data_addr}");
     config.cubesandbox_template_id = "tpl-test".to_string();
@@ -535,13 +550,8 @@ async fn cubesandbox_task_route_uses_remote_api_without_local_helper() {
             (StatusCode::NO_CONTENT, String::new()),
         ],
     );
-    let data_addr = spawn_wildcard_json_server(
-        data_seen,
-        vec![(
-            StatusCode::OK,
-            r#"{"stdout":"45\n","stderr":"","exitCode":0}"#.to_string(),
-        )],
-    );
+    let data_addr =
+        spawn_wildcard_json_server(data_seen, vec![(StatusCode::OK, envd_stdout_frame("45\n"))]);
     config.cubesandbox_api_base_url = format!("http://{control_addr}");
     config.cubesandbox_data_plane_base_url = format!("http://{data_addr}");
     config.cubesandbox_template_id = "tpl-test".to_string();
@@ -676,6 +686,160 @@ async fn cubesandbox_orphan_reconciliation_marks_non_terminal_interrupted() {
     assert_eq!(saved.error_message.as_deref(), Some("backend_restarted"));
 }
 
+#[tokio::test]
+async fn cubesandbox_runtime_opengrep_template_route_ignores_legacy_kind_and_serializes_public_kind(
+) {
+    let Some(config) = require_db_test_config("opengrep-dedicated-template-route") else {
+        return;
+    };
+    let state = AppState::from_config(config)
+        .await
+        .expect("state should build");
+    bootstrap::run(&state)
+        .await
+        .expect("startup bootstrap should create CubeSandbox template schema");
+    let pool = state
+        .db_pool
+        .as_ref()
+        .expect("test requires DB-backed state");
+    sqlx::query("delete from rust_cubesandbox_templates where image_ref like 'argus/test-opengrep-dedicated:%'")
+        .execute(pool)
+        .await
+        .expect("cleanup old test rows");
+
+    let legacy = cubesandbox_templates::insert_pending(
+        &state,
+        TemplateKind::Opengrep,
+        "argus/test-opengrep-dedicated:legacy",
+    )
+    .await
+    .expect("legacy row should insert");
+    cubesandbox_templates::update_to_ready(&state, &legacy.id, "tpl-legacy-opengrep", None)
+        .await
+        .expect("legacy row should become ready");
+
+    let app = build_router(state.clone());
+    let absent_response = app
+        .clone()
+        .oneshot(
+            Request::get("/api/v1/cubesandbox/templates/opengrep")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .expect("status request should complete");
+    assert_eq!(absent_response.status(), StatusCode::OK);
+    let absent_payload: Value = serde_json::from_slice(
+        &to_bytes(absent_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(absent_payload["status"], "absent");
+    assert_eq!(absent_payload["templateId"], Value::Null);
+
+    let dedicated = cubesandbox_templates::insert_pending(
+        &state,
+        TemplateKind::current_opengrep(),
+        "argus/test-opengrep-dedicated:current",
+    )
+    .await
+    .expect("dedicated row should insert");
+    cubesandbox_templates::update_to_ready(&state, &dedicated.id, "tpl-dedicated-opengrep", None)
+        .await
+        .expect("dedicated row should become ready");
+
+    let dedicated_response = app
+        .oneshot(
+            Request::get("/api/v1/cubesandbox/templates/opengrep")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .expect("status request should complete");
+    assert_eq!(dedicated_response.status(), StatusCode::OK);
+    let dedicated_payload: Value = serde_json::from_slice(
+        &to_bytes(dedicated_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(dedicated_payload["kind"], "opengrep");
+    assert_eq!(dedicated_payload["recordKind"], "opengrep_dedicated");
+    assert_eq!(dedicated_payload["templateId"], "tpl-dedicated-opengrep");
+}
+
+#[tokio::test]
+async fn cubesandbox_runtime_opengrep_template_invalidate_only_marks_dedicated_rows() {
+    let Some(config) = require_db_test_config("opengrep-dedicated-template-invalidate") else {
+        return;
+    };
+    let state = AppState::from_config(config)
+        .await
+        .expect("state should build");
+    bootstrap::run(&state)
+        .await
+        .expect("startup bootstrap should create CubeSandbox template schema");
+    let pool = state
+        .db_pool
+        .as_ref()
+        .expect("test requires DB-backed state");
+    sqlx::query("delete from rust_cubesandbox_templates where image_ref like 'argus/test-opengrep-invalidate:%'")
+        .execute(pool)
+        .await
+        .expect("cleanup old test rows");
+
+    let legacy = cubesandbox_templates::insert_pending(
+        &state,
+        TemplateKind::Opengrep,
+        "argus/test-opengrep-invalidate:legacy",
+    )
+    .await
+    .expect("legacy row should insert");
+    cubesandbox_templates::update_to_ready(&state, &legacy.id, "tpl-legacy-opengrep", None)
+        .await
+        .expect("legacy row should become ready");
+    let dedicated = cubesandbox_templates::insert_pending(
+        &state,
+        TemplateKind::current_opengrep(),
+        "argus/test-opengrep-invalidate:current",
+    )
+    .await
+    .expect("dedicated row should insert");
+    cubesandbox_templates::update_to_ready(&state, &dedicated.id, "tpl-dedicated-opengrep", None)
+        .await
+        .expect("dedicated row should become ready");
+
+    let app = build_router(state.clone());
+    let invalidate_response = app
+        .oneshot(
+            Request::post("/api/v1/cubesandbox/templates/opengrep/invalidate")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .expect("invalidate request should complete");
+    assert_eq!(invalidate_response.status(), StatusCode::OK);
+    let payload: Value = serde_json::from_slice(
+        &to_bytes(invalidate_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(payload["affected"], 1);
+
+    let legacy_after = cubesandbox_templates::load_by_id(&state, &legacy.id)
+        .await
+        .expect("legacy lookup should complete")
+        .expect("legacy row should exist");
+    let dedicated_after = cubesandbox_templates::load_by_id(&state, &dedicated.id)
+        .await
+        .expect("dedicated lookup should complete")
+        .expect("dedicated row should exist");
+    assert_eq!(legacy_after.status.as_str(), "ready");
+    assert_eq!(dedicated_after.status.as_str(), "invalidated");
+}
+
 async fn submit_cubesandbox_task(app: &RouterForTest, cube_sandbox: Value) -> Value {
     let state = AppState::from_config(isolated_test_config("cubesandbox-submit-helper"))
         .await
@@ -720,6 +884,52 @@ async fn submit_cubesandbox_task(app: &RouterForTest, cube_sandbox: Value) -> Va
 }
 
 type RouterForTest = axum::Router;
+
+fn envd_stdout_frame(stdout: &str) -> String {
+    envd_process_frame(stdout, "", Some(0))
+}
+
+fn envd_process_frame(stdout: &str, stderr: &str, exit_code: Option<i32>) -> String {
+    let mut frames = Vec::new();
+    if !stdout.is_empty() || !stderr.is_empty() {
+        frames.extend(connect_frame(
+            0,
+            json!({
+                "event": {
+                    "data": {
+                        "stdout": BASE64_STANDARD.encode(stdout.as_bytes()),
+                        "stderr": BASE64_STANDARD.encode(stderr.as_bytes())
+                    }
+                }
+            })
+            .to_string()
+            .as_bytes(),
+        ));
+    }
+    frames.extend(connect_frame(
+        0,
+        json!({
+            "event": {
+                "end": {
+                    "exited": true,
+                    "status": format!("exit status {}", exit_code.unwrap_or_default())
+                }
+            }
+        })
+        .to_string()
+        .as_bytes(),
+    ));
+    frames.extend(connect_frame(2, b"{}"));
+    String::from_utf8(frames).expect("connect frames should be utf8 for test payloads")
+}
+
+fn connect_frame(flags: u8, payload: &[u8]) -> Vec<u8> {
+    let mut out = Vec::new();
+    out.push(flags);
+    out.extend_from_slice(&(payload.len() as u32).to_be_bytes());
+    out.extend_from_slice(payload);
+    out
+}
 
 async fn poll_task(app: &RouterForTest, task_id: &str) -> Value {
     let mut last_payload = None;

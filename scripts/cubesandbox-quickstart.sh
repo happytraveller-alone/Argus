@@ -34,7 +34,8 @@ CUBE_CODEQL_CPP_WRITABLE_LAYER_SIZE="${CUBE_CODEQL_CPP_WRITABLE_LAYER_SIZE:-4Gi}
 CUBE_CODEQL_CPP_DOCKERFILE="${CUBE_CODEQL_CPP_DOCKERFILE:-${ROOT_DIR}/oci/cubesandbox/codeql-cpp.Dockerfile}"
 CUBE_OPENGREP_IMAGE="${CUBE_OPENGREP_IMAGE:-127.0.0.1:${CUBE_LOCAL_REGISTRY_PORT}/cubesandbox-opengrep:latest}"
 CUBE_OPENGREP_WSL_IMAGE="${CUBE_OPENGREP_WSL_IMAGE:-argus/cubesandbox-opengrep:latest}"
-CUBE_OPENGREP_WRITABLE_LAYER_SIZE="${CUBE_OPENGREP_WRITABLE_LAYER_SIZE:-2Gi}"
+CUBE_OPENGREP_BASE_IMAGE="${CUBE_OPENGREP_BASE_IMAGE:-${CUBE_DOCKERHUB_MIRROR_IMAGE_PREFIX}/library/debian:trixie-slim}"
+CUBE_OPENGREP_WRITABLE_LAYER_SIZE="${CUBE_OPENGREP_WRITABLE_LAYER_SIZE:-1Gi}"
 CUBE_OPENGREP_DOCKERFILE="${CUBE_OPENGREP_DOCKERFILE:-${ROOT_DIR}/oci/cubesandbox/opengrep.Dockerfile}"
 CUBE_RELEASE_VERSION="${CUBE_RELEASE_VERSION:-v0.1.2}"
 CUBE_RELEASE_ASSET="${CUBE_RELEASE_ASSET:-cube-sandbox-one-click-aa8d642.tar.gz}"
@@ -431,9 +432,10 @@ build_opengrep_image() {
   [[ -f "$CUBE_OPENGREP_DOCKERFILE" ]] || fail "missing OCI image config: $CUBE_OPENGREP_DOCKERFILE"
   [[ -f "${ROOT_DIR}/docker/opengrep-scan.sh" ]] || fail "missing opengrep scan wrapper: ${ROOT_DIR}/docker/opengrep-scan.sh"
   need_cmd base64
-  local image_q registry_image_q dockerfile_q dockerfile_b64 scan_script_b64 rules_tar_b64
+  local image_q registry_image_q base_image_q dockerfile_q dockerfile_b64 scan_script_b64 rules_tar_b64
   image_q="$(shell_quote "$CUBE_OPENGREP_IMAGE")"
   registry_image_q="$(shell_quote "$CUBE_LOCAL_REGISTRY_IMAGE")"
+  base_image_q="$(shell_quote "$CUBE_OPENGREP_BASE_IMAGE")"
   dockerfile_q="$(shell_quote "$(basename "$CUBE_OPENGREP_DOCKERFILE")")"
   dockerfile_b64="$(base64 -w 0 "$CUBE_OPENGREP_DOCKERFILE")"
   scan_script_b64="$(base64 -w 0 "${ROOT_DIR}/docker/opengrep-scan.sh")"
@@ -450,7 +452,7 @@ mkdir -p context
 printf '%s' '${rules_tar_b64}' | base64 -d > context/rules.tar.gz
 
 docker pull ${registry_image_q}
-DOCKER_BUILDKIT=0 docker build --pull=false --build-arg CUBE_LOCAL_REGISTRY_IMAGE=${registry_image_q} -f ${dockerfile_q} -t ${image_q} context
+DOCKER_BUILDKIT=0 docker build --pull=false --build-arg CUBE_LOCAL_REGISTRY_IMAGE=${registry_image_q} --build-arg CUBE_OPENGREP_BASE_IMAGE=${base_image_q} -f ${dockerfile_q} -t ${image_q} context
 docker push ${image_q}
 REMOTE
 )"
@@ -467,6 +469,7 @@ build_opengrep_image_wsl() {
   tar -C "${ROOT_DIR}/backend/assets/scan_rule_assets" -czf "$temp_dir/rules.tar.gz" rules_opengrep
   docker build --pull=false \
     --build-arg CUBE_LOCAL_REGISTRY_IMAGE="$CUBE_LOCAL_REGISTRY_IMAGE" \
+    --build-arg CUBE_OPENGREP_BASE_IMAGE="$CUBE_OPENGREP_BASE_IMAGE" \
     -f "$temp_dir/opengrep.Dockerfile" \
     -t "$CUBE_OPENGREP_WSL_IMAGE" \
     "$temp_dir"
@@ -545,9 +548,9 @@ clean_cube_provision_state() {
   # CLI output may be tabular or JSON depending on version — probe both.
   # Extract FAILED template_ids and all template_ids for orphan check.
   local failed_ids all_ids
-  failed_ids=$(printf '%s' "$list_raw" | python3 - <<'PY'
-import json, sys
-raw = sys.stdin.read()
+  failed_ids=$(LIST_RAW="$list_raw" python3 - <<'PY'
+import json, os
+raw = os.environ.get("LIST_RAW", "")
 try:
     data = json.loads(raw)
     if isinstance(data, dict):
@@ -561,9 +564,9 @@ except Exception:
             print(parts[0])
 PY
 )
-  all_ids=$(printf '%s' "$list_raw" | python3 - <<'PY'
-import json, sys
-raw = sys.stdin.read()
+  all_ids=$(LIST_RAW="$list_raw" python3 - <<'PY'
+import json, os
+raw = os.environ.get("LIST_RAW", "")
 try:
     data = json.loads(raw)
     if isinstance(data, dict):

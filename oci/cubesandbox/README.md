@@ -43,17 +43,26 @@ scripts/cubesandbox-quickstart.sh shell-codeql-cpp-image-wsl
 Builds the CubeSandbox Opengrep template image used when a static audit task
 selects `OCI CubeSandbox 沙箱` in the Opengrep advanced configuration.
 
-The image uses the same CubeSandbox base as `codeql-cpp.Dockerfile`, installs
-the pinned Opengrep CLI, copies Argus's `docker/opengrep-scan.sh` wrapper, and
-embeds the checked-in `backend/assets/scan_rule_assets/rules_opengrep` rule
-bundle as `/opt/opengrep/rules.tar.gz`.
+The image intentionally does **not** reuse the `codeql-cpp.Dockerfile`
+`sandbox-code` base. It starts from an independent Debian slim runtime
+(`CUBE_OPENGREP_BASE_IMAGE`, defaulting to the DaoCloud mirror of
+`debian:trixie-slim`), installs only the Opengrep wrapper runtime
+dependencies, copies Argus's `docker/opengrep-scan.sh` wrapper, and embeds the
+checked-in `backend/assets/scan_rule_assets/rules_opengrep` rule bundle as
+`/opt/opengrep/rules.tar.gz`.
 
 Runtime defaults are injected by `scripts/cubesandbox-quickstart.sh`:
 
 - `CUBE_OPENGREP_IMAGE`
 - `CUBE_OPENGREP_WSL_IMAGE`
+- `CUBE_OPENGREP_BASE_IMAGE`
 - `CUBE_OPENGREP_WRITABLE_LAYER_SIZE`
 - `CUBE_OPENGREP_DOCKERFILE`
+
+The public lifecycle API remains `/api/v1/cubesandbox/templates/opengrep` for
+compatibility, but current backend rows are stored as
+`kind='opengrep_dedicated'`. Responses keep `kind: "opengrep"` and expose the
+stored kind as `recordKind`.
 
 For WSL-local inspection without the CubeSandbox VM registry, use:
 
@@ -64,7 +73,7 @@ scripts/cubesandbox-quickstart.sh shell-opengrep-image-wsl
 
 ## `sandbox-code:latest` Source Trace
 
-`codeql-cpp.Dockerfile` extends
+Only `codeql-cpp.Dockerfile` extends
 `ccr.ccs.tencentyun.com/ags-image/sandbox-code:latest` because the Argus
 quickstart uses that same CubeSandbox code-template image. No matching
 Dockerfile for `sandbox-code:latest` is present in the checked-out upstream
