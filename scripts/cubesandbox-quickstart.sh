@@ -346,7 +346,7 @@ install_cube() {
 }
 
 create_template() {
-  remote_root "cubemastercli tpl create-from-image --image '$CUBE_TEMPLATE_IMAGE' --writable-layer-size '$CUBE_TEMPLATE_WRITABLE_LAYER_SIZE' --expose-port 49999 --expose-port 49983 --probe 49999"
+  remote_root "cubemastercli --address 127.0.0.1 tpl create-from-image --image '$CUBE_TEMPLATE_IMAGE' --writable-layer-size '$CUBE_TEMPLATE_WRITABLE_LAYER_SIZE' --expose-port 49999 --expose-port 49983 --probe 49999"
 }
 
 configure_docker_mirror() {
@@ -502,7 +502,7 @@ shell_codeql_cpp_image_wsl() {
 
 create_codeql_cpp_template() {
   local raw job_id
-  raw="$(remote_root "cubemastercli tpl create-from-image --image '$(shell_quote "$CUBE_CODEQL_CPP_IMAGE")' --writable-layer-size '$(shell_quote "$CUBE_CODEQL_CPP_WRITABLE_LAYER_SIZE")' --expose-port 49999 --expose-port 49983 --probe 49999 2>&1" | tee /dev/stderr)"
+  raw="$(remote_root "cubemastercli --address 127.0.0.1 tpl create-from-image --image '$(shell_quote "$CUBE_CODEQL_CPP_IMAGE")' --writable-layer-size '$(shell_quote "$CUBE_CODEQL_CPP_WRITABLE_LAYER_SIZE")' --expose-port 49999 --expose-port 49983 --probe 49999 2>&1" | tee /dev/stderr)"
   job_id="$(printf '%s\n' "$raw" | sed -nE 's/.*job[_ -]?id[: ]+([0-9a-fA-F-]+).*/\1/p' | head -n 1 || true)"
   if [[ -z "$job_id" ]]; then
     job_id="$(printf '%s\n' "$raw" | grep -Eio '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' | head -n 1 || true)"
@@ -513,7 +513,7 @@ create_codeql_cpp_template() {
 
 create_opengrep_template() {
   local raw job_id
-  raw="$(remote_root "cubemastercli tpl create-from-image --image '$(shell_quote "$CUBE_OPENGREP_IMAGE")' --writable-layer-size '$(shell_quote "$CUBE_OPENGREP_WRITABLE_LAYER_SIZE")' --expose-port 49999 --expose-port 49983 --probe 49999 2>&1" | tee /dev/stderr)"
+  raw="$(remote_root "cubemastercli --address 127.0.0.1 tpl create-from-image --image '$(shell_quote "$CUBE_OPENGREP_IMAGE")' --writable-layer-size '$(shell_quote "$CUBE_OPENGREP_WRITABLE_LAYER_SIZE")' --expose-port 49999 --expose-port 49983 --probe 49999 2>&1" | tee /dev/stderr)"
   job_id="$(printf '%s\n' "$raw" | sed -nE 's/.*job[_ -]?id[: ]+([0-9a-fA-F-]+).*/\1/p' | head -n 1 || true)"
   if [[ -z "$job_id" ]]; then
     job_id="$(printf '%s\n' "$raw" | grep -Eio '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' | head -n 1 || true)"
@@ -526,7 +526,7 @@ watch_template() {
   local job_id="${1:-}"
   [[ -n "$job_id" ]] || fail "watch-template requires a job_id"
   local raw template_id artifact_id status
-  raw="$(remote_root "cubemastercli tpl watch --job-id '$job_id' 2>&1" | tee /dev/stderr)"
+  raw="$(remote_root "cubemastercli --address 127.0.0.1 tpl watch --job-id '$job_id' 2>&1" | tee /dev/stderr)"
   template_id="$(printf '%s\n' "$raw" | sed -nE 's/.*template[_ ]?id[: ]+([a-zA-Z0-9_-]+).*/\1/p' | head -n 1 || true)"
   artifact_id="$(printf '%s\n' "$raw" | sed -nE 's/.*artifact[_ ]?id[: ]+([a-zA-Z0-9_-]+).*/\1/p' | head -n 1 || true)"
   status="$(printf '%s\n' "$raw" | sed -nE 's/.*(template[_ ]?)?status[: ]+([A-Za-z_]+).*/\2/p' | tail -n 1 || true)"
@@ -542,7 +542,7 @@ clean_cube_provision_state() {
 
   # Fetch template list from cubemaster registry (tolerates CLI errors).
   local list_raw
-  list_raw=$(remote_root "cubemastercli tpl list 2>&1" || fail "template list failed")
+  list_raw=$(remote_root "cubemastercli --address 127.0.0.1 tpl list 2>&1" || fail "template list failed")
 
   # Parse with python3 (already a host dependency per doctor check).
   # CLI output may be tabular or JSON depending on version — probe both.
@@ -634,7 +634,7 @@ PY
         fail "[clean] refusing to delete: template id '$tid' fails safety regex"
       fi
       log "[clean]   delete $tid"
-      if ! remote_root "cubemastercli template delete --template-id '$tid'" >/tmp/.cm_del 2>&1; then
+      if ! remote_root "cubemastercli --address 127.0.0.1 template delete --template-id '$tid'" >/tmp/.cm_del 2>&1; then
         if grep -qiE 'not found|does not exist' /tmp/.cm_del 2>/dev/null; then
           log "[clean]   already gone: $tid"
         else

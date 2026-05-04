@@ -4,7 +4,7 @@
 #
 # Layers verified:
 #   1. Backend orchestration  -- backend log shows delete_template invocation
-#   2. Cubemaster registry    -- cubemastercli tpl list no longer shows FAILED template
+#   2. Cubemaster registry    -- cubemastercli --address 127.0.0.1 tpl list no longer shows FAILED template
 #   3. Containerd storage     -- ctr snapshots ls (all namespaces) shows snapshot gone
 #   4. Disk reclaim           -- df -h /var/lib/containerd usage decreases or holds steady
 #   5. Recovery               -- subsequent provision succeeds (no "disk quota exceeded")
@@ -128,7 +128,7 @@ main() {
 
   # Cubemaster registry -- no FAILED template should remain
   local failed_count
-  failed_count="$(remote_root 'cubemastercli tpl list 2>&1' \
+  failed_count="$(remote_root 'cubemastercli --address 127.0.0.1 tpl list 2>&1' \
     | python3 -c '
 import json, sys
 raw = sys.stdin.read()
