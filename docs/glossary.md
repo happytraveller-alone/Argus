@@ -56,7 +56,7 @@
 ### 智能审计
 
 - **是什么**：AI 驱动的安全审计产品方向。
-- **当前状态**：占位/重构过渡。Rust gateway 当前不挂载 `/api/v1/agent-tasks`，runtime 不导出 `agentflow`，前端 `/agent-audit/:taskId` 显示 `InDevelopmentPlaceholder`。`vendor/agentflow-src/` 已删除；`backend/agentflow/` 历史 pipeline/schema 资产、`frontend/src/shared/api/agentTasks.ts` 的历史快照类型和 `/api/v1/system-config/agent-preflight` 仍存在。`backend/src/runtime/intelligent/config.rs` 已开始承接 claw-code 迁移的基础 LLM 配置适配，但还不是完整任务执行链。
+- **当前状态**：重构过渡。Rust gateway 当前不挂载旧 `/api/v1/agent-tasks`，runtime 不导出旧 `agentflow`，但已挂载新的 `/api/v1/intelligent-tasks` 轻量任务接口；前端 `/agent-audit/:taskId` 渲染 `AgentAuditDetail.tsx`，展示任务标签、执行进度、LLM 推理思考、获取结果、事件日志、发现问题和摘要。`vendor/agentflow-src/` 已删除；`backend/agentflow/` 历史 pipeline/schema 资产、`frontend/src/shared/api/agentTasks.ts` 的历史快照类型和 `/api/v1/system-config/agent-preflight` 仍存在。`backend/src/runtime/intelligent/config.rs` 已开始承接 claw-code 迁移的基础 LLM 配置适配，但还不是完整 AgentFlow 执行链。
 - **维护提示**：如果要恢复或重建智能审计，应继续沿 `runtime/intelligent/` 新边界补齐 route、task state、claw-code bridge、工具沙箱和前端 contract；不要默认复用旧 AgentFlow runner 执行链。
 
 ### Rust gateway

@@ -1,17 +1,14 @@
-import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import path from "node:path";
+import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 const frontendDir = path.resolve(
 	path.dirname(fileURLToPath(import.meta.url)),
 	"..",
 );
-const detailPagePath = path.join(
-	frontendDir,
-	"src/pages/AgentAuditDetail.tsx",
-);
+const detailPagePath = path.join(frontendDir, "src/pages/AgentAuditDetail.tsx");
 
 const source = readFileSync(detailPagePath, "utf8");
 
@@ -94,42 +91,61 @@ test("AgentAuditDetail shows failureReason label", () => {
 // Required proof fields visible in UI
 // ---------------------------------------------------------------------------
 
-test("AgentAuditDetail renders all required metadata labels", () => {
-	const requiredLabels = [
-		"任务 ID",
-		"项目 ID",
-		"状态",
-		"创建时间",
-		"开始时间",
-		"完成时间",
-		"耗时",
-		"LLM 模型",
-		"LLM Fingerprint",
+test("AgentAuditDetail removes standalone basic/status/reasoning/summary modules", () => {
+	const removedLabels = [
+		"基本信息",
+		"运行状态",
+		"LLM 推理思考",
 		"输入摘要",
 		"报告摘要",
-		"发现问题",
-		"事件日志",
 	];
+	for (const label of removedLabels) {
+		assert.doesNotMatch(
+			source,
+			new RegExp(label),
+			`Unexpected label: ${label}`,
+		);
+	}
+	assert.doesNotMatch(source, /LlmReasoningPanel/);
+});
+
+test("AgentAuditDetail keeps required visible sections", () => {
+	const requiredLabels = ["发现问题", "事件日志", "返回"];
 	for (const label of requiredLabels) {
 		assert.match(source, new RegExp(label), `Missing label: ${label}`);
 	}
 });
 
-test("AgentAuditDetail renders inputSummary inside a pre block", () => {
-	assert.match(source, /<pre/);
-	assert.match(source, /inputSummary/);
+test("AgentAuditDetail header matches CodeQL detail title and summary tag pattern", () => {
+	assert.match(source, />\s*智能审计\s*</);
+	assert.match(
+		source,
+		/<legend className="sr-only">智能审计概要标签<\/legend>/,
+	);
+	assert.match(source, /headerTags\.map/);
 });
 
-test("AgentAuditDetail renders durationMs field", () => {
+test("AgentAuditDetail summary tags include project, progress, elapsed time, and finding count", () => {
+	assert.match(source, /record\.projectName/);
+	assert.match(source, /progressPercent/);
+	assert.match(source, /formatDuration\(record\.durationMs\)/);
+	assert.match(source, /发现问题 \$\{findings\.length\.toLocaleString\(\)\}/);
+});
+
+test("AgentAuditDetail places return button to the right of summary tags", () => {
+	assert.match(source, /<ArrowLeft/);
+	assert.match(source, /onClick=\{handleBack\}/);
+});
+
+test("AgentAuditDetail renders findings with CodeQL-style horizontally scrollable data table", () => {
+	assert.match(source, /<DataTable/);
+	assert.match(source, /findingColumns/);
+	assert.match(source, /tableClassName="min-w-\[1280px\]"/);
+	assert.match(source, /tableContainerClassName="overflow-x-auto rounded-sm"/);
+});
+
+test("AgentAuditDetail renders durationMs in header tag", () => {
 	assert.match(source, /durationMs/);
-});
-
-test("AgentAuditDetail renders llmModel field", () => {
-	assert.match(source, /llmModel/);
-});
-
-test("AgentAuditDetail renders llmFingerprint field", () => {
-	assert.match(source, /llmFingerprint/);
 });
 
 // ---------------------------------------------------------------------------
@@ -138,7 +154,7 @@ test("AgentAuditDetail renders llmFingerprint field", () => {
 
 test("AgentAuditDetail renders eventLog with kind and timestamp columns", () => {
 	assert.match(source, /eventLog/);
-	assert.match(source, /role="columnheader"/);
+	assert.match(source, /<th scope="col">类型<\/th>/);
 	assert.match(source, /entry\.kind/);
 	assert.match(source, /entry\.timestamp/);
 });
@@ -155,24 +171,4 @@ test("AgentAuditDetail handles loading state without crash", () => {
 test("AgentAuditDetail handles fetch error state with retry button", () => {
 	assert.match(source, /fetchError/);
 	assert.match(source, /重试/);
-});
-
-// ---------------------------------------------------------------------------
-// Status pill styling
-// ---------------------------------------------------------------------------
-
-test("AgentAuditDetail status pill uses orange style for cancelled", () => {
-	assert.match(source, /orange-500/);
-});
-
-test("AgentAuditDetail status pill uses emerald style for completed", () => {
-	assert.match(source, /emerald-500/);
-});
-
-test("AgentAuditDetail status pill uses rose style for failed", () => {
-	assert.match(source, /rose-500/);
-});
-
-test("AgentAuditDetail status pill uses sky style for running/pending", () => {
-	assert.match(source, /sky-500/);
 });

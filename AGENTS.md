@@ -38,19 +38,22 @@ Keep runtime marker contracts stable and non-destructive when overlays are appli
 - Check official documentation before implementing with unfamiliar SDKs, frameworks, or APIs.
 - Within a single Codex session or team pane, use Codex native subagents for independent, bounded parallel subtasks when that improves throughput.
 <!-- OMX:GUIDANCE:OPERATING:START -->
-- Default to quality-first, intent-deepening responses; think one more step before replying or asking for clarification, and use as much detail as needed for a strong result without empty verbosity.
-- Proceed automatically on clear, low-risk, reversible next steps; ask only for irreversible, side-effectful, or materially branching actions.
+- Default to outcome-first, quality-focused responses: identify the user's target result, success criteria, constraints, available evidence, expected output, and stop condition before adding process detail.
+- Keep collaboration style short and direct. Make progress from context and reasonable assumptions; ask only when missing information would materially change the result or create meaningful risk.
+- Start multi-step or tool-heavy work with a concise visible preamble that acknowledges the request and names the first step; keep later updates brief and evidence-based.
+- Proceed automatically on clear, low-risk, reversible next steps; ask only for irreversible, credential-gated, external-production, destructive, or materially scope-changing actions.
 - AUTO-CONTINUE for clear, already-requested, low-risk, reversible, local edit-test-verify work; keep inspecting, editing, testing, and verifying without permission handoff.
 - ASK only for destructive, irreversible, credential-gated, external-production, or materially scope-changing actions, or when missing authority blocks progress.
 - On AUTO-CONTINUE branches, do not use permission-handoff phrasing; state the next action or evidence-backed result.
 - Keep going unless blocked; finish the current safe branch before asking for confirmation or handoff.
 - Ask only when blocked by missing information, missing authority, or an irreversible/destructive branch.
+- Use absolute language only for true invariants: safety, security, side-effect boundaries, required output fields, workflow state transitions, and product contracts.
 - Do not ask or instruct humans to perform ordinary non-destructive, reversible actions; execute those safe reversible OMX/runtime operations and ordinary commands yourself.
 - Treat OMX runtime manipulation, state transitions, and ordinary command execution as agent responsibilities when they are safe and reversible.
 - Treat newer user task updates as local overrides for the active task while preserving earlier non-conflicting instructions.
 - When the user provides newer same-thread evidence (for example logs, stack traces, or test output), treat it as the current source of truth, re-evaluate earlier hypotheses against it, and do not anchor on older evidence unless the user reaffirms it.
-- Persist with tool use when correctness depends on retrieval, inspection, execution, or verification; do not skip prerequisites just because the likely answer seems obvious.
-- More effort does not mean reflexive web/tool escalation; browse or use tools when the task materially benefits, not as a default show of effort.
+- Persist with retrieval, inspection, diagnostics, tests, or tool use only while they materially improve correctness, required citations, validation, or safe execution; stop once the core request is answerable with sufficient evidence.
+- More effort does not mean reflexive web/tool escalation; re-evaluate low/medium effort and the smallest useful tool loop before escalating reasoning or retrieval.
 <!-- OMX:GUIDANCE:OPERATING:END -->
 </operating_principles>
 
@@ -59,7 +62,6 @@ Keep runtime marker contracts stable and non-destructive when overlays are appli
 - Prefer deletion, existing utilities, and existing patterns before new abstractions; add dependencies only when explicitly requested.
 - Keep diffs small, reviewable, and reversible.
 - Verify with lint, typecheck, tests, and static analysis after changes; final reports include changed files, simplifications, and remaining risks.
-- After every code modification task, run the `$neat-freak` skill once to reconcile project docs and agent knowledge. If a user writes `$neat-break`, treat it as this `$neat-freak` post-change cleanup directive unless a separate `neat-break` skill exists.
 
 <lore_commit_protocol>
 ## Lore Commit Protocol
@@ -187,7 +189,7 @@ Runtime availability gate:
 - Treat `autopilot`, `ralph`, `ultrawork`, `ultraqa`, `team`/`swarm`, and `ecomode` as **OMX runtime workflows**, not generic prompt aliases.
 - Auto-activate runtime workflows only when the current session is actually running under OMX CLI/runtime (for example, launched via `omx`, with OMX session overlay/runtime state available, or when the user explicitly asks to run `omx ...` in the shell).
 - In Codex App or plain Codex sessions without OMX runtime, do **not** treat those keywords alone as activation. Explain that they require OMX CLI runtime support and are not directly available there, and continue with the nearest App-safe surface (`deep-interview`, `ralplan`, `plan`, or native subagents) unless the user explicitly wants you to launch OMX CLI from shell first.
-- When deep-interview is active in attached-tmux OMX CLI/runtime, ask interview rounds via `omx question`; after launching `omx question` in a background terminal, wait for that terminal to finish and read the JSON answer before continuing; preserve the leader pane with `OMX_QUESTION_RETURN_PANE=$TMUX_PANE` (or an explicit `%pane` value) when invoking it through Bash/tool paths, and respect Stop-hook blocking while a deep-interview question obligation is pending. Outside tmux or native surfaces that cannot render `omx question` should use the native structured question path when available, otherwise ask exactly one concise plain-text question and wait for the answer.
+- When deep-interview is active in attached-tmux OMX CLI/runtime, ask each interview round via `omx question` as a temporary popup-style renderer over the leader pane; after launching `omx question` in a background terminal, wait for that terminal to finish and read the JSON answer before continuing; preserve the leader pane with `OMX_QUESTION_RETURN_PANE=$TMUX_PANE` (or an explicit `%pane` value) when invoking it through Bash/tool paths, prefer `answers[0].answer` / `answers[]` from the response and use legacy `answer` only as fallback, and respect Stop-hook blocking while a deep-interview question obligation is pending. Deep-interview remains one question per round; do not batch multiple interview rounds into one `questions[]` form. Outside tmux or native surfaces that cannot render `omx question` should use the native structured question path when available, otherwise ask exactly one concise plain-text question and wait for the answer.
 
 <triage_routing>
 ## Triage: advisory prompt-routing context
@@ -298,11 +300,12 @@ Sizing guidance:
 - Large or security/architectural changes: thorough verification
 
 <!-- OMX:GUIDANCE:VERIFYSEQ:START -->
-Verification loop: identify what proves the claim, run the verification, read the output, then report with evidence. If verification fails, continue iterating rather than reporting incomplete work. Default to quality-first evidence summaries: think one more step before declaring completion, and include enough detail to make the proof actionable without padding.
+Verification loop: define the claim and success criteria, run the smallest validation that can prove it, read the output, then report with evidence. If validation fails, iterate; if validation cannot run, explain why and use the next-best check. Keep evidence summaries concise but sufficient.
 
 - Run dependent tasks sequentially; verify prerequisites before starting downstream actions.
 - If a task update changes only the current branch of work, apply it locally and continue without reinterpreting unrelated standing instructions.
-- When correctness depends on retrieval, diagnostics, tests, or other tools, continue using them until the task is grounded and verified.
+- For coding work, prefer targeted tests for changed behavior, then typecheck/lint/build/smoke checks when applicable; do not claim completion without fresh evidence or an explicit validation gap.
+- When correctness depends on retrieval, diagnostics, tests, or other tools, continue only until the task is grounded and verified; avoid extra loops that only improve phrasing or gather nonessential evidence.
 <!-- OMX:GUIDANCE:VERIFYSEQ:END -->
 </verification>
 
@@ -381,90 +384,3 @@ Do not manually duplicate hook-owned activation state unless recovering from mis
 ## Setup
 
 Execute `omx setup` to install all components. Execute `omx doctor` to verify installation.
-
-
-<claude-mem-context>
-# Memory Context
-
-# [argus] recent context, 2026-05-04 10:22am GMT+8
-
-Legend: 🎯session 🔴bugfix 🟣feature 🔄refactor ✅change 🔵discovery ⚖️decision 🚨security_alert 🔐security_note
-Format: ID TIME TYPE TITLE
-Fetch details: get_observations([IDs]) | Search: mem-search skill
-
-Stats: 50 obs (23,557t read) | 637,685t work | 96% savings
-
-### May 2, 2026
-S16 neat-freak skill execution: reconcile project documentation with current codebase state regarding agentflow retirement (May 2, 8:03 AM)
-S15 AgentFlow retirement autopilot project - complete removal of intelligent audit subsystem from Argus codebase (May 2, 8:03 AM)
-S17 Implement CodeQL scanning entry in frontend with mutually exclusive engine selection (CodeQL vs OpenGrep), details page matching OpenGrep format, and sandbox container lifecycle management (May 2, 8:54 AM)
-S18 Strengthen OpenGrep scanning rules in Argus backend by implementing quality improvements from fix documentation to reduce false positives while maintaining detection accuracy (May 2, 9:03 AM)
-144 9:46a ✅ CodeQL Frontend Integration PRD Created with 5 User Stories
-145 9:47a 🔵 CodeQL API Functions Already Implemented in opengrep.ts
-142 " 🔵 Backend CodeQL Infrastructure Fully Implemented
-146 9:51a 🔵 CodeQL API Functions Already Fully Implemented in opengrep.ts
-147 10:15a 🔵 OpenGrep Rule Documentation vs Backend Assets Alignment Analysis
-148 10:16a 🔵 Rule Quality Gaps Identified Between Documentation and Backend Implementation
-149 10:17a 🔵 Detailed Rule Improvement Specifications for C/C++ Buffer and Format String Rules
-151 " 🔵 Rule Strengthening Initiative Analysis: 20 Rules Across 3 Languages with Systematic Improvement Patterns
-150 10:18a 🔵 Comprehensive Rule Improvement Specifications Across C/C++/Python Security Rules
-S19 Fix CodeQL static audit page failing with error before displaying project plan; investigate root cause of "exhausted without accepted build plan" error (May 2, 10:27 AM)
-155 10:44a ⚖️ CodeQL Frontend Integration Scope Defined
-156 " ⚖️ Dual-Sandbox Architecture for CodeQL Integration Established
-157 " ✅ Autoresearch Mission Established for CodeQL Frontend Integration
-158 " 🔵 Frontend Codebase Structure Mapped for CodeQL Integration
-159 10:45a 🔵 Frontend CodeQL Integration Points Identified - Partial Infrastructure Exists
-160 10:46a ✅ Comprehensive CodeQL Frontend Integration Refinement Plan Created
-161 " ✅ Autoresearch Mission Completed - Iteration 001 Deliverables Finalized
-### May 3, 2026
-S20 Fix CodeQL static audit page failing with error before showing project plan; investigate root cause and implement targeted fix (May 3, 6:19 AM)
-162 6:35a 🔵 Frontend error handling displays actual API error messages, not generic toast
-S21 Deep-dive investigation and spec generation for cubemaster template cleanup multi-layer storage leak fix (guest disk 93% full, 12GB in /var/lib/containerd) (May 3, 6:40 AM)
-163 7:07a ✅ Frontend error display improvement task created
-164 7:10a 🔴 Fix CodeQL build plan exhaustion error masking in frontend
-165 " 🔵 CodeQL build plan exhaustion error message location confirmed
-166 7:17a 🔵 CodeQL build plan exhaustion error flow and event structure
-167 " 🔵 CodeQL task retrieval endpoint functions located
-168 7:28a 🔵 get_codeql_task delegates to get_static_task generic handler
-### May 4, 2026
-170 4:34a 🔵 Cubemaster template accumulation causing containerd storage exhaustion
-171 " 🔵 Template provisioner state machine and cleanup gap identified
-172 4:35a 🔵 Template provisioning lifecycle incomplete: cubemaster registry not synced with cleanup
-173 4:36a ⚖️ Deep-dive investigation structured into three parallel trace lanes
-174 " 🔵 No cubemastercli template delete integration found in codebase
-175 " 🔵 Root cause confirmed: No cubemaster template deletion integration in backend
-176 4:37a 🔵 Snapshot cleanup mechanism exists in containerd but is NOT invoked for failed templates
-177 " 🔵 Lane 3 investigation complete: Provision state machine gap confirmed as root cause
-179 " 🔵 Root cause of cubemaster provision failure identified
-178 " 🔵 Lane 1 investigation complete: FAILED templates accumulate in backend DB without cleanup
-182 " 🔵 Multi-layer template cleanup gap root cause analysis complete
-183 " ⚖️ Comprehensive three-layer cleanup fix designed with defense-in-depth strategy
-S22 Create a comprehensive Phase 6 E2E Verification plan for the CubeSandbox disk exhaustion template cleanup fix, documenting verification objectives, test procedures, success criteria, and implementation details for a multi-layer cleanup system (May 4, 4:51 AM)
-180 4:52a 🔵 Backend provision state machine lacks cubemaster template deletion integration
-181 " 🔵 Template cleanup removes filesystem paths but not containerd snapshots
-184 4:54a ⚖️ Deep-dive interview completed with comprehensive spec ready for implementation
-185 5:04a 🔵 Multi-layer template cleanup architecture analyzed and documented
-186 5:05a 🔵 Implementation infrastructure exists for all 5 acceptance criteria
-187 5:07a 🔵 Cubemaster Template Cleanup Architecture: 9 Spec Corrections via Code Inspection
-188 " 🔵 Cubemaster Template Cleanup: Cubelet Containerd Snapshotter Fix Required (Phase 3 Critical Path)
-189 5:10a 🔵 Implementation Plan Validation: 4 Changes Required Before Execution
-S23 Debug and resolve persistent disk exhaustion in CubeSandbox codeql-cpp template provisioning by analyzing bloated build artifacts (May 4, 5:11 AM)
-190 5:33a 🔵 CubeSandbox codeql-cpp template provision fails due to disk exhaustion during rootfs population
-191 " 🔴 CodeQL C++ Template Disk Space Exhaustion Fixed via Distribution Slimming
-192 10:07a 🔵 ext4 Template Image Sizing Formula and Overhead Calculation
-193 " 🔵 sandbox-code Base Image is Upstream Prebuilt Artifact, Not Vendored
-194 " 🔄 Extended Dockerfile Slimming: Stage 0 Base Image Cleanup Added to codeql-cpp.Dockerfile
-195 10:13a 🔄 Added CodeQL Documentation and Platform-Specific Cleanup to codeql-cpp.Dockerfile
-196 10:14a 🟣 New Diagnostic Script: probe-codeql-cpp-rootfs-sizes.sh for Image Footprint Analysis
-S24 Debug and fix CodeQL C++ template disk space exhaustion in CubeSandbox ext4 provisioning (mkfs.ext4 population failure with "No space left on device") (May 4, 10:14 AM)
-**Investigated**: Root cause of mkfs.ext4 failure during template population; ext4 filesystem sizing logic in CubeMaster; base image composition (sandbox-code → e2bdev/code-interpreter → python:3.12.13-trixie); disk footprint contributors across system packages, Python ML/data-science libraries, Node.js, JVM, and caches
-
-**Learned**: CubeMaster sizes ext4 as next_pow_of_2(rootfs_size + 256MB). Full CodeQL bundle with all language packs produces ~7.9 GiB rootfs; with 256MB overhead = 7.75 GiB, exceeding safe margin within 8 GiB limit. ext4 metadata at 8 GiB consumes ~460 MB, leaving only ~50 MB during file population. Base image inherits entire Jupyter/ML/Node ecosystem unnecessary for C++-only extraction. Previous CodeQL language-pack slimming (3-4 GB savings) insufficient alone to provide safe margin.
-
-**Completed**: Extended codeql-cpp.Dockerfile with aggressive two-stage slimming: (1) Stage 0 removes e2b/code-interpreter bloat (Jupyter, NumPy, Pandas, SciPy, torch, tensorflow, transformers, scikit-learn, opencv, Node.js, Python caches, system JVM, Tencent/e2b user trees with ignore-missing blocks); (2) Stage 1 existing CodeQL language-pack filtering; (3) CodeQL-side cleanup removing /opt/codeql/codeql/docs, /opt/codeql/codeql/help, and __macosx. Added comprehensive du -sh diagnostics before/after each cleanup stage and final summary. Created probe-codeql-cpp-rootfs-sizes.sh diagnostic tool supporting local-build (WSL image) and guest-vm (SSH to CubeSandbox guest) modes with 9 disk-breakdown categories (rootfs total, /usr, /opt, Python site-packages >50MB, node_modules, JVMs, CodeQL breakdown, caches). Script verified with bash -n syntax check.
-
-**Next Steps**: Rebuild codeql-cpp image using modified Dockerfile and verify size reduction via build logs (grep for "rootfs size" output) and probe script. If rootfs ≤6 GiB achieved, attempt new provision-codeql-cpp-template to validate mkfs.ext4 population succeeds with safe headroom. If rootfs still ≥7.5 GiB, run probe-codeql-cpp-rootfs-sizes.sh local-build to identify remaining bloat and add additional cleanup paths. Possible further optimization: drop additional qlpacks (cwe-*, tutorial, mad, meta) if CodeQL C++ distribution alone exceeds 2 GiB.
-
-
-Access 638k tokens of past work via get_observations([IDs]) or mem-search skill.
-</claude-mem-context>
