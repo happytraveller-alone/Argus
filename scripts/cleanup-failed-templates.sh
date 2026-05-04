@@ -80,7 +80,7 @@ main() {
   log "step 1/5: list all templates (client-side FAILED filter)"
   local list_json
   # --status flag does NOT exist in cubemastercli; filter client-side via Python.
-  list_json="$(remote_root "cubemastercli tpl list --format json 2>/dev/null || cubemastercli tpl list")"
+  list_json="$(remote_root "cubemastercli tpl list --json 2>/dev/null || cubemastercli tpl list")"
 
   local failed_ids
   failed_ids="$(printf '%s' "${list_json}" \

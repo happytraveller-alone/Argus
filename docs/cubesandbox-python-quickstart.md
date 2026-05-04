@@ -405,7 +405,12 @@ Defaults:
 - WSL-local image: `argus/cubesandbox-opengrep:latest`
 - Dockerfile: `oci/cubesandbox/opengrep.Dockerfile`, based on an independent
   Debian slim runtime (`CUBE_OPENGREP_BASE_IMAGE`), not the CodeQL
-  `sandbox-code` base.
+  `sandbox-code` base. The image copies CubeSandbox `envd` from the upstream
+  `CUBE_ENVD_BASE_IMAGE` stage (defaulting to a `ghcr.nju.edu.cn` mirror of
+  `tencentcloud/cubesandbox-base:2026.16` for reliable pulls), but the final
+  filesystem base remains Debian slim.
+- Template probe: envd `/health` on port `49983`; Opengrep scans run through
+  the same envd process API.
 - Writable layer size: `1Gi`
 
 For backend-driven provisioning, use:

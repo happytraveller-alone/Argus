@@ -35,6 +35,7 @@ CUBE_CODEQL_CPP_DOCKERFILE="${CUBE_CODEQL_CPP_DOCKERFILE:-${ROOT_DIR}/oci/cubesa
 CUBE_OPENGREP_IMAGE="${CUBE_OPENGREP_IMAGE:-127.0.0.1:${CUBE_LOCAL_REGISTRY_PORT}/cubesandbox-opengrep:latest}"
 CUBE_OPENGREP_WSL_IMAGE="${CUBE_OPENGREP_WSL_IMAGE:-argus/cubesandbox-opengrep:latest}"
 CUBE_OPENGREP_BASE_IMAGE="${CUBE_OPENGREP_BASE_IMAGE:-${CUBE_DOCKERHUB_MIRROR_IMAGE_PREFIX}/library/debian:trixie-slim}"
+CUBE_ENVD_BASE_IMAGE="${CUBE_ENVD_BASE_IMAGE:-ghcr.nju.edu.cn/tencentcloud/cubesandbox-base:2026.16}"
 CUBE_OPENGREP_WRITABLE_LAYER_SIZE="${CUBE_OPENGREP_WRITABLE_LAYER_SIZE:-1Gi}"
 CUBE_OPENGREP_DOCKERFILE="${CUBE_OPENGREP_DOCKERFILE:-${ROOT_DIR}/oci/cubesandbox/opengrep.Dockerfile}"
 CUBE_RELEASE_VERSION="${CUBE_RELEASE_VERSION:-v0.1.2}"
@@ -432,10 +433,11 @@ build_opengrep_image() {
   [[ -f "$CUBE_OPENGREP_DOCKERFILE" ]] || fail "missing OCI image config: $CUBE_OPENGREP_DOCKERFILE"
   [[ -f "${ROOT_DIR}/docker/opengrep-scan.sh" ]] || fail "missing opengrep scan wrapper: ${ROOT_DIR}/docker/opengrep-scan.sh"
   need_cmd base64
-  local image_q registry_image_q base_image_q dockerfile_q dockerfile_b64 scan_script_b64 rules_tar_b64
+  local image_q registry_image_q base_image_q envd_base_image_q dockerfile_q dockerfile_b64 scan_script_b64 rules_tar_b64
   image_q="$(shell_quote "$CUBE_OPENGREP_IMAGE")"
   registry_image_q="$(shell_quote "$CUBE_LOCAL_REGISTRY_IMAGE")"
   base_image_q="$(shell_quote "$CUBE_OPENGREP_BASE_IMAGE")"
+  envd_base_image_q="$(shell_quote "$CUBE_ENVD_BASE_IMAGE")"
   dockerfile_q="$(shell_quote "$(basename "$CUBE_OPENGREP_DOCKERFILE")")"
   dockerfile_b64="$(base64 -w 0 "$CUBE_OPENGREP_DOCKERFILE")"
   scan_script_b64="$(base64 -w 0 "${ROOT_DIR}/docker/opengrep-scan.sh")"
@@ -452,7 +454,8 @@ mkdir -p context
 printf '%s' '${rules_tar_b64}' | base64 -d > context/rules.tar.gz
 
 docker pull ${registry_image_q}
-DOCKER_BUILDKIT=0 docker build --pull=false --build-arg CUBE_LOCAL_REGISTRY_IMAGE=${registry_image_q} --build-arg CUBE_OPENGREP_BASE_IMAGE=${base_image_q} -f ${dockerfile_q} -t ${image_q} context
+docker pull ${envd_base_image_q}
+DOCKER_BUILDKIT=0 docker build --pull=false --build-arg CUBE_LOCAL_REGISTRY_IMAGE=${registry_image_q} --build-arg CUBE_OPENGREP_BASE_IMAGE=${base_image_q} --build-arg CUBE_ENVD_BASE_IMAGE=${envd_base_image_q} -f ${dockerfile_q} -t ${image_q} context
 docker push ${image_q}
 REMOTE
 )"
@@ -470,6 +473,7 @@ build_opengrep_image_wsl() {
   docker build --pull=false \
     --build-arg CUBE_LOCAL_REGISTRY_IMAGE="$CUBE_LOCAL_REGISTRY_IMAGE" \
     --build-arg CUBE_OPENGREP_BASE_IMAGE="$CUBE_OPENGREP_BASE_IMAGE" \
+    --build-arg CUBE_ENVD_BASE_IMAGE="$CUBE_ENVD_BASE_IMAGE" \
     -f "$temp_dir/opengrep.Dockerfile" \
     -t "$CUBE_OPENGREP_WSL_IMAGE" \
     "$temp_dir"
@@ -502,7 +506,12 @@ shell_codeql_cpp_image_wsl() {
 
 create_codeql_cpp_template() {
   local raw job_id
-  raw="$(remote_root "cubemastercli --address 127.0.0.1 tpl create-from-image --image '$(shell_quote "$CUBE_CODEQL_CPP_IMAGE")' --writable-layer-size '$(shell_quote "$CUBE_CODEQL_CPP_WRITABLE_LAYER_SIZE")' --expose-port 49999 --expose-port 49983 --probe 49999 2>&1" | tee /dev/stderr)"
+  # FINAL plan Phase 4: probe 49983 (envd) instead of 49999 (uvicorn). Stage 0 of
+  # the codeql-cpp Dockerfile removed jupyter packages → uvicorn waits forever
+  # on jupyter at 8888 → port 49999 never binds. argus's codeql runner uses envd
+  # (49983) only, so probing envd is both correct AND the only port that actually
+  # responds in the slimmed image.
+  raw="$(remote_root "cubemastercli --address 127.0.0.1 tpl create-from-image --image '$(shell_quote "$CUBE_CODEQL_CPP_IMAGE")' --writable-layer-size '$(shell_quote "$CUBE_CODEQL_CPP_WRITABLE_LAYER_SIZE")' --expose-port 49999 --expose-port 49983 --probe 49983 2>&1" | tee /dev/stderr)"
   job_id="$(printf '%s\n' "$raw" | sed -nE 's/.*job[_ -]?id[: ]+([0-9a-fA-F-]+).*/\1/p' | head -n 1 || true)"
   if [[ -z "$job_id" ]]; then
     job_id="$(printf '%s\n' "$raw" | grep -Eio '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' | head -n 1 || true)"
@@ -513,7 +522,7 @@ create_codeql_cpp_template() {
 
 create_opengrep_template() {
   local raw job_id
-  raw="$(remote_root "cubemastercli --address 127.0.0.1 tpl create-from-image --image '$(shell_quote "$CUBE_OPENGREP_IMAGE")' --writable-layer-size '$(shell_quote "$CUBE_OPENGREP_WRITABLE_LAYER_SIZE")' --expose-port 49999 --expose-port 49983 --probe 49999 2>&1" | tee /dev/stderr)"
+  raw="$(remote_root "cubemastercli --address 127.0.0.1 tpl create-from-image --image '$(shell_quote "$CUBE_OPENGREP_IMAGE")' --writable-layer-size '$(shell_quote "$CUBE_OPENGREP_WRITABLE_LAYER_SIZE")' --expose-port 49983 --probe 49983 --probe-path /health 2>&1" | tee /dev/stderr)"
   job_id="$(printf '%s\n' "$raw" | sed -nE 's/.*job[_ -]?id[: ]+([0-9a-fA-F-]+).*/\1/p' | head -n 1 || true)"
   if [[ -z "$job_id" ]]; then
     job_id="$(printf '%s\n' "$raw" | grep -Eio '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' | head -n 1 || true)"

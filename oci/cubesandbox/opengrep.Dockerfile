@@ -1,12 +1,16 @@
 ARG CUBE_LOCAL_REGISTRY_IMAGE=m.daocloud.io/docker.io/library/registry:2
 ARG CUBE_OPENGREP_BASE_IMAGE=m.daocloud.io/docker.io/library/debian:trixie-slim
+ARG CUBE_ENVD_BASE_IMAGE=ghcr.io/tencentcloud/cubesandbox-base:2026.16
 FROM ${CUBE_LOCAL_REGISTRY_IMAGE} AS dockerhub_mirror_probe
+FROM ${CUBE_ENVD_BASE_IMAGE} AS cubesandbox_envd
 
 FROM ${CUBE_OPENGREP_BASE_IMAGE}
 
 ARG OPENGREP_VERSION=v1.20.0
 ARG TARGETARCH
 
+ENV ENVD_PORT=49983
+ENV ENVD_LOG_FILE=/var/log/envd.log
 ENV LANG=C.UTF-8
 ENV LC_ALL=C.UTF-8
 ENV PYTHONUTF8=1
@@ -31,9 +35,11 @@ RUN set -eux; \
       -e 's#https://security.debian.org/debian-security#http://mirrors.aliyun.com/debian-security#g'; \
     apt-get update; \
     DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-      ca-certificates curl bash python3-minimal tar; \
+      ca-certificates curl bash python3-minimal tar tini; \
     rm -rf /var/lib/apt/lists/*; \
-    mkdir -p /opt/opengrep /scan
+    mkdir -p /opt/opengrep /scan /var/log
+
+COPY --from=cubesandbox_envd /usr/bin/envd /usr/bin/envd
 
 RUN set -eux; \
     ARCH="${TARGETARCH:-}"; \
@@ -72,10 +78,55 @@ COPY opengrep-scan.sh /usr/local/bin/opengrep-scan
 COPY rules.tar.gz /opt/opengrep/rules.tar.gz
 
 RUN set -eux; \
-    chmod +x /usr/local/bin/opengrep-scan; \
+    chmod +x /usr/local/bin/opengrep-scan /usr/bin/envd; \
+    printf '%s\n' \
+      '#!/bin/sh' \
+      'set -eu' \
+      'ENVD_BIN="${ENVD_BIN:-/usr/bin/envd}"' \
+      'ENVD_PORT="${ENVD_PORT:-49983}"' \
+      'ENVD_LOG_FILE="${ENVD_LOG_FILE:-/var/log/envd.log}"' \
+      'ENVD_EXTRA_ARGS="${ENVD_EXTRA_ARGS:-}"' \
+      '' \
+      'start_envd() {' \
+      '  if [ "${ENVD_LOG_FILE}" = "-" ]; then' \
+      '    # shellcheck disable=SC2086' \
+      '    "${ENVD_BIN}" -port "${ENVD_PORT}" ${ENVD_EXTRA_ARGS} &' \
+      '  else' \
+      '    mkdir -p "$(dirname "${ENVD_LOG_FILE}")"' \
+      '    # shellcheck disable=SC2086' \
+      '    "${ENVD_BIN}" -port "${ENVD_PORT}" ${ENVD_EXTRA_ARGS} >>"${ENVD_LOG_FILE}" 2>&1 &' \
+      '  fi' \
+      '  ENVD_PID=$!' \
+      '  echo "opengrep-cube-entrypoint: started envd pid=${ENVD_PID} port=${ENVD_PORT}" >&2' \
+      '}' \
+      '' \
+      'start_envd' \
+      'if [ "$#" -eq 0 ]; then' \
+      '  wait "${ENVD_PID}"' \
+      '  exit $?' \
+      'fi' \
+      '' \
+      'USER_PID=""' \
+      'forward_signal() {' \
+      '  sig="$1"' \
+      '  if [ -n "${USER_PID}" ]; then' \
+      '    kill -s "${sig}" "${USER_PID}" 2>/dev/null || true' \
+      '  fi' \
+      '}' \
+      'trap '\''forward_signal TERM'\'' TERM' \
+      'trap '\''forward_signal INT'\'' INT' \
+      'trap '\''forward_signal HUP'\'' HUP' \
+      '"$@" &' \
+      'USER_PID=$!' \
+      'wait "${USER_PID}"' \
+      'exit $?' \
+      > /usr/local/bin/opengrep-cube-entrypoint; \
+    chmod +x /usr/local/bin/opengrep-cube-entrypoint; \
     mkdir -p /opt/opengrep/rules /scan; \
     /usr/local/bin/opengrep-scan --self-test; \
     rm -rf /tmp/* /var/cache/apt /usr/share/doc/* /usr/share/locale/* /usr/share/man/* 2>/dev/null || true
 
 WORKDIR /scan
-CMD ["opengrep-scan", "--self-test"]
+EXPOSE 49983
+ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/opengrep-cube-entrypoint"]
+CMD []

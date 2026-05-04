@@ -2,6 +2,10 @@ const ROOT_COMPOSE: &str = include_str!("../../docker-compose.yml");
 const BACKEND_DOCKERFILE: &str = include_str!("../../docker/backend.Dockerfile");
 const DOCKER_PUBLISH_WORKFLOW: &str = include_str!("../../.github/workflows/docker-publish.yml");
 const OPENGREP_RUNNER_DOCKERFILE: &str = include_str!("../../docker/opengrep-runner.Dockerfile");
+const CUBESANDBOX_OPENGREP_DOCKERFILE: &str =
+    include_str!("../../oci/cubesandbox/opengrep.Dockerfile");
+const CUBESANDBOX_QUICKSTART_SCRIPT: &str =
+    include_str!("../../scripts/cubesandbox-quickstart.sh");
 const OPENGREP_REBUILD_VERIFY_SCRIPT: &str =
     include_str!("../../scripts/rebuild-opengrep-runner-verify.sh");
 const RELEASE_BACKEND_DOCKERFILE: &str =
@@ -109,6 +113,32 @@ fn opengrep_runner_packages_only_unified_rule_root() {
     assert!(
         !OPENGREP_RUNNER_DOCKERFILE.contains("rules_from_patches"),
         "opengrep runner image must not reference the retired rules_from_patches root"
+    );
+}
+
+#[test]
+fn opengrep_cubesandbox_image_exposes_envd_health_probe() {
+    assert!(
+        CUBESANDBOX_OPENGREP_DOCKERFILE.contains("ENVD_PORT=49983"),
+        "Opengrep CubeSandbox image must expose envd on 49983 for CubeMaster readiness and envd execution"
+    );
+    assert!(
+        CUBESANDBOX_OPENGREP_DOCKERFILE.contains("ENTRYPOINT")
+            && CUBESANDBOX_OPENGREP_DOCKERFILE.contains("opengrep-cube-entrypoint"),
+        "Opengrep CubeSandbox image must start envd through an entrypoint instead of exiting after self-test"
+    );
+    assert!(
+        CUBESANDBOX_OPENGREP_DOCKERFILE.contains("CMD []"),
+        "default CubeSandbox template command should keep envd in the foreground"
+    );
+    assert!(
+        CUBESANDBOX_QUICKSTART_SCRIPT.contains("--probe 49983"),
+        "create-opengrep-template must probe envd /health on 49983, not the absent code-interpreter port"
+    );
+    assert!(
+        CUBESANDBOX_QUICKSTART_SCRIPT.contains("CUBE_ENVD_BASE_IMAGE")
+            && CUBESANDBOX_QUICKSTART_SCRIPT.contains("--build-arg CUBE_ENVD_BASE_IMAGE="),
+        "Opengrep CubeSandbox builds must pass the envd source image explicitly for reproducible local/VM builds"
     );
 }
 

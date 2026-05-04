@@ -51,13 +51,25 @@ dependencies, copies Argus's `docker/opengrep-scan.sh` wrapper, and embeds the
 checked-in `backend/assets/scan_rule_assets/rules_opengrep` rule bundle as
 `/opt/opengrep/rules.tar.gz`.
 
+The final image also copies the CubeSandbox `envd` binary from the upstream
+`cubesandbox-base` image in a separate build stage. The final base remains the
+independent Debian slim image; `envd` only provides the CubeSandbox control
+plane on port `49983` so template creation can probe `/health` and the backend
+can execute `opengrep-scan` through envd.
+
 Runtime defaults are injected by `scripts/cubesandbox-quickstart.sh`:
 
 - `CUBE_OPENGREP_IMAGE`
 - `CUBE_OPENGREP_WSL_IMAGE`
 - `CUBE_OPENGREP_BASE_IMAGE`
+- `CUBE_ENVD_BASE_IMAGE`
 - `CUBE_OPENGREP_WRITABLE_LAYER_SIZE`
 - `CUBE_OPENGREP_DOCKERFILE`
+
+`CUBE_ENVD_BASE_IMAGE` defaults to the `ghcr.nju.edu.cn` mirror for reliable
+local/VM pulls, but it is still the upstream
+`tencentcloud/cubesandbox-base:2026.16` image and is used only as a source for
+`/usr/bin/envd`.
 
 The public lifecycle API remains `/api/v1/cubesandbox/templates/opengrep` for
 compatibility, but current backend rows are stored as
