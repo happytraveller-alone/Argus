@@ -3,15 +3,30 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 test("StaticAnalysis hides CodeQL exploration on OpenGrep-only detail pages", async () => {
-  const source = await readFile(
-    new URL("../src/pages/StaticAnalysis.tsx", import.meta.url),
-    "utf8",
-  );
+	const source = await readFile(
+		new URL("../src/pages/StaticAnalysis.tsx", import.meta.url),
+		"utf8",
+	);
 
-  assert.match(source, /isCodeqlOnlyDetail/);
-  assert.match(source, /<CodeqlExplorationPanel/);
-  assert.doesNotMatch(
-    source,
-    /isCodeqlOnlyDetail[\s\S]*?\?\s*\([\s\S]*?<CodeqlExplorationPanel[\s\S]*?\)\s*:\s*\([\s\S]*?<CodeqlExplorationPanel/,
-  );
+	assert.match(source, /isCodeqlOnlyDetail/);
+	assert.match(source, /<CodeqlExplorationPanel/);
+	assert.doesNotMatch(
+		source,
+		/isCodeqlOnlyDetail[\s\S]*?\?\s*\([\s\S]*?<CodeqlExplorationPanel[\s\S]*?\)\s*:\s*\([\s\S]*?<CodeqlExplorationPanel/,
+	);
+});
+
+test("CodeqlScanDetail keeps CodeQL exploration but removes right-side progress and reasoning modules", async () => {
+	const source = await readFile(
+		new URL("../src/pages/CodeqlScanDetail.tsx", import.meta.url),
+		"utf8",
+	);
+
+	assert.match(source, /<StaticAnalysisFindingsTable/);
+	assert.match(source, /<CodeqlExplorationPanel/);
+	assert.doesNotMatch(source, /<StepProgressIndicator/);
+	assert.doesNotMatch(source, /<LlmReasoningPanel/);
+	assert.doesNotMatch(source, /useSseStream/);
+	assert.doesNotMatch(source, />执行进度</);
+	assert.doesNotMatch(source, />LLM 推理过程</);
 });

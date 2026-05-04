@@ -369,8 +369,10 @@ export default function StaticAnalysisFindingsTable({
 						table.getState().pagination.pageIndex + 1
 					} / ${Math.max(1, table.getPageCount())} 页`,
 			}}
-			className="h-full border border-border rounded-md"
-			containerClassName="h-full"
+			className="flex h-full min-h-0 flex-col border border-border rounded-md"
+			containerClassName="min-h-0 flex-1 max-w-full overflow-auto custom-scrollbar-dark"
+			tableContainerClassName="overflow-x-auto rounded-sm"
+			tableClassName="min-w-[1280px]"
 			fillContainerWidth
 		/>
 	);

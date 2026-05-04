@@ -183,7 +183,10 @@ test("StaticAnalysisFindingsTable can hide the engine column for CodeQL-only det
 		onToggleStatus: (_row: UnifiedFindingRow, _target: FindingStatus) => {},
 	});
 
-	assert.equal(columns.some((column) => column.id === "engine"), false);
+	assert.equal(
+		columns.some((column) => column.id === "engine"),
+		false,
+	);
 
 	const markup = renderTable(tableModule.default, {
 		rows: [verifiedFinding],
@@ -245,4 +248,26 @@ test("StaticAnalysisFindingsTable headers inherit the shared 序号 typography b
 		dataTableColumnHeaderSource,
 		/inline-flex items-center font-mono text-xs font-medium uppercase tracking-\[0\.16em\] text-foreground\/80/,
 	);
+});
+
+test("StaticAnalysisFindingsTable exposes a module-local horizontal scroll viewport", async () => {
+	const tableModule = await loadTableModule();
+	const markup = renderTable(tableModule.default, {
+		rows: [
+			{
+				...verifiedFinding,
+				rule: "codeql-security-and-quality-rule-with-long-name",
+				filePath:
+					"src/deeply/nested/codeql/security/query/source/file/that/needs/horizontal/scroll.cpp",
+			},
+		],
+		showEngineColumn: false,
+	});
+
+	assert.match(
+		markup,
+		/class="[^"]*min-h-0[^"]*flex-1[^"]*max-w-full[^"]*overflow-auto[^"]*custom-scrollbar-dark[^"]*"/,
+	);
+	assert.match(markup, /class="[^"]*min-w-\[1280px\][^"]*"/);
+	assert.match(markup, /style="width:100%;min-width:\d+px"/);
 });

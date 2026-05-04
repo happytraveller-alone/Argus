@@ -1,12 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
-import {
-	AlertCircle,
-	ArrowLeft,
-	Ban,
-	Loader2,
-	RefreshCw,
-} from "lucide-react";
+import { AlertCircle, ArrowLeft, Ban, Loader2, RefreshCw } from "lucide-react";
 import {
 	AlertDialog,
 	AlertDialogAction,
@@ -24,10 +18,6 @@ import {
 	type DataTableQueryState,
 	useDataTableUrlState,
 } from "@/components/data-table";
-import { LlmReasoningPanel } from "@/components/scan/LlmReasoningPanel";
-import { StepProgressIndicator } from "@/components/scan/StepProgressIndicator";
-import { useSseStream } from "@/hooks/useSseStream";
-import { getApiBaseUrl } from "@/shared/api/apiBase";
 import CodeqlExplorationPanel from "./static-analysis/CodeqlExplorationPanel";
 import StaticAnalysisFindingsTable from "./static-analysis/StaticAnalysisFindingsTable";
 import {
@@ -40,13 +30,10 @@ import {
 	buildStaticAnalysisHeaderSummary,
 	buildStaticAnalysisTaskStatusSummary,
 	buildUnifiedFindingRows,
-	countCodeqlReasoningRounds,
 	formatStaticAnalysisDuration,
 	getStaticAnalysisTaskDisplayDurationMs,
 	isStaticAnalysisPollableStatus,
 } from "./static-analysis/viewModel";
-
-const TERMINAL_STATUSES = new Set(["completed", "failed", "cancelled", "interrupted"]);
 
 export default function CodeqlScanDetail() {
 	const { taskId: rawTaskId } = useParams<{ taskId: string }>();
@@ -76,7 +63,6 @@ export default function CodeqlScanDetail() {
 
 	const {
 		codeqlTask,
-		codeqlProgress,
 		codeqlExplorationEvents,
 		codeqlFindings,
 		loadingInitial,
@@ -100,8 +86,7 @@ export default function CodeqlScanDetail() {
 	});
 
 	const resolvedUrlState = useMemo(
-		() =>
-			resolveStaticAnalysisTableState(initialState),
+		() => resolveStaticAnalysisTableState(initialState),
 		[initialState],
 	);
 	const [tableState, setTableState] = useState<DataTableQueryState>(() =>
@@ -118,18 +103,6 @@ export default function CodeqlScanDetail() {
 			}),
 		[codeqlFindings, codeqlTaskId],
 	);
-
-	const taskTerminal = codeqlTask ? TERMINAL_STATUSES.has(codeqlTask.status) : false;
-
-	const sseUrl = codeqlTaskId
-		? `${getApiBaseUrl()}/static-tasks/codeql/tasks/${codeqlTaskId}/stream`
-		: "";
-
-	const { events: sseEvents, isConnected, isComplete } = useSseStream(sseUrl, {
-		enabled: Boolean(codeqlTaskId) && !taskTerminal,
-	});
-
-	const isStreaming = isConnected && !isComplete;
 
 	const shouldTickClock = useMemo(
 		() => isStaticAnalysisPollableStatus(codeqlTask?.status),
@@ -156,13 +129,6 @@ export default function CodeqlScanDetail() {
 		[codeqlTask, fallbackProjectName, loadingInitial, nowMs],
 	);
 
-	const reasoningCount = useMemo(
-		() => countCodeqlReasoningRounds(codeqlExplorationEvents),
-		[codeqlExplorationEvents],
-	);
-
-	const llmModel = codeqlProgress?.llm_model || null;
-
 	const durationMs = useMemo(
 		() => getStaticAnalysisTaskDisplayDurationMs(codeqlTask, nowMs),
 		[codeqlTask, nowMs],
@@ -174,10 +140,8 @@ export default function CodeqlScanDetail() {
 			`${Math.round(headerSummary.progressPercent)}%`,
 			formatStaticAnalysisDuration(durationMs),
 			`发现漏洞 ${headerSummary.totalFindings.toLocaleString()}`,
-			...(llmModel ? [`模型 ${llmModel}`] : []),
-			`推理 ${reasoningCount}次`,
 		],
-		[headerSummary, durationMs, llmModel, reasoningCount],
+		[headerSummary, durationMs],
 	);
 
 	const failureReasons = useMemo(
@@ -220,7 +184,11 @@ export default function CodeqlScanDetail() {
 					<p className="text-sm text-muted-foreground">
 						CodeQL 任务参数无效，无法加载详情。
 					</p>
-					<Button variant="outline" className="cyber-btn-outline" onClick={handleBack}>
+					<Button
+						variant="outline"
+						className="cyber-btn-outline"
+						onClick={handleBack}
+					>
 						<ArrowLeft className="w-4 h-4 mr-2" />
 						返回
 					</Button>
@@ -237,7 +205,10 @@ export default function CodeqlScanDetail() {
 					<h1 className="text-2xl font-bold tracking-wider uppercase text-foreground">
 						CodeQL 审计详情
 					</h1>
-					<div className="flex min-w-0 flex-wrap items-center gap-2" aria-label="CodeQL审计概要标签">
+					<div
+						className="flex min-w-0 flex-wrap items-center gap-2"
+						aria-label="CodeQL审计概要标签"
+					>
 						{headerTags.map((tag, index) => (
 							<Badge
 								key={`${index}:${tag}`}
@@ -271,7 +242,11 @@ export default function CodeqlScanDetail() {
 						/>
 						刷新
 					</Button>
-					<Button variant="outline" className="cyber-btn-outline h-8" onClick={handleBack}>
+					<Button
+						variant="outline"
+						className="cyber-btn-outline h-8"
+						onClick={handleBack}
+					>
 						<ArrowLeft className="w-3.5 h-3.5 mr-1.5" />
 						返回
 					</Button>
@@ -290,16 +265,15 @@ export default function CodeqlScanDetail() {
 						</pre>
 						{canResetCodeqlBuildPlan ? (
 							<p className="pt-1 text-[11px] text-rose-200/70">
-								可在右侧"CodeQL 编译探索"面板点击"重置并重新探索"重新触发构建方案探索。
+								可在右侧"CodeQL
+								编译探索"面板点击"重置并重新探索"重新触发构建方案探索。
 							</p>
 						) : null}
 					</div>
 				</div>
 			) : null}
 
-			{/* 60/40 split layout */}
 			<div className="grid min-h-0 gap-5 lg:h-[calc(100vh-11rem)] lg:grid-cols-[minmax(0,6fr)_minmax(0,4fr)]">
-				{/* Left panel: 60% - Findings table */}
 				<div className="min-h-[28rem] min-w-0 overflow-y-auto rounded-md pr-1 lg:h-full">
 					<StaticAnalysisFindingsTable
 						currentRoute={currentRoute}
@@ -313,7 +287,6 @@ export default function CodeqlScanDetail() {
 					/>
 				</div>
 
-				{/* Right panel: 40% - Exploration + LLM reasoning */}
 				<div className="min-h-[28rem] min-w-0 overflow-y-auto pr-1 lg:h-full">
 					<CodeqlExplorationPanel
 						events={codeqlExplorationEvents}
@@ -321,20 +294,6 @@ export default function CodeqlScanDetail() {
 						resetting={resettingCodeqlPlan}
 						onReset={handleResetCodeqlBuildPlan}
 					/>
-
-					{sseEvents.length > 0 && (
-						<section className="mt-5 rounded border border-border bg-card/40 p-4">
-							<h2 className="mb-2 text-sm font-semibold text-foreground">执行进度</h2>
-							<StepProgressIndicator events={sseEvents} />
-						</section>
-					)}
-
-					{(sseEvents.length > 0 || isStreaming) && (
-						<section className="mt-5 rounded border border-purple-500/20 bg-card/40 p-4">
-							<h2 className="mb-2 text-sm font-semibold text-foreground">LLM 推理过程</h2>
-							<LlmReasoningPanel events={sseEvents} isStreaming={isStreaming} />
-						</section>
-					)}
 				</div>
 			</div>
 
