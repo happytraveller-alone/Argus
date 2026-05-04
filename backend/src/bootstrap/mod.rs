@@ -147,6 +147,10 @@ async fn build_report(state: &AppState) -> BootstrapReport {
         "cubesandbox startup reconcile complete"
     );
 
+    // Warm sandbox pool — runs after reconcile_stale_templates (which cleans up stale IDs)
+    // and before HTTP server accepts requests. CUBESANDBOX_OPENGREP_POOL_SIZE=0 skips entirely.
+    warm_opengrep_pool(state).await;
+
     report.preflight = match preflight::run(state).await {
         Ok(status) => status,
         Err(error) => {
@@ -524,6 +528,114 @@ async fn ensure_rust_schema(pool: &PgPool) -> Result<()> {
     .await?;
 
     Ok(())
+}
+
+async fn warm_opengrep_pool(state: &AppState) {
+    use std::sync::Arc;
+
+    use crate::runtime::cubesandbox::{
+        client::{CubeSandboxClient, CubeSandboxClientConfig},
+        cubemaster_client::{CubemasterClient, CubemasterClientConfig},
+        opengrep_pool::OpengrepSandboxPool,
+    };
+
+    let pool_size = OpengrepSandboxPool::pool_size_from_env();
+    if pool_size == 0 {
+        tracing::info!("opengrep_pool: CUBESANDBOX_OPENGREP_POOL_SIZE=0; pool disabled");
+        return;
+    }
+
+    // Load the runtime cubesandbox config (best-effort; if this fails, skip pool).
+    let config = match crate::runtime::cubesandbox::config::CubeSandboxConfig::load_runtime(state)
+        .await
+    {
+        Ok(c) => c,
+        Err(e) => {
+            tracing::warn!(error = %e, "opengrep_pool: failed to load cubesandbox config; pool skipped");
+            return;
+        }
+    };
+    if !config.enabled {
+        tracing::info!("opengrep_pool: cubesandbox disabled; pool skipped");
+        return;
+    }
+
+    let opengrep_config = config.for_template_kind(
+        crate::scan::opengrep_cubesandbox::opengrep_template_kind(),
+        state.config.as_ref(),
+    );
+
+    // Resolve the existing template ID (pool can only start if the template is ready).
+    let template_id =
+        match crate::runtime::cubesandbox::template_provisioner::resolve_existing_template_id(
+            state,
+            &opengrep_config,
+            crate::scan::opengrep_cubesandbox::opengrep_template_kind(),
+        )
+        .await
+        {
+            Ok(Some(id)) => id,
+            Ok(None) => {
+                tracing::info!("opengrep_pool: opengrep template not ready yet; pool skipped (will use cold path)");
+                return;
+            }
+            Err(e) => {
+                tracing::warn!(error = %e, "opengrep_pool: template ID resolution failed; pool skipped");
+                return;
+            }
+        };
+
+    // Build cubemaster client (same pattern as template_provisioner).
+    let cubemaster = match CubemasterClient::new(
+        CubemasterClientConfig {
+            base_url: opengrep_config.cubemaster_base_url.clone(),
+            cleanup_timeout_seconds: opengrep_config.cubemaster_cleanup_timeout_seconds,
+            instance_type: "cubebox".to_string(),
+        },
+        opengrep_config.clone(),
+    ) {
+        Ok(c) => Arc::new(c),
+        Err(e) => {
+            tracing::warn!(error = %e, "opengrep_pool: cubemaster client build failed; pool skipped");
+            return;
+        }
+    };
+
+    // Build sandbox client.
+    let client = match CubeSandboxClient::new(CubeSandboxClientConfig {
+        api_base_url: opengrep_config.api_base_url.clone(),
+        data_plane_base_url: opengrep_config.data_plane_base_url.clone(),
+        template_id: template_id.clone(),
+        execution_timeout_seconds: opengrep_config.execution_timeout_seconds,
+        cleanup_timeout_seconds: opengrep_config.sandbox_cleanup_timeout_seconds,
+        stdout_limit_bytes: opengrep_config.stdout_limit_bytes,
+        stderr_limit_bytes: opengrep_config.stderr_limit_bytes,
+    }) {
+        Ok(c) => c,
+        Err(e) => {
+            tracing::warn!(error = %e, "opengrep_pool: sandbox client build failed; pool skipped");
+            return;
+        }
+    };
+
+    let manifest_path = OpengrepSandboxPool::manifest_path_from_env();
+    let pool = Arc::new(OpengrepSandboxPool::new(
+        pool_size,
+        template_id,
+        cubemaster,
+        client,
+        manifest_path,
+    ));
+
+    match pool.startup().await {
+        Ok(()) => {
+            state.set_opengrep_pool(pool).await;
+            tracing::info!(pool_size = pool_size, "opengrep_pool: warm pool active");
+        }
+        Err(e) => {
+            tracing::warn!(error = %e, "opengrep_pool: startup failed; pool skipped (cold path will be used)");
+        }
+    }
 }
 
 fn mark_database_degraded(status: &mut DatabaseBootstrapStatus, message: String) {

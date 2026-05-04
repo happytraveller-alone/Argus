@@ -862,7 +862,10 @@ async fn cubesandbox_template_management_overview_no_db_returns_empty_lists() {
     let payload = response_json(response).await;
     assert_eq!(payload["templates"].as_array().map(Vec::len), Some(0));
     assert_eq!(payload["failedCount"], 0);
-    assert_eq!(payload["actions"]["deleteScope"], "failed_templates_only");
+    assert_eq!(
+        payload["actions"]["deleteScope"],
+        "failed_or_invalidated_templates_only"
+    );
     assert_eq!(payload["actions"]["sandboxDeletion"], false);
 }
 
@@ -891,7 +894,7 @@ async fn cubesandbox_template_management_cleanup_failed_no_db_is_bounded_noop() 
 }
 
 #[tokio::test]
-async fn cubesandbox_template_management_delete_rejects_non_failed_records() {
+async fn cubesandbox_template_management_delete_rejects_active_records() {
     let Some(config) = require_db_test_config("cubesandbox-template-delete-nonfailed") else {
         return;
     };
@@ -905,14 +908,14 @@ async fn cubesandbox_template_management_delete_rejects_non_failed_records() {
         .db_pool
         .as_ref()
         .expect("test requires DB-backed state");
-    sqlx::query("delete from rust_cubesandbox_templates where image_ref like 'argus/test-template-management:%'")
+    sqlx::query("delete from rust_cubesandbox_templates where image_ref like 'argus/test-template-management:%' or template_id in ('tpl-reset-old', 'tpl-reset-new', 'tpl-reset-stale')")
         .execute(pool)
         .await
         .expect("cleanup old test rows");
 
     let record = cubesandbox_templates::insert_pending(
         &state,
-        TemplateKind::CodeqlCpp,
+        TemplateKind::Opengrep,
         "argus/test-template-management:nonfailed",
     )
     .await
@@ -933,7 +936,7 @@ async fn cubesandbox_template_management_delete_rejects_non_failed_records() {
 
     assert_eq!(response.status(), StatusCode::CONFLICT);
     let payload = response_json(response).await;
-    assert_eq!(payload["scope"], "failed_templates_only");
+    assert_eq!(payload["scope"], "failed_or_invalidated_templates_only");
     assert_eq!(payload["status"], "pending");
     assert!(cubesandbox_templates::load_by_id(&state, &record.id)
         .await
@@ -956,14 +959,14 @@ async fn cubesandbox_template_management_delete_failed_record_without_template_i
         .db_pool
         .as_ref()
         .expect("test requires DB-backed state");
-    sqlx::query("delete from rust_cubesandbox_templates where image_ref like 'argus/test-template-management:%'")
+    sqlx::query("delete from rust_cubesandbox_templates where image_ref like 'argus/test-template-management:%' or template_id in ('tpl-reset-old', 'tpl-reset-new', 'tpl-reset-stale')")
         .execute(pool)
         .await
         .expect("cleanup old test rows");
 
     let record = cubesandbox_templates::insert_pending(
         &state,
-        TemplateKind::CodeqlCpp,
+        TemplateKind::Opengrep,
         "argus/test-template-management:failed",
     )
     .await
@@ -993,11 +996,197 @@ async fn cubesandbox_template_management_delete_failed_record_without_template_i
     let payload = response_json(response).await;
     assert_eq!(payload["deletedRecords"], 1);
     assert_eq!(payload["deletedTemplates"], 0);
-    assert_eq!(payload["scope"], "failed_templates_only");
+    assert_eq!(payload["scope"], "failed_or_invalidated_templates_only");
     assert!(cubesandbox_templates::load_by_id(&state, &record.id)
         .await
         .expect("lookup should complete")
         .is_none());
+}
+
+#[tokio::test]
+async fn cubesandbox_template_management_delete_invalidated_record_without_template_id() {
+    let Some(config) = require_db_test_config("cubesandbox-template-delete-invalidated") else {
+        return;
+    };
+    let state = AppState::from_config(config)
+        .await
+        .expect("state should build");
+    bootstrap::run(&state)
+        .await
+        .expect("startup bootstrap should create CubeSandbox template schema");
+    let pool = state
+        .db_pool
+        .as_ref()
+        .expect("test requires DB-backed state");
+    sqlx::query("delete from rust_cubesandbox_templates where image_ref like 'argus/test-template-management:%' or template_id in ('tpl-reset-old', 'tpl-reset-new', 'tpl-reset-stale')")
+        .execute(pool)
+        .await
+        .expect("cleanup old test rows");
+
+    let record = cubesandbox_templates::insert_pending(
+        &state,
+        TemplateKind::Opengrep,
+        "argus/test-template-management:invalidated",
+    )
+    .await
+    .expect("pending row should insert");
+    cubesandbox_templates::mark_invalidated(&state, TemplateKind::Opengrep)
+        .await
+        .expect("row should become invalidated");
+
+    let app = build_router(state.clone());
+    let response = app
+        .oneshot(
+            Request::delete(format!(
+                "/api/v1/cubesandbox/templates/records/{}",
+                record.id
+            ))
+            .body(Body::empty())
+            .unwrap(),
+        )
+        .await
+        .expect("delete request should complete");
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let payload = response_json(response).await;
+    assert_eq!(payload["deletedRecords"], 1);
+    assert_eq!(payload["deletedTemplates"], 0);
+    assert_eq!(payload["scope"], "failed_or_invalidated_templates_only");
+    assert!(cubesandbox_templates::load_by_id(&state, &record.id)
+        .await
+        .expect("lookup should complete")
+        .is_none());
+}
+
+#[tokio::test]
+async fn cubesandbox_template_management_reset_deletes_active_template_and_starts_rebuild() {
+    let Some(mut config) = require_db_test_config("cubesandbox-template-reset-rebuild") else {
+        return;
+    };
+    let helper_dir = tempfile::tempdir().expect("helper tempdir");
+    let helper_path = helper_dir.path().join("cubesandbox-helper.sh");
+    fs::write(
+        &helper_path,
+        "#!/bin/sh\nprintf 'PROVISION_RESULT={\"template_id\":\"tpl-reset-new\",\"artifact_id\":\"rfs-reset-new\",\"status\":\"READY\"}\\n'\nexit 0\n",
+    )
+    .expect("helper script should write");
+    let mut permissions = fs::metadata(&helper_path)
+        .expect("helper metadata")
+        .permissions();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        permissions.set_mode(0o755);
+        fs::set_permissions(&helper_path, permissions).expect("helper chmod");
+    }
+    let cubemaster_seen = RecordedRequests::default();
+    let cubemaster_addr = spawn_json_server(
+        cubemaster_seen.clone(),
+        vec![
+            (
+                StatusCode::OK,
+                r#"{"ret":{"ret_code":0,"ret_msg":"ok"}}"#.to_string(),
+            ),
+            (
+                StatusCode::OK,
+                r#"{"ret":{"ret_code":0,"ret_msg":"ok"}}"#.to_string(),
+            ),
+        ],
+    );
+    config.cubesandbox_enabled = true;
+    config.cubesandbox_api_base_url = "http://127.0.0.1:23000".to_string();
+    config.cubesandbox_data_plane_base_url = "https://127.0.0.1:21443".to_string();
+    config.cubesandbox_template_id = String::new();
+    config.cubesandbox_helper_path = helper_path.to_string_lossy().to_string();
+    config.cubesandbox_cubemaster_base_url = format!("http://{cubemaster_addr}");
+
+    let state = AppState::from_config(config)
+        .await
+        .expect("state should build");
+    bootstrap::run(&state)
+        .await
+        .expect("startup bootstrap should create CubeSandbox template schema");
+    let pool = state
+        .db_pool
+        .as_ref()
+        .expect("test requires DB-backed state");
+    sqlx::query("delete from rust_cubesandbox_templates where image_ref like 'argus/test-template-management:%' or template_id in ('tpl-reset-old', 'tpl-reset-new', 'tpl-reset-stale')")
+        .execute(pool)
+        .await
+        .expect("cleanup old test rows");
+
+    let stale = cubesandbox_templates::insert_pending(
+        &state,
+        TemplateKind::current_opengrep(),
+        "argus/test-template-management:reset-stale",
+    )
+    .await
+    .expect("stale pending row should insert");
+    cubesandbox_templates::update_to_ready(&state, &stale.id, "tpl-reset-stale", None)
+        .await
+        .expect("stale row should become ready");
+    cubesandbox_templates::mark_invalidated(&state, TemplateKind::current_opengrep())
+        .await
+        .expect("stale row should become invalidated");
+
+    let old = cubesandbox_templates::insert_pending(
+        &state,
+        TemplateKind::current_opengrep(),
+        "argus/test-template-management:reset",
+    )
+    .await
+    .expect("pending row should insert");
+    cubesandbox_templates::update_to_ready(&state, &old.id, "tpl-reset-old", None)
+        .await
+        .expect("row should become ready");
+
+    let app = build_router(state.clone());
+    let response = app
+        .oneshot(
+            Request::post("/api/v1/cubesandbox/templates/opengrep/reset")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .expect("reset request should complete");
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let payload = response_json(response).await;
+    assert_eq!(payload["invalidatedRecords"], 1);
+    assert_eq!(payload["deletedRecords"], 2);
+    assert_eq!(payload["deletedTemplates"], 2);
+    assert_eq!(payload["targetStatus"], "ready");
+    assert_eq!(payload["record"]["status"], "pending");
+    assert!(cubesandbox_templates::load_by_id(&state, &old.id)
+        .await
+        .expect("old lookup should complete")
+        .is_none());
+    assert!(cubesandbox_templates::load_by_id(&state, &stale.id)
+        .await
+        .expect("stale lookup should complete")
+        .is_none());
+    assert_eq!(
+        cubemaster_seen.paths(),
+        vec!["/cube/template", "/cube/template"]
+    );
+
+    for _ in 0..20 {
+        let active = cubesandbox_templates::get_active(&state, TemplateKind::OpengrepDedicated)
+            .await
+            .expect("active lookup should complete");
+        if active
+            .as_ref()
+            .is_some_and(|record| record.status.as_str() == "ready")
+        {
+            assert_eq!(
+                active.unwrap().template_id.as_deref(),
+                Some("tpl-reset-new")
+            );
+            return;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+    panic!("reset provision did not reach ready");
 }
 
 async fn submit_cubesandbox_task(app: &RouterForTest, cube_sandbox: Value) -> Value {

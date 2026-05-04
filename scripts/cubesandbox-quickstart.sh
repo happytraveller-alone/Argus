@@ -33,10 +33,21 @@ CUBE_CODEQL_CPP_WSL_IMAGE="${CUBE_CODEQL_CPP_WSL_IMAGE:-argus/cubesandbox-codeql
 CUBE_CODEQL_CPP_WRITABLE_LAYER_SIZE="${CUBE_CODEQL_CPP_WRITABLE_LAYER_SIZE:-16Gi}" # FINAL plan Phase 1: 4Gi→16Gi (CodeQL DB needs runtime headroom)
 CUBE_CODEQL_CPP_DOCKERFILE="${CUBE_CODEQL_CPP_DOCKERFILE:-${ROOT_DIR}/oci/cubesandbox/codeql-cpp.Dockerfile}"
 CUBE_OPENGREP_IMAGE="${CUBE_OPENGREP_IMAGE:-127.0.0.1:${CUBE_LOCAL_REGISTRY_PORT}/cubesandbox-opengrep:latest}"
+CUBE_OPENGREP_REUSE_EXISTING_IMAGE="${CUBE_OPENGREP_REUSE_EXISTING_IMAGE:-true}"
 CUBE_OPENGREP_WSL_IMAGE="${CUBE_OPENGREP_WSL_IMAGE:-argus/cubesandbox-opengrep:latest}"
 CUBE_OPENGREP_BASE_IMAGE="${CUBE_OPENGREP_BASE_IMAGE:-${CUBE_DOCKERHUB_MIRROR_IMAGE_PREFIX}/library/debian:trixie-slim}"
 CUBE_ENVD_BASE_IMAGE="${CUBE_ENVD_BASE_IMAGE:-ghcr.nju.edu.cn/tencentcloud/cubesandbox-base:2026.16}"
-CUBE_OPENGREP_WRITABLE_LAYER_SIZE="${CUBE_OPENGREP_WRITABLE_LAYER_SIZE:-1Gi}"
+# Per-task ephemeral sandbox: extracted source (~300 MB for FFmpeg ~10k files)
+# + rules (~50 MB) + opengrep scratch. 4Gi gives 6x headroom and lets the
+# cubesandbox VM hold 3 concurrent sandboxes within its ~16G free disk (vs 8Gi
+# which only fits 1). Raised from original 1Gi (ENOSPC on medium/large).
+CUBE_OPENGREP_WRITABLE_LAYER_SIZE="${CUBE_OPENGREP_WRITABLE_LAYER_SIZE:-4Gi}"
+# vCPU + memory for the opengrep sandbox template. cubemastercli default = 2000m
+# (2 cores) / 2000 MB. Raised to 4000m / 4096 MB so opengrep can use the host's
+# extra cores during scan (P5 verification showed 94% of OCI scan time was
+# in-sandbox CPU-bound opengrep execution; this is the direct lever).
+CUBE_OPENGREP_CPU_MILLI="${CUBE_OPENGREP_CPU_MILLI:-4000}"
+CUBE_OPENGREP_MEMORY_MB="${CUBE_OPENGREP_MEMORY_MB:-4096}"
 CUBE_OPENGREP_DOCKERFILE="${CUBE_OPENGREP_DOCKERFILE:-${ROOT_DIR}/oci/cubesandbox/opengrep.Dockerfile}"
 CUBE_OPENGREP_RULES_ARCHIVE="${CUBE_OPENGREP_RULES_ARCHIVE:-}"
 CUBE_RELEASE_VERSION="${CUBE_RELEASE_VERSION:-v0.1.2}"
@@ -463,6 +474,11 @@ build_opengrep_image() {
   base_image_q="$(shell_quote "$CUBE_OPENGREP_BASE_IMAGE")"
   envd_base_image_q="$(shell_quote "$CUBE_ENVD_BASE_IMAGE")"
   dockerfile_q="$(shell_quote "$(basename "$CUBE_OPENGREP_DOCKERFILE")")"
+  if is_truthy "$CUBE_OPENGREP_REUSE_EXISTING_IMAGE" && remote_root "docker image inspect ${image_q} >/dev/null 2>&1"; then
+    log "[opengrep] reuse existing image ${CUBE_OPENGREP_IMAGE}"
+    remote_root "docker push ${image_q}"
+    return 0
+  fi
   dockerfile_b64="$(base64 -w 0 "$CUBE_OPENGREP_DOCKERFILE")"
   scan_script_b64="$(base64 -w 0 "${ROOT_DIR}/docker/opengrep-scan.sh")"
   if [[ -n "$CUBE_OPENGREP_RULES_ARCHIVE" ]]; then
@@ -550,7 +566,7 @@ create_codeql_cpp_template() {
 
 create_opengrep_template() {
   local raw job_id
-  raw="$(remote_root "cubemastercli --address 127.0.0.1 tpl create-from-image --image '$(shell_quote "$CUBE_OPENGREP_IMAGE")' --writable-layer-size '$(shell_quote "$CUBE_OPENGREP_WRITABLE_LAYER_SIZE")' --expose-port 49983 --probe 49983 --probe-path /health 2>&1" | tee /dev/stderr)"
+  raw="$(remote_root "cubemastercli --address 127.0.0.1 tpl create-from-image --image '$(shell_quote "$CUBE_OPENGREP_IMAGE")' --writable-layer-size '$(shell_quote "$CUBE_OPENGREP_WRITABLE_LAYER_SIZE")' --cpu '$(shell_quote "$CUBE_OPENGREP_CPU_MILLI")' --memory '$(shell_quote "$CUBE_OPENGREP_MEMORY_MB")' --expose-port 49983 --probe 49983 --probe-path /health 2>&1" | tee /dev/stderr)"
   job_id="$(printf '%s\n' "$raw" | sed -nE 's/.*job[_ -]?id[: ]+([0-9a-fA-F-]+).*/\1/p' | head -n 1 || true)"
   if [[ -z "$job_id" ]]; then
     job_id="$(printf '%s\n' "$raw" | grep -Eio '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' | head -n 1 || true)"

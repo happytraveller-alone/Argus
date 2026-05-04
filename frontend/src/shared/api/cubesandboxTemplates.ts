@@ -56,15 +56,17 @@ export interface SandboxTemplateManagementOverview {
   templates: CubesandboxTemplateRecord[];
   failedCount: number;
   actions: {
-    deleteScope: "failed_templates_only";
+    deleteScope: "failed_templates_only" | "failed_or_invalidated_templates_only";
     cleanupScope?: "failed_templates_only";
     sandboxDeletion: boolean;
     resetDeletesTemplates?: boolean;
+    resetRebuildsTemplate?: boolean;
+    resetTargetStatus?: "ready";
   };
 }
 
 export interface SandboxTemplateCleanupSummary {
-  scope: "failed_templates_only";
+  scope: "failed_templates_only" | "failed_or_invalidated_templates_only";
   scannedFailed?: number;
   deletedRecords: number;
   deletedTemplates: number;
@@ -76,6 +78,16 @@ export interface SandboxTemplateCleanupSummary {
 }
 
 export type SandboxTemplateResetKind = "codeql_cpp" | "opengrep";
+
+export interface SandboxTemplateResetSummary {
+  kind: SandboxTemplateResetKind | "opengrep_dedicated";
+  recordKind?: string;
+  invalidatedRecords: number;
+  deletedRecords: number;
+  deletedTemplates: number;
+  targetStatus: "ready";
+  record: CubesandboxTemplateRecord;
+}
 
 export async function getSandboxTemplateManagementOverview(): Promise<SandboxTemplateManagementOverview> {
   const response = await apiClient.get<SandboxTemplateManagementOverview>(
@@ -102,10 +114,10 @@ export async function cleanupFailedSandboxTemplates(): Promise<SandboxTemplateCl
 
 export async function resetSandboxTemplateKind(
   kind: SandboxTemplateResetKind,
-): Promise<{ affected: number }> {
+): Promise<SandboxTemplateResetSummary> {
   const path = kind === "codeql_cpp" ? "codeql-cpp" : "opengrep";
-  const response = await apiClient.post<{ affected: number }>(
-    `/cubesandbox/templates/${path}/invalidate`,
+  const response = await apiClient.post<SandboxTemplateResetSummary>(
+    `/cubesandbox/templates/${path}/reset`,
   );
   return response.data;
 }

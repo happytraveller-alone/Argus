@@ -2,7 +2,7 @@ use std::{
     collections::{HashMap, HashSet},
     io::Write,
     path::Path,
-    sync::{LazyLock, Mutex},
+    sync::{Arc, LazyLock, Mutex},
 };
 
 use anyhow::{bail, Context, Result};
@@ -20,6 +20,7 @@ use crate::{
         },
         config::CubeSandboxConfig,
         helper::{run_helper_command, should_run_local_lifecycle, CubeSandboxHelperCommand},
+        opengrep_pool::PoolGuard,
         template_provisioner::{self, EnsureOutcome},
     },
     state::AppState,
@@ -49,7 +50,7 @@ pub struct CubeSandboxOpengrepOutput {
 
 #[derive(Serialize)]
 struct CubeSandboxOpengrepRequest {
-    archive_b64: String,
+    // archive_b64 removed (A4-lite): archive is uploaded via write_file to /tmp/workspace.tar.gz
     jobs: usize,
     max_memory_mb: u64,
 }
@@ -75,25 +76,78 @@ static ACTIVE_OPENGREP_SANDBOXES: LazyLock<Mutex<HashMap<String, ActiveOpengrepS
 static CANCELLED_OPENGREP_TASKS: LazyLock<Mutex<HashSet<String>>> =
     LazyLock::new(|| Mutex::new(HashSet::new()));
 
+/// Holds either a pool-borrowed sandbox (warm path) or a directly-created one (cold path).
+enum SessionSandboxSource {
+    /// Warm pool path: the guard carries the sandbox back to the pool on release.
+    Pool { guard: PoolGuard },
+    /// Cold path: sandbox was created ad-hoc; cleanup deletes it.
+    Direct {
+        client: CubeSandboxClient,
+        sandbox: CubeSandboxSandbox,
+    },
+}
+
+impl SessionSandboxSource {
+    fn client(&self) -> &CubeSandboxClient {
+        match self {
+            Self::Pool { guard } => &guard.client,
+            Self::Direct { client, .. } => client,
+        }
+    }
+
+    fn sandbox(&self) -> &CubeSandboxSandbox {
+        match self {
+            Self::Pool { guard } => guard.sandbox(),
+            Self::Direct { sandbox, .. } => sandbox,
+        }
+    }
+}
+
 pub struct OpengrepSandboxSession {
     task_id: String,
     pub template_id: String,
-    client: CubeSandboxClient,
-    sandbox: CubeSandboxSandbox,
+    source: SessionSandboxSource,
+    t0: std::time::Instant,
 }
 
 impl OpengrepSandboxSession {
     pub async fn start(state: &AppState, task_id: &str) -> Result<Self> {
+        let t0 = std::time::Instant::now();
         let config = CubeSandboxConfig::load_runtime(state)
             .await?
             .for_template_kind(opengrep_template_kind(), state.config.as_ref());
         config.validate_for_execution()?;
         let template_id = ensure_template_id_or_wait(state, &config, task_id).await?;
+        tracing::info!(task_id = %task_id, stage = "template_ready", elapsed_ms = t0.elapsed().as_millis() as u64);
         if take_cancel_request(task_id) {
             bail!("Opengrep CubeSandbox scan cancelled before sandbox creation for task {task_id}");
         }
+
+        // Try warm pool first.
+        if let Some(pool) = state.get_opengrep_pool().await {
+            tracing::info!(task_id = %task_id, stage = "client_prepared", elapsed_ms = t0.elapsed().as_millis() as u64);
+            let guard = pool.acquire(task_id).await?;
+            let sandbox_id = guard.sandbox().sandbox_id.clone();
+            register_active_sandbox(
+                task_id,
+                ActiveOpengrepSandbox {
+                    client: guard.client.clone(),
+                    sandbox_id: sandbox_id.clone(),
+                },
+            );
+            return Ok(Self {
+                task_id: task_id.to_string(),
+                template_id,
+                source: SessionSandboxSource::Pool { guard },
+                t0,
+            });
+        }
+
+        // Cold path (no pool or pool disabled).
         let client = prepare_client(&config, &template_id).await?;
+        tracing::info!(task_id = %task_id, stage = "client_prepared", elapsed_ms = t0.elapsed().as_millis() as u64);
         let sandbox = client.create_sandbox().await?;
+        tracing::info!(task_id = %task_id, stage = "sandbox_created", elapsed_ms = t0.elapsed().as_millis() as u64);
         register_active_sandbox(
             task_id,
             ActiveOpengrepSandbox {
@@ -107,11 +161,12 @@ impl OpengrepSandboxSession {
             bail!("Opengrep CubeSandbox scan cancelled before sandbox connect for task {task_id}");
         }
         client.connect_sandbox(&sandbox.sandbox_id).await?;
+        tracing::info!(task_id = %task_id, stage = "sandbox_connected", elapsed_ms = t0.elapsed().as_millis() as u64);
         Ok(Self {
             task_id: task_id.to_string(),
-            template_id: template_id.clone(),
-            client,
-            sandbox,
+            template_id,
+            source: SessionSandboxSource::Direct { client, sandbox },
+            t0,
         })
     }
 
@@ -125,25 +180,52 @@ impl OpengrepSandboxSession {
                 input.task_id
             );
         }
+        let client = self.source.client();
+        let sandbox = self.source.sandbox();
+        tracing::info!(task_id = %self.task_id, stage = "archive_start", elapsed_ms = self.t0.elapsed().as_millis() as u64);
+
+        // A4-lite: build raw tar+gz bytes and upload via write_file (skip base64 encode/decode).
+        let archive_bytes =
+            create_workspace_archive_bytes(input.workspace_dir, input.source_dir, input.rules_dir)?;
+        tracing::info!(
+            task_id = %self.task_id,
+            stage = "archive_built",
+            elapsed_ms = self.t0.elapsed().as_millis() as u64,
+            archive_bytes = archive_bytes.len() as u64,
+            jobs = input.jobs as u64,
+        );
+
+        // Upload archive directly — no base64 encoding.
+        client
+            .write_file(sandbox, "/tmp/workspace.tar.gz", archive_bytes)
+            .await?;
+
         let payload = CubeSandboxOpengrepRequest {
-            archive_b64: create_workspace_archive_b64(
-                input.workspace_dir,
-                input.source_dir,
-                input.rules_dir,
-            )?,
             jobs: input.jobs,
             max_memory_mb: input.max_memory_mb,
         };
         let script = build_opengrep_runner_script(&payload)?;
-        let output = self.client.run_command(&self.sandbox, &script).await?;
+        let output = client.run_command(sandbox, &script).await?;
+        tracing::info!(task_id = %self.task_id, stage = "command_done", elapsed_ms = self.t0.elapsed().as_millis() as u64);
         let mut result = parse_opengrep_output(output)?;
-        result.sandbox_id = self.sandbox.sandbox_id.clone();
+        result.sandbox_id = sandbox.sandbox_id.clone();
         Ok(result)
     }
 
     pub async fn cleanup(self) -> Result<()> {
-        unregister_active_sandbox(&self.task_id, &self.sandbox.sandbox_id);
-        self.client.delete_sandbox(&self.sandbox.sandbox_id).await
+        let sandbox_id = self.source.sandbox().sandbox_id.clone();
+        unregister_active_sandbox(&self.task_id, &sandbox_id);
+        match self.source {
+            SessionSandboxSource::Pool { guard } => {
+                let pool = Arc::clone(&guard.pool);
+                pool.release(guard).await?;
+            }
+            SessionSandboxSource::Direct { client, sandbox } => {
+                client.delete_sandbox(&sandbox.sandbox_id).await?;
+            }
+        }
+        tracing::info!(task_id = %self.task_id, stage = "cleaned_up", elapsed_ms = self.t0.elapsed().as_millis() as u64);
+        Ok(())
     }
 }
 
@@ -358,22 +440,37 @@ fn ensure_helper_success(
     )
 }
 
-fn create_workspace_archive_b64(
+/// Returns true when the sandbox image has pre-baked rules and we should skip bundling them.
+/// Controlled by `OPENGREP_USE_BAKED_RULES` env var (default: "1" = enabled).
+fn use_baked_rules() -> bool {
+    std::env::var("OPENGREP_USE_BAKED_RULES")
+        .unwrap_or_else(|_| "1".to_string())
+        .trim()
+        != "0"
+}
+
+/// A4-lite: returns raw tar+gz bytes (no base64 encoding).
+/// The caller uploads these via `client.write_file(sandbox, "/tmp/workspace.tar.gz", bytes)`.
+/// When `use_baked_rules()` is true, only the source dir is archived (rules already in image).
+fn create_workspace_archive_bytes(
     _workspace_dir: &Path,
     source_dir: &Path,
     rules_dir: &Path,
-) -> Result<String> {
+) -> Result<Vec<u8>> {
     let mut archive = Vec::new();
     {
         let encoder = GzEncoder::new(&mut archive, Compression::default());
         let mut builder = Builder::new(encoder);
         append_dir(&mut builder, source_dir, "source")?;
-        append_dir(&mut builder, rules_dir, "rules")?;
+        if !use_baked_rules() {
+            // Baked-rules disabled: include rules dir so the Python script can find them.
+            append_dir(&mut builder, rules_dir, "rules")?;
+        }
         builder.finish()?;
         let encoder = builder.into_inner()?;
         encoder.finish()?;
     }
-    Ok(STANDARD.encode(archive))
+    Ok(archive)
 }
 
 fn append_dir<W: Write>(builder: &mut Builder<W>, dir: &Path, archive_prefix: &str) -> Result<()> {
@@ -516,20 +613,28 @@ fn truncate_for_error(value: &str) -> String {
 const CUBESANDBOX_OPENGREP_PY: &str = r#"
 import base64
 import json
+import os
 import pathlib
 import subprocess
 import sys
 import tarfile
+import time
+
+_t = {}
+_t["start"] = time.perf_counter()
 
 with open(sys.argv[1], "rb") as _argus_payload_fh:
     _argus_payload_b64 = _argus_payload_fh.read().strip()
 payload = json.loads(base64.b64decode(_argus_payload_b64).decode("utf-8"))
+# fallback when payload['jobs'] is missing or zero (Python truthiness on int 0)
+DEFAULT_JOBS = 4
 work = pathlib.Path("/tmp/argus-opengrep-work")
 if work.exists():
     subprocess.run(["rm", "-rf", str(work)], check=True)
 work.mkdir(parents=True)
-archive_path = work / "workspace.tar.gz"
-archive_path.write_bytes(base64.b64decode(payload["archive_b64"]))
+# A4-lite: archive was uploaded via write_file to /tmp/workspace.tar.gz (no base64)
+archive_path = pathlib.Path("/tmp/workspace.tar.gz")
+_t["extract_start"] = time.perf_counter()
 with tarfile.open(archive_path, "r:gz") as bundle:
     root = work.resolve()
     for member in bundle.getmembers():
@@ -537,9 +642,24 @@ with tarfile.open(archive_path, "r:gz") as bundle:
         if target != root and root not in target.parents:
             raise SystemExit(f"archive member escapes workspace: {member.name}")
     bundle.extractall(work)
+_t["extract_done"] = time.perf_counter()
+print(f"STAGE_TIMING extract_done={_t['extract_done']-_t['extract_start']:.3f}s", file=sys.stderr)
 
 source = work / "source"
-rules = work / "rules"
+# Baked-rules path: if the image pre-extracted rules into /opt/opengrep/rules/ (marker
+# file .baked present) and OPENGREP_USE_BAKED_RULES != "0", use the image-side rules
+# directly — the workspace archive contains only source, so rules dir won't exist in work/.
+_BAKED_RULES_DIR = pathlib.Path("/opt/opengrep/rules")
+_use_baked = (
+    os.environ.get("OPENGREP_USE_BAKED_RULES", "1").strip() != "0"
+    and (_BAKED_RULES_DIR / ".baked").exists()
+)
+if _use_baked:
+    rules = _BAKED_RULES_DIR
+    print(f"STAGE_TIMING baked_rules=1 rules={rules}", file=sys.stderr)
+else:
+    rules = work / "rules"
+    print(f"STAGE_TIMING baked_rules=0 rules={rules}", file=sys.stderr)
 output_dir = work / "output"
 output_dir.mkdir(parents=True, exist_ok=True)
 results = output_dir / "results.json"
@@ -555,10 +675,12 @@ cmd = [
     "--summary", str(summary),
     "--log", str(log),
     "--config", str(rules),
-    "--jobs", str(payload.get("jobs") or 1),
+    "--jobs", str(int(payload.get("jobs") or DEFAULT_JOBS)),
     "--max-memory", str(payload.get("max_memory_mb") or 2048),
 ]
 proc = subprocess.run(cmd, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=900)
+_t["opengrep_done"] = time.perf_counter()
+print(f"STAGE_TIMING opengrep_done={_t['opengrep_done']-_t['extract_done']:.3f}s", file=sys.stderr)
 stdout.write_text(proc.stdout or "", encoding="utf-8")
 stderr.write_text(proc.stderr or "", encoding="utf-8")
 if not summary.exists():
@@ -608,7 +730,6 @@ mod tests {
     #[test]
     fn opengrep_runner_script_passes_payload_as_python_argument() {
         let script = build_opengrep_runner_script(&CubeSandboxOpengrepRequest {
-            archive_b64: "YXJjaGl2ZQ==".to_string(),
             jobs: 2,
             max_memory_mb: 1024,
         })

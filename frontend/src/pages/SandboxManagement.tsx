@@ -44,6 +44,10 @@ function formatTaskTime(value: string | null | undefined) {
   });
 }
 
+function sleep(ms: number) {
+  return new Promise((resolve) => globalThis.setTimeout(resolve, ms));
+}
+
 export default function SandboxManagementPage() {
   const [templates, setTemplates] = useState<CubesandboxTemplateRecord[]>([]);
   const [tasks, setTasks] = useState<CubeSandboxTaskRecord[]>([]);
@@ -82,11 +86,11 @@ export default function SandboxManagementPage() {
   }, []);
 
   async function handleDeleteFailed(record: CubesandboxTemplateRecord) {
-    if (record.status !== "failed") return;
+    if (record.status !== "failed" && record.status !== "invalidated") return;
     if (
       typeof window !== "undefined" &&
       !window.confirm(
-        `确认删除 FAILED 模板记录「${record.templateId ?? record.id}」？此操作只作用于 FAILED 模板记录/模板，不会删除运行中沙箱实例。`,
+        `确认删除 ${record.status.toUpperCase()} 模板记录「${record.templateId ?? record.id}」？此操作只作用于 FAILED / INVALIDATED 模板记录/模板，不会删除运行中沙箱实例。`,
       )
     ) {
       return;
@@ -94,13 +98,13 @@ export default function SandboxManagementPage() {
     setDeletingRecordId(record.id ?? null);
     try {
       const result = await deleteFailedSandboxTemplateRecord(record.id ?? "");
-      toast.success("FAILED 模板已删除", {
+      toast.success("模板已删除", {
         description: `删除记录 ${result.deletedRecords} 条，CubeMaster 模板 ${result.deletedTemplates} 个。`,
       });
       await loadData();
     } catch (error) {
-      console.error("Failed to delete failed sandbox template:", error);
-      toast.error("删除 FAILED 模板失败");
+      console.error("Failed to delete sandbox template:", error);
+      toast.error("删除模板失败");
     } finally {
       setDeletingRecordId(null);
     }
@@ -132,10 +136,30 @@ export default function SandboxManagementPage() {
     setResettingKind(kind);
     try {
       const result = await resetSandboxTemplateKind(kind);
-      toast.success(kind === "codeql_cpp" ? "CodeQL 模板已重置" : "OpenGrep 模板已重置", {
-        description: `已置为 invalidated 的活跃记录数：${result.affected}。`,
+      toast.success(kind === "codeql_cpp" ? "CodeQL 模板已重置并开始重建" : "OpenGrep 模板已重置并开始重建", {
+        description: `删除记录 ${result.deletedRecords} 条，删除模板 ${result.deletedTemplates} 个；新记录目标状态 ready。`,
       });
       await loadData();
+      for (let attempt = 0; attempt < 120; attempt += 1) {
+        await sleep(3000);
+        const overview = await getSandboxTemplateManagementOverview();
+        setTemplates(overview.templates);
+        setFailedCount(overview.failedCount);
+        const latest = overview.templates.find((record) => {
+          const recordKind = record.kind === "opengrep_dedicated" ? "opengrep" : record.kind;
+          return recordKind === kind;
+        });
+        if (latest?.status === "ready") {
+          toast.success(kind === "codeql_cpp" ? "CodeQL 模板已就绪" : "OpenGrep 模板已就绪", {
+            description: latest.templateId ? `template_id=${latest.templateId}` : "状态 ready",
+          });
+          break;
+        }
+        if (latest?.status === "failed") {
+          toast.error(kind === "codeql_cpp" ? "CodeQL 模板重建失败" : "OpenGrep 模板重建失败");
+          break;
+        }
+      }
     } catch (error) {
       console.error("Failed to reset sandbox template kind:", error);
       toast.error("重置模板失败");

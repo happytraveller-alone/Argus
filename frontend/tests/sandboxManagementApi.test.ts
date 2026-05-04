@@ -21,7 +21,16 @@ test("sandbox template management api uses bounded cubesandbox template routes",
   }) as typeof apiClient.get;
   apiClient.post = (async (url: string) => {
     calls.push({ method: "POST", url });
-    return { data: { scope: "failed_templates_only" } };
+    return {
+      data: {
+        scope: "failed_templates_only",
+        invalidatedRecords: 1,
+        deletedRecords: 1,
+        deletedTemplates: 1,
+        targetStatus: "ready",
+        record: { status: "pending", templateId: null, artifactId: null, jobId: null, errorMessage: null, buildLogTail: "" },
+      },
+    };
   }) as typeof apiClient.post;
   apiClient.delete = (async (url: string) => {
     calls.push({ method: "DELETE", url });
@@ -44,7 +53,7 @@ test("sandbox template management api uses bounded cubesandbox template routes",
     { method: "GET", url: "/cubesandbox/templates" },
     { method: "POST", url: "/cubesandbox/templates/cleanup-failed" },
     { method: "DELETE", url: "/cubesandbox/templates/records/record-1" },
-    { method: "POST", url: "/cubesandbox/templates/codeql-cpp/invalidate" },
-    { method: "POST", url: "/cubesandbox/templates/opengrep/invalidate" },
+    { method: "POST", url: "/cubesandbox/templates/codeql-cpp/reset" },
+    { method: "POST", url: "/cubesandbox/templates/opengrep/reset" },
   ]);
 });

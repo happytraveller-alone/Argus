@@ -139,6 +139,14 @@ impl CubemasterClient {
             .await
             .with_context(|| format!("cubemaster DELETE {url} failed"))?;
 
+        if resp.status() == reqwest::StatusCode::NOT_FOUND {
+            tracing::info!(
+                template_id,
+                "cubemaster template delete returned HTTP 404 (idempotent ok)"
+            );
+            return Ok(());
+        }
+
         let envelope: RetEnvelope = resp
             .json()
             .await
@@ -153,6 +161,14 @@ impl CubemasterClient {
                 tracing::info!(
                     template_id,
                     "cubemaster template already gone (idempotent ok)"
+                );
+                Ok(())
+            }
+            code if is_template_not_found_message(&envelope.ret.ret_msg) => {
+                tracing::info!(
+                    template_id,
+                    ret_code = code,
+                    "cubemaster template already gone by message (idempotent ok)"
                 );
                 Ok(())
             }
@@ -268,6 +284,13 @@ impl CubemasterClient {
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────
+
+fn is_template_not_found_message(value: &str) -> bool {
+    let normalized = value.to_ascii_lowercase();
+    normalized.contains("template not found")
+        || normalized.contains("no such template")
+        || normalized.contains("not found template")
+}
 
 /// Parse the tabular output of `cubemastercli tpl list`.
 ///
@@ -385,6 +408,44 @@ mod tests {
         let client = make_client(&server.base_url());
         let result = client.delete_template("tpl-gone").await;
         assert!(result.is_ok(), "expected idempotent Ok, got {:?}", result);
+        mock.assert();
+    }
+
+    #[tokio::test]
+    async fn delete_template_idempotent_http_404() {
+        let server = MockServer::start();
+        let mock = server.mock(|when, then| {
+            when.method(DELETE).path("/cube/template");
+            then.status(404);
+        });
+
+        let client = make_client(&server.base_url());
+        let result = client.delete_template("tpl-gone").await;
+        assert!(
+            result.is_ok(),
+            "expected HTTP 404 idempotent Ok, got {:?}",
+            result
+        );
+        mock.assert();
+    }
+
+    #[tokio::test]
+    async fn delete_template_idempotent_no_such_template_message() {
+        let server = MockServer::start();
+        let mock = server.mock(|when, then| {
+            when.method(DELETE).path("/cube/template");
+            then.status(200).json_body(serde_json::json!({
+                "ret": {"ret_code": 200, "ret_msg": "no such template"}
+            }));
+        });
+
+        let client = make_client(&server.base_url());
+        let result = client.delete_template("tpl-gone").await;
+        assert!(
+            result.is_ok(),
+            "expected no-such-template idempotent Ok, got {:?}",
+            result
+        );
         mock.assert();
     }
 

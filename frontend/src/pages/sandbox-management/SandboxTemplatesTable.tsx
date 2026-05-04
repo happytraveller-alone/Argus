@@ -34,16 +34,12 @@ function statusClassName(status: string) {
   return "border-slate-400/30 bg-slate-400/12 text-slate-100";
 }
 
-function formatDate(value?: string | null) {
-  if (!value) return "-";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString("zh-CN", {
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+function recordCanDelete(status: string) {
+  return status === "failed" || status === "invalidated";
+}
+
+function templateIdentityTitle(record: CubesandboxTemplateRecord) {
+  return `ID: ${record.templateId || "-"}\n镜像: ${record.imageRef || "-"}`;
 }
 
 function buildColumns(
@@ -93,28 +89,27 @@ function buildColumns(
       ),
     },
     {
-      accessorKey: "templateId",
-      header: "CubeMaster 模板 ID",
+      id: "templateIdentity",
+      header: "模板 / 镜像",
       meta: {
-        label: "模板 ID",
-        minWidth: 190,
+        label: "模板 / 镜像",
+        minWidth: 260,
         headerClassName: `${HEADER_CELL_CLASSNAME} ${DIVIDER_CELL_CLASSNAME}`,
         headerContentClassName: HEADER_CONTENT_CLASSNAME,
-        cellClassName: `${BODY_CELL_CLASSNAME} ${DIVIDER_CELL_CLASSNAME} text-muted-foreground`,
+        cellClassName: `${BODY_CELL_CLASSNAME} ${DIVIDER_CELL_CLASSNAME}`,
       },
-      cell: ({ row }) => <span title={row.original.templateId ?? undefined}>{shortText(row.original.templateId)}</span>,
-    },
-    {
-      accessorKey: "imageRef",
-      header: "镜像",
-      meta: {
-        label: "镜像",
-        minWidth: 180,
-        headerClassName: `${HEADER_CELL_CLASSNAME} ${DIVIDER_CELL_CLASSNAME}`,
-        headerContentClassName: HEADER_CONTENT_CLASSNAME,
-        cellClassName: `${BODY_CELL_CLASSNAME} ${DIVIDER_CELL_CLASSNAME} text-muted-foreground`,
-      },
-      cell: ({ row }) => <span title={row.original.imageRef ?? undefined}>{shortText(row.original.imageRef)}</span>,
+      cell: ({ row }) => (
+        <div className="flex flex-col items-center gap-1.5" title={templateIdentityTitle(row.original)}>
+          <span className="inline-flex max-w-[260px] rounded-md border border-sky-400/30 bg-sky-500/10 px-2 py-0.5 font-mono text-[11px] font-semibold text-sky-100">
+            <span className="mr-1 text-sky-300/80">ID</span>
+            <span className="truncate">{shortText(row.original.templateId, "-")}</span>
+          </span>
+          <span className="inline-flex max-w-[260px] rounded-md border border-violet-400/30 bg-violet-500/10 px-2 py-0.5 font-mono text-[11px] font-semibold text-violet-100">
+            <span className="mr-1 text-violet-300/80">镜像</span>
+            <span className="truncate">{shortText(row.original.imageRef, "-")}</span>
+          </span>
+        </div>
+      ),
     },
     {
       id: "error",
@@ -129,18 +124,6 @@ function buildColumns(
       cell: ({ row }) => <span title={row.original.errorMessage ?? row.original.buildLogTail}>{shortText(row.original.errorMessage ?? row.original.buildLogTail)}</span>,
     },
     {
-      accessorKey: "updatedAt",
-      header: "更新时间",
-      meta: {
-        label: "更新时间",
-        minWidth: 120,
-        headerClassName: `${HEADER_CELL_CLASSNAME} ${DIVIDER_CELL_CLASSNAME}`,
-        headerContentClassName: HEADER_CONTENT_CLASSNAME,
-        cellClassName: `${BODY_CELL_CLASSNAME} ${DIVIDER_CELL_CLASSNAME} text-muted-foreground`,
-      },
-      cell: ({ row }) => formatDate(row.original.updatedAt),
-    },
-    {
       id: "actions",
       header: "操作",
       enableSorting: false,
@@ -153,7 +136,7 @@ function buildColumns(
         cellClassName: `${BODY_CELL_CLASSNAME} ${SECTION_DIVIDER_CLASSNAME}`,
       },
       cell: ({ row }) => {
-        const canDelete = row.original.status === "failed";
+        const canDelete = recordCanDelete(row.original.status);
         const deleting = deletingRecordId === row.original.id;
         return (
           <Button
@@ -161,10 +144,10 @@ function buildColumns(
             variant="ghost"
             className="h-8 px-2.5 text-rose-200 hover:bg-rose-500/10 hover:text-rose-100"
             disabled={!canDelete || deleting}
-            title={canDelete ? "仅删除 FAILED 模板记录/模板" : "仅 FAILED 可删"}
+            title={canDelete ? "删除 FAILED / INVALIDATED 模板记录/模板" : "仅 FAILED / INVALIDATED 可删"}
             onClick={() => onDeleteFailed(row.original)}
           >
-            {deleting ? "删除中..." : canDelete ? "删除 FAILED" : "仅 FAILED 可删"}
+            {deleting ? "删除中..." : canDelete ? "删除" : "不可删"}
           </Button>
         );
       },

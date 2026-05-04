@@ -190,7 +190,58 @@ pub async fn list_failed(state: &AppState, limit: i64) -> Result<Vec<Cubesandbox
     rows.into_iter().map(record_from_row).collect()
 }
 
-pub async fn delete_failed_by_id(
+pub async fn list_failed_or_invalidated(
+    state: &AppState,
+    limit: i64,
+) -> Result<Vec<CubesandboxTemplateRecord>> {
+    let Some(pool) = state.db_pool.as_ref() else {
+        return Ok(Vec::new());
+    };
+    let rows = sqlx::query(
+        r#"
+        select id, kind, status, template_id, artifact_id, job_id, image_ref,
+            error_message, build_log_tail, created_at, updated_at, ready_at,
+            image_fingerprint, consecutive_scan_failures
+        from rust_cubesandbox_templates
+        where status in ('failed', 'invalidated')
+        order by updated_at desc, created_at desc
+        limit $1
+        "#,
+    )
+    .bind(limit.max(1))
+    .fetch_all(pool)
+    .await?;
+    rows.into_iter().map(record_from_row).collect()
+}
+
+pub async fn list_failed_or_invalidated_by_kind(
+    state: &AppState,
+    kind: TemplateKind,
+    limit: i64,
+) -> Result<Vec<CubesandboxTemplateRecord>> {
+    let Some(pool) = state.db_pool.as_ref() else {
+        return Ok(Vec::new());
+    };
+    let rows = sqlx::query(
+        r#"
+        select id, kind, status, template_id, artifact_id, job_id, image_ref,
+            error_message, build_log_tail, created_at, updated_at, ready_at,
+            image_fingerprint, consecutive_scan_failures
+        from rust_cubesandbox_templates
+        where kind = $1
+          and status in ('failed', 'invalidated')
+        order by updated_at desc, created_at desc
+        limit $2
+        "#,
+    )
+    .bind(kind.as_str())
+    .bind(limit.max(1))
+    .fetch_all(pool)
+    .await?;
+    rows.into_iter().map(record_from_row).collect()
+}
+
+pub async fn delete_failed_or_invalidated_by_id(
     state: &AppState,
     id: &str,
 ) -> Result<Option<CubesandboxTemplateRecord>> {
@@ -201,13 +252,13 @@ pub async fn delete_failed_by_id(
     let Some(record) = existing else {
         return Ok(None);
     };
-    if record.status != TemplateStatus::Failed {
+    if !record.status.is_terminal_inactive() {
         return Ok(Some(record));
     }
     sqlx::query(
         r#"
         delete from rust_cubesandbox_templates
-        where id = $1 and status = 'failed'
+        where id = $1 and status in ('failed', 'invalidated')
         "#,
     )
     .bind(parse_uuid(id)?)

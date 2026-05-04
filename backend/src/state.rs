@@ -7,8 +7,9 @@ use sqlx::{postgres::PgPoolOptions, PgPool};
 use tokio::sync::{Mutex, RwLock};
 
 use crate::{
-    config::AppConfig, project_file_cache::ProjectFileCache,
-    runtime::cubesandbox::task::CubeSandboxTaskManager,
+    config::AppConfig,
+    project_file_cache::ProjectFileCache,
+    runtime::cubesandbox::{opengrep_pool::OpengrepSandboxPool, task::CubeSandboxTaskManager},
     runtime::intelligent::task::IntelligentTaskManager,
 };
 
@@ -246,6 +247,11 @@ pub struct AppState {
     pub bootstrap: Arc<RwLock<BootstrapReport>>,
     pub cube_sandbox_task_manager: Arc<CubeSandboxTaskManager>,
     pub intelligent_task_manager: Arc<IntelligentTaskManager>,
+    /// Pre-booted opengrep sandbox pool. `None` when
+    /// `CUBESANDBOX_OPENGREP_POOL_SIZE=0` or pool construction failed.
+    /// Wrapped in `Arc<Mutex<…>>` so bootstrap can wire the pool after
+    /// `AppState::from_config` returns (all `AppState` clones share the same Arc).
+    pub opengrep_pool: Arc<Mutex<Option<Arc<OpengrepSandboxPool>>>>,
 }
 
 impl AppState {
@@ -269,6 +275,7 @@ impl AppState {
             project_file_cache: Arc::new(Mutex::new(ProjectFileCache::new())),
             cube_sandbox_task_manager: Arc::new(CubeSandboxTaskManager::new()),
             intelligent_task_manager: Arc::new(IntelligentTaskManager::new()),
+            opengrep_pool: Arc::new(Mutex::new(None)),
             bootstrap: Arc::new(RwLock::new(BootstrapReport {
                 overall: BootstrapStatus::NotRun.as_str().to_string(),
                 file_store: FileStoreBootstrapStatus::default(),
@@ -289,5 +296,15 @@ impl AppState {
     pub async fn set_bootstrap(&self, report: BootstrapReport) {
         let mut guard = self.bootstrap.write().await;
         *guard = report;
+    }
+
+    /// Wire the opengrep pool after bootstrap completes.
+    pub async fn set_opengrep_pool(&self, pool: Arc<OpengrepSandboxPool>) {
+        *self.opengrep_pool.lock().await = Some(pool);
+    }
+
+    /// Read the pool (clones the inner `Arc`; cheap).
+    pub async fn get_opengrep_pool(&self) -> Option<Arc<OpengrepSandboxPool>> {
+        self.opengrep_pool.lock().await.clone()
     }
 }

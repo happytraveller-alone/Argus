@@ -28,10 +28,12 @@ pub fn router() -> Router<AppState> {
         .route("/codeql-cpp", get(get_codeql_cpp_status))
         .route("/codeql-cpp/provision", post(provision_codeql_cpp))
         .route("/codeql-cpp/invalidate", post(invalidate_codeql_cpp))
+        .route("/codeql-cpp/reset", post(reset_codeql_cpp))
         .route("/codeql-cpp/stream", get(stream_codeql_cpp))
         .route("/opengrep", get(get_opengrep_status))
         .route("/opengrep/provision", post(provision_opengrep))
         .route("/opengrep/invalidate", post(invalidate_opengrep))
+        .route("/opengrep/reset", post(reset_opengrep))
         .route("/opengrep/stream", get(stream_opengrep))
 }
 
@@ -49,10 +51,12 @@ async fn list_template_management_overview(
         "templates": templates,
         "failedCount": failed_count,
         "actions": {
-            "deleteScope": "failed_templates_only",
+            "deleteScope": "failed_or_invalidated_templates_only",
             "cleanupScope": "failed_templates_only",
             "sandboxDeletion": false,
-            "resetDeletesTemplates": false
+            "resetDeletesTemplates": true,
+            "resetRebuildsTemplate": true,
+            "resetTargetStatus": "ready"
         }
     })))
 }
@@ -101,12 +105,12 @@ async fn delete_failed_template_record(
                 "CubeSandbox template record not found: {record_id}"
             ))
         })?;
-    if record.status != TemplateStatus::Failed {
+    if !record.status.is_terminal_inactive() {
         return Ok((
             StatusCode::CONFLICT,
             Json(json!({
-                "error": "only failed CubeSandbox template records can be deleted",
-                "scope": "failed_templates_only",
+                "error": "only failed or invalidated CubeSandbox template records can be deleted",
+                "scope": "failed_or_invalidated_templates_only",
                 "recordId": record.id,
                 "status": record.status.as_str()
             })),
@@ -122,16 +126,18 @@ struct FailedTemplateDeleteSummary {
     template_id: Option<String>,
     deleted_records: usize,
     deleted_templates: usize,
+    template_delete_error: Option<String>,
 }
 
 impl FailedTemplateDeleteSummary {
     fn to_json(&self) -> Value {
         json!({
-            "scope": "failed_templates_only",
+            "scope": "failed_or_invalidated_templates_only",
             "recordId": self.record_id,
             "templateId": self.template_id,
             "deletedRecords": self.deleted_records,
-            "deletedTemplates": self.deleted_templates
+            "deletedTemplates": self.deleted_templates,
+            "templateDeleteError": self.template_delete_error
         })
     }
 }
@@ -140,13 +146,14 @@ async fn delete_failed_record_inner(
     state: &AppState,
     record: &CubesandboxTemplateRecord,
 ) -> Result<FailedTemplateDeleteSummary, ApiError> {
-    if record.status != TemplateStatus::Failed {
+    if !record.status.is_terminal_inactive() {
         return Err(ApiError::Conflict(
-            "only failed CubeSandbox template records can be deleted".to_string(),
+            "only failed or invalidated CubeSandbox template records can be deleted".to_string(),
         ));
     }
 
     let mut deleted_templates = 0usize;
+    let mut template_delete_error = None;
     if let Some(template_id) = record
         .template_id
         .as_deref()
@@ -165,22 +172,38 @@ async fn delete_failed_record_inner(
             config,
         )
         .map_err(internal_error)?;
-        client.delete_template(template_id).await.map_err(|error| {
-            ApiError::Upstream(format!(
-                "failed to delete CubeMaster FAILED template {template_id}; local record kept: {error:#}"
-            ))
-        })?;
-        deleted_templates = 1;
+        match client.delete_template(template_id).await {
+            Ok(()) => {
+                deleted_templates = 1;
+            }
+            Err(error) if record.status == TemplateStatus::Invalidated => {
+                let message = format!("{error:#}");
+                tracing::warn!(
+                    record_id = %record.id,
+                    template_id,
+                    error = %message,
+                    "CubeMaster delete failed for invalidated template; deleting local record anyway"
+                );
+                template_delete_error = Some(message);
+            }
+            Err(error) => {
+                return Err(ApiError::Upstream(format!(
+                    "failed to delete CubeMaster terminal template {template_id}; local record kept: {error:#}"
+                )));
+            }
+        }
     }
 
-    let deleted = crate::db::cubesandbox_templates::delete_failed_by_id(state, &record.id)
-        .await
-        .map_err(internal_error)?;
+    let deleted =
+        crate::db::cubesandbox_templates::delete_failed_or_invalidated_by_id(state, &record.id)
+            .await
+            .map_err(internal_error)?;
     Ok(FailedTemplateDeleteSummary {
         record_id: record.id.clone(),
         template_id: record.template_id.clone(),
         deleted_records: usize::from(deleted.is_some()),
         deleted_templates,
+        template_delete_error,
     })
 }
 
@@ -212,6 +235,10 @@ async fn invalidate_codeql_cpp(State(state): State<AppState>) -> Result<Json<Val
         .await
         .map_err(internal_error)?;
     Ok(Json(json!({ "affected": affected })))
+}
+
+async fn reset_codeql_cpp(State(state): State<AppState>) -> Result<Json<Value>, ApiError> {
+    reset_template_kind(state, TemplateKind::CodeqlCpp, TemplateKind::CodeqlCpp).await
 }
 
 async fn stream_codeql_cpp(State(state): State<AppState>) -> impl IntoResponse {
@@ -255,12 +282,70 @@ async fn invalidate_opengrep(State(state): State<AppState>) -> Result<Json<Value
     Ok(Json(json!({ "affected": affected })))
 }
 
+async fn reset_opengrep(State(state): State<AppState>) -> Result<Json<Value>, ApiError> {
+    reset_template_kind(state, current_opengrep_route_kind(), TemplateKind::Opengrep).await
+}
+
 async fn stream_opengrep(State(state): State<AppState>) -> impl IntoResponse {
     stream_public_template_kind(state, current_opengrep_route_kind(), TemplateKind::Opengrep).await
 }
 
 fn current_opengrep_route_kind() -> TemplateKind {
     TemplateKind::current_opengrep()
+}
+
+async fn reset_template_kind(
+    state: AppState,
+    kind: TemplateKind,
+    public_kind: TemplateKind,
+) -> Result<Json<Value>, ApiError> {
+    let config = CubeSandboxConfig::load_runtime(&state)
+        .await
+        .map_err(internal_error)?
+        .for_template_kind(kind, state.config.as_ref());
+    if !config.enabled {
+        return Err(ApiError::BadRequest(
+            "CubeSandbox 未启用; 请先在系统配置中开启".to_string(),
+        ));
+    }
+
+    let active = crate::db::cubesandbox_templates::get_active(&state, kind)
+        .await
+        .map_err(internal_error)?;
+
+    let mut invalidated_records = 0u64;
+    if active.is_some() {
+        invalidated_records = template_provisioner::invalidate(&state, kind)
+            .await
+            .map_err(internal_error)?;
+    }
+
+    let mut deleted_records = 0usize;
+    let mut deleted_templates = 0usize;
+    let terminal_records =
+        crate::db::cubesandbox_templates::list_failed_or_invalidated_by_kind(&state, kind, 200)
+            .await
+            .map_err(internal_error)?;
+    for terminal_record in terminal_records {
+        let summary = delete_failed_record_inner(&state, &terminal_record).await?;
+        deleted_records += summary.deleted_records;
+        deleted_templates += summary.deleted_templates;
+    }
+
+    let record = template_provisioner::start_provision(&state, &config, kind)
+        .await
+        .map_err(|error| ApiError::BadRequest(format!("{error:#}")))?;
+    let status = serialize_status_for_public_kind(Some(&record), public_kind);
+
+    Ok(Json(json!({
+        "kind": public_kind,
+        "recordKind": kind,
+        "invalidatedRecords": invalidated_records,
+        "deletedRecords": deleted_records,
+        "deletedTemplates": deleted_templates,
+        "targetStatus": "ready",
+        "record": status
+    })))
 }
 
 async fn stream_template_kind(state: AppState, kind: TemplateKind) -> impl IntoResponse {

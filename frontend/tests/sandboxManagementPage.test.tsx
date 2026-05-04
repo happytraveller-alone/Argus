@@ -25,16 +25,16 @@ test("SandboxTemplatesTable renders project-style template management columns an
           consecutiveScanFailures: 0,
         },
         {
-          id: "failed-record",
+          id: "invalidated-record",
           kind: "opengrep",
-          status: "failed",
-          templateId: "tpl-failed",
+          status: "invalidated",
+          templateId: "tpl-invalidated",
           imageRef: "argus/opengrep:latest",
           imageFingerprint: null,
-          errorMessage: "provision failed",
+          errorMessage: "template invalidated",
           createdAt: "2026-05-04T00:00:00Z",
           updatedAt: "2026-05-04T00:02:00Z",
-          buildLogTail: "failed",
+          buildLogTail: "invalidated",
           consecutiveScanFailures: 2,
         },
       ],
@@ -46,14 +46,14 @@ test("SandboxTemplatesTable renders project-style template management columns an
   assert.match(markup, /序号/);
   assert.match(markup, /模板类型/);
   assert.match(markup, /记录状态/);
-  assert.match(markup, /CubeMaster 模板 ID/);
+  assert.match(markup, /模板 \/ 镜像/);
   assert.match(markup, /镜像/);
   assert.match(markup, /错误摘要/);
   assert.match(markup, /操作/);
-  assert.match(markup, /删除 FAILED/);
-  assert.match(markup, /仅 FAILED 可删/);
+  assert.match(markup, /删除 FAILED \/ INVALIDATED/);
+  assert.match(markup, /仅 FAILED \/ INVALIDATED 可删/);
   assert.match(markup, /tpl-ready/);
-  assert.match(markup, /tpl-failed/);
+  assert.match(markup, /tpl-invalidated/);
   assert.match(markup, /border-b-2/);
   assert.match(markup, /disabled/);
 });

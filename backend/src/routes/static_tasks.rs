@@ -3683,6 +3683,7 @@ async fn run_opengrep_scan_inner(
         record.extra = json!({
             "engine": "opengrep",
             "opengrep_sandbox": sandbox_label,
+            "executor": if sandbox_label == "oci_cubesandbox" { "oci_cubesandbox" } else { "docker_runner" },
             "error_count": error_count,
             "warning_count": warning_count,
             "high_confidence_count": high_confidence_count,
