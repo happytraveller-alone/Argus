@@ -145,8 +145,10 @@ RUN set -eux; \
     done; \
     if [ -d qlpacks/codeql ]; then \
       find qlpacks/codeql -mindepth 1 -maxdepth 1 -type d \
-        ! -name 'cpp-*' ! -name 'shared-*' ! -name 'suite-helpers' \
-        ! -name 'mad' ! -name 'meta' ! -name 'cwe-*' ! -name 'tutorial' \
+        \( -name 'csharp-*' -o -name 'go-*' -o -name 'java-*' \
+        -o -name 'javascript-*' -o -name 'python-*' -o -name 'ruby-*' \
+        -o -name 'swift-*' -o -name 'actions-*' -o -name 'html-*' \
+        -o -name 'ql-*' \) \
         -exec rm -rf {} +; \
     fi; \
     cd /; \

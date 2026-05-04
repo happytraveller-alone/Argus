@@ -1896,6 +1896,33 @@ async fn run_codeql_cpp_scan_with_build_plan(
         62.0,
     )
     .await;
+    if scan_output
+        .summary_json
+        .get("status")
+        .and_then(|v| v.as_str())
+        == Some("scan_failed")
+    {
+        let detail = scan_output
+            .summary_json
+            .get("message")
+            .and_then(|v| v.as_str())
+            .unwrap_or("CodeQL analyze failed inside CubeSandbox")
+            .to_string();
+        append_codeql_exploration_event(
+            state,
+            task_id,
+            68.0,
+            "scan_failed",
+            "codeql_scan_failed",
+            None,
+            json!({
+                "message": format!("CodeQL scan failed: {detail}"),
+                "summary": scan_output.summary_json.clone(),
+            }),
+        )
+        .await;
+        return Err(format!("CodeQL scan failed inside CubeSandbox: {detail}").into());
+    }
     let codeql_events_text = tokio::fs::read_to_string(workspace_dir.join(&codeql_events_rel_path))
         .await
         .map_err(|error| format!("missing CodeQL event output: {error}"))?;
@@ -2080,6 +2107,33 @@ async fn run_codeql_direct_scan_after_query_materialization(
         62.0,
     )
     .await;
+    if scan_output
+        .summary_json
+        .get("status")
+        .and_then(|v| v.as_str())
+        == Some("scan_failed")
+    {
+        let detail = scan_output
+            .summary_json
+            .get("message")
+            .and_then(|v| v.as_str())
+            .unwrap_or("CodeQL analyze failed inside CubeSandbox")
+            .to_string();
+        append_codeql_exploration_event(
+            state,
+            task_id,
+            68.0,
+            "scan_failed",
+            "codeql_scan_failed",
+            None,
+            json!({
+                "message": format!("CodeQL scan failed: {detail}"),
+                "summary": scan_output.summary_json.clone(),
+            }),
+        )
+        .await;
+        return Err(format!("CodeQL scan failed inside CubeSandbox: {detail}").into());
+    }
 
     update_scan_progress(
         state,
