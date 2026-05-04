@@ -63,6 +63,14 @@ fn in_flight() -> Arc<TokioMutex<HashMap<TemplateKind, InFlightChannel>>> {
         .clone()
 }
 
+/// Snapshot the set of TemplateKinds currently in-flight (provisioning).
+/// Used by reconcile (Fix 9) to avoid double-invalidating kinds mid-provision.
+pub async fn snapshot_in_flight_kinds() -> std::collections::HashSet<TemplateKind> {
+    let lock = in_flight();
+    let guard = lock.lock().await;
+    guard.keys().copied().collect()
+}
+
 /// Subscribe to provisioning events for a kind. Returns Some when a build is in flight.
 pub async fn subscribe(kind: TemplateKind) -> Option<broadcast::Receiver<ProvisionEvent>> {
     let lock = in_flight();
@@ -388,6 +396,30 @@ async fn drive_provision(
         payload.artifact_id.as_deref(),
     )
     .await?;
+
+    // Record the Dockerfile fingerprint at provision-success time so reconcile
+    // can detect stale templates on next startup (Signal-A).
+    match crate::runtime::cubesandbox::reconcile::compute_dockerfile_fingerprint(kind) {
+        Ok(fp) => {
+            if let Err(e) =
+                cubesandbox_templates::set_image_fingerprint(&state, &template_id, &fp).await
+            {
+                tracing::warn!(
+                    template_id = %template_id,
+                    error = %e,
+                    "failed to store image_fingerprint after provision — reconcile will treat as no fingerprint"
+                );
+            }
+        }
+        Err(e) => {
+            tracing::warn!(
+                template_id = %template_id,
+                error = %e,
+                "compute_dockerfile_fingerprint failed after provision — image_fingerprint not stored"
+            );
+        }
+    }
+
     let _ = sender.send(ProvisionEvent {
         record_id,
         status: TemplateStatus::Ready.as_str().to_string(),
@@ -395,7 +427,6 @@ async fn drive_provision(
         template_id: Some(template_id),
         error_message: None,
     });
-    let _ = kind; // suppress unused on future enum growth
     Ok(())
 }
 
@@ -417,11 +448,14 @@ impl ProvisionResult {
 }
 
 fn build_cubemaster_client(config: &CubeSandboxConfig) -> Result<CubemasterClient> {
-    CubemasterClient::new(CubemasterClientConfig {
-        base_url: config.cubemaster_base_url.clone(),
-        cleanup_timeout_seconds: config.cubemaster_cleanup_timeout_seconds,
-        instance_type: "cubebox".to_string(),
-    })
+    CubemasterClient::new(
+        CubemasterClientConfig {
+            base_url: config.cubemaster_base_url.clone(),
+            cleanup_timeout_seconds: config.cubemaster_cleanup_timeout_seconds,
+            instance_type: "cubebox".to_string(),
+        },
+        config.clone(),
+    )
 }
 
 fn parse_provision_result(stdout: &str) -> Option<ProvisionResult> {

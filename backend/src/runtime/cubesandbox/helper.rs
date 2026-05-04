@@ -22,6 +22,7 @@ pub enum CubeSandboxHelperCommand {
     BuildOpengrepImage,
     CreateOpengrepTemplate,
     ProvisionOpengrepTemplate,
+    TplList,
 }
 
 impl CubeSandboxHelperCommand {
@@ -41,6 +42,7 @@ impl CubeSandboxHelperCommand {
             Self::BuildOpengrepImage => "build-opengrep-image",
             Self::CreateOpengrepTemplate => "create-opengrep-template",
             Self::ProvisionOpengrepTemplate => "provision-opengrep-template",
+            Self::TplList => "tpl-list",
         }
     }
 }
@@ -64,6 +66,7 @@ impl TryFrom<&str> for CubeSandboxHelperCommand {
             "build-opengrep-image" => Ok(Self::BuildOpengrepImage),
             "create-opengrep-template" => Ok(Self::CreateOpengrepTemplate),
             "provision-opengrep-template" => Ok(Self::ProvisionOpengrepTemplate),
+            "tpl-list" => Ok(Self::TplList),
             _ => bail!("unsupported CubeSandbox helper command: {value}"),
         }
     }
@@ -286,6 +289,7 @@ mod tests {
                 "provision-opengrep-template",
                 CubeSandboxHelperCommand::ProvisionOpengrepTemplate,
             ),
+            ("tpl-list", CubeSandboxHelperCommand::TplList),
         ];
         for (text, variant) in cases {
             assert_eq!(variant.as_str(), text);

@@ -77,6 +77,7 @@ static CANCELLED_OPENGREP_TASKS: LazyLock<Mutex<HashSet<String>>> =
 
 pub struct OpengrepSandboxSession {
     task_id: String,
+    pub template_id: String,
     client: CubeSandboxClient,
     sandbox: CubeSandboxSandbox,
 }
@@ -108,6 +109,7 @@ impl OpengrepSandboxSession {
         client.connect_sandbox(&sandbox.sandbox_id).await?;
         Ok(Self {
             task_id: task_id.to_string(),
+            template_id: template_id.clone(),
             client,
             sandbox,
         })
@@ -152,6 +154,41 @@ pub async fn run_opengrep_scan(
     let session = OpengrepSandboxSession::start(state, input.task_id).await?;
     let mut result = session.run_scan(input).await?;
     let sandbox_id = result.sandbox_id.clone();
+    // Wire scan-failure counter feedback before cleanup consumes session.
+    let template_id = session.template_id.clone();
+    match result.summary_json.get("status").and_then(|v| v.as_str()) {
+        Some("scan_failed") => {
+            match crate::db::cubesandbox_templates::bump_scan_failure_counter(state, &template_id)
+                .await
+            {
+                Ok(n) if n >= 3 => {
+                    let _ = crate::db::cubesandbox_templates::mark_invalidated_by_template_id(
+                        state,
+                        &template_id,
+                    )
+                    .await;
+                    let _ = crate::db::cubesandbox_templates::reset_scan_failure_counter(
+                        state,
+                        &template_id,
+                    )
+                    .await;
+                }
+                Ok(_) => {}
+                Err(e) => {
+                    tracing::warn!(error = %e, %template_id, "scan_failed counter bump failed; swallowing")
+                }
+            }
+        }
+        Some("scan_completed") => {
+            if let Err(e) =
+                crate::db::cubesandbox_templates::reset_scan_failure_counter(state, &template_id)
+                    .await
+            {
+                tracing::warn!(error = %e, %template_id, "scan_completed counter reset failed; swallowing");
+            }
+        }
+        _ => {}
+    }
     if let Err(error) = session.cleanup().await {
         bail!("CubeSandbox cleanup failed after Opengrep scan: {error}");
     }

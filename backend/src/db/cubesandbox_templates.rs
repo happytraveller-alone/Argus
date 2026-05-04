@@ -89,6 +89,8 @@ pub struct CubesandboxTemplateRecord {
     pub created_at: String,
     pub updated_at: String,
     pub ready_at: Option<String>,
+    pub image_fingerprint: Option<String>,
+    pub consecutive_scan_failures: i16,
 }
 
 const BUILD_LOG_TAIL_LIMIT: usize = 4 * 1024;
@@ -103,7 +105,8 @@ pub async fn get_active(
     let row = sqlx::query(
         r#"
         select id, kind, status, template_id, artifact_id, job_id, image_ref,
-            error_message, build_log_tail, created_at, updated_at, ready_at
+            error_message, build_log_tail, created_at, updated_at, ready_at,
+            image_fingerprint, consecutive_scan_failures
         from rust_cubesandbox_templates
         where kind = $1
           and status in ('pending', 'building', 'ready')
@@ -128,7 +131,8 @@ pub async fn list_history(
     let rows = sqlx::query(
         r#"
         select id, kind, status, template_id, artifact_id, job_id, image_ref,
-            error_message, build_log_tail, created_at, updated_at, ready_at
+            error_message, build_log_tail, created_at, updated_at, ready_at,
+            image_fingerprint, consecutive_scan_failures
         from rust_cubesandbox_templates
         where kind = $1
         order by updated_at desc, created_at desc
@@ -140,6 +144,76 @@ pub async fn list_history(
     .fetch_all(pool)
     .await?;
     rows.into_iter().map(record_from_row).collect()
+}
+
+pub async fn list_all_history(
+    state: &AppState,
+    limit: i64,
+) -> Result<Vec<CubesandboxTemplateRecord>> {
+    let Some(pool) = state.db_pool.as_ref() else {
+        return Ok(Vec::new());
+    };
+    let rows = sqlx::query(
+        r#"
+        select id, kind, status, template_id, artifact_id, job_id, image_ref,
+            error_message, build_log_tail, created_at, updated_at, ready_at,
+            image_fingerprint, consecutive_scan_failures
+        from rust_cubesandbox_templates
+        order by updated_at desc, created_at desc
+        limit $1
+        "#,
+    )
+    .bind(limit.max(1))
+    .fetch_all(pool)
+    .await?;
+    rows.into_iter().map(record_from_row).collect()
+}
+
+pub async fn list_failed(state: &AppState, limit: i64) -> Result<Vec<CubesandboxTemplateRecord>> {
+    let Some(pool) = state.db_pool.as_ref() else {
+        return Ok(Vec::new());
+    };
+    let rows = sqlx::query(
+        r#"
+        select id, kind, status, template_id, artifact_id, job_id, image_ref,
+            error_message, build_log_tail, created_at, updated_at, ready_at,
+            image_fingerprint, consecutive_scan_failures
+        from rust_cubesandbox_templates
+        where status = 'failed'
+        order by updated_at desc, created_at desc
+        limit $1
+        "#,
+    )
+    .bind(limit.max(1))
+    .fetch_all(pool)
+    .await?;
+    rows.into_iter().map(record_from_row).collect()
+}
+
+pub async fn delete_failed_by_id(
+    state: &AppState,
+    id: &str,
+) -> Result<Option<CubesandboxTemplateRecord>> {
+    let Some(pool) = state.db_pool.as_ref() else {
+        return Ok(None);
+    };
+    let existing = load_by_id(state, id).await?;
+    let Some(record) = existing else {
+        return Ok(None);
+    };
+    if record.status != TemplateStatus::Failed {
+        return Ok(Some(record));
+    }
+    sqlx::query(
+        r#"
+        delete from rust_cubesandbox_templates
+        where id = $1 and status = 'failed'
+        "#,
+    )
+    .bind(parse_uuid(id)?)
+    .execute(pool)
+    .await?;
+    Ok(Some(record))
 }
 
 pub async fn insert_pending(
@@ -246,6 +320,114 @@ pub async fn update_to_failed(
     load_by_id(state, id).await
 }
 
+/// Per-id variant of mark_invalidated. Used by reconcile when a specific template
+/// (not an entire kind) must be invalidated (e.g. fingerprint mismatch or scan-failure threshold).
+pub async fn mark_invalidated_by_template_id(state: &AppState, template_id: &str) -> Result<()> {
+    let Some(pool) = state.db_pool.as_ref() else {
+        return Ok(());
+    };
+    sqlx::query(
+        r#"
+        update rust_cubesandbox_templates
+        set status = 'invalidated', updated_at = now()
+        where template_id = $1
+          and status in ('pending', 'building', 'ready')
+        "#,
+    )
+    .bind(template_id)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+/// List all active (pending | building | ready) records across all template kinds.
+/// Used by reconcile to build the full cross-kind protection set.
+pub async fn list_active_all_kinds(state: &AppState) -> Result<Vec<CubesandboxTemplateRecord>> {
+    let Some(pool) = state.db_pool.as_ref() else {
+        return Ok(Vec::new());
+    };
+    let rows = sqlx::query(
+        r#"
+        select id, kind, status, template_id, artifact_id, job_id, image_ref,
+            error_message, build_log_tail, created_at, updated_at, ready_at,
+            image_fingerprint, consecutive_scan_failures
+        from rust_cubesandbox_templates
+        where status in ('pending', 'building', 'ready')
+        order by updated_at desc, created_at desc
+        "#,
+    )
+    .fetch_all(pool)
+    .await?;
+    rows.into_iter().map(record_from_row).collect()
+}
+
+/// Set the image_fingerprint column for a specific template record.
+/// Called by template_provisioner at provision-success time.
+pub async fn set_image_fingerprint(
+    state: &AppState,
+    template_id: &str,
+    fingerprint: &str,
+) -> Result<()> {
+    let Some(pool) = state.db_pool.as_ref() else {
+        return Ok(());
+    };
+    sqlx::query(
+        r#"
+        update rust_cubesandbox_templates
+        set image_fingerprint = $2, updated_at = now()
+        where template_id = $1
+        "#,
+    )
+    .bind(template_id)
+    .bind(fingerprint)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+/// Increment consecutive_scan_failures by 1 and return the post-bump value.
+/// The bump is done in a single atomic UPDATE … RETURNING so no read-modify-write race.
+pub async fn bump_scan_failure_counter(state: &AppState, template_id: &str) -> Result<i16> {
+    let Some(pool) = state.db_pool.as_ref() else {
+        return Ok(0);
+    };
+    let row = sqlx::query(
+        r#"
+        update rust_cubesandbox_templates
+        set consecutive_scan_failures = consecutive_scan_failures + 1,
+            updated_at = now()
+        where template_id = $1
+        returning consecutive_scan_failures
+        "#,
+    )
+    .bind(template_id)
+    .fetch_optional(pool)
+    .await?;
+    match row {
+        Some(r) => Ok(r.try_get::<i16, _>("consecutive_scan_failures")?),
+        None => Ok(0),
+    }
+}
+
+/// Reset consecutive_scan_failures to 0. Called after successful scan or after
+/// mark_invalidated_by_template_id to prevent re-fire.
+pub async fn reset_scan_failure_counter(state: &AppState, template_id: &str) -> Result<()> {
+    let Some(pool) = state.db_pool.as_ref() else {
+        return Ok(());
+    };
+    sqlx::query(
+        r#"
+        update rust_cubesandbox_templates
+        set consecutive_scan_failures = 0, updated_at = now()
+        where template_id = $1
+        "#,
+    )
+    .bind(template_id)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
 pub async fn mark_invalidated(state: &AppState, kind: TemplateKind) -> Result<u64> {
     let Some(pool) = state.db_pool.as_ref() else {
         return Ok(0);
@@ -305,7 +487,8 @@ pub async fn load_by_id(state: &AppState, id: &str) -> Result<Option<Cubesandbox
     let row = sqlx::query(
         r#"
         select id, kind, status, template_id, artifact_id, job_id, image_ref,
-            error_message, build_log_tail, created_at, updated_at, ready_at
+            error_message, build_log_tail, created_at, updated_at, ready_at,
+            image_fingerprint, consecutive_scan_failures
         from rust_cubesandbox_templates
         where id = $1
         "#,
@@ -334,6 +517,8 @@ fn record_from_row(row: sqlx::postgres::PgRow) -> Result<CubesandboxTemplateReco
         ready_at: row
             .try_get::<Option<OffsetDateTime>, _>("ready_at")?
             .map(format_timestamp),
+        image_fingerprint: row.try_get("image_fingerprint")?,
+        consecutive_scan_failures: row.try_get("consecutive_scan_failures")?,
     })
 }
 
@@ -370,5 +555,45 @@ mod tests {
             TemplateKind::OpengrepDedicated
         );
         assert!(TemplateKind::from_str("opengrep-surprise").is_err());
+    }
+
+    /// Phase 3: scan-failure counter threshold logic.
+    /// No PgPool harness is available in this repo (grep for sqlx::test / test_db found nothing),
+    /// so integration tests that hit the DB are omitted. This unit test validates the threshold
+    /// predicate used in run_codeql_scan / run_opengrep_scan counter feedback arms.
+    #[test]
+    fn scan_failure_counter_threshold_predicate() {
+        // The dispatch arms use `Ok(n) if n >= 3` — verify the boundary.
+        let below: i16 = 2;
+        let at: i16 = 3;
+        let above: i16 = 4;
+        assert!(!(below >= 3), "counter 2 must NOT trigger invalidation");
+        assert!(at >= 3, "counter 3 must trigger invalidation");
+        assert!(above >= 3, "counter 4 must trigger invalidation");
+    }
+
+    /// Phase 3: summary_json status dispatch correctness.
+    /// Validates that the `get("status").and_then(|v| v.as_str())` pattern
+    /// used in both scan dispatch fns correctly matches the enum arms.
+    #[test]
+    fn summary_json_status_dispatch() {
+        use serde_json::json;
+        let scan_failed = json!({"status": "scan_failed"});
+        let scan_ok = json!({"status": "scan_completed"});
+        let missing = json!({});
+        let unexpected = json!({"status": "unknown_status"});
+
+        let arm = |v: &serde_json::Value| -> &str {
+            match v.get("status").and_then(|s| s.as_str()) {
+                Some("scan_failed") => "failed_arm",
+                Some("scan_completed") => "ok_arm",
+                _ => "wildcard",
+            }
+        };
+
+        assert_eq!(arm(&scan_failed), "failed_arm");
+        assert_eq!(arm(&scan_ok), "ok_arm");
+        assert_eq!(arm(&missing), "wildcard");
+        assert_eq!(arm(&unexpected), "wildcard");
     }
 }

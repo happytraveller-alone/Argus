@@ -1080,6 +1080,10 @@ case "$cmd" in
     shift
     watch_template "$@"
     ;;
+  tpl-list)
+    shift
+    remote_root "cubemastercli --address 127.0.0.1 tpl list 2>&1"
+    ;;
   clean-provision-state)
     no_extra_args "${@:2}"
     clean_cube_provision_state

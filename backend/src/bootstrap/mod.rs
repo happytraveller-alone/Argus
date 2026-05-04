@@ -123,6 +123,30 @@ async fn build_report(state: &AppState) -> BootstrapReport {
         }
     }
 
+    // ORDER INVARIANT (Fix 6):
+    //   reconcile_stale_templates MUST complete and emit its info! event
+    //   BEFORE bootstrap_provision_template runs. No tokio::spawn, no select!,
+    //   no parallel join between them. If bootstrap_provision_template was
+    //   previously inside a separate tokio::spawn, fold it into the same
+    //   spawn (or the current sequential function) — do NOT split into two.
+    let reconcile_summary =
+        crate::runtime::cubesandbox::reconcile::reconcile_stale_templates(state).await;
+    tracing::info!(
+        target: "argus::cubesandbox::reconcile",
+        deleted_failed_n             = reconcile_summary.deleted_failed_n,
+        deleted_running_zombie_n     = reconcile_summary.deleted_running_zombie_n,
+        reverse_orphan_n             = reconcile_summary.reverse_orphan_n,
+        forward_orphan_n             = reconcile_summary.forward_orphan_n,
+        scan_failed_invalidated_n    = reconcile_summary.scan_failed_invalidated_n,
+        fingerprint_mismatch_n       = reconcile_summary.fingerprint_mismatch_n,
+        env_rewrote_bool             = reconcile_summary.env_rewrote_bool,
+        cubemaster_list_failed        = reconcile_summary.cubemaster_list_failed,
+        orphan_sandbox_check_skipped = reconcile_summary.orphan_sandbox_check_skipped,
+        orphan_sandbox_n             = reconcile_summary.orphan_sandbox_n,
+        errors                       = ?reconcile_summary.errors,
+        "cubesandbox startup reconcile complete"
+    );
+
     report.preflight = match preflight::run(state).await {
         Ok(status) => status,
         Err(error) => {
@@ -466,6 +490,34 @@ async fn ensure_rust_schema(pool: &PgPool) -> Result<()> {
         r#"
         create index if not exists ix_rust_cubesandbox_templates_kind_updated
             on rust_cubesandbox_templates (kind, updated_at desc)
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    sqlx::query(
+        r#"
+        alter table rust_cubesandbox_templates
+            add column if not exists image_fingerprint text
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    sqlx::query(
+        r#"
+        alter table rust_cubesandbox_templates
+            add column if not exists consecutive_scan_failures smallint not null default 0
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    sqlx::query(
+        r#"
+        create index if not exists ix_rust_cubesandbox_templates_template_id
+            on rust_cubesandbox_templates (template_id)
+            where template_id is not null
         "#,
     )
     .execute(pool)
