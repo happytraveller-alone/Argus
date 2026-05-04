@@ -54,6 +54,38 @@ RUN set -eux; \
     echo "==== rootfs size AFTER base-image slim ===="; du -sh / 2>/dev/null || true; \
     echo "==== top-15 dirs after slim ===="; du -h --max-depth=3 / 2>/dev/null | sort -h | tail -15 || true
 
+# ── Stage 0.5: Aggressive non-essential cleanup (FINAL plan Phase 0) ───────
+# Remove alternate-language runtimes and decoration content NOT needed for
+# {CodeQL CLI extract+analyze cpp, gcc/cmake/make/git build chain, sandbox-code
+# envd backend agent}. Stage 0 already trimmed Python ML libs; this stage hits
+# the remaining ~642 MiB of bloat (deno / go / R / perl / python3.13 / fonts /
+# icons). Python 3.11 and 3.12 are explicitly preserved (sandbox-code envd
+# depends on Python); only python3.13 is dropped. A python-preserve sanity
+# check FAILS the build if neither 3.11 nor 3.12 imports after the slim.
+RUN set -eux; \
+    drop()    { rm -rf "$@" 2>/dev/null || true; }; \
+    log_size_at() { echo "==== $1: $(du -sh / 2>/dev/null | awk '{print $1}') ===="; }; \
+    log_size_at "Stage 0.5 BEFORE"; \
+    # Alternate language runtimes — not used by codeql-cpp scan
+    drop /opt/deno; \
+    drop /usr/lib/go-1.24 /usr/share/go-1.24 /usr/share/doc/golang-1.24-* /etc/profile.d/go-*; \
+    drop /usr/lib/R /usr/share/R /usr/bin/R /usr/bin/Rscript; \
+    drop /usr/share/perl5 /usr/share/perl /usr/lib/x86_64-linux-gnu/libperl* /usr/bin/perl /usr/bin/perl5*; \
+    # python3.13 ONLY (3.11 / 3.12 preserved per R1 mitigation; AC2-gated)
+    drop /usr/lib/python3.13 /usr/share/python3.13; \
+    # Decoration not user-visible inside sandbox
+    drop /usr/share/fonts /usr/share/icons /usr/share/gir-1.0 /usr/share/applications; \
+    drop /usr/share/hwdata /usr/share/X11; \
+    log_size_at "Stage 0.5 AFTER"; \
+    # Python-preserve sanity check (R1): fail build if neither 3.11 nor 3.12 importable
+    if ! { command -v python3.11 >/dev/null 2>&1 && python3.11 -c 'import sys' 2>/dev/null; } \
+       && ! { command -v python3.12 >/dev/null 2>&1 && python3.12 -c 'import sys' 2>/dev/null; }; then \
+      echo "ERROR Stage 0.5: neither python3.11 nor python3.12 importable after slim"; \
+      command -v python3 >/dev/null 2>&1 && python3 --version || true; \
+      exit 1; \
+    fi; \
+    echo "==== Stage 0.5 python-preserve sanity check OK ===="
+
 RUN set -eux; \
     mkdir -p /etc/apt/disabled-sources.list.d; \
     find /etc/apt/sources.list.d -maxdepth 1 -type f \( -name '*cran*' -o -name '*r-project*' -o -name '*nodesource*' \) -exec mv {} /etc/apt/disabled-sources.list.d/ \; 2>/dev/null || true; \
