@@ -38,6 +38,59 @@ scripts/cubesandbox-quickstart.sh build-codeql-cpp-image-wsl
 scripts/cubesandbox-quickstart.sh shell-codeql-cpp-image-wsl
 ```
 
+### Storage axes and slim stages (2026-05-04 rework)
+
+`codeql-cpp.Dockerfile` slims the upstream `sandbox-code:latest` base in two
+sequential stages:
+
+- **Stage 0** removes e2b/code-interpreter runtime trees (Jupyter packages,
+  NumPy/Pandas/SciPy/torch/etc., Node ecosystem, JVM, e2b user trees). This
+  is the slim that originally landed in commit `25b8b9ad`.
+- **Stage 0.5** (new on 2026-05-04) drops alternate language runtimes and
+  decoration NOT needed for the codeql-cpp scan or the sandbox-code envd
+  agent: `/opt/deno`, `/usr/lib/go-1.24` + `/usr/share/go-1.24`, `/usr/lib/R`
+  + `/usr/share/R`, `/usr/share/perl5` + `/usr/bin/perl*` + system Perl libs,
+  `/usr/lib/python3.13` (only — `python3.11`/`python3.12` are explicitly
+  preserved for envd), `/usr/share/{fonts,icons,gir-1.0,applications,hwdata,X11}`.
+  A Python-preserve sanity check fails the build if neither `python3.11` nor
+  `python3.12` imports after the slim.
+
+The slimmed rootfs lands at ~2.8 GiB → `next_pow_of_2(2.8 + 1) = 4 GiB` ext4
+image with ~970 MB of mkfs.ext4 metadata headroom. The runtime writable layer
+is sized separately via `--writable-layer-size 16Gi` so the CodeQL database
+and trap caches have room. The full storage architecture (template ext4 vs
+runtime writable layer) is documented in `.omc/skills/cubesandbox-storage-axes-expertise.md`.
+
+### Probe port: 49983 (envd) — NOT 49999 (uvicorn)
+
+`cubemastercli tpl create-from-image --probe 49983` for codeql-cpp; the
+slimmed image's uvicorn at 49999 never binds because Stage 0 removes the
+`jupyter_core` Python package and uvicorn waits forever on `localhost:8888`
+for jupyter. Argus's codeql runner uses envd directly (the
+`run_command`/`run_python` paths in `backend/src/runtime/cubesandbox/client.rs`
+all hit the envd `/process` endpoint), so probing envd both avoids the
+uvicorn deadlock and tests the path argus actually depends on.
+
+`scripts/cubesandbox-quickstart.sh codeql-cpp-smoke` is incompatible with the
+slimmed image because it uses the e2b code-interpreter Python SDK, which
+talks through the cube-api openresty proxy to uvicorn on 49999 → returns 502
+Bad Gateway. Use the argus end-to-end task path
+(`POST /api/v1/static-tasks/codeql/tasks`) for actual verification — it goes
+through envd and is unaffected.
+
+### Cubesandbox submodule patches
+
+The ext4 sizing formula is patched in the cubesandbox submodule from
+`+256 MB` overhead to `+1 GiB` overhead at
+`third_party/cubesandbox/CubeMaster/pkg/templatecenter/template_image.go:1508`.
+The same patch must be applied to the install copy at
+`.cubesandbox/CubeSandbox/CubeMaster/pkg/templatecenter/template_image.go:1508`
+because `cubesandbox-quickstart.sh install` is a one-way copy and the
+deployed cubemaster binary is built from the install tree. See
+`oci/cubesandbox/PATCHES.md` (P1) for the full patch + operator runbook
+(concurrent-sandbox ceiling, post-install verification commands, post-rebase
+replay checklist).
+
 ## `opengrep.Dockerfile`
 
 Builds the CubeSandbox Opengrep template image used when a static audit task

@@ -281,7 +281,10 @@ Defaults:
 - Local registry image: `m.daocloud.io/docker.io/library/registry:2`
 - Built image: `127.0.0.1:5000/cubesandbox-codeql-cpp:latest`
 - CodeQL bundle: `https://v6.gh-proxy.org/https://github.com/github/codeql-action/releases/download/codeql-bundle-v2.20.5/codeql-bundle-linux64.tar.zst`
-- Writable layer size: `4G`
+- Writable layer size: `16Gi` (raised from `4Gi` on 2026-05-04 to fit CodeQL DB + trap caches at runtime; see `oci/cubesandbox/PATCHES.md` and `.omc/specs/deep-dive-sandbox-storage-insufficient.md`)
+- Template probe: envd `/health` on port `49983` (NOT uvicorn `49999`; jupyter pkg removed by Stage 0 means uvicorn never binds)
+- ext4 image formula: `next_pow_of_2(rootfs + 1 GiB)` GiB (overhead bumped from 256 MB to 1 GiB in
+  `third_party/cubesandbox/CubeMaster/pkg/templatecenter/template_image.go:1508` so mkfs metadata always fits)
 
 Watch the printed `job_id` until the template reaches `READY`:
 
