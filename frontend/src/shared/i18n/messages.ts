@@ -15,6 +15,7 @@ export const I18N_MESSAGES = {
 		"route.scanConfig": "扫描配置",
 		"route.devTest": "开发测试",
 		"route.dataManagement": "数据管理",
+		"route.sandboxManagement": "沙箱管理",
 		"route.scanConfigOverview": "扫描配置总览",
 		"route.scanEngines": "扫描引擎",
 		"route.smartEngine": "智能引擎",

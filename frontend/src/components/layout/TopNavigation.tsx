@@ -3,6 +3,7 @@ import type { AnchorHTMLAttributes, ReactNode } from "react";
 import { Link, useLocation } from "react-router-dom";
 import {
 	Bot,
+	Boxes,
 	ChevronDown,
 	Code,
 	DatabaseBackup,
@@ -54,6 +55,7 @@ const routeIcons: Record<string, ReactNode> = {
 	"/data-management": (
 		<DatabaseBackup className="h-[1.125rem] w-[1.125rem]" />
 	),
+	"/sandbox-management": <Boxes className="h-[1.125rem] w-[1.125rem]" />,
 };
 
 const DESKTOP_GROUP_CLOSE_DELAY_MS = 240;

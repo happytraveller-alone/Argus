@@ -455,3 +455,47 @@ not currently show a dedicated template status panel; users pick Dockerfile
 container vs OCI CubeSandbox in
 `StaticEngineConfigDialog`, and the backend surfaces provisioning or execution
 errors on the static task if the template cannot be readied.
+
+## 12. Argus Sandbox Management Page
+
+Argus exposes a Development Testing page at `/sandbox-management` for
+operators to inspect CubeSandbox template records and recent sandbox task
+status without touching running sandbox instances.
+
+Frontend behavior:
+
+- Route/nav label: `/sandbox-management` under the `开发测试` navigation group,
+  labeled `沙箱管理`.
+- Template table: `frontend/src/pages/sandbox-management/SandboxTemplatesTable.tsx`
+  uses the same shared `DataTable` visual language as the project management
+  page, with columns for sequence number, template kind, record status,
+  CubeMaster template ID, image, error summary, updated time, and actions.
+- Sandbox status table: `frontend/src/pages/SandboxManagement.tsx` reads
+  `/api/v1/cubesandbox-tasks?limit=50` and displays task id, status,
+  `sandboxId`, `cleanupStatus`, and updated time as a read-only view.
+
+Management HTTP API:
+
+- `GET /api/v1/cubesandbox/templates` — returns recent
+  `rust_cubesandbox_templates` records, `failedCount`, and action-scope flags
+  such as `deleteScope: "failed_templates_only"` and `sandboxDeletion: false`.
+- `DELETE /api/v1/cubesandbox/templates/records/{record_id}` — deletes only a
+  `status='failed'` template record. If the record has a `template_id`, the
+  backend first calls CubeMaster template deletion; if CubeMaster deletion
+  fails, the local DB row is kept and the error is returned.
+- `POST /api/v1/cubesandbox/templates/cleanup-failed` — scans recent FAILED
+  records and applies the same single-record FAILED-only deletion path to each.
+- `POST /api/v1/cubesandbox/templates/codeql-cpp/invalidate` and
+  `POST /api/v1/cubesandbox/templates/opengrep/invalidate` — reused by the
+  page's reset buttons to mark active template records invalidated so later
+  work can rebuild them.
+
+Safety boundary:
+
+- Delete and cleanup actions are limited to FAILED template records/templates.
+- Non-FAILED records return HTTP 409 for direct delete attempts.
+- The page does **not** delete running sandbox instances, completed
+  `cubesandbox-tasks`, project data, scan findings, READY templates through the
+  delete path, or generic containerd content.
+- Reset is an invalidation signal for the active template kind; it is not a
+  template deletion or a sandbox instance cleanup.

@@ -99,3 +99,13 @@ test("project code browser route stays hidden under the projects section", () =>
 	assert.equal(codeBrowserRoute.navVisible, false);
 	assert.equal(codeBrowserRoute.navParentPath, "/projects");
 });
+
+
+test("sandbox management route is grouped under devTest navigation", () => {
+	const sandboxRoute = routes.find((route) => route.path === "/sandbox-management");
+
+	assert.ok(sandboxRoute);
+	assert.equal(sandboxRoute.name, "沙箱管理");
+	assert.equal(sandboxRoute.navGroup, "devTest");
+	assert.equal(sandboxRoute.navVisible, true);
+});

@@ -22,6 +22,8 @@ export interface CubesandboxTemplateRecord {
   createdAt?: string;
   updatedAt?: string;
   readyAt?: string | null;
+  imageFingerprint?: string | null;
+  consecutiveScanFailures?: number;
 }
 
 export async function getCodeqlCppTemplateStatus(): Promise<CubesandboxTemplateRecord> {
@@ -47,4 +49,63 @@ export async function invalidateCodeqlCppTemplate(): Promise<{ affected: number 
 
 export function getCodeqlCppTemplateStreamUrl(): string {
   return `${getApiBaseUrl()}/cubesandbox/templates/codeql-cpp/stream`;
+}
+
+
+export interface SandboxTemplateManagementOverview {
+  templates: CubesandboxTemplateRecord[];
+  failedCount: number;
+  actions: {
+    deleteScope: "failed_templates_only";
+    cleanupScope?: "failed_templates_only";
+    sandboxDeletion: boolean;
+    resetDeletesTemplates?: boolean;
+  };
+}
+
+export interface SandboxTemplateCleanupSummary {
+  scope: "failed_templates_only";
+  scannedFailed?: number;
+  deletedRecords: number;
+  deletedTemplates: number;
+  failures?: Array<{
+    recordId?: string;
+    templateId?: string | null;
+    error: string;
+  }>;
+}
+
+export type SandboxTemplateResetKind = "codeql_cpp" | "opengrep";
+
+export async function getSandboxTemplateManagementOverview(): Promise<SandboxTemplateManagementOverview> {
+  const response = await apiClient.get<SandboxTemplateManagementOverview>(
+    "/cubesandbox/templates",
+  );
+  return response.data;
+}
+
+export async function deleteFailedSandboxTemplateRecord(
+  recordId: string,
+): Promise<SandboxTemplateCleanupSummary> {
+  const response = await apiClient.delete<SandboxTemplateCleanupSummary>(
+    `/cubesandbox/templates/records/${encodeURIComponent(recordId)}`,
+  );
+  return response.data;
+}
+
+export async function cleanupFailedSandboxTemplates(): Promise<SandboxTemplateCleanupSummary> {
+  const response = await apiClient.post<SandboxTemplateCleanupSummary>(
+    "/cubesandbox/templates/cleanup-failed",
+  );
+  return response.data;
+}
+
+export async function resetSandboxTemplateKind(
+  kind: SandboxTemplateResetKind,
+): Promise<{ affected: number }> {
+  const path = kind === "codeql_cpp" ? "codeql-cpp" : "opengrep";
+  const response = await apiClient.post<{ affected: number }>(
+    `/cubesandbox/templates/${path}/invalidate`,
+  );
+  return response.data;
 }

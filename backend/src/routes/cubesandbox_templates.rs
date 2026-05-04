@@ -1,6 +1,7 @@
 use async_stream::stream;
 use axum::{
-    extract::State,
+    extract::{Path, State},
+    http::StatusCode,
     response::sse::{Event, KeepAlive, Sse},
     response::IntoResponse,
     routing::{get, post},
@@ -18,6 +19,12 @@ use crate::{
 
 pub fn router() -> Router<AppState> {
     Router::new()
+        .route("/", get(list_template_management_overview))
+        .route("/cleanup-failed", post(cleanup_failed_templates))
+        .route(
+            "/records/{record_id}",
+            axum::routing::delete(delete_failed_template_record),
+        )
         .route("/codeql-cpp", get(get_codeql_cpp_status))
         .route("/codeql-cpp/provision", post(provision_codeql_cpp))
         .route("/codeql-cpp/invalidate", post(invalidate_codeql_cpp))
@@ -26,6 +33,155 @@ pub fn router() -> Router<AppState> {
         .route("/opengrep/provision", post(provision_opengrep))
         .route("/opengrep/invalidate", post(invalidate_opengrep))
         .route("/opengrep/stream", get(stream_opengrep))
+}
+
+async fn list_template_management_overview(
+    State(state): State<AppState>,
+) -> Result<Json<Value>, ApiError> {
+    let templates = crate::db::cubesandbox_templates::list_all_history(&state, 200)
+        .await
+        .map_err(internal_error)?;
+    let failed_count = templates
+        .iter()
+        .filter(|record| record.status == TemplateStatus::Failed)
+        .count();
+    Ok(Json(json!({
+        "templates": templates,
+        "failedCount": failed_count,
+        "actions": {
+            "deleteScope": "failed_templates_only",
+            "cleanupScope": "failed_templates_only",
+            "sandboxDeletion": false,
+            "resetDeletesTemplates": false
+        }
+    })))
+}
+
+async fn cleanup_failed_templates(State(state): State<AppState>) -> Result<Json<Value>, ApiError> {
+    let failed = crate::db::cubesandbox_templates::list_failed(&state, 200)
+        .await
+        .map_err(internal_error)?;
+    let scanned_failed = failed.len();
+    let mut deleted_records = 0usize;
+    let mut deleted_templates = 0usize;
+    let mut failures = Vec::<Value>::new();
+
+    for record in failed {
+        match delete_failed_record_inner(&state, &record).await {
+            Ok(summary) => {
+                deleted_records += summary.deleted_records;
+                deleted_templates += summary.deleted_templates;
+            }
+            Err(error) => failures.push(json!({
+                "recordId": record.id,
+                "templateId": record.template_id,
+                "error": error.to_string()
+            })),
+        }
+    }
+
+    Ok(Json(json!({
+        "scope": "failed_templates_only",
+        "scannedFailed": scanned_failed,
+        "deletedRecords": deleted_records,
+        "deletedTemplates": deleted_templates,
+        "failures": failures
+    })))
+}
+
+async fn delete_failed_template_record(
+    State(state): State<AppState>,
+    Path(record_id): Path<String>,
+) -> Result<impl IntoResponse, ApiError> {
+    let record = crate::db::cubesandbox_templates::load_by_id(&state, &record_id)
+        .await
+        .map_err(internal_error)?
+        .ok_or_else(|| {
+            ApiError::NotFound(format!(
+                "CubeSandbox template record not found: {record_id}"
+            ))
+        })?;
+    if record.status != TemplateStatus::Failed {
+        return Ok((
+            StatusCode::CONFLICT,
+            Json(json!({
+                "error": "only failed CubeSandbox template records can be deleted",
+                "scope": "failed_templates_only",
+                "recordId": record.id,
+                "status": record.status.as_str()
+            })),
+        )
+            .into_response());
+    }
+    let summary = delete_failed_record_inner(&state, &record).await?;
+    Ok(Json(summary.to_json()).into_response())
+}
+
+struct FailedTemplateDeleteSummary {
+    record_id: String,
+    template_id: Option<String>,
+    deleted_records: usize,
+    deleted_templates: usize,
+}
+
+impl FailedTemplateDeleteSummary {
+    fn to_json(&self) -> Value {
+        json!({
+            "scope": "failed_templates_only",
+            "recordId": self.record_id,
+            "templateId": self.template_id,
+            "deletedRecords": self.deleted_records,
+            "deletedTemplates": self.deleted_templates
+        })
+    }
+}
+
+async fn delete_failed_record_inner(
+    state: &AppState,
+    record: &CubesandboxTemplateRecord,
+) -> Result<FailedTemplateDeleteSummary, ApiError> {
+    if record.status != TemplateStatus::Failed {
+        return Err(ApiError::Conflict(
+            "only failed CubeSandbox template records can be deleted".to_string(),
+        ));
+    }
+
+    let mut deleted_templates = 0usize;
+    if let Some(template_id) = record
+        .template_id
+        .as_deref()
+        .filter(|value| !value.trim().is_empty())
+    {
+        let config = CubeSandboxConfig::load_runtime(state)
+            .await
+            .map_err(internal_error)?
+            .for_template_kind(record.kind, state.config.as_ref());
+        let client = crate::runtime::cubesandbox::cubemaster_client::CubemasterClient::new(
+            crate::runtime::cubesandbox::cubemaster_client::CubemasterClientConfig {
+                base_url: config.cubemaster_base_url.clone(),
+                cleanup_timeout_seconds: config.cubemaster_cleanup_timeout_seconds,
+                instance_type: "cubebox".to_string(),
+            },
+            config,
+        )
+        .map_err(internal_error)?;
+        client.delete_template(template_id).await.map_err(|error| {
+            ApiError::Upstream(format!(
+                "failed to delete CubeMaster FAILED template {template_id}; local record kept: {error:#}"
+            ))
+        })?;
+        deleted_templates = 1;
+    }
+
+    let deleted = crate::db::cubesandbox_templates::delete_failed_by_id(state, &record.id)
+        .await
+        .map_err(internal_error)?;
+    Ok(FailedTemplateDeleteSummary {
+        record_id: record.id.clone(),
+        template_id: record.template_id.clone(),
+        deleted_records: usize::from(deleted.is_some()),
+        deleted_templates,
+    })
 }
 
 async fn get_codeql_cpp_status(State(state): State<AppState>) -> Result<Json<Value>, ApiError> {
@@ -225,6 +381,8 @@ mod tests {
             created_at: "2026-05-04T00:00:00Z".to_string(),
             updated_at: "2026-05-04T00:00:01Z".to_string(),
             ready_at: Some("2026-05-04T00:00:02Z".to_string()),
+            image_fingerprint: None,
+            consecutive_scan_failures: 0,
         }
     }
 

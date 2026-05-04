@@ -840,6 +840,166 @@ async fn cubesandbox_runtime_opengrep_template_invalidate_only_marks_dedicated_r
     assert_eq!(dedicated_after.status.as_str(), "invalidated");
 }
 
+#[tokio::test]
+async fn cubesandbox_template_management_overview_no_db_returns_empty_lists() {
+    let state = AppState::from_config(isolated_test_config(
+        "cubesandbox-template-management-no-db",
+    ))
+    .await
+    .expect("state should build");
+    let app = build_router(state);
+
+    let response = app
+        .oneshot(
+            Request::get("/api/v1/cubesandbox/templates")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .expect("overview request should complete");
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let payload = response_json(response).await;
+    assert_eq!(payload["templates"].as_array().map(Vec::len), Some(0));
+    assert_eq!(payload["failedCount"], 0);
+    assert_eq!(payload["actions"]["deleteScope"], "failed_templates_only");
+    assert_eq!(payload["actions"]["sandboxDeletion"], false);
+}
+
+#[tokio::test]
+async fn cubesandbox_template_management_cleanup_failed_no_db_is_bounded_noop() {
+    let state = AppState::from_config(isolated_test_config("cubesandbox-template-cleanup-no-db"))
+        .await
+        .expect("state should build");
+    let app = build_router(state);
+
+    let response = app
+        .oneshot(
+            Request::post("/api/v1/cubesandbox/templates/cleanup-failed")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .expect("cleanup request should complete");
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let payload = response_json(response).await;
+    assert_eq!(payload["scannedFailed"], 0);
+    assert_eq!(payload["deletedRecords"], 0);
+    assert_eq!(payload["deletedTemplates"], 0);
+    assert_eq!(payload["scope"], "failed_templates_only");
+}
+
+#[tokio::test]
+async fn cubesandbox_template_management_delete_rejects_non_failed_records() {
+    let Some(config) = require_db_test_config("cubesandbox-template-delete-nonfailed") else {
+        return;
+    };
+    let state = AppState::from_config(config)
+        .await
+        .expect("state should build");
+    bootstrap::run(&state)
+        .await
+        .expect("startup bootstrap should create CubeSandbox template schema");
+    let pool = state
+        .db_pool
+        .as_ref()
+        .expect("test requires DB-backed state");
+    sqlx::query("delete from rust_cubesandbox_templates where image_ref like 'argus/test-template-management:%'")
+        .execute(pool)
+        .await
+        .expect("cleanup old test rows");
+
+    let record = cubesandbox_templates::insert_pending(
+        &state,
+        TemplateKind::CodeqlCpp,
+        "argus/test-template-management:nonfailed",
+    )
+    .await
+    .expect("pending row should insert");
+
+    let app = build_router(state.clone());
+    let response = app
+        .oneshot(
+            Request::delete(format!(
+                "/api/v1/cubesandbox/templates/records/{}",
+                record.id
+            ))
+            .body(Body::empty())
+            .unwrap(),
+        )
+        .await
+        .expect("delete request should complete");
+
+    assert_eq!(response.status(), StatusCode::CONFLICT);
+    let payload = response_json(response).await;
+    assert_eq!(payload["scope"], "failed_templates_only");
+    assert_eq!(payload["status"], "pending");
+    assert!(cubesandbox_templates::load_by_id(&state, &record.id)
+        .await
+        .expect("lookup should complete")
+        .is_some());
+}
+
+#[tokio::test]
+async fn cubesandbox_template_management_delete_failed_record_without_template_id() {
+    let Some(config) = require_db_test_config("cubesandbox-template-delete-failed") else {
+        return;
+    };
+    let state = AppState::from_config(config)
+        .await
+        .expect("state should build");
+    bootstrap::run(&state)
+        .await
+        .expect("startup bootstrap should create CubeSandbox template schema");
+    let pool = state
+        .db_pool
+        .as_ref()
+        .expect("test requires DB-backed state");
+    sqlx::query("delete from rust_cubesandbox_templates where image_ref like 'argus/test-template-management:%'")
+        .execute(pool)
+        .await
+        .expect("cleanup old test rows");
+
+    let record = cubesandbox_templates::insert_pending(
+        &state,
+        TemplateKind::CodeqlCpp,
+        "argus/test-template-management:failed",
+    )
+    .await
+    .expect("pending row should insert");
+    cubesandbox_templates::update_to_failed(
+        &state,
+        &record.id,
+        "provision failed before template id",
+    )
+    .await
+    .expect("row should become failed");
+
+    let app = build_router(state.clone());
+    let response = app
+        .oneshot(
+            Request::delete(format!(
+                "/api/v1/cubesandbox/templates/records/{}",
+                record.id
+            ))
+            .body(Body::empty())
+            .unwrap(),
+        )
+        .await
+        .expect("delete request should complete");
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let payload = response_json(response).await;
+    assert_eq!(payload["deletedRecords"], 1);
+    assert_eq!(payload["deletedTemplates"], 0);
+    assert_eq!(payload["scope"], "failed_templates_only");
+    assert!(cubesandbox_templates::load_by_id(&state, &record.id)
+        .await
+        .expect("lookup should complete")
+        .is_none());
+}
+
 async fn submit_cubesandbox_task(app: &RouterForTest, cube_sandbox: Value) -> Value {
     let state = AppState::from_config(isolated_test_config("cubesandbox-submit-helper"))
         .await

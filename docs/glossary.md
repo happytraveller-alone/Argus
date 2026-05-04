@@ -46,6 +46,13 @@
 - **运维约束**：自动构建仅在 `CUBESANDBOX_API_BASE_URL` / `CUBESANDBOX_DATA_PLANE_BASE_URL` 指向 `localhost`/`127.0.0.1`/`::1`/`host.docker.internal` 之一时启用（其它远端 URL 由 `should_run_local_lifecycle` 拒绝）；helper SSH 用 `CUBE_SSH_HOST=host.docker.internal` 当 URL 走 docker host gateway。
 - **主要入口**：`backend/src/runtime/cubesandbox/template_provisioner.rs`、`backend/src/db/cubesandbox_templates.rs`、`backend/src/routes/cubesandbox_templates.rs`、`backend/src/runtime/cubesandbox/client.rs`、`backend/src/runtime/cubesandbox/helper.rs`、`oci/cubesandbox/{codeql-cpp,opengrep}.Dockerfile`、`scripts/cubesandbox-quickstart.sh`。
 
+### 沙箱管理页
+
+- **是什么**：开发测试导航组里的 `/sandbox-management` 页面，用项目管理页的共享 `DataTable` 视觉查看 CubeSandbox 模板记录和 `cubesandbox-tasks` 状态。模板数据来自 `GET /api/v1/cubesandbox/templates`，沙箱状态来自只读的 `/api/v1/cubesandbox-tasks?limit=50`。
+- **不是什么**：通用沙箱实例控制台、项目/扫描清理页或 containerd 垃圾回收入口。它不删除运行中 sandbox 实例、不删除 task 记录、不删除项目/扫描结果，也不对泛 containerd 内容做清理。
+- **操作边界**：删除与清空只作用于 `status='failed'` 的模板记录及其 CubeMaster template_id；直接删除非 FAILED 记录应返回 HTTP 409。页面上的“重置 CodeQL / 重置 OpenGrep”只调用既有 `/invalidate` 路由标记 active 模板记录失效，以便后续重建，不是 READY 模板删除。
+- **主要入口**：`frontend/src/pages/SandboxManagement.tsx`、`frontend/src/pages/sandbox-management/SandboxTemplatesTable.tsx`、`frontend/src/shared/api/cubesandboxTemplates.ts`、`frontend/src/shared/api/cubesandboxTasks.ts`、`backend/src/routes/cubesandbox_templates.rs`、`backend/src/db/cubesandbox_templates.rs`。
+
 ### 智能审计
 
 - **是什么**：AI 驱动的安全审计产品方向。
