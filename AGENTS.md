@@ -386,67 +386,85 @@ Execute `omx setup` to install all components. Execute `omx doctor` to verify in
 <claude-mem-context>
 # Memory Context
 
-# [argus] recent context, 2026-05-02 9:10am GMT+8
+# [argus] recent context, 2026-05-04 10:22am GMT+8
 
 Legend: 🎯session 🔴bugfix 🟣feature 🔄refactor ✅change 🔵discovery ⚖️decision 🚨security_alert 🔐security_note
 Format: ID TIME TYPE TITLE
 Fetch details: get_observations([IDs]) | Search: mem-search skill
 
-Stats: 50 obs (16,919t read) | 826,469t work | 98% savings
+Stats: 50 obs (23,557t read) | 637,685t work | 96% savings
 
 ### May 2, 2026
-82 6:26a 🔵 ProjectManagementMetricsResponse structure tracks intelligent and verified findings
-83 " ⚖️ Systematic removal of agent task execution infrastructure planned
-84 6:27a ✅ Agentflow module and agent routes deleted from backend
-85 " ✅ Agent task and agent test routes removed from API router
-86 " ✅ Agent task recovery specification removed from startup recovery system
-87 6:28a ✅ Agent tasks column removed from project_management_metrics legacy schema
-88 " ✅ Agent task record structs removed from task state module
-89 " ✅ Task state module cleaned up to remove agent task infrastructure
-93 6:30a ✅ Dashboard snapshot endpoint hardcoded to return zero intelligent findings
-94 " ✅ Removed intelligent task reporting from dashboard snapshot endpoint
-95 6:31a 🔄 Agentflow Runtime Retirement - Backend Phase 4 Complete
-96 7:17a ✅ Test Suite Updated - Agent Task Fixtures Removed
-97 7:40a ✅ Agentflow Infrastructure Retirement - Data Migration and Cleanup
-98 " 🔵 Agentflow Data Migration Script Failed Silently - agent_tasks Key Not Removed
-99 7:41a 🔴 Fixed Agentflow Data Migration Script - Replaced jq with Python3 JSON Handler
-100 " ✅ Removed Agentflow Runner Service from Docker Compose Configuration
-101 " ✅ Removed Agentflow Service Dependencies and Environment File Reference from Docker Compose
-102 " ✅ Updated Data Migration Script - Replaced Python3 with sed for JSON Manipulation
-103 " ✅ Removed Agentflow-Related Environment Variables and Volume Definition from Docker Compose
-104 7:42a 🔵 Agentflow Data Migration Script Successfully Executed - agent_tasks Key Removed
-105 " ✅ Removed Configuration File Handling from Reset/Rebuild/Start Script
-106 " ✅ Removed CACHE_SCOPE Variable from Reset/Rebuild/Start Script
-107 " 🔴 Agentflow Data Migration Verified - All Cleanup Complete
-108 7:43a ✅ Agentflow intelligent audit system retired from documentation
-109 7:51a ✅ Documentation cleanup completed for agentflow retirement
-110 " ✅ Architecture guide terminology section updated to remove retired agentflow references
-111 " ✅ Documentation index updated to reflect agentflow retirement and system changes
-112 " 🔵 All active agentflow references removed from documentation
-113 " 🔵 ADR document confirms agentflow retirement decision and implementation scope
-114 7:52a 🟣 Agentflow retirement documentation and ADR completed
-115 " 🔵 Agentflow retirement project completed successfully
-116 " 🔵 Final verification reveals 3 blockers preventing acceptance
-117 7:53a 🔵 Decision document exists - verification report was incomplete
-118 " 🔵 InDevelopmentPlaceholder import is correct in routes.tsx
-119 " 🔴 Fixed TypeScript export mismatch in InDevelopmentPlaceholder component
-120 " 🔴 Fixed all import statements to match default export
-121 " 🔵 TypeScript compilation now passes successfully
-122 7:54a 🔵 Agentflow retirement project completed with all acceptance criteria passing
-123 " 🔵 Comprehensive file deletion count confirms thorough agentflow removal
-124 " 🔵 Complete change summary for agentflow retirement project
-125 7:56a 🟣 Agentflow retirement autopilot project completed with comprehensive summary
-126 7:58a 🔴 Agentflow retirement autopilot project successfully completed
-127 " 🔵 Session resumed after agentflow retirement autopilot completion
+S16 neat-freak skill execution: reconcile project documentation with current codebase state regarding agentflow retirement (May 2, 8:03 AM)
 S15 AgentFlow retirement autopilot project - complete removal of intelligent audit subsystem from Argus codebase (May 2, 8:03 AM)
-130 8:22a ⚖️ Intelligent Audit Feature Retired
-134 " ✅ Documentation reconciliation for AgentFlow intelligent audit transitional state
-131 8:24a 🔵 AgentFlow Intelligent Audit Retirement Status and Cleanup State
-132 " 🔵 Argus System Architecture: Backend Rust Gateway with Multi-Scanner Runtime
-133 " 🔵 CodeQL Isolated Scan Plan: C/C++ Compile Sandbox Integration
-135 8:34a ✅ Project documentation and agent knowledge reconciliation via neat-freak
-S16 neat-freak skill execution: reconcile project documentation with current codebase state regarding agentflow retirement (May 2, 8:54 AM)
-140 8:56a ✅ Clarified dual-sandbox responsibility separation in CodeQL architecture
+S17 Implement CodeQL scanning entry in frontend with mutually exclusive engine selection (CodeQL vs OpenGrep), details page matching OpenGrep format, and sandbox container lifecycle management (May 2, 8:54 AM)
+S18 Strengthen OpenGrep scanning rules in Argus backend by implementing quality improvements from fix documentation to reduce false positives while maintaining detection accuracy (May 2, 9:03 AM)
+144 9:46a ✅ CodeQL Frontend Integration PRD Created with 5 User Stories
+145 9:47a 🔵 CodeQL API Functions Already Implemented in opengrep.ts
+142 " 🔵 Backend CodeQL Infrastructure Fully Implemented
+146 9:51a 🔵 CodeQL API Functions Already Fully Implemented in opengrep.ts
+147 10:15a 🔵 OpenGrep Rule Documentation vs Backend Assets Alignment Analysis
+148 10:16a 🔵 Rule Quality Gaps Identified Between Documentation and Backend Implementation
+149 10:17a 🔵 Detailed Rule Improvement Specifications for C/C++ Buffer and Format String Rules
+151 " 🔵 Rule Strengthening Initiative Analysis: 20 Rules Across 3 Languages with Systematic Improvement Patterns
+150 10:18a 🔵 Comprehensive Rule Improvement Specifications Across C/C++/Python Security Rules
+S19 Fix CodeQL static audit page failing with error before displaying project plan; investigate root cause of "exhausted without accepted build plan" error (May 2, 10:27 AM)
+155 10:44a ⚖️ CodeQL Frontend Integration Scope Defined
+156 " ⚖️ Dual-Sandbox Architecture for CodeQL Integration Established
+157 " ✅ Autoresearch Mission Established for CodeQL Frontend Integration
+158 " 🔵 Frontend Codebase Structure Mapped for CodeQL Integration
+159 10:45a 🔵 Frontend CodeQL Integration Points Identified - Partial Infrastructure Exists
+160 10:46a ✅ Comprehensive CodeQL Frontend Integration Refinement Plan Created
+161 " ✅ Autoresearch Mission Completed - Iteration 001 Deliverables Finalized
+### May 3, 2026
+S20 Fix CodeQL static audit page failing with error before showing project plan; investigate root cause and implement targeted fix (May 3, 6:19 AM)
+162 6:35a 🔵 Frontend error handling displays actual API error messages, not generic toast
+S21 Deep-dive investigation and spec generation for cubemaster template cleanup multi-layer storage leak fix (guest disk 93% full, 12GB in /var/lib/containerd) (May 3, 6:40 AM)
+163 7:07a ✅ Frontend error display improvement task created
+164 7:10a 🔴 Fix CodeQL build plan exhaustion error masking in frontend
+165 " 🔵 CodeQL build plan exhaustion error message location confirmed
+166 7:17a 🔵 CodeQL build plan exhaustion error flow and event structure
+167 " 🔵 CodeQL task retrieval endpoint functions located
+168 7:28a 🔵 get_codeql_task delegates to get_static_task generic handler
+### May 4, 2026
+170 4:34a 🔵 Cubemaster template accumulation causing containerd storage exhaustion
+171 " 🔵 Template provisioner state machine and cleanup gap identified
+172 4:35a 🔵 Template provisioning lifecycle incomplete: cubemaster registry not synced with cleanup
+173 4:36a ⚖️ Deep-dive investigation structured into three parallel trace lanes
+174 " 🔵 No cubemastercli template delete integration found in codebase
+175 " 🔵 Root cause confirmed: No cubemaster template deletion integration in backend
+176 4:37a 🔵 Snapshot cleanup mechanism exists in containerd but is NOT invoked for failed templates
+177 " 🔵 Lane 3 investigation complete: Provision state machine gap confirmed as root cause
+179 " 🔵 Root cause of cubemaster provision failure identified
+178 " 🔵 Lane 1 investigation complete: FAILED templates accumulate in backend DB without cleanup
+182 " 🔵 Multi-layer template cleanup gap root cause analysis complete
+183 " ⚖️ Comprehensive three-layer cleanup fix designed with defense-in-depth strategy
+S22 Create a comprehensive Phase 6 E2E Verification plan for the CubeSandbox disk exhaustion template cleanup fix, documenting verification objectives, test procedures, success criteria, and implementation details for a multi-layer cleanup system (May 4, 4:51 AM)
+180 4:52a 🔵 Backend provision state machine lacks cubemaster template deletion integration
+181 " 🔵 Template cleanup removes filesystem paths but not containerd snapshots
+184 4:54a ⚖️ Deep-dive interview completed with comprehensive spec ready for implementation
+185 5:04a 🔵 Multi-layer template cleanup architecture analyzed and documented
+186 5:05a 🔵 Implementation infrastructure exists for all 5 acceptance criteria
+187 5:07a 🔵 Cubemaster Template Cleanup Architecture: 9 Spec Corrections via Code Inspection
+188 " 🔵 Cubemaster Template Cleanup: Cubelet Containerd Snapshotter Fix Required (Phase 3 Critical Path)
+189 5:10a 🔵 Implementation Plan Validation: 4 Changes Required Before Execution
+S23 Debug and resolve persistent disk exhaustion in CubeSandbox codeql-cpp template provisioning by analyzing bloated build artifacts (May 4, 5:11 AM)
+190 5:33a 🔵 CubeSandbox codeql-cpp template provision fails due to disk exhaustion during rootfs population
+191 " 🔴 CodeQL C++ Template Disk Space Exhaustion Fixed via Distribution Slimming
+192 10:07a 🔵 ext4 Template Image Sizing Formula and Overhead Calculation
+193 " 🔵 sandbox-code Base Image is Upstream Prebuilt Artifact, Not Vendored
+194 " 🔄 Extended Dockerfile Slimming: Stage 0 Base Image Cleanup Added to codeql-cpp.Dockerfile
+195 10:13a 🔄 Added CodeQL Documentation and Platform-Specific Cleanup to codeql-cpp.Dockerfile
+196 10:14a 🟣 New Diagnostic Script: probe-codeql-cpp-rootfs-sizes.sh for Image Footprint Analysis
+S24 Debug and fix CodeQL C++ template disk space exhaustion in CubeSandbox ext4 provisioning (mkfs.ext4 population failure with "No space left on device") (May 4, 10:14 AM)
+**Investigated**: Root cause of mkfs.ext4 failure during template population; ext4 filesystem sizing logic in CubeMaster; base image composition (sandbox-code → e2bdev/code-interpreter → python:3.12.13-trixie); disk footprint contributors across system packages, Python ML/data-science libraries, Node.js, JVM, and caches
 
-Access 826k tokens of past work via get_observations([IDs]) or mem-search skill.
+**Learned**: CubeMaster sizes ext4 as next_pow_of_2(rootfs_size + 256MB). Full CodeQL bundle with all language packs produces ~7.9 GiB rootfs; with 256MB overhead = 7.75 GiB, exceeding safe margin within 8 GiB limit. ext4 metadata at 8 GiB consumes ~460 MB, leaving only ~50 MB during file population. Base image inherits entire Jupyter/ML/Node ecosystem unnecessary for C++-only extraction. Previous CodeQL language-pack slimming (3-4 GB savings) insufficient alone to provide safe margin.
+
+**Completed**: Extended codeql-cpp.Dockerfile with aggressive two-stage slimming: (1) Stage 0 removes e2b/code-interpreter bloat (Jupyter, NumPy, Pandas, SciPy, torch, tensorflow, transformers, scikit-learn, opencv, Node.js, Python caches, system JVM, Tencent/e2b user trees with ignore-missing blocks); (2) Stage 1 existing CodeQL language-pack filtering; (3) CodeQL-side cleanup removing /opt/codeql/codeql/docs, /opt/codeql/codeql/help, and __macosx. Added comprehensive du -sh diagnostics before/after each cleanup stage and final summary. Created probe-codeql-cpp-rootfs-sizes.sh diagnostic tool supporting local-build (WSL image) and guest-vm (SSH to CubeSandbox guest) modes with 9 disk-breakdown categories (rootfs total, /usr, /opt, Python site-packages >50MB, node_modules, JVMs, CodeQL breakdown, caches). Script verified with bash -n syntax check.
+
+**Next Steps**: Rebuild codeql-cpp image using modified Dockerfile and verify size reduction via build logs (grep for "rootfs size" output) and probe script. If rootfs ≤6 GiB achieved, attempt new provision-codeql-cpp-template to validate mkfs.ext4 population succeeds with safe headroom. If rootfs still ≥7.5 GiB, run probe-codeql-cpp-rootfs-sizes.sh local-build to identify remaining bloat and add additional cleanup paths. Possible further optimization: drop additional qlpacks (cwe-*, tutorial, mad, meta) if CodeQL C++ distribution alone exceeds 2 GiB.
+
+
+Access 638k tokens of past work via get_observations([IDs]) or mem-search skill.
 </claude-mem-context>

@@ -1,0 +1,223 @@
+diff --git a/Cubelet/storage/template_cleanup.go b/Cubelet/storage/template_cleanup.go
+index 933de57..cbd342f 100644
+--- a/Cubelet/storage/template_cleanup.go
++++ b/Cubelet/storage/template_cleanup.go
+@@ -83,6 +83,10 @@ func CleanupTemplateLocalData(ctx context.Context, templateID, snapshotPath stri
+ 		remove(filepath.Join(templatesRoot, entry.Name(), templateID))
+ 	}
+ 
++	if err := removeTemplateSnapshots(ctx, templateID); err != nil {
++		cleanupErr = errors.Join(cleanupErr, fmt.Errorf("remove containerd snapshots for %s: %w", templateID, err))
++	}
++
+ 	if cleanupErr != nil {
+ 		return cleanupErr
+ 	}
+diff --git a/Cubelet/storage/template_cleanup_containerd.go b/Cubelet/storage/template_cleanup_containerd.go
+new file mode 100644
+index 0000000..ee7e923
+--- /dev/null
++++ b/Cubelet/storage/template_cleanup_containerd.go
+@@ -0,0 +1,135 @@
++// Copyright (c) 2024 Tencent Inc.
++// SPDX-License-Identifier: Apache-2.0
++//
++
++package storage
++
++import (
++	"context"
++	"errors"
++	"fmt"
++	"regexp"
++	"strings"
++
++	containerd "github.com/containerd/containerd/v2/client"
++	"github.com/containerd/containerd/v2/core/snapshots"
++	"github.com/containerd/containerd/v2/pkg/namespaces"
++	"github.com/containerd/errdefs"
++	"github.com/containerd/platforms"
++
++	"github.com/tencentcloud/CubeSandbox/Cubelet/pkg/log"
++)
++
++// templateIDRegex restricts templateID to a conservative character set so a
++// short or empty value cannot cause Walk's prefix-match to delete unrelated
++// snapshots (e.g. an empty templateID would match every "_"-prefixed key).
++var templateIDRegex = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{2,127}$`)
++
++const (
++	// cubeletSockPath is the default containerd socket used by Cubelet.
++	// Mirrors the constant in cmd/cubelet/config.go: unixSockPath.
++	cubeletSockPath = "/data/cubelet/cubelet.sock"
++
++	// templateSnapshotterName is the snapshotter Cubelet uses for template
++	// snapshots. Confirmed by cube_container_create_test.go fixtures.
++	templateSnapshotterName = "overlayfs"
++)
++
++// removeTemplateSnapshots removes all containerd snapshots whose key is
++// exactly templateID or whose key starts with templateID+"_" (e.g.
++// templateID_0, templateID_1, …).
++//
++// Behaviour:
++//   - If the containerd socket is unavailable the function logs a warning and
++//     returns nil so that the caller's filesystem cleanup still succeeds.
++//   - NotFound errors during removal are treated as success (idempotent).
++//   - Any other removal error is returned so the caller can decide whether to
++//     surface it.
++func removeTemplateSnapshots(ctx context.Context, templateID string) error {
++	// Reject empty / unsafe templateIDs so a short prefix cannot match every
++	// "_"-prefixed snapshot key on the host.
++	if !templateIDRegex.MatchString(templateID) {
++		return fmt.Errorf("removeTemplateSnapshots: invalid templateID %q (must match %s)",
++			templateID, templateIDRegex.String())
++	}
++
++	client, err := containerd.New(
++		cubeletSockPath,
++		containerd.WithDefaultPlatform(platforms.Default()),
++	)
++	if err != nil {
++		// Graceful degradation: socket missing / daemon down / running in test.
++		log.G(ctx).Warnf("removeTemplateSnapshots: cannot connect to containerd at %s, skipping snapshot cleanup for %s: %v",
++			cubeletSockPath, templateID, err)
++		return nil
++	}
++	defer client.Close()
++
++	// Discover all containerd namespaces. Templates may live in `default`
++	// (Cubelet's documented fallback) or `cubemaster` (per spec assumption A1)
++	// or another sandbox-scoped namespace. Walking every namespace makes the
++	// cleanup robust to runtime configuration we cannot probe at compile time.
++	nsList, nsErr := client.NamespaceService().List(ctx)
++	if nsErr != nil {
++		return fmt.Errorf("list containerd namespaces: %w", nsErr)
++	}
++	if len(nsList) == 0 {
++		// Fall back to the default namespace explicitly so callers running
++		// against an empty namespace store still attempt cleanup.
++		nsList = []string{namespaces.Default}
++	}
++
++	snapshotter := client.SnapshotService(templateSnapshotterName)
++
++	var joinedErr error
++	for _, ns := range nsList {
++		nsCtx := namespaces.WithNamespace(ctx, ns)
++
++		// Collect all matching snapshot keys first, then remove them.
++		// Removing while walking can cause undefined iterator behaviour.
++		var toRemove []string
++
++		// Walk-by-prefix: covers templateID itself and templateID_<N> variants.
++		walkErr := snapshotter.Walk(nsCtx, func(_ context.Context, info snapshots.Info) error {
++			key := info.Name
++			if key == templateID || strings.HasPrefix(key, templateID+"_") {
++				toRemove = append(toRemove, key)
++			}
++			return nil
++		})
++		if walkErr != nil {
++			if errdefs.IsNotFound(walkErr) {
++				log.G(ctx).Warnf("removeTemplateSnapshots: snapshotter %q not found in namespace %q, skipping: %v",
++					templateSnapshotterName, ns, walkErr)
++				continue
++			}
++			joinedErr = errors.Join(joinedErr,
++				fmt.Errorf("walk snapshots for template %s in namespace %s: %w", templateID, ns, walkErr))
++			continue
++		}
++
++		// If Walk found nothing, also attempt a direct Stat in case the key
++		// equals templateID exactly but Walk somehow missed it (defensive).
++		if len(toRemove) == 0 {
++			if _, statErr := snapshotter.Stat(nsCtx, templateID); statErr == nil {
++				toRemove = append(toRemove, templateID)
++			}
++		}
++
++		for _, key := range toRemove {
++			if err := snapshotter.Remove(nsCtx, key); err != nil {
++				if errdefs.IsNotFound(err) {
++					// Already gone — idempotent, continue.
++					continue
++				}
++				joinedErr = errors.Join(joinedErr,
++					fmt.Errorf("remove snapshot %q in namespace %s: %w", key, ns, err))
++			} else {
++				log.G(ctx).Infof("removeTemplateSnapshots: removed containerd snapshot %q in namespace %q for template %s",
++					key, ns, templateID)
++			}
++		}
++	}
++
++	return joinedErr
++}
+diff --git a/Cubelet/storage/template_cleanup_test.go b/Cubelet/storage/template_cleanup_test.go
+new file mode 100644
+index 0000000..736649e
+--- /dev/null
++++ b/Cubelet/storage/template_cleanup_test.go
+@@ -0,0 +1,61 @@
++// Copyright (c) 2024 Tencent Inc.
++// SPDX-License-Identifier: Apache-2.0
++//
++
++package storage
++
++import (
++	"context"
++	"testing"
++
++	"github.com/stretchr/testify/assert"
++)
++
++// TestCleanupTemplateLocalData_EmptyTemplateID rejects blank templateIDs.
++func TestCleanupTemplateLocalData_EmptyTemplateID(t *testing.T) {
++	err := CleanupTemplateLocalData(context.Background(), "", "")
++	assert.Error(t, err)
++	assert.Contains(t, err.Error(), "templateID is required")
++}
++
++// TestCleanupTemplateLocalData_InvalidTemplateID rejects IDs with path-traversal
++// components rejected by pathutil.ValidateSafeID.
++func TestCleanupTemplateLocalData_InvalidTemplateID(t *testing.T) {
++	err := CleanupTemplateLocalData(context.Background(), "../etc/passwd", "")
++	assert.Error(t, err)
++	assert.Contains(t, err.Error(), "invalid templateID")
++}
++
++// TestCleanupTemplateLocalData_NilStorage verifies the function is a no-op
++// when localStorage has not been initialised (nil guard).
++func TestCleanupTemplateLocalData_NilStorage(t *testing.T) {
++	prev := localStorage
++	localStorage = nil
++	t.Cleanup(func() { localStorage = prev })
++
++	err := CleanupTemplateLocalData(context.Background(), "tmpl-nil-storage", "")
++	assert.NoError(t, err)
++}
++
++// TestRemoveTemplateSnapshots_GracefulDegradation verifies that
++// removeTemplateSnapshots returns nil when containerd is unreachable.
++// In the test / CI environment there is no cubelet socket, so the function
++// must degrade gracefully rather than propagate the connection error.
++func TestRemoveTemplateSnapshots_GracefulDegradation(t *testing.T) {
++	err := removeTemplateSnapshots(context.Background(), "some-template-id")
++	assert.NoError(t, err, "removeTemplateSnapshots must not error when containerd socket is absent")
++}
++
++// TestRemoveTemplateSnapshots_RejectsUnsafeID guards against an empty/short
++// templateID being passed to Walk where the prefix match would match every
++// "_"-prefixed snapshot key on the host.
++func TestRemoveTemplateSnapshots_RejectsUnsafeID(t *testing.T) {
++	cases := []string{"", "_", "ab", "..", "../etc"}
++	for _, id := range cases {
++		err := removeTemplateSnapshots(context.Background(), id)
++		assert.Error(t, err, "removeTemplateSnapshots must reject unsafe templateID %q", id)
++		if err != nil {
++			assert.Contains(t, err.Error(), "invalid templateID")
++		}
++	}
++}
