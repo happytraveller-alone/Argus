@@ -4,8 +4,11 @@ use tokio::sync::watch;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use backend_rust::{
-    app::build_router, bootstrap, config::AppConfig,
-    runtime::cubesandbox::{wait_for_active_scans_drain, ShutdownGate}, state::AppState,
+    app::build_router,
+    bootstrap,
+    config::AppConfig,
+    runtime::cubesandbox::{wait_for_active_scans_drain, ShutdownGate},
+    state::AppState,
 };
 
 #[tokio::main]

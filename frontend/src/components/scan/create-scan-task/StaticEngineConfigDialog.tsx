@@ -28,7 +28,7 @@ export interface StaticEngineConfigDialogProps extends StaticEngineConfigDialogC
 }
 
 const PLACEHOLDER_COPY: Record<ScanEngineTab, string> = {
-  opengrep: "选择本次 Opengrep 任务使用 Dockerfile 容器还是 OCI CubeSandbox 沙箱。",
+  opengrep: "选择本次 Opengrep 任务使用 Dockerfile 容器、OCI CubeSandbox 或 A3S Box MicroVM。",
   codeql: "后续将支持语言、查询包和构建命令等任务级配置。",
 };
 
@@ -88,7 +88,7 @@ export function StaticEngineConfigDialogContent({
                 <p className="mt-1">{PLACEHOLDER_COPY[engine]}</p>
               </div>
             </div>
-            <div className="grid gap-2 md:grid-cols-2">
+            <div className="grid gap-2 md:grid-cols-3">
               {[
                 {
                   value: "dockerfile_container" as const,
@@ -99,6 +99,11 @@ export function StaticEngineConfigDialogContent({
                   value: "oci_cubesandbox" as const,
                   title: "OCI CubeSandbox 沙箱",
                   description: "使用 oci/cubesandbox/opengrep.Dockerfile 构建的隔离沙箱模板。",
+                },
+                {
+                  value: "a3s_box" as const,
+                  title: "A3S Box MicroVM",
+                  description: "使用 a3s-box 运行 OpenGrep OCI 镜像，保留沙箱级隔离与结果回收。",
                 },
               ].map((item) => {
                 const selected = opengrepSandbox === item.value;

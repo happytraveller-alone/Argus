@@ -1,3 +1,4 @@
+pub mod a3s_box_runner;
 pub mod bootstrap;
 pub mod cubesandbox;
 pub mod finding_payload;

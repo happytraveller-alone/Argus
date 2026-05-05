@@ -7,6 +7,8 @@ ARG BACKEND_APT_SECURITY_FALLBACK=security.debian.org
 ARG BACKEND_CARGO_REGISTRY=sparse+https://rsproxy.cn/index/
 ARG BACKEND_CARGO_HTTP_TIMEOUT_SECONDS=30
 ARG BACKEND_CARGO_NET_RETRY=10
+ARG A3S_BOX_VERSION=v2.0.3
+ARG A3S_BOX_DOWNLOAD_BASE_URL=https://v6.gh-proxy.org/https://github.com/AI45Lab/Box/releases/download
 
 FROM ${DOCKERHUB_LIBRARY_MIRROR}/rust:1.90-slim-bookworm AS builder
 
@@ -55,6 +57,8 @@ RUN --mount=type=cache,id=argus-backend-builder-apt-lists,target=/var/lib/apt/li
   apt-get update && \
   DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
   binutils \
+  ca-certificates \
+  curl \
   pkg-config \
   libssl-dev; \
   }; \
@@ -98,6 +102,54 @@ RUN --mount=type=cache,id=argus-backend-cargo-registry,target=/usr/local/cargo/r
   cargo build --locked --release --bin backend-rust \
   && cp /app/target/release/backend-rust /usr/local/bin/backend-rust \
   && strip /usr/local/bin/backend-rust
+
+FROM ${DOCKERHUB_LIBRARY_MIRROR}/debian:trixie-slim AS a3s-box-binary-src
+
+ARG A3S_BOX_VERSION
+ARG A3S_BOX_DOWNLOAD_BASE_URL
+ARG TARGETARCH
+ARG BACKEND_APT_MIRROR_PRIMARY
+ARG BACKEND_APT_SECURITY_PRIMARY
+ARG BACKEND_APT_MIRROR_FALLBACK
+ARG BACKEND_APT_SECURITY_FALLBACK
+
+RUN --mount=type=cache,id=argus-a3s-box-binary-apt-lists,target=/var/lib/apt/lists,sharing=locked \
+  --mount=type=cache,id=argus-a3s-box-binary-apt-cache,target=/var/cache/apt,sharing=locked \
+  set -eux; \
+  . /etc/os-release; \
+  CODENAME="${VERSION_CODENAME:-trixie}"; \
+  write_sources() { \
+    main_host="$1"; \
+    security_host="$2"; \
+    rm -f /etc/apt/sources.list.d/debian.sources 2>/dev/null || true; \
+    printf 'deb http://%s/debian %s main\n' "${main_host}" "${CODENAME}" > /etc/apt/sources.list; \
+    printf 'deb http://%s/debian %s-updates main\n' "${main_host}" "${CODENAME}" >> /etc/apt/sources.list; \
+    printf 'deb http://%s/debian-security %s-security main\n' "${security_host}" "${CODENAME}" >> /etc/apt/sources.list; \
+  }; \
+  write_sources "${BACKEND_APT_MIRROR_PRIMARY}" "${BACKEND_APT_SECURITY_PRIMARY}"; \
+  apt-get update; \
+  DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ca-certificates curl || { \
+    rm -rf /var/lib/apt/lists/*; \
+    write_sources "${BACKEND_APT_MIRROR_FALLBACK}" "${BACKEND_APT_SECURITY_FALLBACK}"; \
+    apt-get update; \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ca-certificates curl; \
+  }; \
+  rm -rf /var/lib/apt/lists/*; \
+  case "${TARGETARCH:-amd64}" in \
+    amd64) package_arch="linux-x86_64" ;; \
+    arm64) package_arch="linux-arm64" ;; \
+    *) echo "unsupported A3S Box TARGETARCH=${TARGETARCH}" >&2; exit 1 ;; \
+  esac; \
+  package="a3s-box-${A3S_BOX_VERSION}-${package_arch}"; \
+  curl -fsSL --retry 5 "${A3S_BOX_DOWNLOAD_BASE_URL}/${A3S_BOX_VERSION}/${package}.tar.gz" -o /tmp/a3s-box.tar.gz; \
+  mkdir -p /tmp/a3s-box /opt/a3s-box/bin /opt/a3s-box/lib; \
+  tar -xzf /tmp/a3s-box.tar.gz -C /tmp/a3s-box --strip-components=1; \
+  install -m 0755 /tmp/a3s-box/a3s-box /opt/a3s-box/bin/a3s-box; \
+  install -m 0755 /tmp/a3s-box/a3s-box-shim /opt/a3s-box/bin/a3s-box-shim; \
+  install -m 0755 /tmp/a3s-box/a3s-box-guest-init /opt/a3s-box/bin/a3s-box-guest-init; \
+  cp -a /tmp/a3s-box/lib/. /opt/a3s-box/lib/; \
+  LD_LIBRARY_PATH=/opt/a3s-box/lib /opt/a3s-box/bin/a3s-box --version | grep -F "a3s-box ${A3S_BOX_VERSION#v}"; \
+  rm -rf /tmp/a3s-box /tmp/a3s-box.tar.gz
 
 FROM ${DOCKER_CLI_IMAGE} AS docker-cli-src
 
@@ -187,6 +239,8 @@ COPY --chmod=755 docker/backend-entrypoint.sh /usr/local/bin/backend-entrypoint.
 COPY --chmod=755 scripts/cubesandbox-quickstart.sh /app/scripts/cubesandbox-quickstart.sh
 COPY --from=builder /usr/local/bin/backend-rust /usr/local/bin/backend
 COPY --from=stripped-runtime-artifacts /usr/local/bin/docker /usr/local/bin/docker
+COPY --from=a3s-box-binary-src /opt/a3s-box/bin/ /usr/local/bin/
+COPY --from=a3s-box-binary-src /opt/a3s-box/lib/ /usr/local/lib/
 COPY --from=backend-assets-archive /opt/backend-assets/scan_rule_assets.tar.gz /app/assets/scan_rule_assets.tar.gz
 
 ENV BIND_ADDR=0.0.0.0:8000
@@ -194,6 +248,7 @@ ENV ZIP_STORAGE_PATH=/app/uploads/zip_files
 ENV XDG_DATA_HOME=/app/data/runtime/xdg-data
 ENV XDG_CACHE_HOME=/app/data/runtime/xdg-cache
 ENV XDG_CONFIG_HOME=/app/data/runtime/xdg-config
+ENV LD_LIBRARY_PATH=/usr/local/lib
 
 EXPOSE 8000
 

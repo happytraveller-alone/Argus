@@ -2,7 +2,9 @@ use axum::{
     body::Body,
     http::{Request, StatusCode},
 };
-use backend_rust::{app::build_router, config::AppConfig, runtime::cubesandbox::ShutdownGate, state::AppState};
+use backend_rust::{
+    app::build_router, config::AppConfig, runtime::cubesandbox::ShutdownGate, state::AppState,
+};
 use tower::util::ServiceExt;
 
 #[tokio::test]

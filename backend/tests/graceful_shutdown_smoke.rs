@@ -197,11 +197,7 @@ async fn drain_waits_for_active_scans() {
     drop(guard);
 
     // Give the drain up to 500 ms to notice the counter drop.
-    let result = tokio::time::timeout(
-        tokio::time::Duration::from_millis(500),
-        drain_handle,
-    )
-    .await;
+    let result = tokio::time::timeout(tokio::time::Duration::from_millis(500), drain_handle).await;
     assert!(
         result.is_ok(),
         "drain must return within 500 ms after all guards are dropped"

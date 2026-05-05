@@ -134,7 +134,9 @@ export async function getOpengrepRuleStats(): Promise<OpengrepRuleStatsResponse>
 export async function getOpengrepRule(
     ruleId: string,
 ): Promise<OpengrepRuleDetail> {
-    const response = await apiClient.get(`/static-tasks/rules/${ruleId}`);
+    const response = await apiClient.get(
+        `/static-tasks/rules/${encodeURIComponent(ruleId)}`,
+    );
     return response.data;
 }
 
@@ -144,7 +146,9 @@ export async function getOpengrepRule(
 export async function toggleOpengrepRule(
     ruleId: string,
 ): Promise<{ message: string; rule_id: string; is_active: boolean }> {
-    const response = await apiClient.put(`/static-tasks/rules/${ruleId}`);
+    const response = await apiClient.put(
+        `/static-tasks/rules/${encodeURIComponent(ruleId)}`,
+    );
     return response.data;
 }
 
@@ -154,7 +158,9 @@ export async function toggleOpengrepRule(
 export async function deleteOpengrepRule(
     ruleId: string,
 ): Promise<{ message: string; rule_id: string }> {
-    const response = await apiClient.delete(`/static-tasks/rules/${ruleId}`);
+    const response = await apiClient.delete(
+        `/static-tasks/rules/${encodeURIComponent(ruleId)}`,
+    );
     return response.data;
 }
 
@@ -328,12 +334,15 @@ export async function updateOpengrepRule(
     ruleId: string,
     params: OpengrepRuleUpdateRequest,
 ): Promise<{ message: string; rule: OpengrepRuleDetail }> {
-    const response = await apiClient.patch(`/static-tasks/rules/${ruleId}`, params);
+    const response = await apiClient.patch(
+        `/static-tasks/rules/${encodeURIComponent(ruleId)}`,
+        params,
+    );
     return response.data;
 }
 
 export type StaticScanEngine = "opengrep" | "codeql";
-export type OpengrepSandboxMode = "dockerfile_container" | "oci_cubesandbox";
+export type OpengrepSandboxMode = "dockerfile_container" | "oci_cubesandbox" | "a3s_box";
 
 export interface OpengrepScanTask {
     id: string;

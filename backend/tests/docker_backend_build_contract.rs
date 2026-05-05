@@ -9,6 +9,8 @@ const OPENGREP_REBUILD_VERIFY_SCRIPT: &str =
     include_str!("../../scripts/rebuild-opengrep-runner-verify.sh");
 const RELEASE_BACKEND_DOCKERFILE: &str =
     include_str!("../../scripts/release-templates/backend.Dockerfile");
+const RELEASE_COMPOSE: &str =
+    include_str!("../../scripts/release-templates/docker-compose.release-slim.yml");
 
 #[test]
 fn compose_passes_backend_cargo_network_build_args() {
@@ -70,6 +72,61 @@ fn compose_and_backend_image_support_host_cubesandbox_runtime() {
         assert!(
             BACKEND_DOCKERFILE.contains(package) && RELEASE_BACKEND_DOCKERFILE.contains(package),
             "backend runtime images must include {package} for CubeSandbox helper diagnostics"
+        );
+    }
+}
+
+#[test]
+fn compose_exposes_a3s_box_opengrep_image_override() {
+    assert!(
+        ROOT_COMPOSE.contains(
+            "SCANNER_OPENGREP_A3S_BOX_IMAGE: ${SCANNER_OPENGREP_A3S_BOX_IMAGE:-${SCANNER_OPENGREP_IMAGE:-Argus/opengrep-runner-local:latest}}"
+        ),
+        "root compose must let A3S Box OpenGrep scans use a dedicated image while defaulting to the normal runner image"
+    );
+    assert!(
+        RELEASE_COMPOSE.contains("SCANNER_OPENGREP_A3S_BOX_IMAGE: ${SCANNER_OPENGREP_A3S_BOX_IMAGE:-${SCANNER_OPENGREP_IMAGE:-"),
+        "release compose must preserve the A3S Box OpenGrep image override"
+    );
+}
+
+#[test]
+fn backend_images_download_a3s_box_v203_binary_package_for_target_arch() {
+    for (name, dockerfile) in [
+        ("docker/backend.Dockerfile", BACKEND_DOCKERFILE),
+        (
+            "scripts/release-templates/backend.Dockerfile",
+            RELEASE_BACKEND_DOCKERFILE,
+        ),
+    ] {
+        assert!(
+            dockerfile.contains("ARG A3S_BOX_VERSION=v2.0.3"),
+            "{name} must pin the Box binary package version used for backend images"
+        );
+        assert!(
+            dockerfile.contains("github.com/AI45Lab/Box/releases/download"),
+            "{name} must fetch AI45Lab Box release binary packages through the configured mirror prefix"
+        );
+        assert!(
+            dockerfile.contains("amd64) package_arch=\"linux-x86_64\"")
+                && dockerfile.contains("arm64) package_arch=\"linux-arm64\""),
+            "{name} must choose the x86_64 or arm64 Box binary package from TARGETARCH"
+        );
+        assert!(
+            dockerfile.contains("install -m 0755 /tmp/a3s-box/a3s-box /opt/a3s-box/bin/a3s-box")
+                && dockerfile.contains("install -m 0755 /tmp/a3s-box/a3s-box-shim /opt/a3s-box/bin/a3s-box-shim")
+                && dockerfile.contains("install -m 0755 /tmp/a3s-box/a3s-box-guest-init /opt/a3s-box/bin/a3s-box-guest-init"),
+            "{name} must keep the Box runtime binaries needed by a3s-box run"
+        );
+        assert!(
+            dockerfile.contains("COPY --from=a3s-box-binary-src /opt/a3s-box/bin/ /usr/local/bin/")
+                && dockerfile.contains("COPY --from=a3s-box-binary-src /opt/a3s-box/lib/ /usr/local/lib/")
+                && dockerfile.contains("ENV LD_LIBRARY_PATH=/usr/local/lib"),
+            "{name} must copy only release binaries/libs into runtime and expose libkrun to the loader"
+        );
+        assert!(
+            dockerfile.contains("rm -rf /tmp/a3s-box /tmp/a3s-box.tar.gz"),
+            "{name} must remove the unpacked Box package after extracting runtime artifacts"
         );
     }
 }

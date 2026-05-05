@@ -43,5 +43,6 @@ test("StaticEngineConfigDialogContent renders placeholder text for opengrep", ()
   assert.match(markup, /Opengrep 配置/);
   assert.match(markup, /Dockerfile 容器/);
   assert.match(markup, /OCI CubeSandbox 沙箱/);
+  assert.match(markup, /A3S Box MicroVM/);
   assert.match(markup, /aria-pressed="true"[^>]*><span[^>]*><span[^>]*><\/span><span[^>]*>OCI CubeSandbox 沙箱/);
 });

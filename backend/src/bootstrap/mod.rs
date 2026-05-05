@@ -547,7 +547,7 @@ async fn migrate_remove_opengrep_pool_manifest() {
         match tokio::fs::remove_file(&path).await {
             Ok(()) => tracing::info!(path = %path.display(),
                 "removed legacy opengrep pool manifest (one-time migration)"),
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {},
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
             Err(e) => tracing::warn!(error = %e, path = %path.display(),
                 "failed to remove legacy opengrep pool manifest"),
         }

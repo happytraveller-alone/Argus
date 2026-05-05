@@ -7,8 +7,7 @@ use sqlx::{postgres::PgPoolOptions, PgPool};
 use tokio::sync::{Mutex, RwLock};
 
 use crate::{
-    config::AppConfig,
-    project_file_cache::ProjectFileCache,
+    config::AppConfig, project_file_cache::ProjectFileCache,
     runtime::cubesandbox::task::CubeSandboxTaskManager,
     runtime::intelligent::task::IntelligentTaskManager,
 };
@@ -291,5 +290,4 @@ impl AppState {
         let mut guard = self.bootstrap.write().await;
         *guard = report;
     }
-
 }

@@ -7,6 +7,7 @@ use std::{
 };
 
 use async_stream::stream;
+use axum::http::StatusCode;
 use axum::{
     extract::{Multipart, Path as AxumPath, Query, State},
     response::{
@@ -16,7 +17,6 @@ use axum::{
     routing::{get, post},
     Extension, Json, Router,
 };
-use axum::http::StatusCode;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use time::{format_description::well_known::Rfc3339, OffsetDateTime};
@@ -30,12 +30,12 @@ use crate::{
     db::{codeql_build_plans, projects, system_config, task_state},
     error::ApiError,
     llm_rule,
-    runtime::cubesandbox::ShutdownGate,
     runtime::intelligent::{
         config::{resolve_intelligent_llm_config, IntelligentLlmConfig},
         llm::{HttpIntelligentLlmInvoker, IntelligentLlmInvoker},
     },
     runtime::runner::{self, RunnerSpec},
+    runtime::{a3s_box_runner, cubesandbox::ShutdownGate},
     scan::{codeql, codeql_cubesandbox, opengrep, opengrep_cubesandbox, scope_filters},
     state::AppState,
 };
@@ -55,6 +55,7 @@ struct CodeqlTaskOptions {
 enum OpengrepSandboxKind {
     DockerfileContainer,
     OciCubesandbox,
+    A3sBox,
 }
 
 impl OpengrepSandboxKind {
@@ -66,6 +67,7 @@ impl OpengrepSandboxKind {
             .as_str()
         {
             "oci_cubesandbox" | "cubesandbox" | "oci-cubesandbox" => Self::OciCubesandbox,
+            "a3s_box" | "a3s-box" | "box" | "a3sbox" => Self::A3sBox,
             _ => Self::DockerfileContainer,
         }
     }
@@ -74,6 +76,7 @@ impl OpengrepSandboxKind {
         match self {
             Self::DockerfileContainer => "dockerfile_container",
             Self::OciCubesandbox => "oci_cubesandbox",
+            Self::A3sBox => "a3s_box",
         }
     }
 }
@@ -756,9 +759,13 @@ async fn create_static_task(
     }
     let engine = optional_string(&payload, "engine").unwrap_or_else(|| "opengrep".to_string());
     if engine.eq_ignore_ascii_case("codeql") {
-        return create_static_task_for_engine(state, payload, "codeql").await.into_response();
+        return create_static_task_for_engine(state, payload, "codeql")
+            .await
+            .into_response();
     }
-    create_static_task_for_engine(state, payload, "opengrep").await.into_response()
+    create_static_task_for_engine(state, payload, "opengrep")
+        .await
+        .into_response()
 }
 
 async fn create_codeql_task(
@@ -769,7 +776,9 @@ async fn create_codeql_task(
     if gate.is_set() {
         return (StatusCode::SERVICE_UNAVAILABLE, "server shutting down").into_response();
     }
-    create_static_task_for_engine(state, payload, "codeql").await.into_response()
+    create_static_task_for_engine(state, payload, "codeql")
+        .await
+        .into_response()
 }
 
 async fn create_static_task_for_engine(
@@ -3568,6 +3577,49 @@ async fn run_opengrep_scan_inner(
                 return Err(format!("opengrep scan failed: {error_msg}").into());
             }
         }
+
+        OpengrepSandboxKind::A3sBox => {
+            let scanner_image = state.config.scanner_opengrep_a3s_box_image.clone();
+            let container_source_dir = workspace_container_path(&workspace_dir, &source_dir)?;
+            let config_container_path = rule_inputs
+                .workspace_rules_dir
+                .as_ref()
+                .map(|path| workspace_container_path(&workspace_dir, path))
+                .transpose()?;
+            let output_container_path = workspace_dir.join(&output_rel_path).display().to_string();
+            let summary_container_path =
+                workspace_dir.join(&summary_rel_path).display().to_string();
+            let log_container_path = workspace_dir.join(&log_rel_path).display().to_string();
+            let spec = build_opengrep_a3s_box_runner_spec(
+                &state.config,
+                scanner_image,
+                &workspace_dir,
+                runner_resources,
+                OpengrepRunnerPaths {
+                    container_source_dir: &container_source_dir,
+                    config_container_path: config_container_path.as_deref(),
+                    output_container_path: &output_container_path,
+                    summary_rel_path: &summary_rel_path,
+                    summary_container_path: &summary_container_path,
+                    log_container_path: &log_container_path,
+                    stdout_rel_path: &stdout_rel_path,
+                    stderr_rel_path: &stderr_rel_path,
+                },
+            );
+
+            let runner_result =
+                tokio::task::spawn_blocking(move || a3s_box_runner::execute(spec)).await?;
+            drop(resource_permit);
+            if !runner_result.success {
+                let error_msg = format_a3s_box_opengrep_runner_error(
+                    &runner_result,
+                    Some(&workspace_dir.join(&log_rel_path)),
+                )
+                .await;
+                let _ = tokio::fs::remove_dir_all(&workspace_dir).await;
+                return Err(format!("opengrep A3S Box scan failed: {error_msg}").into());
+            }
+        }
         OpengrepSandboxKind::OciCubesandbox => {
             let rules_dir = rule_inputs
                 .workspace_rules_dir
@@ -3721,7 +3773,7 @@ async fn run_opengrep_scan_inner(
         record.extra = json!({
             "engine": "opengrep",
             "opengrep_sandbox": sandbox_label,
-            "executor": if sandbox_label == "oci_cubesandbox" { "oci_cubesandbox" } else { "docker_runner" },
+            "executor": match sandbox_label { "oci_cubesandbox" => "oci_cubesandbox", "a3s_box" => "a3s_box", _ => "docker_runner" },
             "error_count": error_count,
             "warning_count": warning_count,
             "high_confidence_count": high_confidence_count,
@@ -3854,6 +3906,39 @@ fn build_opengrep_runner_spec(
     }
 }
 
+fn build_opengrep_a3s_box_runner_spec(
+    config: &crate::config::AppConfig,
+    image: String,
+    workspace_dir: &std::path::Path,
+    resources: OpengrepRunnerResources,
+    paths: OpengrepRunnerPaths<'_>,
+) -> a3s_box_runner::A3sBoxRunnerSpec {
+    a3s_box_runner::A3sBoxRunnerSpec {
+        scanner_type: "opengrep".to_string(),
+        image,
+        workspace_dir: workspace_dir.display().to_string(),
+        command: opengrep::build_scan_command(&opengrep::ScanCommandArgs {
+            manifest_path: None,
+            config_dir: paths.config_container_path,
+            target_dir: paths.container_source_dir,
+            output_path: paths.output_container_path,
+            summary_path: paths.summary_container_path,
+            log_path: paths.log_container_path,
+            jobs: resources.jobs,
+            max_memory_mb: config.opengrep_scan_max_memory_mb,
+        }),
+        timeout_seconds: config.opengrep_scan_timeout_seconds,
+        env: BTreeMap::new(),
+        expected_exit_codes: vec![0, 1],
+        capture_stdout_path: Some(paths.stdout_rel_path.to_string()),
+        capture_stderr_path: Some(paths.stderr_rel_path.to_string()),
+        memory_limit_mb: Some(config.opengrep_runner_memory_limit_mb),
+        cpu_limit: Some(resources.cpu_limit),
+        pids_limit: Some(config.opengrep_runner_pids_limit),
+        network_disabled: false,
+    }
+}
+
 #[derive(Clone, Debug)]
 struct OpengrepRunnerInputs {
     workspace_rules_dir: Option<PathBuf>,
@@ -3942,6 +4027,30 @@ async fn format_opengrep_runner_error(
         .error
         .clone()
         .unwrap_or_else(|| format!("opengrep exited with code {}", result.exit_code))];
+
+    if let Some(stdout_excerpt) = read_runner_output_excerpt(result.stdout_path.as_deref()).await {
+        parts.push(format!("stdout={stdout_excerpt}"));
+    }
+    if let Some(stderr_excerpt) = read_runner_output_excerpt(result.stderr_path.as_deref()).await {
+        parts.push(format!("stderr={stderr_excerpt}"));
+    }
+    if let Some(log_excerpt) = read_text_excerpt(opengrep_log_path).await {
+        parts.push(format!("log={log_excerpt}"));
+    }
+
+    parts.join("; ")
+}
+
+async fn format_a3s_box_opengrep_runner_error(
+    result: &a3s_box_runner::A3sBoxRunnerResult,
+    opengrep_log_path: Option<&std::path::Path>,
+) -> String {
+    let mut parts = vec![result.error.clone().unwrap_or_else(|| {
+        format!(
+            "opengrep A3S Box workload exited with code {}",
+            result.exit_code
+        )
+    })];
 
     if let Some(stdout_excerpt) = read_runner_output_excerpt(result.stdout_path.as_deref()).await {
         parts.push(format!("stdout={stdout_excerpt}"));
@@ -5706,9 +5815,9 @@ mod tests {
     use crate::db::task_state;
 
     use super::{
-        build_opengrep_runner_spec, choose_cubesandbox_cpp_build_plan,
-        dependency_install_commands_from_plan_with_failures, extract_highest_rule_severity,
-        extract_opengrep_task_options, format_opengrep_runner_error,
+        build_opengrep_a3s_box_runner_spec, build_opengrep_runner_spec,
+        choose_cubesandbox_cpp_build_plan, dependency_install_commands_from_plan_with_failures,
+        extract_highest_rule_severity, extract_opengrep_task_options, format_opengrep_runner_error,
         normalize_codeql_task_languages, parse_codeql_llm_build_plan_response,
         prepare_opengrep_runner_inputs, read_opengrep_results_text, static_task_value,
         OpengrepResourceScheduler, OpengrepRunnerPaths, OpengrepRunnerResources,
@@ -6209,6 +6318,11 @@ rules:
             cubesandbox_options.sandbox,
             OpengrepSandboxKind::OciCubesandbox
         );
+
+        let a3s_box_options = extract_opengrep_task_options(&json!({
+            "opengrep_sandbox": "a3s_box",
+        }));
+        assert_eq!(a3s_box_options.sandbox, OpengrepSandboxKind::A3sBox);
     }
 
     #[test]
@@ -6360,6 +6474,63 @@ rules:
         assert_eq!(resources.jobs, 6);
         assert_eq!(resources.cpu_limit, 3.5);
         assert_eq!(resources.allocated_cores, 4);
+    }
+
+    #[test]
+    fn opengrep_a3s_box_runner_spec_uses_absolute_workspace_paths() {
+        let config = AppConfig::for_tests();
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let workspace_dir = temp_dir.path();
+        let resources = OpengrepRunnerResources {
+            jobs: 3,
+            cpu_limit: 2.0,
+            allocated_cores: 2,
+            total_cores: 8,
+        };
+
+        let spec = build_opengrep_a3s_box_runner_spec(
+            &config,
+            "argus/opengrep-runner:test".to_string(),
+            workspace_dir,
+            resources,
+            OpengrepRunnerPaths {
+                container_source_dir: "/tmp/workspace/source",
+                config_container_path: Some("/tmp/workspace/opengrep-rules"),
+                output_container_path: "/tmp/workspace/output/results.json",
+                summary_rel_path: "output/summary.json",
+                summary_container_path: "/tmp/workspace/output/summary.json",
+                log_container_path: "/tmp/workspace/output/opengrep.log",
+                stdout_rel_path: "output/stdout.txt",
+                stderr_rel_path: "output/stderr.txt",
+            },
+        );
+
+        assert_eq!(spec.scanner_type, "opengrep");
+        assert_eq!(spec.image, "argus/opengrep-runner:test");
+        assert_eq!(spec.expected_exit_codes, vec![0, 1]);
+        assert_eq!(
+            spec.capture_stdout_path.as_deref(),
+            Some("output/stdout.txt")
+        );
+        assert_eq!(
+            spec.capture_stderr_path.as_deref(),
+            Some("output/stderr.txt")
+        );
+        assert!(spec.command.contains(&"--target".to_string()));
+        assert!(spec.command.contains(&"/tmp/workspace/source".to_string()));
+        assert!(spec.command.contains(&"--config".to_string()));
+        assert!(spec
+            .command
+            .contains(&"/tmp/workspace/opengrep-rules".to_string()));
+        assert!(spec
+            .command
+            .contains(&"/tmp/workspace/output/results.json".to_string()));
+        assert_eq!(
+            spec.memory_limit_mb,
+            Some(config.opengrep_runner_memory_limit_mb)
+        );
+        assert_eq!(spec.cpu_limit, Some(2.0));
+        assert_eq!(spec.pids_limit, Some(config.opengrep_runner_pids_limit));
     }
 
     #[tokio::test]

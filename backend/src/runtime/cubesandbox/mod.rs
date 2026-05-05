@@ -7,8 +7,8 @@ pub mod task;
 pub mod template_provisioner;
 pub mod types;
 
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::Arc;
 
 /// Gate that submission handlers check before accepting new tasks.
 /// Cloned cheaply (Arc inside); `set()` is called by the signal handler

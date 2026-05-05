@@ -130,10 +130,7 @@ fn walkdir_residue_check(forbidden: &[&str]) {
     );
 }
 
-fn walk_rs_files(
-    dir: &std::path::Path,
-    callback: &mut dyn FnMut(&std::path::Path, &str),
-) {
+fn walk_rs_files(dir: &std::path::Path, callback: &mut dyn FnMut(&std::path::Path, &str)) {
     let entries = match std::fs::read_dir(dir) {
         Ok(e) => e,
         Err(_) => return,

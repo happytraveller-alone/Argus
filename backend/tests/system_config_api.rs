@@ -2,7 +2,9 @@ use axum::{
     body::{to_bytes, Body},
     http::{Method, Request, StatusCode},
 };
-use backend_rust::{app::build_router, config::AppConfig, runtime::cubesandbox::ShutdownGate, state::AppState};
+use backend_rust::{
+    app::build_router, config::AppConfig, runtime::cubesandbox::ShutdownGate, state::AppState,
+};
 use serde_json::{json, Value};
 use std::{env, fs, sync::LazyLock};
 use tempfile::TempDir;
