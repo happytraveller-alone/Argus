@@ -23,7 +23,10 @@
 : "${CUBE_SSH_PORT:=${CUBESANDBOX_SSH_PORT:-10022}}"
 : "${CUBE_VM_USER:=${CUBESANDBOX_VM_USER:-opencloudos}}"
 : "${CUBE_VM_PASSWORD:=${CUBESANDBOX_VM_PASSWORD:-opencloudos}}"
-: "${CUBE_WORK_DIR:=${CUBESANDBOX_WORK_DIR:-}}"
+# NOTE: defaults to `.cubesandbox` (argus convention) so callers like argus-bootstrap.sh
+# that don't `source .env` (they read via read_env_value and don't export) still get a
+# usable value. Callers with a different convention should set CUBE_WORK_DIR explicitly.
+: "${CUBE_WORK_DIR:=${CUBESANDBOX_WORK_DIR:-.cubesandbox}}"
 
 # ---------------------------------------------------------------------------
 # Internal: SSH options (mirrors cubesandbox-quickstart.sh::ssh_common_opts)
