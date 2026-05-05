@@ -169,6 +169,10 @@ fn opengrep_cubesandbox_image_exposes_envd_health_probe() {
             && !CUBESANDBOX_OPENGREP_DOCKERFILE.contains("python3-minimal"),
         "Opengrep CubeSandbox runtime must install full python3 because the envd runner imports standard-library modules like tarfile"
     );
+    assert!(
+        CUBESANDBOX_OPENGREP_DOCKERFILE.contains("touch /opt/opengrep/rules/.baked"),
+        "Opengrep CubeSandbox image must mark baked rules so OCI scans can skip per-task image-rule uploads"
+    );
 }
 
 #[test]

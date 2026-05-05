@@ -333,7 +333,7 @@ stage_manifest_rules() {
 
     local target_path="$selected_root/$relative_path"
     mkdir -p "$(dirname "$target_path")"
-    ln -sf "$source_path" "$target_path"
+    cp -p -- "$source_path" "$target_path"
     count=$((count + 1))
   done < "$manifest_path"
 

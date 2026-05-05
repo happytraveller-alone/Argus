@@ -124,6 +124,7 @@ RUN set -eux; \
     chmod +x /usr/local/bin/opengrep-cube-entrypoint; \
     mkdir -p /opt/opengrep/rules /scan; \
     /usr/local/bin/opengrep-scan --self-test; \
+    touch /opt/opengrep/rules/.baked; \
     rm -rf /tmp/* /var/cache/apt /usr/share/doc/* /usr/share/locale/* /usr/share/man/* 2>/dev/null || true
 
 WORKDIR /scan

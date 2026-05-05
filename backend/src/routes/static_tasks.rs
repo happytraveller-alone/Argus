@@ -3566,12 +3566,36 @@ async fn run_opengrep_scan_inner(
                     workspace_dir: &workspace_dir,
                     source_dir: &source_dir,
                     rules_dir,
+                    image_rule_manifest_paths: &rule_inputs.image_rule_manifest_paths,
                     jobs: runner_resources.jobs,
                     max_memory_mb: state.config.opengrep_scan_max_memory_mb,
                 },
             )
             .await?;
             drop(resource_permit);
+            let scan_exit_code = scan_output.scan_exit_code;
+            let failure_detail = if scan_exit_code != 0 && scan_exit_code != 1 {
+                let summary_reason = scan_output
+                    .summary_json
+                    .get("reason")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default();
+                let summary_debug = scan_output
+                    .summary_json
+                    .get("argus_oci_debug")
+                    .map(Value::to_string)
+                    .unwrap_or_default();
+                first_non_empty_excerpt(&[
+                    scan_output.log_text.as_str(),
+                    scan_output.stderr_text.as_str(),
+                    scan_output.stdout_text.as_str(),
+                    summary_debug.as_str(),
+                    summary_reason,
+                ])
+                .unwrap_or_else(|| "no opengrep output available".to_string())
+            } else {
+                String::new()
+            };
             tokio::fs::write(
                 workspace_dir.join(&output_rel_path),
                 scan_output.results_text,
@@ -3593,11 +3617,11 @@ async fn run_opengrep_scan_inner(
                 scan_output.stderr_text,
             )
             .await?;
-            if scan_output.scan_exit_code != 0 && scan_output.scan_exit_code != 1 {
+            if scan_exit_code != 0 && scan_exit_code != 1 {
                 let _ = tokio::fs::remove_dir_all(&workspace_dir).await;
                 return Err(format!(
-                    "opengrep CubeSandbox scan failed: exit_code={}",
-                    scan_output.scan_exit_code
+                    "opengrep CubeSandbox scan failed: exit_code={} detail={}",
+                    scan_exit_code, failure_detail
                 )
                 .into());
             }
@@ -3819,6 +3843,7 @@ fn build_opengrep_runner_spec(
 #[derive(Clone, Debug)]
 struct OpengrepRunnerInputs {
     workspace_rules_dir: Option<PathBuf>,
+    image_rule_manifest_paths: Vec<String>,
 }
 
 async fn prepare_opengrep_runner_inputs(
@@ -3829,6 +3854,10 @@ async fn prepare_opengrep_runner_inputs(
 ) -> Result<Option<OpengrepRunnerInputs>, Box<dyn std::error::Error + Send + Sync>> {
     let image_rule_assets = selected_image_rule_assets(state, rule_ids, project_languages).await?;
     let image_rule_count = image_rule_assets.len();
+    let image_rule_manifest_paths = image_rule_assets
+        .iter()
+        .map(|asset| asset.asset_path.clone())
+        .collect();
     let workspace_rules_dir =
         opengrep::materialize_rule_assets(workspace_dir, image_rule_assets).await?;
     let rules_root = workspace_rules_dir.unwrap_or_else(|| workspace_dir.join("opengrep-rules"));
@@ -3841,6 +3870,7 @@ async fn prepare_opengrep_runner_inputs(
 
     Ok(Some(OpengrepRunnerInputs {
         workspace_rules_dir: Some(rules_root),
+        image_rule_manifest_paths,
     }))
 }
 
@@ -3939,6 +3969,29 @@ async fn read_text_excerpt(path: Option<&std::path::Path>) -> Option<String> {
         trimmed.to_string()
     };
     Some(excerpt.replace('\n', "\\n"))
+}
+
+fn first_non_empty_excerpt(values: &[&str]) -> Option<String> {
+    const MAX_EXCERPT_CHARS: usize = 400;
+    values.iter().find_map(|value| {
+        let trimmed = value.trim();
+        if trimmed.is_empty() {
+            return None;
+        }
+        if trimmed.chars().count() > MAX_EXCERPT_CHARS {
+            let suffix: String = trimmed
+                .chars()
+                .rev()
+                .take(MAX_EXCERPT_CHARS)
+                .collect::<Vec<_>>()
+                .into_iter()
+                .rev()
+                .collect();
+            Some(format!("...{suffix}"))
+        } else {
+            Some(trimmed.to_string())
+        }
+    })
 }
 
 fn workspace_container_path(
@@ -5643,8 +5696,9 @@ mod tests {
         dependency_install_commands_from_plan_with_failures, extract_highest_rule_severity,
         extract_opengrep_task_options, format_opengrep_runner_error,
         normalize_codeql_task_languages, parse_codeql_llm_build_plan_response,
-        read_opengrep_results_text, static_task_value, OpengrepResourceScheduler,
-        OpengrepRunnerPaths, OpengrepRunnerResources, OpengrepSandboxKind,
+        prepare_opengrep_runner_inputs, read_opengrep_results_text, static_task_value,
+        OpengrepResourceScheduler, OpengrepRunnerPaths, OpengrepRunnerResources,
+        OpengrepSandboxKind,
     };
     use serde_json::json;
     use std::{collections::BTreeSet, sync::mpsc, time::Duration};
@@ -6092,6 +6146,38 @@ rules:
                 max_memory_mb: 2048,
             })
         );
+    }
+
+    #[tokio::test]
+    async fn opengrep_runner_inputs_preserve_image_rule_manifest_paths_for_oci() {
+        let state = crate::state::AppState::from_config(AppConfig::for_tests())
+            .await
+            .expect("test state");
+        let workspace =
+            std::env::temp_dir().join(format!("opengrep-runner-inputs-{}", uuid::Uuid::new_v4()));
+        let inputs = prepare_opengrep_runner_inputs(
+            &state,
+            &workspace,
+            &["rules_opengrep/python/sqlalchemy-sql-injection.yaml".to_string()],
+            &["Python".to_string()],
+        )
+        .await
+        .expect("runner inputs")
+        .expect("rules should exist");
+
+        assert_eq!(
+            inputs.image_rule_manifest_paths,
+            vec!["rules_opengrep/python/sqlalchemy-sql-injection.yaml".to_string()]
+        );
+        assert!(
+            inputs
+                .workspace_rules_dir
+                .expect("workspace rules")
+                .join("internal/python/sqlalchemy-sql-injection.yaml")
+                .exists(),
+            "Docker path still materializes selected image rules"
+        );
+        let _ = tokio::fs::remove_dir_all(workspace).await;
     }
 
     #[test]

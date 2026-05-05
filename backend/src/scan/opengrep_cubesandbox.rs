@@ -30,6 +30,9 @@ pub struct CubeSandboxOpengrepInput<'a> {
     pub workspace_dir: &'a Path,
     pub source_dir: &'a Path,
     pub rules_dir: &'a Path,
+    /// Selected image-packaged rule paths, relative to the baked image rule root.
+    /// Example: `rules_opengrep/c/sql-injection.yaml`.
+    pub image_rule_manifest_paths: &'a [String],
     pub jobs: usize,
     pub max_memory_mb: u64,
 }
@@ -49,6 +52,7 @@ pub struct CubeSandboxOpengrepOutput {
 #[derive(Serialize)]
 struct CubeSandboxOpengrepRequest {
     // archive_b64 removed (A4-lite): archive is uploaded via write_file to /tmp/workspace.tar.gz
+    image_rule_manifest_paths: Vec<String>,
     jobs: usize,
     max_memory_mb: u64,
 }
@@ -199,6 +203,7 @@ impl OpengrepSandboxSession {
             .await?;
 
         let payload = CubeSandboxOpengrepRequest {
+            image_rule_manifest_paths: input.image_rule_manifest_paths.to_vec(),
             jobs: input.jobs,
             max_memory_mb: input.max_memory_mb,
         };
@@ -487,12 +492,26 @@ fn create_workspace_archive_bytes(
     source_dir: &Path,
     rules_dir: &Path,
 ) -> Result<Vec<u8>> {
+    create_workspace_archive_bytes_with_baked_mode(source_dir, rules_dir, use_baked_rules())
+}
+
+fn create_workspace_archive_bytes_with_baked_mode(
+    source_dir: &Path,
+    rules_dir: &Path,
+    baked_rules: bool,
+) -> Result<Vec<u8>> {
     let mut archive = Vec::new();
     {
         let encoder = GzEncoder::new(&mut archive, Compression::default());
         let mut builder = Builder::new(encoder);
         append_dir(&mut builder, source_dir, "source")?;
-        if !use_baked_rules() {
+        if baked_rules {
+            // Image-packaged rules are selected through a manifest at runtime.
+            // Keep only non-image rules (currently user rules) in the archive.
+            append_dir_filtered(&mut builder, rules_dir, "rules", |relative| {
+                !relative.starts_with("internal")
+            })?;
+        } else {
             // Baked-rules disabled: include rules dir so the Python script can find them.
             append_dir(&mut builder, rules_dir, "rules")?;
         }
@@ -504,6 +523,19 @@ fn create_workspace_archive_bytes(
 }
 
 fn append_dir<W: Write>(builder: &mut Builder<W>, dir: &Path, archive_prefix: &str) -> Result<()> {
+    append_dir_filtered(builder, dir, archive_prefix, |_| true)
+}
+
+fn append_dir_filtered<W, F>(
+    builder: &mut Builder<W>,
+    dir: &Path,
+    archive_prefix: &str,
+    should_include: F,
+) -> Result<()>
+where
+    W: Write,
+    F: Fn(&Path) -> bool,
+{
     if !dir.exists() {
         return Ok(());
     }
@@ -512,6 +544,9 @@ fn append_dir<W: Write>(builder: &mut Builder<W>, dir: &Path, archive_prefix: &s
     files.sort();
     for path in files {
         let relative = path.strip_prefix(dir)?;
+        if !should_include(relative) {
+            continue;
+        }
         let archive_path = Path::new(archive_prefix).join(relative);
         append_file_with_normalized_mode(builder, &path, &archive_path)
             .with_context(|| format!("failed to stage {}", path.display()))?;
@@ -661,20 +696,30 @@ _t["extract_done"] = time.perf_counter()
 print(f"STAGE_TIMING extract_done={_t['extract_done']-_t['extract_start']:.3f}s", file=sys.stderr)
 
 source = work / "source"
-# Baked-rules path: if the image pre-extracted rules into /opt/opengrep/rules/ (marker
-# file .baked present) and OPENGREP_USE_BAKED_RULES != "0", use the image-side rules
-# directly — the workspace archive contains only source, so rules dir won't exist in work/.
+# Baked-rules path: if the image pre-extracted rules into /opt/opengrep/rules/
+# and OPENGREP_USE_BAKED_RULES != "0", use the image-side rules directly. The
+# marker file is written by newer images, but older valid templates only have
+# rules_opengrep/, so accept either shape.
 _BAKED_RULES_DIR = pathlib.Path("/opt/opengrep/rules")
 _use_baked = (
     os.environ.get("OPENGREP_USE_BAKED_RULES", "1").strip() != "0"
-    and (_BAKED_RULES_DIR / ".baked").exists()
+    and ((_BAKED_RULES_DIR / ".baked").exists() or (_BAKED_RULES_DIR / "rules_opengrep").is_dir())
 )
+manifest_entries = payload.get("image_rule_manifest_paths") or []
+manifest_path = work / "image-rules.manifest"
+if manifest_entries:
+    manifest_path.write_text(
+        "\n".join(str(entry).lstrip("./") for entry in manifest_entries if str(entry).strip()) + "\n",
+        encoding="utf-8",
+    )
+
 if _use_baked:
     rules = _BAKED_RULES_DIR
     print(f"STAGE_TIMING baked_rules=1 rules={rules}", file=sys.stderr)
 else:
     rules = work / "rules"
     print(f"STAGE_TIMING baked_rules=0 rules={rules}", file=sys.stderr)
+workspace_rules = work / "rules"
 output_dir = work / "output"
 output_dir.mkdir(parents=True, exist_ok=True)
 results = output_dir / "results.json"
@@ -689,11 +734,20 @@ cmd = [
     "--output", str(results),
     "--summary", str(summary),
     "--log", str(log),
-    "--config", str(rules),
     "--jobs", str(int(payload.get("jobs") or DEFAULT_JOBS)),
     "--max-memory", str(payload.get("max_memory_mb") or 2048),
 ]
-proc = subprocess.run(cmd, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=900)
+if _use_baked and manifest_entries:
+    cmd.extend(["--manifest", str(manifest_path)])
+elif not _use_baked:
+    cmd.extend(["--config", str(rules)])
+elif rules.exists():
+    cmd.extend(["--config", str(rules)])
+if workspace_rules.exists() and (any(workspace_rules.rglob("*.yml")) or any(workspace_rules.rglob("*.yaml"))):
+    cmd.extend(["--config", str(workspace_rules)])
+run_env = os.environ.copy()
+run_env.update({"LANG": "C.UTF-8", "LC_ALL": "C.UTF-8", "PYTHONUTF8": "1"})
+proc = subprocess.run(cmd, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=900, env=run_env)
 _t["opengrep_done"] = time.perf_counter()
 print(f"STAGE_TIMING opengrep_done={_t['opengrep_done']-_t['extract_done']:.3f}s", file=sys.stderr)
 stdout.write_text(proc.stdout or "", encoding="utf-8")
@@ -715,6 +769,15 @@ if not results.exists() and proc.returncode in (0, 1):
     results.write_text('{"results":[]}\n', encoding="utf-8")
 summary_payload = json.loads(summary.read_text(encoding="utf-8"))
 summary_payload["exit_code"] = proc.returncode
+if proc.returncode not in (0, 1) and not summary_payload.get("reason"):
+    summary_payload["reason"] = f"opengrep-scan exited {proc.returncode}"
+summary_payload["argus_oci_debug"] = {
+    "manifest_count": len(manifest_entries),
+    "baked_rules": bool(_use_baked),
+    "workspace_rules": str(workspace_rules),
+    "workspace_rules_exists": workspace_rules.exists(),
+    "command": cmd,
+}
 
 def b64_text(path):
     if not path.exists():
@@ -753,6 +816,7 @@ mod tests {
     #[test]
     fn opengrep_runner_script_passes_payload_as_python_argument() {
         let script = build_opengrep_runner_script(&CubeSandboxOpengrepRequest {
+            image_rule_manifest_paths: vec!["rules_opengrep/python/demo-rule.yaml".to_string()],
             jobs: 2,
             max_memory_mb: 1024,
         })
@@ -760,8 +824,48 @@ mod tests {
 
         assert!(script.starts_with("set -e\n"));
         assert!(script.contains("python3 - \"$_ARGUS_PAYLOAD\" <<'PY'"));
+        assert!(script.contains("--manifest"));
+        assert!(script.contains("\"PYTHONUTF8\": \"1\""));
+        assert!(script.contains("summary_payload[\"reason\"]"));
         assert!(script.contains("ARGUS_OPENGREP_RESULT_PATH="));
         assert!(script.ends_with("exit $_ARGUS_RC\n"));
+    }
+
+    #[test]
+    fn opengrep_archive_skips_internal_rules_when_baked_rules_are_enabled() {
+        let root =
+            std::env::temp_dir().join(format!("opengrep-baked-archive-{}", uuid::Uuid::new_v4()));
+        let source = root.join("source");
+        let rules = root.join("rules");
+        std::fs::create_dir_all(source.join("src")).expect("source dir");
+        std::fs::create_dir_all(rules.join("internal/python")).expect("internal rules dir");
+        std::fs::create_dir_all(rules.join("user")).expect("user rules dir");
+        std::fs::write(source.join("src/main.py"), "print(1)\n").expect("source file");
+        std::fs::write(rules.join("internal/python/demo.yaml"), "rules: []\n")
+            .expect("internal rule");
+        std::fs::write(rules.join("user/custom.yaml"), "rules: []\n").expect("user rule");
+
+        let archive =
+            create_workspace_archive_bytes_with_baked_mode(&source, &rules, true).expect("archive");
+        let decoder = flate2::read::GzDecoder::new(archive.as_slice());
+        let mut archive = tar::Archive::new(decoder);
+        let paths: Vec<String> = archive
+            .entries()
+            .expect("entries")
+            .map(|entry| {
+                entry
+                    .expect("entry")
+                    .path()
+                    .expect("path")
+                    .to_string_lossy()
+                    .replace('\\', "/")
+            })
+            .collect();
+
+        assert!(paths.contains(&"source/src/main.py".to_string()));
+        assert!(paths.contains(&"rules/user/custom.yaml".to_string()));
+        assert!(!paths.contains(&"rules/internal/python/demo.yaml".to_string()));
+        let _ = std::fs::remove_dir_all(root);
     }
 
     #[test]

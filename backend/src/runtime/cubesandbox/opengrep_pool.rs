@@ -269,7 +269,7 @@ impl OpengrepSandboxPool {
             .client
             .run_command(
                 &pooled.sandbox,
-                "rm -rf /tmp/source /tmp/rules /tmp/argus-task-*",
+                "rm -rf /tmp/argus-opengrep-work /dev/shm/argus-opengrep-work /tmp/workspace.tar.gz /tmp/argus-opengrep-result.json /tmp/argus-opengrep-payload-*.b64 /tmp/argus-*.sh /tmp/argus-task-*",
             )
             .await;
 
