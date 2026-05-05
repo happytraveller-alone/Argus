@@ -189,7 +189,17 @@ impl CodeqlSandboxSession {
                 codeql::redact_sensitive_text(&output.stderr)
             );
         }
-        parse_exploration_command_output(output)
+        let envelope_path = extract_codeql_envelope_path(
+            &output,
+            "ARGUS_CODEQL_EXPLORATION_RESULT_PATH=",
+            "CodeQL exploration",
+        )?;
+        let bytes = self
+            .client
+            .read_file(&self.sandbox, &envelope_path)
+            .await
+            .with_context(|| format!("reading CodeQL exploration envelope from {envelope_path}"))?;
+        parse_codeql_exploration_envelope_bytes(&bytes)
     }
 
     pub async fn run_dependency_install_command(
@@ -206,7 +216,19 @@ impl CodeqlSandboxSession {
                 codeql::redact_sensitive_text(&output.stderr)
             );
         }
-        parse_exploration_command_output(output)
+        let envelope_path = extract_codeql_envelope_path(
+            &output,
+            "ARGUS_CODEQL_EXPLORATION_RESULT_PATH=",
+            "CodeQL dependency install",
+        )?;
+        let bytes = self
+            .client
+            .read_file(&self.sandbox, &envelope_path)
+            .await
+            .with_context(|| {
+                format!("reading CodeQL dependency-install envelope from {envelope_path}")
+            })?;
+        parse_codeql_exploration_envelope_bytes(&bytes)
     }
 
     pub async fn run_scan(
@@ -235,7 +257,14 @@ impl CodeqlSandboxSession {
         };
         let script = build_codeql_runner_script(&payload)?;
         let output = self.client.run_command(&self.sandbox, &script).await?;
-        let mut result = parse_codeql_output(output)?;
+        let envelope_path =
+            extract_codeql_envelope_path(&output, "ARGUS_CODEQL_RESULT_PATH=", "CodeQL")?;
+        let bytes = self
+            .client
+            .read_file(&self.sandbox, &envelope_path)
+            .await
+            .with_context(|| format!("reading CodeQL envelope from {envelope_path}"))?;
+        let mut result = parse_codeql_envelope_bytes(&bytes)?;
         result.sandbox_id = self.sandbox.sandbox_id.clone();
         Ok(result)
     }
@@ -650,23 +679,33 @@ fn ensure_successful_process(label: &str, output: EnvdProcessOutput) -> Result<(
     )
 }
 
-fn parse_codeql_output(output: EnvdProcessOutput) -> Result<CubeSandboxCodeqlOutput> {
-    let envelope = output.stdout.lines().rev().find_map(|line| {
-        line.strip_prefix("ARGUS_CODEQL_RESULT=")
-            .map(str::to_string)
-    });
-    let Some(envelope) = envelope else {
-        if output.exit_code.unwrap_or(0) != 0 {
-            bail!(
-                "CubeSandbox CodeQL process failed exit={:?} stdout={} stderr={}",
-                output.exit_code,
-                codeql::redact_sensitive_text(&output.stdout),
-                codeql::redact_sensitive_text(&output.stderr)
-            );
-        }
-        bail!("CubeSandbox CodeQL output missing result envelope");
-    };
-    let parsed: CubeSandboxCodeqlEnvelope = serde_json::from_str(&envelope)?;
+fn extract_codeql_envelope_path(
+    output: &EnvdProcessOutput,
+    marker: &str,
+    label: &str,
+) -> Result<String> {
+    let path = output
+        .stdout
+        .lines()
+        .rev()
+        .find_map(|line| line.strip_prefix(marker))
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string);
+    match path {
+        Some(p) => Ok(p),
+        None => bail!(
+            "CubeSandbox {label} output missing result path marker (exit={:?}) stdout={} stderr={}",
+            output.exit_code,
+            codeql::redact_sensitive_text(&output.stdout),
+            codeql::redact_sensitive_text(&output.stderr)
+        ),
+    }
+}
+
+fn parse_codeql_envelope_bytes(bytes: &[u8]) -> Result<CubeSandboxCodeqlOutput> {
+    let parsed: CubeSandboxCodeqlEnvelope =
+        serde_json::from_slice(bytes).context("decoding CodeQL envelope JSON")?;
     Ok(CubeSandboxCodeqlOutput {
         sarif_text: decode_text(&parsed.sarif_b64, "sarif")?,
         events_text: decode_text(&parsed.events_b64, "events")?,
@@ -677,16 +716,9 @@ fn parse_codeql_output(output: EnvdProcessOutput) -> Result<CubeSandboxCodeqlOut
     })
 }
 
-fn parse_exploration_command_output(
-    output: EnvdProcessOutput,
-) -> Result<CodeqlExplorationCommandOutput> {
-    let envelope = output
-        .stdout
-        .lines()
-        .rev()
-        .find_map(|line| line.strip_prefix("ARGUS_CODEQL_EXPLORATION_RESULT="))
-        .ok_or_else(|| anyhow::anyhow!("CubeSandbox CodeQL exploration output missing result"))?;
-    let parsed: CodeqlExplorationCommandEnvelope = serde_json::from_str(envelope)?;
+fn parse_codeql_exploration_envelope_bytes(bytes: &[u8]) -> Result<CodeqlExplorationCommandOutput> {
+    let parsed: CodeqlExplorationCommandEnvelope =
+        serde_json::from_slice(bytes).context("decoding CodeQL exploration envelope JSON")?;
     Ok(CodeqlExplorationCommandOutput {
         command: parsed.command,
         stdout: codeql::redact_sensitive_text(&parsed.stdout),
@@ -809,7 +841,14 @@ def emit_result_and_exit(status, exit_code=1, message=None):
         "summary": final_summary,
         "build_plan": build_plan,
     }
-    print("ARGUS_CODEQL_RESULT=" + json.dumps(result, separators=(",", ":")))
+    # File-based envelope transport: write to sandbox file and emit only the
+    # path marker so large SARIF payloads bypass the run_command stdout cap.
+    result_path = "/tmp/argus-codeql-result.json"
+    pathlib.Path(result_path).write_text(
+        json.dumps(result, separators=(",", ":")),
+        encoding="utf-8",
+    )
+    print("ARGUS_CODEQL_RESULT_PATH=" + result_path)
     raise SystemExit(exit_code)
 
 def run(cmd, cwd=None):
@@ -1113,7 +1152,15 @@ result = {
     "summary": summary,
     "build_plan": build_plan,
 }
-print("ARGUS_CODEQL_RESULT=" + json.dumps(result, separators=(",", ":")))
+# File-based envelope transport: SARIF payloads can easily exceed the
+# run_command stdout cap, so write the envelope to a sandbox file and
+# emit only the path marker.
+result_path = "/tmp/argus-codeql-result.json"
+pathlib.Path(result_path).write_text(
+    json.dumps(result, separators=(",", ":")),
+    encoding="utf-8",
+)
+print("ARGUS_CODEQL_RESULT_PATH=" + result_path)
 "##;
 
 const CUBESANDBOX_CODEQL_SETUP_PY: &str = r#"
@@ -1315,7 +1362,14 @@ payload = {
     "failure_category": "none" if exit_code == 0 else ("timeout" if exit_code == 124 else "compile_error"),
     "dependency_installation": {"detected": dependency_detected},
 }
-print("ARGUS_CODEQL_EXPLORATION_RESULT=" + json.dumps(payload, separators=(",", ":")))
+# File-based envelope transport: even captured stdout/stderr can exceed the
+# run_command 64 KiB cap, so write the envelope and emit only the path marker.
+result_path = "/tmp/argus-codeql-exploration-result.json"
+pathlib.Path(result_path).write_text(
+    json.dumps(payload, separators=(",", ":")),
+    encoding="utf-8",
+)
+print("ARGUS_CODEQL_EXPLORATION_RESULT_PATH=" + result_path)
 "#;
 
 #[cfg(test)]
@@ -1483,11 +1537,11 @@ mod tests {
         assert!(script.contains("def emit_result_and_exit"));
         assert!(script.contains("\"events_b64\""));
         assert!(script.contains("\"scan_failed\""));
-        assert!(script.contains("ARGUS_CODEQL_RESULT="));
+        assert!(script.contains("ARGUS_CODEQL_RESULT_PATH="));
     }
 
     #[test]
-    fn parse_codeql_output_preserves_failure_event_envelope() {
+    fn parse_codeql_envelope_bytes_preserves_failure_event_envelope() {
         let events = serde_json::to_string(&json!({
             "stage": "database_trace_command",
             "event": "failed",
@@ -1501,15 +1555,10 @@ mod tests {
             "summary": {"status": "scan_failed", "message": "trace command failed"},
             "build_plan": {"build_mode": "manual"},
         });
-        let output = EnvdProcessOutput {
-            exit_code: Some(2),
-            stdout: format!("ARGUS_CODEQL_RESULT={envelope}\n"),
-            stderr: "python wrapper exited".to_string(),
-            stdout_truncated: false,
-            stderr_truncated: false,
-        };
+        let bytes = serde_json::to_vec(&envelope).expect("envelope serializes");
 
-        let parsed = parse_codeql_output(output).expect("failure envelope should parse");
+        let parsed =
+            parse_codeql_envelope_bytes(&bytes).expect("failure envelope bytes should parse");
 
         assert_eq!(parsed.summary_json["status"], "scan_failed");
         assert!(parsed.events_text.contains("database_trace_command"));

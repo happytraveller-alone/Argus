@@ -671,7 +671,7 @@ for r in records:
     age_hours = (now - created_at).total_seconds() / 3600.0 if created_at else 0.0
 
     # Determine action
-    if status == "FAILED":
+    if status in ("FAILED", "INVALIDATED"):
         action = "delete"
     elif status in ("RUNNING", "BUILDING"):
         action = "delete" if age_hours >= zombie_hours else "keep"
@@ -691,6 +691,9 @@ winner_codeql = ""
 winner_opengrep = ""
 
 for kind, entries in buckets.items():
+    pin_id = env_pin_codeql if kind == "codeql_cpp" else env_pin_opengrep
+    bad_pinned = False
+
     # Sort READY candidates newest-first
     ready = sorted(
         [e for e in entries if e["action"] == "candidate"],
@@ -708,10 +711,15 @@ for kind, entries in buckets.items():
         for surplus in ready[1:]:
             print(f"DELETE:{surplus['tid']}", flush=True)
 
-    # Emit deletes for FAILED + zombies
+    # Emit deletes for FAILED + INVALIDATED + zombies; flag pin if its target is FAILED/INVALIDATED
     for e in entries:
         if e["action"] == "delete":
             print(f"DELETE:{e['tid']}", flush=True)
+            if pin_id and e["tid"] == pin_id and e["status"] in ("FAILED", "INVALIDATED"):
+                bad_pinned = True
+
+    if bad_pinned:
+        print(f"CLEAR_PIN:{kind}", flush=True)
 
 print(f"WINNER_CODEQL:{winner_codeql}", flush=True)
 print(f"WINNER_OPENGREP:{winner_opengrep}", flush=True)
@@ -734,6 +742,31 @@ PYEOF
   # Emit warnings for unknown buckets
   while IFS= read -r line; do
     [[ "$line" == WARNING:* ]] && log "WARNING: cube inventory: ${line#WARNING:}"
+  done <<< "$winners"
+
+  # Process CLEAR_PIN markers FIRST: when the .env-pinned template is FAILED or
+  # INVALIDATED it must be deleted, so clear the pin so the inviolability guard
+  # below does not refuse the delete. This handles the common shutdown→bootstrap
+  # cycle where prior templates come back as INVALIDATED.
+  while IFS= read -r line; do
+    if [[ "$line" == CLEAR_PIN:* ]]; then
+      case "${line#CLEAR_PIN:}" in
+        codeql_cpp)
+          if [[ -n "$env_pin_codeql" ]]; then
+            log "cube inventory: pinned codeql template ${env_pin_codeql} is FAILED/INVALIDATED; clearing CUBESANDBOX_TEMPLATE_ID before delete."
+            cube_persist_template_id ""
+            env_pin_codeql=""
+          fi
+          ;;
+        opengrep)
+          if [[ -n "$env_pin_opengrep" ]]; then
+            log "cube inventory: pinned opengrep template ${env_pin_opengrep} is FAILED/INVALIDATED; clearing CUBESANDBOX_OPENGREP_TEMPLATE_ID before delete."
+            cube_persist_opengrep_template_id ""
+            env_pin_opengrep=""
+          fi
+          ;;
+      esac
+    fi
   done <<< "$winners"
 
   # Process deletes — with env-pin inviolability guard (MAJOR #2)
@@ -838,6 +871,47 @@ cube_ensure_template() {
   cube_persist_template_id "$template_id"
 }
 
+cube_ensure_opengrep_template() {
+  if ! cubesandbox_bootstrap_provision_template_in_env; then
+    log "cubesandbox: CUBESANDBOX_BOOTSTRAP_PROVISION_TEMPLATE=false; skipping Opengrep template pre-provision (backend will lazy-provision on first Opengrep scan)."
+    return 0
+  fi
+  local current
+  current="$(read_env_value CUBESANDBOX_OPENGREP_TEMPLATE_ID)"
+  if [[ -n "$current" ]] && ! is_placeholder_value "$current"; then
+    log "cubesandbox: Opengrep template already configured (${current}); skip provision."
+    return 0
+  fi
+  log "cubesandbox: provisioning Opengrep template (configure-docker-mirror -> start-local-registry -> build-opengrep-image -> create-opengrep-template -> watch). 5-15 min on first run."
+  if "$DRY_RUN"; then
+    printf '[dry-run] %s provision-opengrep-template\n' "$CUBE_QUICKSTART"
+    return 0
+  fi
+  local provision_log
+  provision_log="$(mktemp -t argus-cube-opengrep-provision.XXXXXX.log)"
+  local provision_rc=0
+  set +e
+  "$CUBE_QUICKSTART" provision-opengrep-template 2>&1 | tee "$provision_log"
+  provision_rc=${PIPESTATUS[0]}
+  set -e
+  if (( provision_rc != 0 )); then
+    rm -f "$provision_log"
+    fail "cubesandbox provision-opengrep-template exited with rc=${provision_rc}; see streamed output above."
+  fi
+  local template_id
+  template_id="$(grep -E '^PROVISION_RESULT=' "$provision_log" \
+    | tail -n 1 \
+    | sed -E 's/^PROVISION_RESULT=//' \
+    | python3 -c "import json, sys; data=json.load(sys.stdin); tid=data.get('template_id') or ''; sys.stdout.write(tid)" \
+    2>/dev/null \
+    || true)"
+  rm -f "$provision_log"
+  if [[ -z "$template_id" ]]; then
+    fail "cubesandbox opengrep provision exited 0 but no template_id was parsed; inspect the streamed log above."
+  fi
+  cube_persist_opengrep_template_id "$template_id"
+}
+
 cube_status() {
   local enabled_state auto_state provision_state vm_state api_state template_state host_state template_id
   if is_wsl2_host; then host_state="WSL2"; else host_state="non-WSL2"; fi
@@ -898,6 +972,7 @@ ensure_cubesandbox() {
     fi
     cube_inventory_templates
     cube_ensure_template
+    cube_ensure_opengrep_template
     log "cubesandbox host-side bootstrap complete (fast path)."
     return 0
   fi
@@ -910,6 +985,7 @@ ensure_cubesandbox() {
   fi
   cube_inventory_templates
   cube_ensure_template
+  cube_ensure_opengrep_template
   log "cubesandbox host-side bootstrap complete."
 }
 
