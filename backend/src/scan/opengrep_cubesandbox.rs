@@ -302,6 +302,15 @@ pub async fn cancel_opengrep_scan(task_id: &str) -> Result<bool> {
     Ok(true)
 }
 
+pub fn snapshot_active_sandbox_ids() -> HashSet<String> {
+    ACTIVE_OPENGREP_SANDBOXES
+        .lock()
+        .expect("active sandbox lock")
+        .values()
+        .map(|active| active.sandbox_id.clone())
+        .collect()
+}
+
 fn register_active_sandbox(task_id: &str, active: ActiveOpengrepSandbox) {
     ACTIVE_OPENGREP_SANDBOXES
         .lock()

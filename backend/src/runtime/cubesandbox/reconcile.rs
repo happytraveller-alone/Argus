@@ -24,7 +24,7 @@ use crate::{
         },
         template_provisioner,
     },
-    scan::codeql_cubesandbox,
+    scan::{codeql_cubesandbox, opengrep_cubesandbox},
     state::AppState,
 };
 
@@ -200,6 +200,12 @@ fn protected_set(
 /// Returns empty set at startup (before HTTP server bind, no scans are active).
 async fn read_active_codeql_sandboxes() -> HashSet<String> {
     tokio::task::spawn_blocking(codeql_cubesandbox::snapshot_active_sandbox_ids)
+        .await
+        .unwrap_or_default()
+}
+
+async fn read_active_opengrep_sandboxes() -> HashSet<String> {
+    tokio::task::spawn_blocking(opengrep_cubesandbox::snapshot_active_sandbox_ids)
         .await
         .unwrap_or_default()
 }
@@ -598,7 +604,8 @@ pub(crate) async fn reconcile_stale_templates_with_client<C: CubemasterApi>(
     // SKIPPED when cubemaster_list_failed=true (cannot safely determine orphans without
     // a complete cubemaster list — we'd false-positive delete every DB-tracked template).
     // protected = template_ids from DB active + env_pin + in-process active (empty at startup)
-    let in_process_active = read_active_codeql_sandboxes().await;
+    let mut in_process_active = read_active_codeql_sandboxes().await;
+    in_process_active.extend(read_active_opengrep_sandboxes().await);
     // Note: read_active_codeql_sandboxes returns sandbox_ids (not template_ids).
     // For forward-orphan protection we need template_ids. In_process_active here
     // contributes task_ids which are keys in the map; at startup it is always empty.
@@ -749,7 +756,8 @@ pub(crate) async fn reconcile_stale_templates_with_client<C: CubemasterApi>(
             } else {
                 // Step 12: orphan sandbox cleanup (real data)
                 // Collect active sandbox ids for comparison
-                let active_sb_ids = read_active_codeql_sandboxes().await;
+                let mut active_sb_ids = read_active_codeql_sandboxes().await;
+                active_sb_ids.extend(read_active_opengrep_sandboxes().await);
                 let now_sb = OffsetDateTime::now_utc();
                 for sb in &cm_sandboxes {
                     let age = now_sb - sb.created_at;
