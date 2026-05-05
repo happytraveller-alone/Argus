@@ -2,7 +2,7 @@ use std::{
     collections::{HashMap, HashSet},
     io::Write,
     path::Path,
-    sync::{Arc, LazyLock, Mutex},
+    sync::{LazyLock, Mutex},
 };
 
 use anyhow::{bail, Context, Result};
@@ -18,7 +18,6 @@ use crate::{
         client::{CubeSandboxClient, CubeSandboxClientConfig, CubeSandboxSandbox},
         config::CubeSandboxConfig,
         helper::{run_helper_command, should_run_local_lifecycle, CubeSandboxHelperCommand},
-        opengrep_pool::PoolGuard,
         template_provisioner::{self, EnsureOutcome},
     },
     state::AppState,
@@ -78,37 +77,11 @@ static ACTIVE_OPENGREP_SANDBOXES: LazyLock<Mutex<HashMap<String, ActiveOpengrepS
 static CANCELLED_OPENGREP_TASKS: LazyLock<Mutex<HashSet<String>>> =
     LazyLock::new(|| Mutex::new(HashSet::new()));
 
-/// Holds either a pool-borrowed sandbox (warm path) or a directly-created one (cold path).
-enum SessionSandboxSource {
-    /// Warm pool path: the guard carries the sandbox back to the pool on release.
-    Pool { guard: PoolGuard },
-    /// Cold path: sandbox was created ad-hoc; cleanup deletes it.
-    Direct {
-        client: CubeSandboxClient,
-        sandbox: CubeSandboxSandbox,
-    },
-}
-
-impl SessionSandboxSource {
-    fn client(&self) -> &CubeSandboxClient {
-        match self {
-            Self::Pool { guard } => &guard.client,
-            Self::Direct { client, .. } => client,
-        }
-    }
-
-    fn sandbox(&self) -> &CubeSandboxSandbox {
-        match self {
-            Self::Pool { guard } => guard.sandbox(),
-            Self::Direct { sandbox, .. } => sandbox,
-        }
-    }
-}
-
 pub struct OpengrepSandboxSession {
     task_id: String,
     pub template_id: String,
-    source: SessionSandboxSource,
+    client: CubeSandboxClient,
+    sandbox: CubeSandboxSandbox,
     t0: std::time::Instant,
 }
 
@@ -125,27 +98,6 @@ impl OpengrepSandboxSession {
             bail!("Opengrep CubeSandbox scan cancelled before sandbox creation for task {task_id}");
         }
 
-        // Try warm pool first.
-        if let Some(pool) = state.get_opengrep_pool().await {
-            tracing::info!(task_id = %task_id, stage = "client_prepared", elapsed_ms = t0.elapsed().as_millis() as u64);
-            let guard = pool.acquire(task_id).await?;
-            let sandbox_id = guard.sandbox().sandbox_id.clone();
-            register_active_sandbox(
-                task_id,
-                ActiveOpengrepSandbox {
-                    client: guard.client.clone(),
-                    sandbox_id: sandbox_id.clone(),
-                },
-            );
-            return Ok(Self {
-                task_id: task_id.to_string(),
-                template_id,
-                source: SessionSandboxSource::Pool { guard },
-                t0,
-            });
-        }
-
-        // Cold path (no pool or pool disabled).
         let client = prepare_client(&config, &template_id).await?;
         tracing::info!(task_id = %task_id, stage = "client_prepared", elapsed_ms = t0.elapsed().as_millis() as u64);
         let sandbox = client.create_sandbox().await?;
@@ -158,7 +110,10 @@ impl OpengrepSandboxSession {
             },
         );
         if take_cancel_request(task_id) {
-            let _ = client.delete_sandbox(&sandbox.sandbox_id).await;
+            crate::runtime::cubesandbox::best_effort_delete_sandbox(
+                &client, &sandbox.sandbox_id, task_id, "cancel_after_create",
+            )
+            .await;
             unregister_active_sandbox(task_id, &sandbox.sandbox_id);
             bail!("Opengrep CubeSandbox scan cancelled before sandbox connect for task {task_id}");
         }
@@ -167,7 +122,8 @@ impl OpengrepSandboxSession {
         Ok(Self {
             task_id: task_id.to_string(),
             template_id,
-            source: SessionSandboxSource::Direct { client, sandbox },
+            client,
+            sandbox,
             t0,
         })
     }
@@ -182,8 +138,8 @@ impl OpengrepSandboxSession {
                 input.task_id
             );
         }
-        let client = self.source.client();
-        let sandbox = self.source.sandbox();
+        let client = &self.client;
+        let sandbox = &self.sandbox;
         tracing::info!(task_id = %self.task_id, stage = "archive_start", elapsed_ms = self.t0.elapsed().as_millis() as u64);
 
         // A4-lite: build raw tar+gz bytes and upload via write_file (skip base64 encode/decode).
@@ -247,20 +203,12 @@ impl OpengrepSandboxSession {
         Ok(result)
     }
 
-    pub async fn cleanup(self) -> Result<()> {
-        let sandbox_id = self.source.sandbox().sandbox_id.clone();
-        unregister_active_sandbox(&self.task_id, &sandbox_id);
-        match self.source {
-            SessionSandboxSource::Pool { guard } => {
-                let pool = Arc::clone(&guard.pool);
-                pool.release(guard).await?;
-            }
-            SessionSandboxSource::Direct { client, sandbox } => {
-                client.delete_sandbox(&sandbox.sandbox_id).await?;
-            }
-        }
-        tracing::info!(task_id = %self.task_id, stage = "cleaned_up", elapsed_ms = self.t0.elapsed().as_millis() as u64);
-        Ok(())
+    pub fn sandbox_id(&self) -> &str {
+        &self.sandbox.sandbox_id
+    }
+
+    pub async fn unregister_active(&self) {
+        unregister_active_sandbox(&self.task_id, &self.sandbox.sandbox_id);
     }
 }
 
@@ -269,11 +217,35 @@ pub async fn run_opengrep_scan(
     input: CubeSandboxOpengrepInput<'_>,
 ) -> Result<CubeSandboxOpengrepOutput> {
     let session = OpengrepSandboxSession::start(state, input.task_id).await?;
-    let mut result = session.run_scan(input).await?;
-    let sandbox_id = result.sandbox_id.clone();
-    // Wire scan-failure counter feedback before cleanup consumes session.
+
+    // Capture values needed after session is consumed by cleanup.
     let template_id = session.template_id.clone();
-    match result.summary_json.get("status").and_then(|v| v.as_str()) {
+    let task_id_owned = session.task_id.clone();
+    let sandbox_id_for_log = session.sandbox_id().to_string();
+    let client_for_cleanup = session.client.clone();
+
+    // Do NOT use `?` here — we must run cleanup regardless of scan outcome.
+    let scan_result = session.run_scan(input).await;
+
+    // Determine counter status from scan result before cleanup.
+    let status_for_counter = scan_result
+        .as_ref()
+        .ok()
+        .and_then(|r| r.summary_json.get("status").and_then(|v| v.as_str()))
+        .map(str::to_string);
+
+    // Always-cleanup: unregister then best-effort delete. Never bail on cleanup failure.
+    session.unregister_active().await;
+    crate::runtime::cubesandbox::best_effort_delete_sandbox(
+        &client_for_cleanup,
+        &sandbox_id_for_log,
+        &task_id_owned,
+        "cleanup_post_run",
+    )
+    .await;
+
+    // Counter feedback runs after cleanup, on captured values.
+    match status_for_counter.as_deref() {
         Some("scan_failed") => {
             match crate::db::cubesandbox_templates::bump_scan_failure_counter(state, &template_id)
                 .await
@@ -306,10 +278,10 @@ pub async fn run_opengrep_scan(
         }
         _ => {}
     }
-    if let Err(error) = session.cleanup().await {
-        bail!("CubeSandbox cleanup failed after Opengrep scan: {error}");
-    }
-    result.sandbox_id = sandbox_id;
+
+    // Surface scan result; mark cleanup_completed = true on success path.
+    let mut result = scan_result?;
+    result.sandbox_id = sandbox_id_for_log;
     result.cleanup_completed = true;
     Ok(result)
 }
