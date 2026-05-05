@@ -5,7 +5,7 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use backend_rust::{
     app::build_router, bootstrap, config::AppConfig,
-    runtime::cubesandbox::ShutdownGate, state::AppState,
+    runtime::cubesandbox::{wait_for_active_scans_drain, ShutdownGate}, state::AppState,
 };
 
 #[tokio::main]
@@ -62,4 +62,11 @@ async fn shutdown_signal(tx: watch::Sender<bool>, gate: ShutdownGate) {
 
     gate.set();
     let _ = tx.send(true);
+
+    // Wait for all in-flight scan tasks to finish their cleanup blocks before
+    // allowing axum to exit. Without this, detached tokio::spawn scan futures
+    // are aborted at their next .await when the runtime drops, meaning
+    // best_effort_delete_sandbox never runs and sandboxes leak.
+    // Hard timeout: 60 s — remaining orphans are reaped by reconcile / argus-shutdown.sh.
+    wait_for_active_scans_drain(tokio::time::Duration::from_secs(60)).await;
 }

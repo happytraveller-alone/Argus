@@ -903,6 +903,10 @@ async fn create_static_task_for_engine(
     let bg_task_id = task_id.clone();
     let engine_for_task = engine.to_string();
     tokio::spawn(async move {
+        // Hold an ActiveScanGuard for the lifetime of this scan task.
+        // shutdown_signal waits for ACTIVE_SCAN_COUNT to reach zero before
+        // letting axum exit, ensuring best_effort_delete_sandbox always runs.
+        let _scan_guard = crate::runtime::cubesandbox::ActiveScanGuard::enter();
         if engine_for_task == "codeql" {
             run_codeql_scan(
                 bg_state,

@@ -23,7 +23,10 @@ use axum::{
     http::{Request, StatusCode},
 };
 use backend_rust::{
-    app::build_router, config::AppConfig, runtime::cubesandbox::ShutdownGate, state::AppState,
+    app::build_router,
+    config::AppConfig,
+    runtime::cubesandbox::{wait_for_active_scans_drain, ActiveScanGuard, ShutdownGate},
+    state::AppState,
 };
 use tower::ServiceExt;
 
@@ -155,4 +158,52 @@ fn shutdown_gate_state_machine() {
     // Idempotent: set() a second time must not panic.
     gate.set();
     assert!(gate.is_set(), "gate must remain set after second set()");
+}
+
+// ─── TEST 5: drain waits for active scans (AC3 regression guard) ─────────────
+//
+// Verifies that wait_for_active_scans_drain does NOT return while a scan guard
+// is held, and DOES return promptly after the guard is dropped.
+//
+// This is the unit-level proof that shutdown_signal holds axum open until all
+// spawned scan futures finish their cleanup blocks.
+//
+// Requires feature = "test-helpers" so ActiveScanGuard is publicly accessible
+// outside the cubesandbox module in non-test builds.
+//
+// Refs:
+//   spec: .omc/specs/deep-dive-opengrep-sandbox-auto-destroy.md (AC3)
+//   plan: .omc/plans/ralplan-opengrep-sandbox-auto-destroy.md (Step 5)
+#[cfg(feature = "test-helpers")]
+#[tokio::test]
+async fn drain_waits_for_active_scans() {
+    // Acquire a guard — simulates an in-flight scan task.
+    let guard = ActiveScanGuard::enter();
+
+    // Spawn wait_for_active_scans_drain with a generous timeout (2 s).
+    // The drain must NOT return while `guard` is alive.
+    let drain_handle = tokio::spawn(async {
+        wait_for_active_scans_drain(tokio::time::Duration::from_secs(2)).await;
+    });
+
+    // Sleep 150 ms — drain should still be blocked.
+    tokio::time::sleep(tokio::time::Duration::from_millis(150)).await;
+    assert!(
+        !drain_handle.is_finished(),
+        "drain must not return while an ActiveScanGuard is held"
+    );
+
+    // Drop the guard — counter reaches zero, drain should unblock quickly.
+    drop(guard);
+
+    // Give the drain up to 500 ms to notice the counter drop.
+    let result = tokio::time::timeout(
+        tokio::time::Duration::from_millis(500),
+        drain_handle,
+    )
+    .await;
+    assert!(
+        result.is_ok(),
+        "drain must return within 500 ms after all guards are dropped"
+    );
 }
