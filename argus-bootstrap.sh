@@ -821,6 +821,17 @@ PYEOF
   log "cube inventory: done."
 }
 
+
+cube_refresh_template_pins_from_inventory() {
+  if "$DRY_RUN" || is_truthy "$STUB_DOCKER"; then
+    return 0
+  fi
+  if ! cube_api_healthy; then
+    return 0
+  fi
+  cube_inventory_templates
+}
+
 cube_reset_template_id() {
   local current
   current="$(cube_template_id_from_env)"
@@ -955,6 +966,10 @@ ensure_cubesandbox() {
   fi
   if ! cubesandbox_bootstrap_auto_in_env; then
     log "cubesandbox host-side auto-bootstrap disabled (CUBESANDBOX_BOOTSTRAP_AUTO=false); run scripts/cubesandbox-quickstart.sh manually when ready."
+    return 0
+  fi
+  if is_truthy "$STUB_DOCKER"; then
+    log "Stub mode: skipping cubesandbox host-side bootstrap."
     return 0
   fi
   if ! is_wsl2_host; then
@@ -1244,6 +1259,29 @@ cubesandbox_template_status() {
     | python3 -c "import json,sys; print((json.loads(sys.stdin.read(), strict=False).get('status') or '').lower())"
 }
 
+backend_cubesandbox_template_cache_key() {
+  local api_kind="$1"
+  case "$api_kind" in
+    codeql-cpp) printf 'CUBESANDBOX_TEMPLATE_ID' ;;
+    opengrep) printf 'CUBESANDBOX_OPENGREP_TEMPLATE_ID' ;;
+    *) fail "unknown backend CubeSandbox template kind: $api_kind" ;;
+  esac
+}
+
+backend_cubesandbox_template_cache_hit() {
+  local label="$1"
+  local api_kind="$2"
+  local env_key cached_id
+  env_key="$(backend_cubesandbox_template_cache_key "$api_kind")"
+  cached_id="$(read_env_value "$env_key")"
+  if [[ -z "$cached_id" ]] || is_placeholder_value "$cached_id"; then
+    return 1
+  fi
+  log "cubesandbox: backend ${label} cache hit candidate ${env_key}=${cached_id}; requesting provision endpoint to adopt it if DB state is absent."
+  provision_backend_cubesandbox_template "$api_kind"
+  return 0
+}
+
 reset_backend_cubesandbox_template() {
   local api_kind="$1"
   log "cubesandbox: backend reset requested for ${api_kind} template."
@@ -1272,8 +1310,12 @@ wait_for_backend_cubesandbox_template_ready() {
       log "cubesandbox: backend ${label} template is ${status}; resetting."
       reset_backend_cubesandbox_template "$api_kind"
     elif [[ "$status" == "absent" || -z "$status" ]]; then
-      log "cubesandbox: backend ${label} template is ${status:-unreachable/unknown}; provisioning."
-      provision_backend_cubesandbox_template "$api_kind"
+      log "cubesandbox: backend ${label} template is ${status:-unreachable/unknown}; checking CubeSandbox cache before rebuilding."
+      cube_refresh_template_pins_from_inventory
+      if ! backend_cubesandbox_template_cache_hit "$label" "$api_kind"; then
+        log "cubesandbox: backend ${label} template has no cache hit; provisioning."
+        provision_backend_cubesandbox_template "$api_kind"
+      fi
     fi
     now="$(date +%s)"
     elapsed=$((now - start))

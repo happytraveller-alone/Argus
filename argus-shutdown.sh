@@ -9,6 +9,10 @@
 #   --hard   (default) soft + Step 3 (delete cubemaster templates) + Step 4 (ctr orphan reclaim)
 #   --full   hard + compose down --volumes (destroys postgres_data et al.)
 #
+# Cache knobs:
+#   ARGUS_SHUTDOWN_KEEP_SCANNER_TEMPLATES=true  Preserve READY CodeQL/OpenGrep templates on --hard
+#                                            so the next bootstrap can cache-hit.
+#
 # --dry-run  Print all planned ops without executing any destructive command.
 # --help     Print this usage and exit 0.
 
@@ -27,6 +31,7 @@ ENV_FILE="$ROOT/.env"
 # ---------------------------------------------------------------------------
 MODE="hard"
 DRY_RUN=false
+KEEP_SCANNER_TEMPLATES="${ARGUS_SHUTDOWN_KEEP_SCANNER_TEMPLATES:-true}"
 
 # ---------------------------------------------------------------------------
 # Counters (for summary)
@@ -66,6 +71,13 @@ done
 log()     { printf '[argus-shutdown] %s\n' "$*"; }
 warn()    { printf '[argus-shutdown] WARNING: %s\n' "$*" >&2; ORPHAN_WARNINGS=$((ORPHAN_WARNINGS + 1)); }
 die()     { printf '[argus-shutdown] ERROR: %s\n' "$*" >&2; exit 1; }
+
+is_truthy() {
+  case "${1:-}" in
+    1|true|TRUE|yes|YES|on|ON) return 0 ;;
+    *) return 1 ;;
+  esac
+}
 
 # run_cmd: honours --dry-run.
 # Usage: run_cmd <description> cmd [args...]
@@ -295,6 +307,8 @@ step2_5_cleanup_cubemaster_state() {
 # ---------------------------------------------------------------------------
 step3_delete_templates() {
   log "Step 3: Delete cubemaster templates"
+  local pinned_codeql="${CUBESANDBOX_TEMPLATE_ID:-}"
+  local pinned_opengrep="${CUBESANDBOX_OPENGREP_TEMPLATE_ID:-}"
 
   # List templates (tabular output; skip header lines)
   local list_output
@@ -324,10 +338,31 @@ step3_delete_templates() {
     local tpl_id
     tpl_id=$(printf '%s' "$line" | awk '{print $1}')
     [[ -z "$tpl_id" ]] && continue
+    local tpl_status
+    tpl_status=$(printf '%s' "$line" | awk '{print toupper($2)}')
 
     if ! cubesandbox_template_id_safe "$tpl_id"; then
       warn "Skipping unsafe template ID: $tpl_id"
       continue
+    fi
+
+    if is_truthy "${KEEP_SCANNER_TEMPLATES}"; then
+      if [[ -n "$pinned_codeql" && "$tpl_id" == "$pinned_codeql" ]]; then
+        log "  Preserving pinned CodeQL template cache: $tpl_id"
+        continue
+      fi
+      if [[ -n "$pinned_opengrep" && "$tpl_id" == "$pinned_opengrep" ]]; then
+        log "  Preserving pinned OpenGrep template cache: $tpl_id"
+        continue
+      fi
+      if [[ "$tpl_status" == "READY" || "$tpl_status" == "RUNNING" ]]; then
+        case "$line" in
+          *codeql*|*CodeQL*|*CODEQL*|*opengrep*|*OpenGrep*|*OPENGREP*)
+            log "  Preserving scanner template cache: $tpl_id"
+            continue
+            ;;
+        esac
+      fi
     fi
 
     log "  Deleting template: $tpl_id"
@@ -352,6 +387,10 @@ step3_delete_templates() {
 # ---------------------------------------------------------------------------
 step4_reclaim_snapshots() {
   log "Step 4: ctr snapshot orphan reclaim"
+  if is_truthy "${KEEP_SCANNER_TEMPLATES}"; then
+    log "  Preserving scanner template cache; skipping broad snapshot reclaim."
+    return 0
+  fi
 
   local snap_output
   set +e

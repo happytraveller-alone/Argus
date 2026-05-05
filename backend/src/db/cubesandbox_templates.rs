@@ -269,6 +269,37 @@ pub async fn delete_failed_or_invalidated_by_id(
     Ok(Some(record))
 }
 
+pub async fn insert_ready(
+    state: &AppState,
+    kind: TemplateKind,
+    image_ref: &str,
+    template_id: &str,
+    artifact_id: Option<&str>,
+) -> Result<CubesandboxTemplateRecord> {
+    let pool = state
+        .db_pool
+        .as_ref()
+        .context("database pool is not configured")?;
+    let id = Uuid::new_v4();
+    sqlx::query(
+        r#"
+        insert into rust_cubesandbox_templates
+            (id, kind, status, template_id, artifact_id, image_ref, build_log_tail, ready_at)
+        values ($1, $2, 'ready', $3, $4, $5, '', now())
+        "#,
+    )
+    .bind(id)
+    .bind(kind.as_str())
+    .bind(template_id)
+    .bind(artifact_id)
+    .bind(image_ref)
+    .execute(pool)
+    .await?;
+    load_by_id(state, &id.to_string())
+        .await?
+        .context("inserted ready template record disappeared")
+}
+
 pub async fn insert_pending(
     state: &AppState,
     kind: TemplateKind,

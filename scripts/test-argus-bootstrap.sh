@@ -4,6 +4,7 @@ set -Eeuo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SCRIPT_SRC="$ROOT_DIR/argus-bootstrap.sh"
 VALIDATOR_SRC="$ROOT_DIR/scripts/validate-llm-config.sh"
+CUBE_QUICKSTART_SRC="$ROOT_DIR/scripts/cubesandbox-quickstart.sh"
 TMP_ROOT="$(mktemp -d)"
 trap 'rm -rf "$TMP_ROOT"' EXIT
 
@@ -53,9 +54,12 @@ new_fixture() {
   mkdir -p "$dir/scripts"
   cp "$SCRIPT_SRC" "$dir/argus-bootstrap.sh"
   cp "$VALIDATOR_SRC" "$dir/scripts/validate-llm-config.sh"
+  cp "$ROOT_DIR/scripts/cubesandbox-lib.sh" "$dir/scripts/cubesandbox-lib.sh"
+  cp "$CUBE_QUICKSTART_SRC" "$dir/scripts/cubesandbox-quickstart.sh"
   cp "$ROOT_DIR/env.example" "$dir/env.example"
   chmod +x "$dir/argus-bootstrap.sh"
   chmod +x "$dir/scripts/validate-llm-config.sh"
+  chmod +x "$dir/scripts/cubesandbox-quickstart.sh"
   cat > "$dir/docker-compose.yml" <<'COMPOSE'
 services:
   opengrep-runner:
@@ -467,7 +471,7 @@ assert_contains "$ROOT_DIR/docker-compose.yml" "\"host.docker.internal:host-gate
 assert_contains "$ROOT_DIR/env.example" "CUBESANDBOX_API_BASE_URL=http://host.docker.internal:23000"
 assert_contains "$ROOT_DIR/env.example" "CUBESANDBOX_DATA_PLANE_BASE_URL=https://host.docker.internal:21443"
 assert_contains "$ROOT_DIR/env.example" "CUBESANDBOX_HELPER_PATH=/app/scripts/cubesandbox-quickstart.sh"
-assert_contains "$ROOT_DIR/env.example" "CUBESANDBOX_AUTO_START=false"
+assert_contains "$ROOT_DIR/env.example" "CUBESANDBOX_AUTO_START=true"
 assert_contains "$ROOT_DIR/docker/backend.Dockerfile" "COPY --chmod=755 scripts/cubesandbox-quickstart.sh /app/scripts/cubesandbox-quickstart.sh"
 assert_contains "$ROOT_DIR/docker/backend.Dockerfile" "openssh-client"
 assert_contains "$ROOT_DIR/scripts/release-templates/backend.Dockerfile" "COPY --chmod=755 scripts/cubesandbox-quickstart.sh /app/scripts/cubesandbox-quickstart.sh"

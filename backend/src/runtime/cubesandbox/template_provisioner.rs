@@ -186,6 +186,91 @@ pub async fn get_status(
 }
 
 /// Force a fresh provisioning run. Refuses if a record is already pending/building/ready.
+
+fn select_reusable_cubemaster_template_id(
+    templates: impl IntoIterator<Item = CubemasterTemplate>,
+    image_ref: &str,
+) -> Option<String> {
+    templates
+        .into_iter()
+        .filter(|template| {
+            template.status.eq_ignore_ascii_case("READY")
+                && template
+                    .image_fingerprint
+                    .as_deref()
+                    .is_some_and(|fingerprint| fingerprint.contains(image_ref))
+        })
+        .max_by_key(|template| template.created_at)
+        .map(|template| template.template_id)
+}
+
+fn select_configured_ready_template_id(
+    templates: &[CubemasterTemplate],
+    template_id: &str,
+) -> Option<String> {
+    templates
+        .iter()
+        .find(|template| {
+            template.template_id == template_id && template.status.eq_ignore_ascii_case("READY")
+        })
+        .map(|template| template.template_id.clone())
+}
+
+async fn list_cubemaster_templates_for_cache(
+    config: &CubeSandboxConfig,
+) -> Option<Vec<CubemasterTemplate>> {
+    let client = match build_cubemaster_client(config) {
+        Ok(client) => client,
+        Err(error) => {
+            tracing::warn!(
+                error = %error,
+                "could not build CubeMaster client for template cache lookup"
+            );
+            return None;
+        }
+    };
+    match client.list_templates().await {
+        Ok(templates) => Some(templates),
+        Err(error) => {
+            tracing::warn!(
+                error = %error,
+                "could not list CubeMaster templates for cache lookup"
+            );
+            return None;
+        }
+    }
+}
+
+async fn adopt_reusable_cubemaster_template(
+    state: &AppState,
+    config: &CubeSandboxConfig,
+    kind: TemplateKind,
+    image_ref: &str,
+) -> Result<Option<CubesandboxTemplateRecord>> {
+    let Some(templates) = list_cubemaster_templates_for_cache(config).await else {
+        return Ok(None);
+    };
+    let configured = config.template_id.trim();
+    let template_id = if !configured.is_empty() {
+        select_configured_ready_template_id(&templates, configured)
+    } else {
+        None
+    }
+    .or_else(|| select_reusable_cubemaster_template_id(templates, image_ref));
+
+    let Some(template_id) = template_id else {
+        return Ok(None);
+    };
+    let ready =
+        cubesandbox_templates::insert_ready(state, kind, image_ref, &template_id, None).await?;
+    tracing::info!(
+        kind = %kind.as_str(),
+        template_id = %template_id,
+        "CubeSandbox template cache hit; adopted existing CubeMaster READY template"
+    );
+    Ok(Some(ready))
+}
+
 pub async fn start_provision(
     state: &AppState,
     config: &CubeSandboxConfig,
@@ -205,6 +290,11 @@ pub async fn start_provision(
         bail!(
             "CubeSandbox 控制面/数据面 URL 必须指向 localhost 或 host.docker.internal 才能自动构建"
         );
+    }
+    let image_ref = template_image_ref(kind);
+    if let Some(record) = adopt_reusable_cubemaster_template(state, config, kind, image_ref).await?
+    {
+        return Ok(record);
     }
     start_provision_internal(state, config, kind).await
 }
@@ -555,6 +645,65 @@ mod tests {
             TemplateKind::OpengrepDedicated
         );
         assert_ne!(current_opengrep_provision_kind(), TemplateKind::Opengrep);
+    }
+
+    #[test]
+    fn reusable_template_prefers_newest_ready_image_match() {
+        let older = CubemasterTemplate {
+            template_id: "tpl-older".to_string(),
+            kind: String::new(),
+            status: "READY".to_string(),
+            created_at: time::OffsetDateTime::UNIX_EPOCH,
+            image_fingerprint: Some(
+                "localhost:5000/argus/cubesandbox-opengrep:auto@sha256:old".to_string(),
+            ),
+        };
+        let newer = CubemasterTemplate {
+            template_id: "tpl-newer".to_string(),
+            created_at: time::OffsetDateTime::UNIX_EPOCH + time::Duration::seconds(60),
+            ..older.clone()
+        };
+        let failed = CubemasterTemplate {
+            template_id: "tpl-failed".to_string(),
+            status: "FAILED".to_string(),
+            created_at: time::OffsetDateTime::UNIX_EPOCH + time::Duration::seconds(120),
+            ..older.clone()
+        };
+        let unrelated = CubemasterTemplate {
+            template_id: "tpl-unrelated".to_string(),
+            image_fingerprint: Some("localhost:5000/argus/other:auto@sha256:new".to_string()),
+            created_at: time::OffsetDateTime::UNIX_EPOCH + time::Duration::seconds(180),
+            ..older.clone()
+        };
+
+        assert_eq!(
+            select_reusable_cubemaster_template_id(
+                [older, newer, failed, unrelated],
+                DEFAULT_OPENGREP_IMAGE_REF,
+            )
+            .as_deref(),
+            Some("tpl-newer")
+        );
+    }
+
+    #[test]
+    fn configured_ready_template_can_cache_hit_without_image_fingerprint() {
+        let configured = CubemasterTemplate {
+            template_id: "tpl-configured".to_string(),
+            kind: String::new(),
+            status: "READY".to_string(),
+            created_at: time::OffsetDateTime::UNIX_EPOCH,
+            image_fingerprint: None,
+        };
+        let failed = CubemasterTemplate {
+            status: "FAILED".to_string(),
+            ..configured.clone()
+        };
+
+        assert_eq!(
+            select_configured_ready_template_id(&[failed, configured], "tpl-configured").as_deref(),
+            Some("tpl-configured")
+        );
     }
 
     #[test]
