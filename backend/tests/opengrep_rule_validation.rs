@@ -2,7 +2,7 @@ use axum::{
     body::{to_bytes, Body},
     http::{Method, Request, StatusCode},
 };
-use backend_rust::{app::build_router, config::AppConfig, state::AppState};
+use backend_rust::{app::build_router, config::AppConfig, runtime::cubesandbox::ShutdownGate, state::AppState};
 use serde_json::{json, Value};
 use tower::util::ServiceExt;
 use uuid::Uuid;
@@ -19,7 +19,7 @@ async fn create_generic_rule_normalizes_top_level_yaml_list() {
     let state = AppState::from_config(isolated_test_config("opengrep-generic-create"))
         .await
         .expect("state should build");
-    let app = build_router(state);
+    let app = build_router(state, ShutdownGate::default());
 
     let response = app
         .clone()
@@ -65,7 +65,7 @@ async fn upload_json_rule_rejects_missing_pattern_fields() {
     let state = AppState::from_config(isolated_test_config("opengrep-upload-validate"))
         .await
         .expect("state should build");
-    let app = build_router(state);
+    let app = build_router(state, ShutdownGate::default());
 
     let response = app
         .clone()
@@ -107,7 +107,7 @@ async fn create_generic_rule_rejects_malformed_yaml() {
     let state = AppState::from_config(isolated_test_config("opengrep-generic-malformed"))
         .await
         .expect("state should build");
-    let app = build_router(state);
+    let app = build_router(state, ShutdownGate::default());
 
     let response = app
         .clone()
@@ -146,7 +146,7 @@ async fn create_generic_rule_does_not_let_nested_metadata_pattern_satisfy_schema
     let state = AppState::from_config(isolated_test_config("opengrep-generic-nested-pattern"))
         .await
         .expect("state should build");
-    let app = build_router(state);
+    let app = build_router(state, ShutdownGate::default());
 
     let response = app
         .clone()
@@ -188,7 +188,7 @@ async fn update_rule_revalidates_pattern_yaml() {
     let state = AppState::from_config(isolated_test_config("opengrep-update-validate"))
         .await
         .expect("state should build");
-    let app = build_router(state);
+    let app = build_router(state, ShutdownGate::default());
 
     let create_response = app
         .clone()
@@ -293,7 +293,7 @@ async fn create_rule_from_patch_uses_patch_metadata_when_available() {
     let state = AppState::from_config(isolated_test_config("opengrep-create-from-patch"))
         .await
         .expect("state should build");
-    let app = build_router(state);
+    let app = build_router(state, ShutdownGate::default());
 
     let response = app
         .clone()

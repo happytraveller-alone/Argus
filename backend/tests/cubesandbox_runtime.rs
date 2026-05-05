@@ -16,6 +16,7 @@ use backend_rust::{
         config::CubeSandboxConfig,
         helper::{build_helper_invocation, should_run_local_lifecycle, CubeSandboxHelperCommand},
         types::CubeSandboxTaskStatus,
+        ShutdownGate,
     },
     state::AppState,
 };
@@ -64,7 +65,7 @@ async fn cubesandbox_defaults_expose_only_runtime_controls() {
     let state = AppState::from_config(isolated_test_config("cubesandbox-defaults"))
         .await
         .expect("state should build");
-    let app = build_router(state);
+    let app = build_router(state, ShutdownGate::default());
 
     let response = app
         .oneshot(
@@ -86,7 +87,7 @@ async fn cubesandbox_config_preserves_unknown_other_config_keys() {
     let state = AppState::from_config(isolated_test_config("cubesandbox-other-config"))
         .await
         .expect("state should build");
-    let app = build_router(state);
+    let app = build_router(state, ShutdownGate::default());
     let save_payload = json!({
         "llmConfig": {
             "llmProvider": "openai_compatible",
@@ -258,7 +259,7 @@ async fn cubesandbox_runtime_config_rejects_disabled_missing_template_and_invali
     let state = AppState::from_config(config)
         .await
         .expect("state should build");
-    let app = build_router(state);
+    let app = build_router(state, ShutdownGate::default());
 
     let disabled = submit_cubesandbox_task(
         &app,
@@ -473,7 +474,7 @@ async fn cubesandbox_task_route_smoke_returns_45() {
     )
     .await
     .expect("config should save");
-    let app = build_router(state.clone());
+    let app = build_router(state.clone(), ShutdownGate::default());
 
     let submit_response = app
         .clone()
@@ -574,7 +575,7 @@ async fn cubesandbox_task_route_uses_remote_api_without_local_helper() {
     )
     .await
     .expect("config should save");
-    let app = build_router(state.clone());
+    let app = build_router(state.clone(), ShutdownGate::default());
 
     let submit_response = app
         .clone()
@@ -605,7 +606,7 @@ async fn cubesandbox_delete_rejects_non_terminal_and_deletes_terminal() {
     let state = AppState::from_config(isolated_test_config("cubesandbox-delete"))
         .await
         .expect("state should build");
-    let app = build_router(state.clone());
+    let app = build_router(state.clone(), ShutdownGate::default());
     let running_id = "task-running";
     let mut running = backend_rust::runtime::cubesandbox::types::CubeSandboxTaskRecord::new_queued(
         running_id.to_string(),
@@ -718,7 +719,7 @@ async fn cubesandbox_runtime_opengrep_template_route_ignores_legacy_kind_and_ser
         .await
         .expect("legacy row should become ready");
 
-    let app = build_router(state.clone());
+    let app = build_router(state.clone(), ShutdownGate::default());
     let absent_response = app
         .clone()
         .oneshot(
@@ -810,7 +811,7 @@ async fn cubesandbox_runtime_opengrep_template_invalidate_only_marks_dedicated_r
         .await
         .expect("dedicated row should become ready");
 
-    let app = build_router(state.clone());
+    let app = build_router(state.clone(), ShutdownGate::default());
     let invalidate_response = app
         .oneshot(
             Request::post("/api/v1/cubesandbox/templates/opengrep/invalidate")
@@ -847,7 +848,7 @@ async fn cubesandbox_template_management_overview_no_db_returns_empty_lists() {
     ))
     .await
     .expect("state should build");
-    let app = build_router(state);
+    let app = build_router(state, ShutdownGate::default());
 
     let response = app
         .oneshot(
@@ -874,7 +875,7 @@ async fn cubesandbox_template_management_cleanup_failed_no_db_is_bounded_noop() 
     let state = AppState::from_config(isolated_test_config("cubesandbox-template-cleanup-no-db"))
         .await
         .expect("state should build");
-    let app = build_router(state);
+    let app = build_router(state, ShutdownGate::default());
 
     let response = app
         .oneshot(
@@ -921,7 +922,7 @@ async fn cubesandbox_template_management_delete_rejects_active_records() {
     .await
     .expect("pending row should insert");
 
-    let app = build_router(state.clone());
+    let app = build_router(state.clone(), ShutdownGate::default());
     let response = app
         .oneshot(
             Request::delete(format!(
@@ -979,7 +980,7 @@ async fn cubesandbox_template_management_delete_failed_record_without_template_i
     .await
     .expect("row should become failed");
 
-    let app = build_router(state.clone());
+    let app = build_router(state.clone(), ShutdownGate::default());
     let response = app
         .oneshot(
             Request::delete(format!(
@@ -1034,7 +1035,7 @@ async fn cubesandbox_template_management_delete_invalidated_record_without_templ
         .await
         .expect("row should become invalidated");
 
-    let app = build_router(state.clone());
+    let app = build_router(state.clone(), ShutdownGate::default());
     let response = app
         .oneshot(
             Request::delete(format!(
@@ -1140,7 +1141,7 @@ async fn cubesandbox_template_management_reset_deletes_active_template_and_start
         .await
         .expect("row should become ready");
 
-    let app = build_router(state.clone());
+    let app = build_router(state.clone(), ShutdownGate::default());
     let response = app
         .oneshot(
             Request::post("/api/v1/cubesandbox/templates/opengrep/reset")

@@ -2,7 +2,7 @@ use axum::{
     body::{to_bytes, Body},
     http::{Method, Request, StatusCode},
 };
-use backend_rust::{app::build_router, config::AppConfig, state::AppState};
+use backend_rust::{app::build_router, config::AppConfig, runtime::cubesandbox::ShutdownGate, state::AppState};
 use serde_json::{json, Value};
 use tower::util::ServiceExt;
 use uuid::Uuid;
@@ -13,7 +13,7 @@ async fn skills_catalog_and_prompt_skill_crud_are_rust_owned() {
     let state = AppState::from_config(config)
         .await
         .expect("state should build");
-    let app = build_router(state);
+    let app = build_router(state, ShutdownGate::default());
 
     let catalog_response = app
         .clone()
@@ -165,7 +165,7 @@ async fn default_skills_catalog_exposes_prompt_effective_entries() {
     let state = AppState::from_config(config)
         .await
         .expect("state should build");
-    let app = build_router(state);
+    let app = build_router(state, ShutdownGate::default());
 
     let catalog_response = app
         .oneshot(
@@ -239,7 +239,7 @@ async fn external_tools_catalog_keeps_builtin_and_custom_prompt_resources() {
     let state = AppState::from_config(config)
         .await
         .expect("state should build");
-    let app = build_router(state);
+    let app = build_router(state, ShutdownGate::default());
 
     let create_response = app
         .clone()
@@ -308,7 +308,7 @@ async fn prompt_effective_detail_merges_builtin_global_and_agent_specific_source
     let state = AppState::from_config(config)
         .await
         .expect("state should build");
-    let app = build_router(state);
+    let app = build_router(state, ShutdownGate::default());
 
     for request_body in [
         json!({
@@ -407,7 +407,7 @@ async fn prompt_effective_detail_stays_visible_when_no_active_sources_exist() {
     let state = AppState::from_config(config)
         .await
         .expect("state should build");
-    let app = build_router(state);
+    let app = build_router(state, ShutdownGate::default());
 
     let builtin_update_response = app
         .clone()
@@ -457,7 +457,7 @@ async fn skills_pagination_total_counts_all_matches_before_paging() {
     let state = AppState::from_config(config)
         .await
         .expect("state should build");
-    let app = build_router(state);
+    let app = build_router(state, ShutdownGate::default());
 
     for name in ["Prompt One", "Prompt Two"] {
         let response = app
@@ -527,7 +527,7 @@ async fn skill_detail_and_test_streams_are_available() {
     let state = AppState::from_config(config)
         .await
         .expect("state should build");
-    let app = build_router(state);
+    let app = build_router(state, ShutdownGate::default());
 
     let catalog_response = app
         .clone()

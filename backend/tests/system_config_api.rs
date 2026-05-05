@@ -2,7 +2,7 @@ use axum::{
     body::{to_bytes, Body},
     http::{Method, Request, StatusCode},
 };
-use backend_rust::{app::build_router, config::AppConfig, state::AppState};
+use backend_rust::{app::build_router, config::AppConfig, runtime::cubesandbox::ShutdownGate, state::AppState};
 use serde_json::{json, Value};
 use std::{env, fs, sync::LazyLock};
 use tempfile::TempDir;
@@ -82,7 +82,7 @@ async fn system_config_crud_roundtrip_stays_deuserized() {
     let state = AppState::from_config(config.clone())
         .await
         .expect("state should build");
-    let app = build_router(state);
+    let app = build_router(state, ShutdownGate::default());
 
     let defaults_response = app
         .clone()
@@ -136,7 +136,7 @@ async fn system_config_crud_roundtrip_stays_deuserized() {
     let reloaded_state = AppState::from_config(config)
         .await
         .expect("reloaded state should build");
-    let reloaded_app = build_router(reloaded_state);
+    let reloaded_app = build_router(reloaded_state, ShutdownGate::default());
 
     let current_response = reloaded_app
         .clone()
@@ -204,7 +204,7 @@ async fn system_config_save_requires_explicit_llm_key_without_promoting_app_defa
     let state = AppState::from_config(config)
         .await
         .expect("state should build");
-    let app = build_router(state);
+    let app = build_router(state, ShutdownGate::default());
 
     let save_response = app
         .oneshot(
@@ -247,7 +247,7 @@ async fn system_config_helper_endpoints_are_available() {
     let state = AppState::from_config(isolated_test_config("system-config-helper"))
         .await
         .expect("state should build");
-    let app = build_router(state);
+    let app = build_router(state, ShutdownGate::default());
 
     let providers_response = app
         .clone()
@@ -301,7 +301,7 @@ async fn agent_preflight_redacts_credentials_and_reports_runner_stage() {
     let state = AppState::from_config(isolated_test_config("system-config-agent-preflight-runner"))
         .await
         .expect("state should build");
-    let app = build_router(state);
+    let app = build_router(state, ShutdownGate::default());
     let mock_base_url =
         spawn_llm_mock_server(r#"{"choices":[{"message":{"content":"pong"}}]}"#).await;
 
@@ -442,7 +442,7 @@ base_url = "https://api.openai.com/v1"
     let state = AppState::from_config(isolated_test_config("system-config-agent-preflight-codex"))
         .await
         .expect("state should build");
-    let app = build_router(state);
+    let app = build_router(state, ShutdownGate::default());
 
     let preflight_response = app
         .oneshot(
@@ -474,7 +474,7 @@ async fn test_llm_runs_real_openai_compatible_generation_and_persists_metadata()
     let state = AppState::from_config(isolated_test_config("system-config-real-test-openai"))
         .await
         .expect("state should build");
-    let app = build_router(state);
+    let app = build_router(state, ShutdownGate::default());
     let base_url = spawn_llm_mock_server(r#"{"choices":[{"message":{"content":"ok"}}]}"#).await;
 
     let save_payload = json!({
@@ -599,7 +599,7 @@ async fn test_llm_batch_validates_saved_rows_and_persists_each_status_without_se
     let state = AppState::from_config(isolated_test_config("system-config-batch-validate"))
         .await
         .expect("state should build");
-    let app = build_router(state);
+    let app = build_router(state, ShutdownGate::default());
     let fail_base_url = spawn_llm_mock_server(r#"{"choices":[{"message":{"content":""}}]}"#).await;
     let pass_base_url =
         spawn_llm_mock_server(r#"{"choices":[{"message":{"content":"ok"}}]}"#).await;
@@ -811,7 +811,7 @@ async fn test_llm_accepts_deepseek_reasoning_empty_content_with_finish_reason() 
     let state = AppState::from_config(isolated_test_config("system-config-deepseek-finish-reason"))
         .await
         .expect("state should build");
-    let app = build_router(state);
+    let app = build_router(state, ShutdownGate::default());
     let base_url = spawn_llm_mock_server(
         r#"{"choices":[{"index":0,"message":{"role":"assistant","content":"","reasoning_content":"ok"},"finish_reason":"stop"}]}"#,
     )
@@ -896,7 +896,7 @@ async fn test_llm_still_rejects_malformed_openai_response_without_completion_sig
     let state = AppState::from_config(isolated_test_config("system-config-malformed-no-signal"))
         .await
         .expect("state should build");
-    let app = build_router(state);
+    let app = build_router(state, ShutdownGate::default());
     let base_url = spawn_llm_mock_server(r#"{"choices":[{"message":{"content":""}}]}"#).await;
 
     let save_payload = json!({
@@ -961,7 +961,7 @@ async fn test_llm_batch_reports_no_eligible_rows_for_disabled_or_missing_only_co
     let state = AppState::from_config(isolated_test_config("system-config-batch-no-eligible"))
         .await
         .expect("state should build");
-    let app = build_router(state);
+    let app = build_router(state, ShutdownGate::default());
 
     let save_payload = json!({
         "llmConfig": {
@@ -1047,7 +1047,7 @@ async fn import_env_requires_token_and_saves_verified_redacted_system_config() {
     let state = AppState::from_config(isolated_test_config("system-config-import-env"))
         .await
         .expect("state should build");
-    let app = build_router(state);
+    let app = build_router(state, ShutdownGate::default());
 
     let missing_token_response = app
         .clone()
@@ -1127,7 +1127,7 @@ async fn import_env_rejects_legacy_provider_aliases() {
     let state = AppState::from_config(isolated_test_config("system-config-import-legacy"))
         .await
         .expect("state should build");
-    let app = build_router(state);
+    let app = build_router(state, ShutdownGate::default());
 
     let response = app
         .oneshot(
@@ -1152,7 +1152,7 @@ async fn test_llm_rejects_empty_text_response() {
     let state = AppState::from_config(isolated_test_config("system-config-real-test-empty"))
         .await
         .expect("state should build");
-    let app = build_router(state);
+    let app = build_router(state, ShutdownGate::default());
     let base_url = spawn_llm_mock_server(r#"{"choices":[{"message":{"content":""}}]}"#).await;
 
     let save_payload = json!({
@@ -1215,7 +1215,7 @@ async fn system_config_llm_provider_catalog_matches_rust_registry_semantics() {
     let state = AppState::from_config(isolated_test_config("system-config-provider-catalog"))
         .await
         .expect("state should build");
-    let app = build_router(state);
+    let app = build_router(state, ShutdownGate::default());
 
     let providers_response = app
         .oneshot(
@@ -1259,7 +1259,7 @@ async fn system_config_save_allows_empty_model_but_preflight_stays_strict() {
     let state = AppState::from_config(isolated_test_config("system-config-empty-model-save"))
         .await
         .expect("state should build");
-    let app = build_router(state);
+    let app = build_router(state, ShutdownGate::default());
 
     let save_response = app
         .clone()
@@ -1328,7 +1328,7 @@ async fn fetch_llm_models_uses_draft_request_for_online_discovery_without_persis
     let state = AppState::from_config(isolated_test_config("system-config-fetch-models-draft"))
         .await
         .expect("state should build");
-    let app = build_router(state);
+    let app = build_router(state, ShutdownGate::default());
     let mock_base_url =
         spawn_llm_mock_server(r#"{"data":[{"id":"z-draft-model"},{"id":"a-draft-model"}]}"#).await;
 
@@ -1396,7 +1396,7 @@ async fn fetch_llm_models_saved_path_omits_draft_key_but_draft_base_url_takes_pr
     let state = AppState::from_config(isolated_test_config("system-config-fetch-models-saved"))
         .await
         .expect("state should build");
-    let app = build_router(state);
+    let app = build_router(state, ShutdownGate::default());
     let saved_base_url = spawn_llm_mock_server(r#"{"data":[{"id":"saved-model"}]}"#).await;
     let draft_base_url = spawn_llm_mock_server(r#"{"data":[{"id":"draft-base-model"}]}"#).await;
 
@@ -1491,7 +1491,7 @@ async fn fetch_llm_models_failure_falls_back_to_static_catalog_without_secret_ec
     let state = AppState::from_config(isolated_test_config("system-config-fetch-models-fallback"))
         .await
         .expect("state should build");
-    let app = build_router(state);
+    let app = build_router(state, ShutdownGate::default());
 
     let response = app
         .oneshot(
@@ -1546,7 +1546,7 @@ async fn system_config_defaults_follow_app_config() {
     let state = AppState::from_config(config)
         .await
         .expect("state should build");
-    let app = build_router(state);
+    let app = build_router(state, ShutdownGate::default());
 
     let response = app
         .oneshot(
@@ -1590,7 +1590,7 @@ async fn system_config_multi_row_contract_redacts_and_preserves_row_secret() {
     let state = AppState::from_config(isolated_test_config("system-config-multi-row-contract"))
         .await
         .expect("state should build");
-    let app = build_router(state);
+    let app = build_router(state, ShutdownGate::default());
 
     let save_payload = json!({
         "llmConfig": {

@@ -2,8 +2,8 @@
 //!
 //! Verifies the ShutdownGate contract:
 //!   - After gate.set(), new POST to opengrep/codeql submission endpoints → 503
-//!   - The test builds the same router stack as main.rs — inner gate layer wins
-//!     in axum 0.8 Extension resolution (innermost layer is consulted first).
+//!   - Uses the real build_router(state, gate) signature — single Extension mount,
+//!     no layer-ordering ambiguity.
 //!
 //! Degraded test (state-machine level only):
 //!   Full SIGTERM → drain → socket-close flow requires a live cubemaster and
@@ -21,11 +21,9 @@
 use axum::{
     body::{to_bytes, Body},
     http::{Request, StatusCode},
-    routing::any,
-    Router,
 };
 use backend_rust::{
-    config::AppConfig, routes, runtime::cubesandbox::ShutdownGate, state::AppState,
+    app::build_router, config::AppConfig, runtime::cubesandbox::ShutdownGate, state::AppState,
 };
 use tower::ServiceExt;
 
@@ -36,41 +34,16 @@ async fn no_db_state() -> AppState {
         .expect("AppState::from_config")
 }
 
-// ─── Helper: build router with a specific gate ────────────────────────────────
-//
-// Mirrors the main.rs pattern:
-//   build_router() sets a default ShutdownGate as the innermost Extension layer.
-//   main.rs then re-layers the production gate *inside* build_router's own layer
-//   via axum::Extension override. In axum 0.8, layers stack as middleware: the
-//   last `.layer()` call wraps all previous ones, so to make OUR gate win we
-//   must mount it AFTER the routes but BEFORE build_router's default layer.
-//
-// Simplest correct approach: build the router from routes directly (same as
-// build_router does internally) and mount our gate as the innermost layer.
-// This avoids calling build_router() which hardcodes ShutdownGate::new().
-fn build_router_with_gate(state: AppState, gate: ShutdownGate) -> Router {
-    Router::new()
-        .merge(routes::owned_routes())
-        .fallback(any(|| async {
-            (
-                axum::http::StatusCode::NOT_FOUND,
-                "route not owned by rust gateway",
-            )
-        }))
-        .with_state(state)
-        // Mount our gate as the innermost Extension layer — handlers see this one.
-        .layer(axum::Extension(gate))
-}
-
 // ─── TEST 1: new opengrep submission → 503 after gate is set ─────────────────
 
+// FIX FOR REVIEW: prior version bypassed build_router topology; now uses real signature.
 #[tokio::test]
 async fn shutdown_gate_set_rejects_opengrep_submission_with_503() {
     let state = no_db_state().await;
     let gate = ShutdownGate::new();
     gate.set(); // simulate post-SIGTERM state
 
-    let router = build_router_with_gate(state, gate);
+    let router = build_router(state, gate);
 
     // POST to the opengrep static-task submission endpoint.
     // Route: /api/v1/static-tasks/tasks (POST = create_static_task)
@@ -102,13 +75,14 @@ async fn shutdown_gate_set_rejects_opengrep_submission_with_503() {
 
 // ─── TEST 2: new codeql submission → 503 after gate is set ───────────────────
 
+// FIX FOR REVIEW: prior version bypassed build_router topology; now uses real signature.
 #[tokio::test]
 async fn shutdown_gate_set_rejects_codeql_submission_with_503() {
     let state = no_db_state().await;
     let gate = ShutdownGate::new();
     gate.set();
 
-    let router = build_router_with_gate(state, gate);
+    let router = build_router(state, gate);
 
     // Route: /api/v1/static-tasks/codeql/tasks (POST = create_codeql_task)
     let response = router
@@ -132,12 +106,13 @@ async fn shutdown_gate_set_rejects_codeql_submission_with_503() {
 
 // ─── TEST 3: gate not set → submission is not rejected with 503 ──────────────
 
+// FIX FOR REVIEW: prior version bypassed build_router topology; now uses real signature.
 #[tokio::test]
 async fn shutdown_gate_unset_does_not_reject_with_503() {
     let state = no_db_state().await;
     let gate = ShutdownGate::new(); // NOT set
 
-    let router = build_router_with_gate(state, gate);
+    let router = build_router(state, gate);
 
     let response = router
         .oneshot(

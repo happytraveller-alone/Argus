@@ -2,7 +2,12 @@ use axum::{routing::any, Router};
 
 use crate::{routes, runtime::cubesandbox::ShutdownGate, state::AppState};
 
-pub fn build_router(state: AppState) -> Router {
+/// Build the application router.
+///
+/// The caller is responsible for providing the `shutdown_gate` that submission
+/// handlers extract via `Extension<ShutdownGate>`. A single Extension mount
+/// here ensures there is no layer-ordering ambiguity (axum 0.8 onion model).
+pub fn build_router(state: AppState, shutdown_gate: ShutdownGate) -> Router {
     Router::new()
         .merge(routes::owned_routes())
         .fallback(any(|| async {
@@ -12,8 +17,5 @@ pub fn build_router(state: AppState) -> Router {
             )
         }))
         .with_state(state)
-        // Default gate so tests calling build_router(state) don't get MissingExtension
-        // on POST submission handlers. main.rs overrides this with the production gate
-        // (axum 0.8 last-mount-wins).
-        .layer(axum::Extension(ShutdownGate::new()))
+        .layer(axum::Extension(shutdown_gate))
 }

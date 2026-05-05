@@ -24,10 +24,9 @@ async fn main() -> Result<()> {
     let gate = ShutdownGate::new();
     let (shutdown_tx, _shutdown_rx) = watch::channel::<bool>(false);
 
-    // Override the default Extension(ShutdownGate) mounted inside build_router.
-    // axum 0.8 last-mount-wins → the production gate (wired to signal handler) is
-    // the one extracted by submission handlers at request time.
-    let app = build_router(state).layer(axum::Extension(gate.clone()));
+    // Pass gate directly — build_router mounts a single Extension(ShutdownGate).
+    // No secondary .layer() chain needed; single source of truth.
+    let app = build_router(state, gate.clone());
     let listener = TcpListener::bind(config.bind_addr).await?;
 
     axum::serve(listener, app)

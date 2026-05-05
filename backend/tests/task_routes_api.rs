@@ -7,6 +7,7 @@ use backend_rust::{
     bootstrap,
     config::AppConfig,
     db::{codeql_build_plans, task_state},
+    runtime::cubesandbox::ShutdownGate,
     state::AppState,
 };
 use base64::{engine::general_purpose::STANDARD, Engine as _};
@@ -887,7 +888,7 @@ async fn static_task_api_binds_project_name_from_backend_project_record() {
     let state = AppState::from_config(config)
         .await
         .expect("state should build");
-    let app = build_router(state.clone());
+    let app = build_router(state.clone(), ShutdownGate::default());
     let project_id = create_project_with_name(&app, "Backend Static Project").await;
 
     let mut snapshot = task_state::load_snapshot(&state)
@@ -987,7 +988,7 @@ async fn codeql_compile_sandbox_persists_plan_to_postgres_when_configured() {
         .await
         .expect("startup bootstrap should create CodeQL build plan schema");
     assert!(state.db_pool.is_some(), "test requires DB-backed state");
-    let app = build_router(state.clone());
+    let app = build_router(state.clone(), ShutdownGate::default());
     let project_id = create_project_with_name(&app, "codeql cpp db truth project").await;
     fs::create_dir_all(&*state.config.zip_storage_path).expect("mkdir zip root");
     fs::write(
@@ -1077,7 +1078,7 @@ async fn codeql_task_runs_cpp_compile_sandbox_before_replay_and_persists_db_trut
             .await
             .expect("startup bootstrap should create CodeQL build plan schema");
     }
-    let app = build_router(state.clone());
+    let app = build_router(state.clone(), ShutdownGate::default());
     let project_id = create_project_with_name(&app, "codeql cpp project").await;
     fs::create_dir_all(&*state.config.zip_storage_path).expect("mkdir zip root");
     fs::write(
@@ -1291,7 +1292,7 @@ async fn codeql_cpp_exploration_feeds_failed_command_into_next_llm_round() {
             .await
             .expect("startup bootstrap should create CodeQL build plan schema");
     }
-    let app = build_router(state.clone());
+    let app = build_router(state.clone(), ShutdownGate::default());
     let project_id = create_project_with_name(&app, "codeql cpp retry feedback project").await;
     let retry_base_url = spawn_openai_mock_server_with_retry_feedback(true).await;
     configure_verified_llm_with_base_url(&app, retry_base_url).await;
@@ -1437,7 +1438,7 @@ async fn codeql_cpp_exploration_installs_missing_python_headers_and_persists_pla
             .await
             .expect("startup bootstrap should create CodeQL build plan schema");
     }
-    let app = build_router(state.clone());
+    let app = build_router(state.clone(), ShutdownGate::default());
     let project_id = create_project_with_name(&app, "codeql cpp python header project").await;
     let base_url = spawn_openai_mock_server_with_content(|request| {
         if request.contains("selecting a safe C/C++ build plan") {
@@ -1576,7 +1577,7 @@ async fn codeql_cpp_nested_project_config_overrides_llm_file_compile_plan() {
             .await
             .expect("startup bootstrap should create CodeQL build plan schema");
     }
-    let app = build_router(state.clone());
+    let app = build_router(state.clone(), ShutdownGate::default());
     let project_id = create_project_with_name(&app, "codeql cpp nested config project").await;
     let base_url = spawn_openai_mock_server_with_content(|request| {
         if request.contains("selecting a safe C/C++ build plan") {
@@ -1688,7 +1689,7 @@ async fn codeql_interrupt_deletes_active_cubesandbox_and_preserves_cancelled_sta
     let state = AppState::from_config(config)
         .await
         .expect("state should build");
-    let app = build_router(state.clone());
+    let app = build_router(state.clone(), ShutdownGate::default());
     let project_id =
         create_project_with_name(&app, "codeql active cubesandbox cancel project").await;
     fs::create_dir_all(&*state.config.zip_storage_path).expect("mkdir zip root");
@@ -1795,7 +1796,7 @@ async fn codeql_cpp_task_reuses_and_resets_project_sticky_build_plan() {
             .await
             .expect("startup bootstrap should create CodeQL build plan schema");
     }
-    let app = build_router(state.clone());
+    let app = build_router(state.clone(), ShutdownGate::default());
     let project_id = create_project_with_name(&app, "codeql cpp sticky project").await;
     fs::create_dir_all(&*state.config.zip_storage_path).expect("mkdir zip root");
     fs::write(
@@ -1917,7 +1918,7 @@ async fn codeql_task_honors_non_cpp_language_payloads_without_compile_sandbox() 
         let state = AppState::from_config(config)
             .await
             .expect("state should build");
-        let app = build_router(state.clone());
+        let app = build_router(state.clone(), ShutdownGate::default());
         let project_id =
             create_project_with_name(&app, &format!("codeql {language} project")).await;
         fs::create_dir_all(&*state.config.zip_storage_path).expect("mkdir zip root");

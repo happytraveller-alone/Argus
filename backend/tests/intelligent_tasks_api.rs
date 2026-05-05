@@ -8,11 +8,14 @@ use backend_rust::{
     app::build_router,
     config::AppConfig,
     db::intelligent_task_state,
-    runtime::intelligent::{
-        config::IntelligentLlmConfig,
-        llm::{IntelligentLlmInvocation, IntelligentLlmInvocationError, IntelligentLlmInvoker},
-        task::IntelligentTaskManager,
-        types::{IntelligentTaskEvent, IntelligentTaskRecord, IntelligentTaskStatus},
+    runtime::{
+        cubesandbox::ShutdownGate,
+        intelligent::{
+            config::IntelligentLlmConfig,
+            llm::{IntelligentLlmInvocation, IntelligentLlmInvocationError, IntelligentLlmInvoker},
+            task::IntelligentTaskManager,
+            types::{IntelligentTaskEvent, IntelligentTaskRecord, IntelligentTaskStatus},
+        },
     },
     state::{AppState, StoredProject, StoredProjectArchive},
 };
@@ -218,7 +221,7 @@ async fn create_returns_pending_or_running_then_completes_zero_findings() {
     let project_id = Uuid::new_v4().to_string();
     seed_project_with_archive(&state, &project_id).await;
 
-    let app = build_router(state.clone());
+    let app = build_router(state.clone(), ShutdownGate::default());
     let response = app
         .oneshot(
             Request::builder()
@@ -278,7 +281,7 @@ async fn intelligent_task_api_binds_project_name_from_backend_project_record() {
         .await
         .expect("save intelligent task");
 
-    let app = build_router(state);
+    let app = build_router(state, ShutdownGate::default());
     let response = app
         .clone()
         .oneshot(
@@ -327,7 +330,7 @@ async fn create_with_no_llm_config_records_failed_llm_config_stage() {
     let project_id = Uuid::new_v4().to_string();
     seed_project_with_archive(&state, &project_id).await;
 
-    let app = build_router(state.clone());
+    let app = build_router(state.clone(), ShutdownGate::default());
     let response = app
         .oneshot(
             Request::builder()
@@ -362,7 +365,7 @@ async fn create_with_llm_request_failure_records_failed_llm_request_stage_no_ret
     let project_id = Uuid::new_v4().to_string();
     seed_project_with_archive(&state, &project_id).await;
 
-    let app = build_router(state.clone());
+    let app = build_router(state.clone(), ShutdownGate::default());
     let response = app
         .oneshot(
             Request::builder()
@@ -411,7 +414,7 @@ async fn create_with_missing_archive_records_failed_input_read_stage() {
         .await
         .expect("create project");
 
-    let app = build_router(state.clone());
+    let app = build_router(state.clone(), ShutdownGate::default());
     let response = app
         .oneshot(
             Request::builder()
@@ -441,7 +444,7 @@ async fn list_returns_records_sorted_with_limit() {
     let project_id = Uuid::new_v4().to_string();
     seed_project_with_archive(&state, &project_id).await;
 
-    let app = build_router(state.clone());
+    let app = build_router(state.clone(), ShutdownGate::default());
     for _ in 0..3 {
         let _ = app
             .clone()
@@ -476,7 +479,7 @@ async fn list_returns_records_sorted_with_limit() {
 #[tokio::test]
 async fn get_unknown_task_returns_not_found() {
     let state = build_state_default("get-unknown").await;
-    let app = build_router(state);
+    let app = build_router(state, ShutdownGate::default());
     let response = app
         .oneshot(
             Request::get("/api/v1/intelligent-tasks/missing-task-id")
@@ -497,7 +500,7 @@ async fn cancel_pending_task_persists_cancelled_status() {
     let project_id = Uuid::new_v4().to_string();
     seed_project_with_archive(&state, &project_id).await;
 
-    let app = build_router(state.clone());
+    let app = build_router(state.clone(), ShutdownGate::default());
     let create_response = app
         .clone()
         .oneshot(
@@ -557,7 +560,7 @@ async fn delete_completed_task_removes_record() {
         .await
         .expect("save completed task");
 
-    let app = build_router(state.clone());
+    let app = build_router(state.clone(), ShutdownGate::default());
     let response = app
         .oneshot(
             Request::builder()
@@ -590,7 +593,7 @@ async fn delete_running_task_returns_conflict() {
         .await
         .expect("save running task");
 
-    let app = build_router(state.clone());
+    let app = build_router(state.clone(), ShutdownGate::default());
     let response = app
         .oneshot(
             Request::builder()
@@ -608,7 +611,7 @@ async fn delete_running_task_returns_conflict() {
 #[tokio::test]
 async fn missing_project_id_field_returns_bad_request() {
     let state = build_state_default("missing-project-id").await;
-    let app = build_router(state);
+    let app = build_router(state, ShutdownGate::default());
     let response = app
         .oneshot(
             Request::builder()
@@ -626,7 +629,7 @@ async fn missing_project_id_field_returns_bad_request() {
 #[tokio::test]
 async fn legacy_agent_tasks_route_is_absent() {
     let state = build_state_default("legacy-absent").await;
-    let app = build_router(state);
+    let app = build_router(state, ShutdownGate::default());
     for path in [
         "/api/v1/agent-tasks",
         "/api/v1/agent-tasks/",
@@ -653,7 +656,7 @@ async fn project_deletion_removes_related_intelligent_tasks() {
     let project_id = Uuid::new_v4().to_string();
     seed_project_with_archive(&state, &project_id).await;
 
-    let app = build_router(state.clone());
+    let app = build_router(state.clone(), ShutdownGate::default());
     let create_response = app
         .clone()
         .oneshot(

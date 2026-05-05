@@ -6,7 +6,10 @@ use backend_rust::{
     app::build_router,
     config::AppConfig,
     db::{intelligent_task_state, task_state},
-    runtime::intelligent::types::{IntelligentTaskRecord, IntelligentTaskStatus},
+    runtime::{
+        cubesandbox::ShutdownGate,
+        intelligent::types::{IntelligentTaskRecord, IntelligentTaskStatus},
+    },
     state::AppState,
 };
 use serde_json::{json, Value};
@@ -84,7 +87,7 @@ async fn project_crud_and_zip_routes_work_end_to_end() {
     let state = AppState::from_config(config.clone())
         .await
         .expect("state should build");
-    let app = build_router(state);
+    let app = build_router(state, ShutdownGate::default());
 
     let create_payload = json!({
         "name": "demo-project",
@@ -132,7 +135,7 @@ async fn project_crud_and_zip_routes_work_end_to_end() {
     let reloaded_state = AppState::from_config(config)
         .await
         .expect("reloaded state should build");
-    let reloaded_app = build_router(reloaded_state);
+    let reloaded_app = build_router(reloaded_state, ShutdownGate::default());
 
     let zip_meta_response = reloaded_app
         .clone()
@@ -231,7 +234,7 @@ async fn deleting_project_removes_related_scan_tasks_from_snapshot() {
     let state = AppState::from_config(config)
         .await
         .expect("state should build");
-    let app = build_router(state.clone());
+    let app = build_router(state.clone(), ShutdownGate::default());
 
     async fn create_project(app: &axum::Router) -> String {
         let response = app
@@ -328,7 +331,7 @@ async fn dashboard_snapshot_includes_recent_tasks_from_task_state() {
     let state = AppState::from_config(config)
         .await
         .expect("state should build");
-    let app = build_router(state.clone());
+    let app = build_router(state.clone(), ShutdownGate::default());
 
     let alpha_project_id = create_project_named(&app, "Alpha Gateway").await;
     let beta_project_id = create_project_named(&app, "Beta API").await;
@@ -444,7 +447,7 @@ async fn dashboard_snapshot_includes_intelligent_and_static_task_lanes_plus_lang
     let state = AppState::from_config(config)
         .await
         .expect("state should build");
-    let app = build_router(state.clone());
+    let app = build_router(state.clone(), ShutdownGate::default());
 
     let alpha_project_id =
         create_project_with_languages(&app, "Alpha Gateway", vec!["TypeScript", "Python"]).await;
@@ -535,7 +538,7 @@ async fn dashboard_snapshot_counts_cumulative_vulnerabilities_from_verified_only
     let state = AppState::from_config(config)
         .await
         .expect("state should build");
-    let app = build_router(state.clone());
+    let app = build_router(state.clone(), ShutdownGate::default());
     let project_id = create_project_named(&app, "Verified Dashboard").await;
 
     let mut snapshot = task_state::load_snapshot(&state)
@@ -623,7 +626,7 @@ async fn project_management_metrics_include_cumulative_opengrep_findings() {
     let state = AppState::from_config(isolated_test_config("projects-static-metrics"))
         .await
         .expect("state should build");
-    let app = build_router(state.clone());
+    let app = build_router(state.clone(), ShutdownGate::default());
     let project_id = create_project_named(&app, "Static Metrics").await;
 
     let upload_response = app
@@ -749,7 +752,7 @@ async fn project_management_metrics_ignore_static_summary_counts_without_detail_
     let state = AppState::from_config(isolated_test_config("projects-static-metrics-no-details"))
         .await
         .expect("state should build");
-    let app = build_router(state.clone());
+    let app = build_router(state.clone(), ShutdownGate::default());
     let project_id = create_project_named(&app, "Static Metrics No Details").await;
 
     let mut snapshot = task_state::load_snapshot(&state)
@@ -803,7 +806,7 @@ async fn project_metrics_degrade_when_task_state_snapshot_is_malformed() {
     let state = AppState::from_config(config.clone())
         .await
         .expect("state should build");
-    let app = build_router(state);
+    let app = build_router(state, ShutdownGate::default());
     let project_id = create_project_named(&app, "Malformed Snapshot").await;
     let snapshot_path = config.zip_storage_path.join("rust-task-state.json");
     tokio::fs::create_dir_all(&config.zip_storage_path)
@@ -886,7 +889,7 @@ async fn create_with_tar_xz_and_zst_archives_and_description_preview_use_static_
     let state = AppState::from_config(isolated_test_config("projects-create-with-archive"))
         .await
         .expect("state should build");
-    let app = build_router(state.clone());
+    let app = build_router(state.clone(), ShutdownGate::default());
 
     let preview_response = app
         .clone()
@@ -1039,7 +1042,7 @@ async fn create_with_zip_accepts_multi_megabyte_archives() {
     let state = AppState::from_config(isolated_test_config("projects-create-large-zip"))
         .await
         .expect("state should build");
-    let app = build_router(state);
+    let app = build_router(state, ShutdownGate::default());
 
     let body = test_create_with_large_zip_body();
     assert!(
@@ -1077,7 +1080,7 @@ async fn download_project_archive_supports_utf8_filenames() {
     let state = AppState::from_config(config)
         .await
         .expect("state should build");
-    let app = build_router(state);
+    let app = build_router(state, ShutdownGate::default());
 
     let create_payload = json!({
         "name": "utf8-project",
@@ -1152,7 +1155,7 @@ async fn project_file_content_reports_actual_encoding_instead_of_requested_encod
     let state = AppState::from_config(config)
         .await
         .expect("state should build");
-    let app = build_router(state);
+    let app = build_router(state, ShutdownGate::default());
 
     let create_payload = json!({
         "name": "encoding-project",
@@ -1242,7 +1245,7 @@ async fn project_file_content_previews_utf8_text_without_language_extension() {
     let state = AppState::from_config(config)
         .await
         .expect("state should build");
-    let app = build_router(state);
+    let app = build_router(state, ShutdownGate::default());
     let project_id = create_project_named(&app, "text-detection-project").await;
 
     let upload_response = app
@@ -1314,7 +1317,7 @@ async fn projects_domain_endpoints_cover_files_stats_and_transfer() {
     let source_state = AppState::from_config(source_config.clone())
         .await
         .expect("source state should build");
-    let source_app = build_router(source_state);
+    let source_app = build_router(source_state, ShutdownGate::default());
 
     let create_payload = json!({
         "name": "domain-project",
@@ -1607,7 +1610,7 @@ async fn projects_domain_endpoints_cover_files_stats_and_transfer() {
     let target_state = AppState::from_config(target_config.clone())
         .await
         .expect("target state should build");
-    let target_app = build_router(target_state);
+    let target_app = build_router(target_state, ShutdownGate::default());
 
     let import_response = target_app
         .clone()
