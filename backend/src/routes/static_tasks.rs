@@ -14,8 +14,9 @@ use axum::{
         IntoResponse,
     },
     routing::{get, post},
-    Json, Router,
+    Extension, Json, Router,
 };
+use axum::http::StatusCode;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use time::{format_description::well_known::Rfc3339, OffsetDateTime};
@@ -29,6 +30,7 @@ use crate::{
     db::{codeql_build_plans, projects, system_config, task_state},
     error::ApiError,
     llm_rule,
+    runtime::cubesandbox::ShutdownGate,
     runtime::intelligent::{
         config::{resolve_intelligent_llm_config, IntelligentLlmConfig},
         llm::{HttpIntelligentLlmInvoker, IntelligentLlmInvoker},
@@ -746,20 +748,28 @@ async fn batch_update_opengrep_rules(
 
 async fn create_static_task(
     State(state): State<AppState>,
+    Extension(gate): Extension<ShutdownGate>,
     Json(payload): Json<Value>,
-) -> Result<Json<Value>, ApiError> {
+) -> impl IntoResponse {
+    if gate.is_set() {
+        return (StatusCode::SERVICE_UNAVAILABLE, "server shutting down").into_response();
+    }
     let engine = optional_string(&payload, "engine").unwrap_or_else(|| "opengrep".to_string());
     if engine.eq_ignore_ascii_case("codeql") {
-        return create_static_task_for_engine(state, payload, "codeql").await;
+        return create_static_task_for_engine(state, payload, "codeql").await.into_response();
     }
-    create_static_task_for_engine(state, payload, "opengrep").await
+    create_static_task_for_engine(state, payload, "opengrep").await.into_response()
 }
 
 async fn create_codeql_task(
     State(state): State<AppState>,
+    Extension(gate): Extension<ShutdownGate>,
     Json(payload): Json<Value>,
-) -> Result<Json<Value>, ApiError> {
-    create_static_task_for_engine(state, payload, "codeql").await
+) -> impl IntoResponse {
+    if gate.is_set() {
+        return (StatusCode::SERVICE_UNAVAILABLE, "server shutting down").into_response();
+    }
+    create_static_task_for_engine(state, payload, "codeql").await.into_response()
 }
 
 async fn create_static_task_for_engine(

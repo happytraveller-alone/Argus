@@ -7,6 +7,27 @@ pub mod task;
 pub mod template_provisioner;
 pub mod types;
 
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+
+/// Gate that submission handlers check before accepting new tasks.
+/// Cloned cheaply (Arc inside); `set()` is called by the signal handler
+/// before axum begins its graceful-shutdown drain.
+#[derive(Clone, Default)]
+pub struct ShutdownGate(Arc<AtomicBool>);
+
+impl ShutdownGate {
+    pub fn new() -> Self {
+        Self(Arc::new(AtomicBool::new(false)))
+    }
+    pub fn set(&self) {
+        self.0.store(true, Ordering::SeqCst);
+    }
+    pub fn is_set(&self) -> bool {
+        self.0.load(Ordering::SeqCst)
+    }
+}
+
 /// Best-effort sandbox deletion: log structured error on failure, never propagate.
 ///
 /// Used by both opengrep and codeql scan paths to satisfy spec constraint 5
