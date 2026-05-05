@@ -210,13 +210,17 @@ async fn bind_project_name(
 ) -> Result<IntelligentTaskRecord, ApiError> {
     let project = projects::get_project(state, &record.project_id)
         .await
-        .map_err(internal_error)?
-        .ok_or_else(|| {
-            ApiError::Conflict(format!(
-                "project binding missing for intelligent task {}: {}",
-                record.task_id, record.project_id
-            ))
-        })?;
-    record.project_name = Some(project.name);
+        .map_err(internal_error)?;
+    record.project_name = match project {
+        Some(project) => Some(project.name),
+        None => {
+            tracing::warn!(
+                task_id = %record.task_id,
+                project_id = %record.project_id,
+                "project binding missing for intelligent task; rendering as orphan"
+            );
+            Some("<项目已删除>".to_string())
+        }
+    };
     Ok(record)
 }
