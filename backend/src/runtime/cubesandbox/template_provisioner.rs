@@ -96,21 +96,6 @@ pub async fn resolve_existing_template_id(
             "configured CubeSandbox template_id is not usable in CubeMaster; falling back to DB ready template"
         );
     }
-    if kind == TemplateKind::current_opengrep()
-        && !state
-            .config
-            .cubesandbox_opengrep_template_id
-            .trim()
-            .is_empty()
-    {
-        return Ok(Some(
-            state
-                .config
-                .cubesandbox_opengrep_template_id
-                .trim()
-                .to_string(),
-        ));
-    }
     let active = cubesandbox_templates::get_active(state, kind).await?;
     if let Some(record) = active {
         if record.status == TemplateStatus::Ready {
