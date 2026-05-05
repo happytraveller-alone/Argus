@@ -24,6 +24,8 @@ CUBE_PORT_AUTO_FREE="${CUBE_PORT_AUTO_FREE:-true}"
 CUBE_DISABLE_WEBUI="${CUBE_DISABLE_WEBUI:-true}"
 BACKEND_HEALTH_URL="${ARGUS_BACKEND_HEALTH_URL:-http://127.0.0.1:${BACKEND_PORT}/health}"
 BACKEND_IMPORT_URL="${ARGUS_BACKEND_IMPORT_URL:-http://127.0.0.1:${BACKEND_PORT}/api/v1/system-config/import-env}"
+BACKEND_CUBESANDBOX_TEMPLATES_URL="${ARGUS_BACKEND_CUBESANDBOX_TEMPLATES_URL:-http://127.0.0.1:${BACKEND_PORT}/api/v1/cubesandbox/templates}"
+ARGUS_REQUIRE_CUBESANDBOX_TEMPLATES_READY="${ARGUS_REQUIRE_CUBESANDBOX_TEMPLATES_READY:-true}"
 ARGUS_RESET_IMPORT_TOKEN=""
 
 # CubeSandbox host-side bootstrap configuration.
@@ -101,9 +103,10 @@ Docker cleanup precedence:
   ARGUS_DOCKER_SYSTEM_PRUNE=false disables only aggressive-mode global Docker prune.
 
 Start modes:
-  Default:     docker compose up -d --build, poll backend, import LLM env, then docker compose logs -f
+  Default:     docker compose up -d --build db redis backend, poll backend, import LLM env,
+               ensure CubeSandbox CodeQL+OpenGrep templates are ready, start frontend, then docker compose logs -f
                Ctrl-C/SIGTERM stops the Compose stack before exiting.
-  --wait-exit: docker compose up -d --build, poll backend, import LLM env, poll http://127.0.0.1:$FRONTEND_PORT, then exit
+  --wait-exit: same gating, then poll http://127.0.0.1:$FRONTEND_PORT, then exit
 
 Ports:
   Argus_FRONTEND_PORT           Frontend host port. Default: 13000
@@ -159,6 +162,9 @@ CubeSandbox host-side bootstrap (WSL2-native):
   CUBESANDBOX_BOOTSTRAP_PROVISION_TEMPLATE=false
                                  Skip pre-provisioning the CodeQL C/C++ template
                                  (backend lazy-provisions on first scan instead).
+  ARGUS_REQUIRE_CUBESANDBOX_TEMPLATES_READY=false
+                                 Skip backend template reset/provision/readiness gate
+                                 before starting frontend.
   ARGUS_CUBE_BOOTSTRAP_TIMEOUT   Per-step wait timeout in seconds. Default: 1800.
 
 Test / verification:
@@ -1164,6 +1170,22 @@ compose_up_detached() {
     docker compose --project-directory "$ROOT_DIR" --file "$COMPOSE_FILE" --project-name "$PROJECT_NAME" up -d --build
 }
 
+compose_up_backend_detached() {
+  log "Starting Argus backend prerequisites detached (frontend is gated until CubeSandbox templates are ready)"
+  run_cmd env \
+    "ARGUS_ENV_FILE=$ARGUS_ENV_FILE" \
+    "ARGUS_RESET_IMPORT_TOKEN=$ARGUS_RESET_IMPORT_TOKEN" \
+    docker compose --project-directory "$ROOT_DIR" --file "$COMPOSE_FILE" --project-name "$PROJECT_NAME" up -d --build db redis backend
+}
+
+compose_up_frontend_detached() {
+  log "Starting Argus frontend on port ${FRONTEND_PORT}"
+  run_cmd env \
+    "ARGUS_ENV_FILE=$ARGUS_ENV_FILE" \
+    "ARGUS_RESET_IMPORT_TOKEN=$ARGUS_RESET_IMPORT_TOKEN" \
+    docker compose --project-directory "$ROOT_DIR" --file "$COMPOSE_FILE" --project-name "$PROJECT_NAME" up -d --build frontend
+}
+
 build_runner_images() {
   log "Building Opengrep runner image without starting runner service containers."
   run_cmd docker compose --project-directory "$ROOT_DIR" --file "$COMPOSE_FILE" --project-name "$PROJECT_NAME" build opengrep-runner
@@ -1216,6 +1238,73 @@ import_backend_env() {
   log "Backend LLM env import/test succeeded; response was sanitized by backend."
 }
 
+cubesandbox_template_status() {
+  local api_kind="$1"
+  curl -fsS --max-time 10 "${BACKEND_CUBESANDBOX_TEMPLATES_URL}/${api_kind}" \
+    | python3 -c "import json,sys; print((json.loads(sys.stdin.read(), strict=False).get('status') or '').lower())"
+}
+
+reset_backend_cubesandbox_template() {
+  local api_kind="$1"
+  log "cubesandbox: backend reset requested for ${api_kind} template."
+  curl -fsS --max-time 30 -X POST "${BACKEND_CUBESANDBOX_TEMPLATES_URL}/${api_kind}/reset" >/dev/null
+}
+
+provision_backend_cubesandbox_template() {
+  local api_kind="$1"
+  log "cubesandbox: backend provision requested for ${api_kind} template."
+  curl -fsS --max-time 30 -X POST "${BACKEND_CUBESANDBOX_TEMPLATES_URL}/${api_kind}/provision" >/dev/null
+}
+
+wait_for_backend_cubesandbox_template_ready() {
+  local label="$1"
+  local api_kind="$2"
+  local start now elapsed status
+  start="$(date +%s)"
+  log "cubesandbox: waiting up to ${CUBE_BOOTSTRAP_TIMEOUT}s for backend ${label} template ready..."
+  while true; do
+    status="$(cubesandbox_template_status "$api_kind" 2>/dev/null || true)"
+    if [[ "$status" == "ready" ]]; then
+      log "cubesandbox: backend ${label} template ready."
+      return 0
+    fi
+    if [[ "$status" == "failed" || "$status" == "invalidated" ]]; then
+      log "cubesandbox: backend ${label} template is ${status}; resetting."
+      reset_backend_cubesandbox_template "$api_kind"
+    elif [[ "$status" == "absent" || -z "$status" ]]; then
+      log "cubesandbox: backend ${label} template is ${status:-unreachable/unknown}; provisioning."
+      provision_backend_cubesandbox_template "$api_kind"
+    fi
+    now="$(date +%s)"
+    elapsed=$((now - start))
+    if (( elapsed >= CUBE_BOOTSTRAP_TIMEOUT )); then
+      fail "backend ${label} CubeSandbox template did not become ready within ${CUBE_BOOTSTRAP_TIMEOUT}s (last status=${status:-unknown})."
+    fi
+    sleep "$CUBE_BOOTSTRAP_POLL_INTERVAL"
+  done
+}
+
+ensure_backend_cubesandbox_templates_ready() {
+  if ! is_truthy "$ARGUS_REQUIRE_CUBESANDBOX_TEMPLATES_READY"; then
+    log "Skipping backend CubeSandbox template readiness gate (ARGUS_REQUIRE_CUBESANDBOX_TEMPLATES_READY=false)."
+    return 0
+  fi
+  if "$SKIP_CUBESANDBOX" || ! cubesandbox_enabled_in_env; then
+    log "Skipping backend CubeSandbox template readiness gate because CubeSandbox bootstrap is disabled/skipped."
+    return 0
+  fi
+  if ! cubesandbox_bootstrap_provision_template_in_env; then
+    log "Skipping backend CubeSandbox template readiness gate because CUBESANDBOX_BOOTSTRAP_PROVISION_TEMPLATE=false."
+    return 0
+  fi
+  if "$DRY_RUN" || is_truthy "$STUB_DOCKER"; then
+    log "Stub/dry-run: would reset failed/invalidated backend CodeQL and OpenGrep templates, then wait for ready before frontend start."
+    return 0
+  fi
+  wait_for_backend_cubesandbox_template_ready "CodeQL C/C++" "codeql-cpp"
+  wait_for_backend_cubesandbox_template_ready "OpenGrep" "opengrep"
+}
+
 follow_foreground_logs() {
   log "Following Compose logs in foreground. Ctrl-C/SIGTERM stops the Compose stack before exiting."
   _argus_stop_on_signal() {
@@ -1261,9 +1350,11 @@ wait_for_frontend() {
 
 start_stack() {
   build_runner_images
-  compose_up_detached
+  compose_up_backend_detached
   wait_for_backend
   import_backend_env
+  ensure_backend_cubesandbox_templates_ready
+  compose_up_frontend_detached
   if "$WAIT_EXIT"; then
     wait_for_frontend
     log "Complete. Frontend: http://127.0.0.1:$FRONTEND_PORT"
