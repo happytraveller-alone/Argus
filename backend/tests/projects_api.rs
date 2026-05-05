@@ -2,7 +2,13 @@ use axum::{
     body::{to_bytes, Body},
     http::{Method, Request, StatusCode},
 };
-use backend_rust::{app::build_router, config::AppConfig, db::task_state, state::AppState};
+use backend_rust::{
+    app::build_router,
+    config::AppConfig,
+    db::{intelligent_task_state, task_state},
+    runtime::intelligent::types::{IntelligentTaskRecord, IntelligentTaskStatus},
+    state::AppState,
+};
 use serde_json::{json, Value};
 use std::io::Write;
 use tower::util::ServiceExt;
@@ -22,6 +28,40 @@ async fn create_project_named(app: &axum::Router, name: &str) -> String {
                         "source_type": "zip",
                         "default_branch": "main",
                         "programming_languages": []
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let payload: Value =
+        serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
+    payload["id"]
+        .as_str()
+        .expect("project id should exist")
+        .to_string()
+}
+
+async fn create_project_with_languages(
+    app: &axum::Router,
+    name: &str,
+    programming_languages: Vec<&str>,
+) -> String {
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/projects")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "name": name,
+                        "source_type": "zip",
+                        "default_branch": "main",
+                        "programming_languages": programming_languages
                     })
                     .to_string(),
                 ))
@@ -311,6 +351,20 @@ async fn dashboard_snapshot_includes_recent_tasks_from_task_state() {
         },
     );
     snapshot.static_tasks.insert(
+        "static-codeql".to_string(),
+        task_state::StaticTaskRecord {
+            id: "static-codeql".to_string(),
+            engine: "codeql".to_string(),
+            project_id: alpha_project_id.clone(),
+            name: "static codeql".to_string(),
+            status: "completed".to_string(),
+            target_path: ".".to_string(),
+            created_at: "2026-04-24T12:30:00Z".to_string(),
+            extra: json!({}),
+            ..Default::default()
+        },
+    );
+    snapshot.static_tasks.insert(
         "static-new".to_string(),
         task_state::StaticTaskRecord {
             id: "static-new".to_string(),
@@ -364,19 +418,115 @@ async fn dashboard_snapshot_includes_recent_tasks_from_task_state() {
     assert_eq!(payload["task_status_by_scan_type"]["failed"]["static"], 1);
 
     let recent_tasks = payload["recent_tasks"].as_array().unwrap();
-    assert_eq!(recent_tasks.len(), 2);
+    assert_eq!(recent_tasks.len(), 3);
     assert!(recent_tasks
         .iter()
         .all(|task| task["task_id"] != "unknown-static-old"));
-    assert_eq!(recent_tasks[0]["task_id"], "static-new");
+    assert_eq!(recent_tasks[0]["task_id"], "static-codeql");
     assert_eq!(recent_tasks[0]["task_type"], "静态审计");
-    assert_eq!(recent_tasks[0]["title"], "静态审计 · Beta API");
+    assert_eq!(recent_tasks[0]["title"], "静态审计 · Alpha Gateway");
     assert_eq!(
         recent_tasks[0]["detail_path"],
+        "/codeql-analysis/static-codeql?codeqlTaskId=static-codeql&engine=codeql"
+    );
+    assert_eq!(recent_tasks[1]["task_id"], "static-new");
+    assert_eq!(
+        recent_tasks[1]["detail_path"],
         "/static-analysis/static-new?opengrepTaskId=static-new"
     );
-    assert_eq!(recent_tasks[1]["task_id"], "static-failed");
-    assert_eq!(recent_tasks[1]["status"], "failed");
+    assert_eq!(recent_tasks[2]["task_id"], "static-failed");
+    assert_eq!(recent_tasks[2]["status"], "failed");
+}
+
+#[tokio::test]
+async fn dashboard_snapshot_includes_intelligent_and_static_task_lanes_plus_language_ratios() {
+    let config = isolated_test_config("projects-dashboard-intelligent-static-language");
+    let state = AppState::from_config(config)
+        .await
+        .expect("state should build");
+    let app = build_router(state.clone());
+
+    let alpha_project_id =
+        create_project_with_languages(&app, "Alpha Gateway", vec!["TypeScript", "Python"]).await;
+    let beta_project_id = create_project_with_languages(&app, "Beta API", vec!["TypeScript"]).await;
+
+    let mut static_snapshot = task_state::load_snapshot(&state)
+        .await
+        .expect("static snapshot should load");
+    static_snapshot.static_tasks.insert(
+        "static-alpha".to_string(),
+        task_state::StaticTaskRecord {
+            id: "static-alpha".to_string(),
+            engine: "opengrep".to_string(),
+            project_id: alpha_project_id.clone(),
+            name: "static alpha".to_string(),
+            status: "completed".to_string(),
+            target_path: ".".to_string(),
+            created_at: "2026-04-24T12:00:00Z".to_string(),
+            extra: json!({}),
+            ..Default::default()
+        },
+    );
+    task_state::save_snapshot(&state, &static_snapshot)
+        .await
+        .expect("static snapshot should save");
+
+    let mut intelligent = IntelligentTaskRecord::new_pending(
+        "intelligent-beta".to_string(),
+        beta_project_id.clone(),
+        "test-model".to_string(),
+        "test-fingerprint".to_string(),
+    );
+    intelligent.project_name = Some("Beta API".to_string());
+    intelligent.status = IntelligentTaskStatus::Running;
+    intelligent.created_at = "2026-04-24T13:00:00Z".to_string();
+    intelligent_task_state::save_record(&state, intelligent)
+        .await
+        .expect("intelligent task should save");
+
+    let response = app
+        .oneshot(
+            Request::get("/api/v1/projects/dashboard-snapshot?top_n=5")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let payload: Value =
+        serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
+
+    assert_eq!(
+        payload["task_status_by_scan_type"]["running"]["intelligent"],
+        1
+    );
+    assert_eq!(
+        payload["task_status_by_scan_type"]["completed"]["static"],
+        1
+    );
+    assert_eq!(payload["task_status_breakdown"]["running"], 1);
+    assert_eq!(payload["task_status_breakdown"]["completed"], 1);
+
+    assert_eq!(
+        payload["recent_tasks_by_scan_type"]["intelligent"][0]["task_id"],
+        "intelligent-beta"
+    );
+    assert_eq!(
+        payload["recent_tasks_by_scan_type"]["intelligent"][0]["detail_path"],
+        "/agent-audit/intelligent-beta"
+    );
+    assert_eq!(
+        payload["recent_tasks_by_scan_type"]["static"][0]["task_id"],
+        "static-alpha"
+    );
+
+    let language_rows = payload["language_loc_distribution"].as_array().unwrap();
+    assert_eq!(language_rows[0]["language"], "TypeScript");
+    assert_eq!(language_rows[0]["project_count"], 2);
+    assert_eq!(language_rows[0]["loc_number"], 66.67);
+    assert_eq!(language_rows[1]["language"], "Python");
+    assert_eq!(language_rows[1]["project_count"], 1);
+    assert_eq!(language_rows[1]["loc_number"], 33.33);
 }
 
 #[tokio::test]

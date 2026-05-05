@@ -244,9 +244,7 @@ function createSnapshotFixture() {
 			{ type_code: "CWE-89", type_name: "SQL 注入", verified_count: 8 },
 			{ type_code: "CWE-79", type_name: "跨站脚本", verified_count: 5 },
 		],
-		static_engine_rule_totals: [
-			{ engine: "opengrep", total_rules: 368 },
-		],
+		static_engine_rule_totals: [{ engine: "opengrep", total_rules: 368 }],
 		language_loc_distribution: [
 			{ language: "TypeScript", loc_number: 182400, project_count: 4 },
 			{ language: "Python", loc_number: 124600, project_count: 3 },
@@ -264,7 +262,7 @@ test("DashboardCommandCenter renders the live single-page dashboard layout", asy
 		createElement(module.default, {
 			snapshot: createSnapshotFixture(),
 			rangeDays: 14,
-			onRangeDaysChange: () => { },
+			onRangeDaysChange: () => {},
 		}),
 	);
 
@@ -284,7 +282,10 @@ test("DashboardCommandCenter renders the live single-page dashboard layout", asy
 	assert.match(markup, /任务状态/);
 	assert.match(markup, /横坐标：日期/);
 	assert.match(markup, /纵坐标：漏洞数量/);
-	assert.match(markup, /查看近一段时间当日新增漏洞发现与静态、智能来源构成的波动/);
+	assert.match(
+		markup,
+		/查看近一段时间当日新增漏洞发现与静态、智能来源构成的波动/,
+	);
 	assert.doesNotMatch(markup, /truncate whitespace-nowrap text-\[11px\]/);
 	assert.match(markup, /data-panel="trend"/);
 	assert.match(markup, /aria-pressed="true"/);
@@ -352,6 +353,64 @@ test("DashboardCommandCenter builds trend rows with new daily metrics and share 
 			intelligentLabel: 5,
 		},
 	]);
+});
+
+test("DashboardCommandCenter maps project language stats to horizontal percentage rows", async () => {
+	const module = await importOrFail<any>(
+		"../src/features/dashboard/components/DashboardCommandCenter.tsx",
+	);
+	const snapshot = createSnapshotFixture();
+	snapshot.language_loc_distribution = [
+		{ language: "TypeScript", loc_number: 66.67, project_count: 2 },
+		{ language: "Python", loc_number: 33.33, project_count: 1 },
+	];
+
+	const rows = module.buildRowsForView("language-lines", snapshot);
+	assert.deepEqual(rows, [
+		{
+			label: "TypeScript",
+			meta: "2 个项目",
+			total: 66.67,
+			critical: 0,
+			high: 0,
+			medium: 0,
+			low: 0,
+			tone: "critical",
+		},
+		{
+			label: "Python",
+			meta: "1 个项目",
+			total: 33.33,
+			critical: 0,
+			high: 0,
+			medium: 0,
+			low: 0,
+			tone: "critical",
+		},
+	]);
+	assert.deepEqual(module.getHorizontalStatsXAxisProps("language-lines"), {
+		minTickGap: 0,
+		tickCount: 6,
+		allowDecimals: true,
+		domain: [0, "auto"],
+		ticks: [0, 20, 40, 60, 80, 100],
+	});
+	assert.deepEqual(
+		module.formatHorizontalStatsTooltipValue("language-lines", 66.67, "数量"),
+		["66.67%", "语言占比"],
+	);
+
+	assert.deepEqual(
+		module.VIEW_ITEMS.find(
+			(item: { id: string }) => item.id === "language-lines",
+		),
+		{
+			id: "language-lines",
+			label: "项目语言统计图",
+			description: "根据项目管理中的所有项目统计语言占比 Top10。",
+			yAxisLabel: "语言类型",
+		},
+	);
 });
 
 test("task status tooltip items preserve subtype counts, including zero values", async () => {
@@ -434,24 +493,24 @@ test("DashboardCommandCenter builds two audit-type task status sections", async 
 				}),
 			),
 		[
-		{
-			key: "intelligent",
-			label: "智能审计",
-			total: 7,
-			completed: 2,
-			running: 3,
-			anomaly: 2,
-			tasksRoute: "/tasks/intelligent",
-		},
-		{
-			key: "static",
-			label: "静态审计",
-			total: 14,
-			completed: 10,
-			running: 2,
-			anomaly: 2,
-			tasksRoute: "/tasks/static",
-		},
+			{
+				key: "intelligent",
+				label: "智能审计",
+				total: 7,
+				completed: 2,
+				running: 3,
+				anomaly: 2,
+				tasksRoute: "/tasks/intelligent",
+			},
+			{
+				key: "static",
+				label: "静态审计",
+				total: 14,
+				completed: 10,
+				running: 2,
+				anomaly: 2,
+				tasksRoute: "/tasks/static",
+			},
 		],
 	);
 });
@@ -507,7 +566,7 @@ test("DashboardCommandCenter recent static task uses the provided aggregated det
 		createElement(module.default, {
 			snapshot,
 			rangeDays: 14,
-			onRangeDaysChange: () => { },
+			onRangeDaysChange: () => {},
 		}),
 	);
 
@@ -627,7 +686,7 @@ test("DashboardCommandCenter shows an empty state when no recent tasks are avail
 		createElement(module.default, {
 			snapshot,
 			rangeDays: 14,
-			onRangeDaysChange: () => { },
+			onRangeDaysChange: () => {},
 		}),
 	);
 
@@ -731,10 +790,7 @@ test("DashboardCommandCenter keeps task sidebar right while chart rail sits abov
 		markup,
 		/lg:grid-cols-\[minmax\(0,1fr\)_minmax\(360px,28rem\)\]/,
 	);
-	assert.match(
-		markup,
-		/grid min-w-0 content-start gap-2 xl:min-h-0/,
-	);
+	assert.match(markup, /grid min-w-0 content-start gap-2 xl:min-h-0/);
 	assert.match(markup, /sm:grid-cols-2 xl:grid-cols-5/);
 	assert.doesNotMatch(
 		markup,
@@ -806,26 +862,26 @@ test("vulnerability-types view uses 5-step x-axis ticks", async () => {
 	});
 	assert.deepEqual(
 		module.getHorizontalStatsXAxisProps("vulnerability-types", [
-		{
-			label: "CWE-89",
-			meta: "SQL 注入",
-			total: 8,
-			critical: 0,
-			high: 0,
-			medium: 0,
-			low: 0,
-			tone: "medium",
-		},
-		{
-			label: "CWE-79",
-			meta: "跨站脚本",
-			total: 13,
-			critical: 0,
-			high: 0,
-			medium: 0,
-			low: 0,
-			tone: "high",
-		},
+			{
+				label: "CWE-89",
+				meta: "SQL 注入",
+				total: 8,
+				critical: 0,
+				high: 0,
+				medium: 0,
+				low: 0,
+				tone: "medium",
+			},
+			{
+				label: "CWE-79",
+				meta: "跨站脚本",
+				total: 13,
+				critical: 0,
+				high: 0,
+				medium: 0,
+				low: 0,
+				tone: "high",
+			},
 		]).ticks,
 		[0, 5, 10, 15],
 	);

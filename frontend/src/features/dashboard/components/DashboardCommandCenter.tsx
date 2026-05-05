@@ -131,7 +131,7 @@ type TrendRow = {
 	intelligentLabel: number;
 };
 
-const VIEW_ITEMS: DashboardViewMeta[] = [
+export const VIEW_ITEMS: DashboardViewMeta[] = [
 	{
 		id: "trend",
 		label: "漏洞态势统计图",
@@ -159,7 +159,7 @@ const VIEW_ITEMS: DashboardViewMeta[] = [
 	{
 		id: "language-lines",
 		label: "项目语言统计图",
-		description: "展示当前项目涉及语言代码行数 Top10。",
+		description: "根据项目管理中的所有项目统计语言占比 Top10。",
 		yAxisLabel: "语言类型",
 	},
 ];
@@ -316,6 +316,15 @@ export function getHorizontalStatsXAxisProps(
 			ticks: rows.length > 0 ? buildFiveStepTicks(rows) : undefined,
 		};
 	}
+	if (viewId === "language-lines") {
+		return {
+			minTickGap: 0,
+			tickCount: 6,
+			allowDecimals: true,
+			domain: [0, "auto"],
+			ticks: [0, 20, 40, 60, 80, 100],
+		};
+	}
 
 	return {
 		minTickGap: 0,
@@ -352,6 +361,9 @@ export function formatHorizontalStatsTooltipValue(
 
 	if (viewId === "project-risk") {
 		return [formattedValue, `${name}漏洞数量`];
+	}
+	if (viewId === "language-lines") {
+		return [`${formattedValue}%`, "语言占比"];
 	}
 
 	return [formattedValue, name];
@@ -521,7 +533,7 @@ function buildLanguageLineRows(
 ): HorizontalRow[] {
 	return items.slice(0, 10).map((item) => ({
 		label: item.language,
-		meta: `代码行 ${formatNumber(item.loc_number)}`,
+		meta: `${formatNumber(item.project_count)} 个项目`,
 		total: item.loc_number,
 		critical: 0,
 		high: 0,
@@ -531,7 +543,7 @@ function buildLanguageLineRows(
 	}));
 }
 
-function buildRowsForView(
+export function buildRowsForView(
 	view: DashboardViewId,
 	snapshot: DashboardSnapshotResponse,
 ): HorizontalRow[] {
@@ -1181,7 +1193,7 @@ function HorizontalStatsChart({
 			<div className="rounded-sm border border-border bg-background/70 p-3">
 				<div className={HORIZONTAL_STATS_META_ROW_CLASSNAME}>
 					<div className={DASHBOARD_META_LABEL_CLASSNAME}>
-						横坐标：数量
+						横坐标：{viewId === "language-lines" ? "比例" : "数量"}
 						<br />
 						纵坐标：{yAxisLabel}
 					</div>
@@ -1222,6 +1234,11 @@ function HorizontalStatsChart({
 								allowDecimals={xAxisProps.allowDecimals}
 								domain={xAxisProps.domain}
 								ticks={xAxisProps.ticks}
+								tickFormatter={
+									viewId === "language-lines"
+										? (value) => `${formatNumber(Number(value))}%`
+										: undefined
+								}
 							/>
 							<YAxis
 								type="category"
@@ -1300,7 +1317,11 @@ function HorizontalStatsChart({
 										position="right"
 										fill="hsl(var(--foreground))"
 										fontSize={HORIZONTAL_STATS_LABEL_FONT_SIZE}
-										formatter={(value: number) => formatNumber(Number(value))}
+										formatter={(value: number) =>
+											viewId === "language-lines"
+												? `${formatNumber(Number(value))}%`
+												: formatNumber(Number(value))
+										}
 									/>
 								</Bar>
 							)}
@@ -1335,19 +1356,19 @@ export default function DashboardCommandCenter({
 						<section
 							className={`${DASHBOARD_PANEL_CLASSNAME} min-w-0 p-4 xl:min-h-0`}
 						>
-						{activeView === "trend" ? (
-							<TrendPanel snapshot={snapshot} />
-						) : (
-							<HorizontalStatsChart
-								title={activeMeta.label}
-								description={activeMeta.description}
-								rows={rows}
-								viewId={activeView}
-								yAxisLabel={activeMeta.yAxisLabel}
-								stacked={activeView === "project-risk"}
-							/>
-						)}
-					</section>
+							{activeView === "trend" ? (
+								<TrendPanel snapshot={snapshot} />
+							) : (
+								<HorizontalStatsChart
+									title={activeMeta.label}
+									description={activeMeta.description}
+									rows={rows}
+									viewId={activeView}
+									yAxisLabel={activeMeta.yAxisLabel}
+									stacked={activeView === "project-risk"}
+								/>
+							)}
+						</section>
 					</div>
 					<TaskStatusPanel snapshot={snapshot} />
 				</div>

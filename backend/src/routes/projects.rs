@@ -25,7 +25,7 @@ use crate::{
         archive_content_type, list_archive_files_from_bytes, list_archive_files_from_path,
         read_archive_file_from_path, supported_archive_suffixes,
     },
-    db::{projects, task_state},
+    db::{intelligent_task_state, projects, task_state},
     error::ApiError,
     project_file_cache::{ProjectFileCacheEntry, ProjectFileCacheSet},
     state::{AppState, StoredProject, StoredProjectArchive},
@@ -755,10 +755,18 @@ pub async fn get_dashboard_snapshot(
     let task_snapshot = task_state::load_snapshot(&state)
         .await
         .map_err(internal_error)?;
-    let task_status = build_dashboard_task_status(&task_snapshot);
+    let intelligent_task_snapshot = intelligent_task_state::load_snapshot(&state)
+        .await
+        .map_err(internal_error)?;
+    let task_status = build_dashboard_task_status(&task_snapshot, &intelligent_task_snapshot);
     let verified_cumulative_findings = dashboard_verified_cumulative_findings(&task_snapshot);
     let recent_task_limit = query.top_n.unwrap_or(10).clamp(1, 50);
-    let all_recent_tasks = build_dashboard_recent_tasks(&task_snapshot, &project_names, 50);
+    let all_recent_tasks = build_dashboard_recent_tasks(
+        &task_snapshot,
+        &intelligent_task_snapshot,
+        &project_names,
+        50,
+    );
     let recent_tasks = all_recent_tasks
         .iter()
         .take(recent_task_limit)
@@ -770,6 +778,13 @@ pub async fn get_dashboard_snapshot(
         .take(recent_task_limit)
         .cloned()
         .collect::<Vec<_>>();
+    let recent_intelligent_tasks = all_recent_tasks
+        .iter()
+        .filter(|task| task.task_type == "智能审计")
+        .take(recent_task_limit)
+        .cloned()
+        .collect::<Vec<_>>();
+    let language_distribution = build_dashboard_language_distribution(&items);
     Ok(Json(json!({
         "generated_at": now_rfc3339(),
         "total_scan_duration_ms": 0,
@@ -822,13 +837,13 @@ pub async fn get_dashboard_snapshot(
         "language_risk": [],
         "recent_tasks": recent_tasks,
         "recent_tasks_by_scan_type": {
-            "intelligent": Vec::<serde_json::Value>::new(),
+            "intelligent": recent_intelligent_tasks,
             "static": recent_static_tasks
         },
         "project_risk_distribution": [],
         "verified_vulnerability_types": [],
         "static_engine_rule_totals": [],
-        "language_loc_distribution": []
+        "language_loc_distribution": language_distribution
     })))
 }
 
@@ -958,13 +973,25 @@ fn dashboard_task_status_bucket(status: &str) -> DashboardTaskStatusBucket {
     }
 }
 
-fn build_dashboard_task_status(snapshot: &task_state::TaskStateSnapshot) -> DashboardTaskStatus {
+fn build_dashboard_task_status(
+    snapshot: &task_state::TaskStateSnapshot,
+    intelligent_snapshot: &intelligent_task_state::IntelligentTaskStateSnapshot,
+) -> DashboardTaskStatus {
     let mut status = DashboardTaskStatus::default();
 
     for record in snapshot.static_tasks.values() {
+        if !dashboard_is_static_task_engine(&record.engine) {
+            continue;
+        }
         let bucket = dashboard_task_status_bucket(&record.status);
         status.total.add(bucket);
         status.static_tasks.add(bucket);
+    }
+
+    for record in intelligent_snapshot.tasks.values() {
+        let bucket = dashboard_task_status_bucket(&intelligent_task_status_value(&record.status));
+        status.total.add(bucket);
+        status.intelligent.add(bucket);
     }
 
     status
@@ -972,13 +999,14 @@ fn build_dashboard_task_status(snapshot: &task_state::TaskStateSnapshot) -> Dash
 
 fn build_dashboard_recent_tasks(
     snapshot: &task_state::TaskStateSnapshot,
+    intelligent_snapshot: &intelligent_task_state::IntelligentTaskStateSnapshot,
     project_names: &BTreeMap<String, String>,
     limit: usize,
 ) -> Vec<DashboardRecentTask> {
     let mut tasks = Vec::new();
 
     for record in snapshot.static_tasks.values() {
-        if record.engine != "opengrep" {
+        if !dashboard_is_static_task_engine(&record.engine) {
             continue;
         }
         let project_name = dashboard_project_name(project_names, &record.project_id);
@@ -993,6 +1021,19 @@ fn build_dashboard_recent_tasks(
         });
     }
 
+    for record in intelligent_snapshot.tasks.values() {
+        let project_name = dashboard_project_name(project_names, &record.project_id);
+        tasks.push(DashboardRecentTask {
+            task_id: record.task_id.clone(),
+            task_type: "智能审计".to_string(),
+            title: format!("智能审计 · {project_name}"),
+            engine: "llm".to_string(),
+            status: intelligent_task_status_value(&record.status),
+            created_at: record.created_at.clone(),
+            detail_path: format!("/agent-audit/{}", record.task_id),
+        });
+    }
+
     tasks.sort_by(|left, right| {
         right
             .created_at
@@ -1003,6 +1044,103 @@ fn build_dashboard_recent_tasks(
     tasks.into_iter().take(limit).collect()
 }
 
+fn dashboard_is_static_task_engine(engine: &str) -> bool {
+    matches!(
+        engine.trim().to_ascii_lowercase().as_str(),
+        "opengrep" | "codeql"
+    )
+}
+
+fn intelligent_task_status_value(
+    status: &crate::runtime::intelligent::types::IntelligentTaskStatus,
+) -> String {
+    serde_json::to_value(status)
+        .ok()
+        .and_then(|value| value.as_str().map(ToOwned::to_owned))
+        .unwrap_or_else(|| "failed".to_string())
+}
+
+fn build_dashboard_language_distribution(items: &[StoredProject]) -> Vec<Value> {
+    let mut counts: BTreeMap<String, i64> = BTreeMap::new();
+
+    for project in items {
+        for language in parse_project_programming_languages(&project.programming_languages_json) {
+            *counts.entry(language).or_default() += 1;
+        }
+    }
+
+    let total_count = counts.values().sum::<i64>();
+    if total_count <= 0 {
+        return Vec::new();
+    }
+
+    let mut rows = counts
+        .into_iter()
+        .map(|(language, project_count)| {
+            let ratio =
+                ((project_count as f64 / total_count as f64) * 100.0 * 100.0).round() / 100.0;
+            json!({
+                "language": language,
+                "loc_number": ratio,
+                "project_count": project_count
+            })
+        })
+        .collect::<Vec<_>>();
+
+    rows.sort_by(|left, right| {
+        let left_ratio = left
+            .get("loc_number")
+            .and_then(Value::as_f64)
+            .unwrap_or_default();
+        let right_ratio = right
+            .get("loc_number")
+            .and_then(Value::as_f64)
+            .unwrap_or_default();
+        right_ratio
+            .partial_cmp(&left_ratio)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| {
+                left.get("language")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .cmp(
+                        right
+                            .get("language")
+                            .and_then(Value::as_str)
+                            .unwrap_or_default(),
+                    )
+            })
+    });
+
+    rows
+}
+
+fn parse_project_programming_languages(raw: &str) -> Vec<String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return Vec::new();
+    }
+
+    let parsed = if trimmed.starts_with('[') && trimmed.ends_with(']') {
+        serde_json::from_str::<Vec<String>>(trimmed).unwrap_or_default()
+    } else {
+        trimmed
+            .split(',')
+            .map(str::trim)
+            .filter(|item| !item.is_empty())
+            .map(ToOwned::to_owned)
+            .collect()
+    };
+
+    let mut seen = BTreeSet::new();
+    parsed
+        .into_iter()
+        .map(|language| language.trim().to_string())
+        .filter(|language| !language.is_empty())
+        .filter(|language| seen.insert(language.to_ascii_lowercase()))
+        .collect()
+}
+
 fn dashboard_project_name(project_names: &BTreeMap<String, String>, project_id: &str) -> String {
     project_names
         .get(project_id)
@@ -1011,6 +1149,13 @@ fn dashboard_project_name(project_names: &BTreeMap<String, String>, project_id: 
 }
 
 fn dashboard_static_task_detail_path(record: &task_state::StaticTaskRecord) -> String {
+    if record.engine.eq_ignore_ascii_case("codeql") {
+        return format!(
+            "/codeql-analysis/{}?codeqlTaskId={}&engine=codeql",
+            record.id, record.id
+        );
+    }
+
     format!(
         "/static-analysis/{}?opengrepTaskId={}",
         record.id, record.id
