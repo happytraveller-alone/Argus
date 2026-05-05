@@ -145,7 +145,9 @@ impl CodeqlSandboxSession {
             },
         );
         if take_cancel_request(task_id) {
-            let _ = client.delete_sandbox(&sandbox.sandbox_id).await;
+            crate::runtime::cubesandbox::best_effort_delete_sandbox(
+                &client, &sandbox.sandbox_id, task_id, "cancel_after_create",
+            ).await;
             unregister_active_sandbox(task_id, &sandbox.sandbox_id);
             bail!("CodeQL CubeSandbox scan cancelled before sandbox connect for task {task_id}");
         }
