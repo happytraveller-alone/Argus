@@ -276,10 +276,17 @@ the image build. It installs:
 - `git`, `curl`, `zstd`, and related build utilities
 - CodeQL CLI from the mirrored GitHub bundle URL
 
+By default, `build-codeql-cpp-image` reuses an existing VM-local
+`CUBE_CODEQL_CPP_IMAGE` and pushes it to the local registry instead of
+rebuilding the large CodeQL image on every template reset. Set
+`CUBE_CODEQL_CPP_REUSE_EXISTING_IMAGE=false` when the Dockerfile, CodeQL bundle,
+or build arguments changed and a fresh image is required.
+
 Defaults:
 
 - Local registry image: `m.daocloud.io/docker.io/library/registry:2`
 - Built image: `127.0.0.1:5000/cubesandbox-codeql-cpp:latest`
+- Reuse existing CodeQL image: `true`
 - CodeQL bundle: `https://v6.gh-proxy.org/https://github.com/github/codeql-action/releases/download/codeql-bundle-v2.20.5/codeql-bundle-linux64.tar.zst`
 - Writable layer size: `16Gi` (raised from `4Gi` on 2026-05-04 to fit CodeQL DB + trap caches at runtime; see `oci/cubesandbox/PATCHES.md` and `.omc/specs/deep-dive-sandbox-storage-insufficient.md`)
 - Template probe: envd `/health` on port `49983` (NOT uvicorn `49999`; jupyter pkg removed by Stage 0 means uvicorn never binds)

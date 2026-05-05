@@ -31,6 +31,7 @@ CUBE_LOCAL_REGISTRY_PORT="${CUBE_LOCAL_REGISTRY_PORT:-5000}"
 CUBE_CODEQL_VERSION="${CUBE_CODEQL_VERSION:-2.20.5}"
 CUBE_CODEQL_BUNDLE_URL="${CUBE_CODEQL_BUNDLE_URL:-${CUBE_GITHUB_MIRROR_PREFIX}https://github.com/github/codeql-action/releases/download/codeql-bundle-v${CUBE_CODEQL_VERSION}/codeql-bundle-linux64.tar.zst}"
 CUBE_CODEQL_CPP_IMAGE="${CUBE_CODEQL_CPP_IMAGE:-127.0.0.1:${CUBE_LOCAL_REGISTRY_PORT}/cubesandbox-codeql-cpp:latest}"
+CUBE_CODEQL_CPP_REUSE_EXISTING_IMAGE="${CUBE_CODEQL_CPP_REUSE_EXISTING_IMAGE:-true}"
 CUBE_CODEQL_CPP_WSL_IMAGE="${CUBE_CODEQL_CPP_WSL_IMAGE:-argus/cubesandbox-codeql-cpp:latest}"
 CUBE_CODEQL_CPP_WRITABLE_LAYER_SIZE="${CUBE_CODEQL_CPP_WRITABLE_LAYER_SIZE:-16Gi}" # FINAL plan Phase 1: 4Gi→16Gi (CodeQL DB needs runtime headroom)
 CUBE_CODEQL_CPP_DOCKERFILE="${CUBE_CODEQL_CPP_DOCKERFILE:-${ROOT_DIR}/oci/cubesandbox/codeql-cpp.Dockerfile}"
@@ -424,6 +425,11 @@ build_codeql_cpp_image() {
   bundle_url_q="$(shell_quote "$CUBE_CODEQL_BUNDLE_URL")"
   registry_image_q="$(shell_quote "$CUBE_LOCAL_REGISTRY_IMAGE")"
   dockerfile_q="$(shell_quote "$(basename "$CUBE_CODEQL_CPP_DOCKERFILE")")"
+  if is_truthy "$CUBE_CODEQL_CPP_REUSE_EXISTING_IMAGE" && remote_root "docker image inspect ${image_q} >/dev/null 2>&1"; then
+    log "[codeql-cpp] reuse existing image ${CUBE_CODEQL_CPP_IMAGE}"
+    remote_root "docker push ${image_q}"
+    return 0
+  fi
   dockerfile_b64="$(base64 -w 0 "$CUBE_CODEQL_CPP_DOCKERFILE")"
   # NOTE: Keep the docker build invocation on a SINGLE line. When this heredoc
   # is piped to the guest via `ssh ... "sudo -i bash -s" <<<"$command"`,

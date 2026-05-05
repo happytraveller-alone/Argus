@@ -118,6 +118,14 @@ pub fn build_helper_invocation(
             env.insert("CUBE_OPENGREP_RULES_ARCHIVE".to_string(), rules_archive);
         }
     }
+    if let Ok(reuse_existing_image) = std::env::var("CUBE_CODEQL_CPP_REUSE_EXISTING_IMAGE") {
+        if !reuse_existing_image.trim().is_empty() {
+            env.insert(
+                "CUBE_CODEQL_CPP_REUSE_EXISTING_IMAGE".to_string(),
+                reuse_existing_image,
+            );
+        }
+    }
 
     Ok(CubeSandboxHelperInvocation {
         command: config.helper_path.clone(),
@@ -381,6 +389,23 @@ mod tests {
         assert_eq!(
             invocation.env.get("CUBE_OPENGREP_RULES_ARCHIVE"),
             Some(&"/app/assets/scan_rule_assets.tar.gz".to_string())
+        );
+    }
+
+    #[test]
+    fn build_helper_invocation_forwards_codeql_reuse_existing_image_flag() {
+        std::env::set_var("CUBE_CODEQL_CPP_REUSE_EXISTING_IMAGE", "true");
+        let config = sample_config();
+        let invocation = build_helper_invocation(
+            &config,
+            CubeSandboxHelperCommand::ProvisionCodeqlCppTemplate,
+        )
+        .expect("should build");
+        std::env::remove_var("CUBE_CODEQL_CPP_REUSE_EXISTING_IMAGE");
+
+        assert_eq!(
+            invocation.env.get("CUBE_CODEQL_CPP_REUSE_EXISTING_IMAGE"),
+            Some(&"true".to_string())
         );
     }
 

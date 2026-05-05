@@ -12,7 +12,7 @@ use crate::{
     db::cubesandbox_templates::{self, CubesandboxTemplateRecord, TemplateKind, TemplateStatus},
     runtime::cubesandbox::{
         config::CubeSandboxConfig,
-        cubemaster_client::{CubemasterClient, CubemasterClientConfig},
+        cubemaster_client::{CubemasterClient, CubemasterClientConfig, CubemasterTemplate},
         helper::{
             run_helper_command, should_run_local_lifecycle, CubeSandboxHelperCommand,
             CubeSandboxHelperOutput,
@@ -86,7 +86,15 @@ pub async fn resolve_existing_template_id(
     kind: TemplateKind,
 ) -> Result<Option<String>> {
     if !config.template_id.trim().is_empty() {
-        return Ok(Some(config.template_id.trim().to_string()));
+        let configured_template_id = config.template_id.trim().to_string();
+        if configured_template_id_is_usable(config, &configured_template_id).await {
+            return Ok(Some(configured_template_id));
+        }
+        tracing::warn!(
+            kind = %kind.as_str(),
+            template_id = %configured_template_id,
+            "configured CubeSandbox template_id is not usable in CubeMaster; falling back to DB ready template"
+        );
     }
     if kind == TemplateKind::current_opengrep()
         && !state
@@ -112,6 +120,31 @@ pub async fn resolve_existing_template_id(
         }
     }
     Ok(None)
+}
+
+async fn configured_template_id_is_usable(config: &CubeSandboxConfig, template_id: &str) -> bool {
+    let Ok(client) = build_cubemaster_client(config) else {
+        return true;
+    };
+    match client.list_templates().await {
+        Ok(templates) => templates
+            .iter()
+            .any(|template| cubemaster_template_is_usable(template, template_id)),
+        Err(error) => {
+            tracing::warn!(
+                template_id,
+                error = %error,
+                "could not validate configured CubeSandbox template_id against CubeMaster; keeping configured override"
+            );
+            true
+        }
+    }
+}
+
+fn cubemaster_template_is_usable(template: &CubemasterTemplate, template_id: &str) -> bool {
+    template.template_id == template_id
+        && (template.status.eq_ignore_ascii_case("READY")
+            || template.status.eq_ignore_ascii_case("RUNNING"))
 }
 
 /// Ensure that a CodeQL C/C++ template is ready. If not, kick off provisioning.
@@ -537,5 +570,29 @@ mod tests {
             TemplateKind::OpengrepDedicated
         );
         assert_ne!(current_opengrep_provision_kind(), TemplateKind::Opengrep);
+    }
+
+    #[test]
+    fn configured_template_id_usable_only_for_live_ready_or_running_rows() {
+        let ready = CubemasterTemplate {
+            template_id: "tpl-live".to_string(),
+            kind: String::new(),
+            status: "READY".to_string(),
+            created_at: time::OffsetDateTime::UNIX_EPOCH,
+            image_fingerprint: None,
+        };
+        let running = CubemasterTemplate {
+            status: "RUNNING".to_string(),
+            ..ready.clone()
+        };
+        let failed = CubemasterTemplate {
+            status: "FAILED".to_string(),
+            ..ready.clone()
+        };
+
+        assert!(cubemaster_template_is_usable(&ready, "tpl-live"));
+        assert!(cubemaster_template_is_usable(&running, "tpl-live"));
+        assert!(!cubemaster_template_is_usable(&failed, "tpl-live"));
+        assert!(!cubemaster_template_is_usable(&ready, "tpl-other"));
     }
 }
