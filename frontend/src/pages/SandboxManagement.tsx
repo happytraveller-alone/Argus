@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { History, RefreshCw, RotateCcw, Search, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -42,6 +43,26 @@ function formatTaskTime(value: string | null | undefined) {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+function taskEngineLabel(task: CubeSandboxTaskRecord) {
+  const engine = String(task.metadata?.engine || "").toLowerCase();
+  if (engine === "opengrep") return "OpenGrep";
+  if (engine === "codeql") return "CodeQL";
+  return "-";
+}
+
+function taskProjectName(task: CubeSandboxTaskRecord) {
+  return String(task.metadata?.projectName || task.metadata?.projectId || "-");
+}
+
+function taskDetailPath(task: CubeSandboxTaskRecord) {
+  const explicit = typeof task.metadata?.detailPath === "string" ? task.metadata.detailPath : "";
+  if (explicit) return explicit;
+  const engine = String(task.metadata?.engine || "").toLowerCase();
+  if (engine === "codeql") return `/codeql-analysis/${task.taskId}?codeqlTaskId=${task.taskId}&engine=codeql`;
+  if (engine === "opengrep") return `/static-analysis/${task.taskId}?opengrepTaskId=${task.taskId}`;
+  return "";
 }
 
 function sleep(ms: number) {
@@ -239,34 +260,51 @@ export default function SandboxManagementPage() {
             <div>
               <h2 className="text-lg font-semibold tracking-[0.12em] text-foreground">沙箱状态</h2>
             </div>
-            <Badge variant="outline">最近 {tasks.length} 条</Badge>
+            <Badge variant="outline">运行中/最近 {tasks.length} 条</Badge>
           </div>
           <div className="overflow-hidden rounded-xl border border-border/75">
             <table className="w-full text-sm">
               <thead className="bg-muted/70 text-muted-foreground">
                 <tr>
                   <th className="border-b border-border p-3 text-left">任务 ID</th>
+                  <th className="border-b border-border p-3 text-left">类型</th>
+                  <th className="border-b border-border p-3 text-left">项目</th>
                   <th className="border-b border-border p-3 text-left">状态</th>
                   <th className="border-b border-border p-3 text-left">Sandbox ID</th>
                   <th className="border-b border-border p-3 text-left">清理状态</th>
+                  <th className="border-b border-border p-3 text-left">任务</th>
                   <th className="border-b border-border p-3 text-left">更新时间</th>
                 </tr>
               </thead>
               <tbody>
                 {tasks.length === 0 ? (
                   <tr>
-                    <td className="p-4 text-center text-muted-foreground" colSpan={5}>暂无沙箱任务状态</td>
+                    <td className="p-4 text-center text-muted-foreground" colSpan={8}>暂无运行中沙箱或任务状态</td>
                   </tr>
                 ) : (
-                  tasks.map((task) => (
-                    <tr key={task.taskId}>
-                      <td className="border-b border-border/70 p-3 text-muted-foreground">{task.taskId}</td>
-                      <td className="border-b border-border/70 p-3">{task.status}</td>
-                      <td className="border-b border-border/70 p-3 text-muted-foreground">{task.sandboxId ?? "-"}</td>
-                      <td className="border-b border-border/70 p-3 text-muted-foreground">{task.cleanupStatus}</td>
-                      <td className="border-b border-border/70 p-3 text-muted-foreground">{formatTaskTime(task.updatedAt)}</td>
-                    </tr>
-                  ))
+                  tasks.map((task) => {
+                    const detailPath = taskDetailPath(task);
+                    return (
+                      <tr key={`${task.taskId}:${task.sandboxId ?? "none"}`}>
+                        <td className="border-b border-border/70 p-3 text-muted-foreground">{task.taskId}</td>
+                        <td className="border-b border-border/70 p-3">{taskEngineLabel(task)}</td>
+                        <td className="border-b border-border/70 p-3 text-muted-foreground">{taskProjectName(task)}</td>
+                        <td className="border-b border-border/70 p-3">{task.status}</td>
+                        <td className="border-b border-border/70 p-3 text-muted-foreground">{task.sandboxId ?? "-"}</td>
+                        <td className="border-b border-border/70 p-3 text-muted-foreground">{task.cleanupStatus}</td>
+                        <td className="border-b border-border/70 p-3">
+                          {detailPath ? (
+                            <Button asChild size="sm" variant="outline">
+                              <Link to={detailPath}>查看任务</Link>
+                            </Button>
+                          ) : (
+                            <span className="text-muted-foreground">-</span>
+                          )}
+                        </td>
+                        <td className="border-b border-border/70 p-3 text-muted-foreground">{formatTaskTime(task.updatedAt)}</td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>

@@ -19,6 +19,7 @@ use crate::{
         config::CubeSandboxConfig,
         helper::{run_helper_command, should_run_local_lifecycle, CubeSandboxHelperCommand},
         template_provisioner::{self, EnsureOutcome},
+        types::ActiveCubeSandboxSnapshot,
     },
     state::AppState,
 };
@@ -111,7 +112,10 @@ impl OpengrepSandboxSession {
         );
         if take_cancel_request(task_id) {
             crate::runtime::cubesandbox::best_effort_delete_sandbox(
-                &client, &sandbox.sandbox_id, task_id, "cancel_after_create",
+                &client,
+                &sandbox.sandbox_id,
+                task_id,
+                "cancel_after_create",
             )
             .await;
             unregister_active_sandbox(task_id, &sandbox.sandbox_id);
@@ -308,6 +312,19 @@ pub fn snapshot_active_sandbox_ids() -> HashSet<String> {
         .expect("active sandbox lock")
         .values()
         .map(|active| active.sandbox_id.clone())
+        .collect()
+}
+
+pub fn snapshot_active_sandboxes() -> Vec<ActiveCubeSandboxSnapshot> {
+    ACTIVE_OPENGREP_SANDBOXES
+        .lock()
+        .expect("active sandbox lock")
+        .iter()
+        .map(|(task_id, active)| ActiveCubeSandboxSnapshot {
+            task_id: task_id.clone(),
+            sandbox_id: active.sandbox_id.clone(),
+            engine: "opengrep".to_string(),
+        })
         .collect()
 }
 

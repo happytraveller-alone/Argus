@@ -25,7 +25,15 @@ export interface CubeSandboxTaskRecord {
   cleanupError: string | null;
   interruptRequested: boolean;
   timeoutSeconds: number | null;
-  metadata: Record<string, unknown> | null;
+  metadata: {
+    source?: string;
+    engine?: "opengrep" | "codeql" | string;
+    projectId?: string;
+    projectName?: string;
+    taskName?: string;
+    detailPath?: string;
+    [key: string]: unknown;
+  } | null;
 }
 
 export async function listCubeSandboxTasks(limit = 50): Promise<CubeSandboxTaskRecord[]> {

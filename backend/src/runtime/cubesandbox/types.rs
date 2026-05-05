@@ -59,6 +59,14 @@ pub struct CubeSandboxTaskRecord {
     pub metadata: Option<Value>,
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ActiveCubeSandboxSnapshot {
+    pub task_id: String,
+    pub sandbox_id: String,
+    pub engine: String,
+}
+
 impl CubeSandboxTaskRecord {
     pub fn new_queued(
         task_id: String,

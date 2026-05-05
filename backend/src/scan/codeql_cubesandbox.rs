@@ -22,6 +22,7 @@ use crate::{
         config::CubeSandboxConfig,
         helper::{run_helper_command, should_run_local_lifecycle, CubeSandboxHelperCommand},
         template_provisioner::{self, EnsureOutcome},
+        types::ActiveCubeSandboxSnapshot,
     },
     scan::codeql,
     state::AppState,
@@ -62,6 +63,19 @@ pub fn snapshot_active_sandbox_ids() -> HashSet<String> {
         .expect("active sandbox lock poisoned")
         .values()
         .map(|sb| sb.sandbox_id.clone())
+        .collect()
+}
+
+pub fn snapshot_active_sandboxes() -> Vec<ActiveCubeSandboxSnapshot> {
+    ACTIVE_CODEQL_SANDBOXES
+        .lock()
+        .expect("active sandbox lock poisoned")
+        .iter()
+        .map(|(task_id, active)| ActiveCubeSandboxSnapshot {
+            task_id: task_id.clone(),
+            sandbox_id: active.sandbox_id.clone(),
+            engine: "codeql".to_string(),
+        })
         .collect()
 }
 
@@ -146,8 +160,12 @@ impl CodeqlSandboxSession {
         );
         if take_cancel_request(task_id) {
             crate::runtime::cubesandbox::best_effort_delete_sandbox(
-                &client, &sandbox.sandbox_id, task_id, "cancel_after_create",
-            ).await;
+                &client,
+                &sandbox.sandbox_id,
+                task_id,
+                "cancel_after_create",
+            )
+            .await;
             unregister_active_sandbox(task_id, &sandbox.sandbox_id);
             bail!("CodeQL CubeSandbox scan cancelled before sandbox connect for task {task_id}");
         }
