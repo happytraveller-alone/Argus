@@ -43,6 +43,8 @@ zstd = "0.13"
 [features]
 # Expose test-only helpers for integration tests in tests/. Never set in production builds.
 test-helpers = []
+# Gate live-cubemaster integration tests. Requires a running cubemaster instance.
+cubemaster_live_test = []
 
 [dev-dependencies]
 httpmock = "0.7"
