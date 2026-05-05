@@ -207,6 +207,40 @@ impl CubeSandboxClient {
         Ok(())
     }
 
+    /// Download a file from the sandbox via envd `/files` GET endpoint.
+    ///
+    /// Used to retrieve large scan-result payloads that would otherwise be truncated
+    /// by the stdout/stderr length limits applied to `run_command` output.
+    pub async fn read_file(&self, sandbox: &CubeSandboxSandbox, path: &str) -> Result<Vec<u8>> {
+        let host = self.envd_host(&sandbox.sandbox_id, sandbox.domain.as_deref())?;
+        let auth = format!(
+            "Basic {}",
+            BASE64_STANDARD.encode(format!("{ENVD_USERNAME}:").as_bytes())
+        );
+        let mut url = self.envd_url(ENVD_FILES_PATH)?;
+        url.query_pairs_mut()
+            .append_pair("path", path)
+            .append_pair("username", ENVD_USERNAME);
+        let response = self
+            .http_client
+            .get(url)
+            .header(HOST, host)
+            .header("Authorization", &auth)
+            .send()
+            .await?;
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            bail!(
+                "CubeSandbox envd read_file failed: {} body={}",
+                status,
+                truncate_utf8(body, 512).0
+            );
+        }
+        let bytes = response.bytes().await?;
+        Ok(bytes.to_vec())
+    }
+
     /// Run a shell script inside the sandbox via envd Connect-RPC `process.Process/Start`.
     ///
     /// Short scripts are executed inline as `/bin/sh -c <script>`. Larger scripts are

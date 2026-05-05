@@ -807,6 +807,156 @@ async fn test_llm_batch_validates_saved_rows_and_persists_each_status_without_se
 }
 
 #[tokio::test]
+async fn test_llm_accepts_deepseek_reasoning_empty_content_with_finish_reason() {
+    let state = AppState::from_config(isolated_test_config("system-config-deepseek-finish-reason"))
+        .await
+        .expect("state should build");
+    let app = build_router(state);
+    let base_url = spawn_llm_mock_server(
+        r#"{"choices":[{"index":0,"message":{"role":"assistant","content":"","reasoning_content":"ok"},"finish_reason":"stop"}]}"#,
+    )
+    .await;
+
+    let save_payload = json!({
+        "llmConfig": {
+            "llmProvider": "openai_compatible",
+            "llmApiKey": "sk-deepseek-secret",
+            "llmModel": "deepseek-v4-pro",
+            "llmBaseUrl": base_url
+        },
+        "otherConfig": {}
+    });
+    let save_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::PUT)
+                .uri("/api/v1/system-config")
+                .header("content-type", "application/json")
+                .body(Body::from(save_payload.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(save_response.status(), StatusCode::OK);
+
+    let test_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/system-config/test-llm")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "provider": "openai_compatible",
+                        "secretSource": "saved",
+                        "model": "deepseek-v4-pro",
+                        "baseUrl": save_payload["llmConfig"]["llmBaseUrl"]
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(test_response.status(), StatusCode::OK);
+    let payload: Value = serde_json::from_slice(
+        &to_bytes(test_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(payload["success"], true);
+    assert_eq!(payload["metadata"]["model"], "deepseek-v4-pro");
+    assert!(!payload.to_string().contains("sk-deepseek-secret"));
+
+    let current_response = app
+        .oneshot(
+            Request::get("/api/v1/system-config")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let current: Value = serde_json::from_slice(
+        &to_bytes(current_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        current["llmConfig"]["rows"][0]["preflight"]["status"],
+        "passed"
+    );
+}
+
+#[tokio::test]
+async fn test_llm_still_rejects_malformed_openai_response_without_completion_signal() {
+    let state = AppState::from_config(isolated_test_config("system-config-malformed-no-signal"))
+        .await
+        .expect("state should build");
+    let app = build_router(state);
+    let base_url = spawn_llm_mock_server(r#"{"choices":[{"message":{"content":""}}]}"#).await;
+
+    let save_payload = json!({
+        "llmConfig": {
+            "llmProvider": "openai_compatible",
+            "llmApiKey": "sk-empty-secret",
+            "llmModel": "deepseek-v4-pro",
+            "llmBaseUrl": base_url
+        },
+        "otherConfig": {}
+    });
+    let save_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::PUT)
+                .uri("/api/v1/system-config")
+                .header("content-type", "application/json")
+                .body(Body::from(save_payload.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(save_response.status(), StatusCode::OK);
+
+    let test_response = app
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/system-config/test-llm")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "provider": "openai_compatible",
+                        "secretSource": "saved",
+                        "model": "deepseek-v4-pro",
+                        "baseUrl": save_payload["llmConfig"]["llmBaseUrl"]
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(test_response.status(), StatusCode::OK);
+    let payload: Value = serde_json::from_slice(
+        &to_bytes(test_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(payload["success"], false);
+    assert_eq!(payload["metadata"]["reasonCode"], "invalid_response");
+    assert!(payload["message"]
+        .as_str()
+        .unwrap()
+        .contains("没有可确认完成"));
+}
+
+#[tokio::test]
 async fn test_llm_batch_reports_no_eligible_rows_for_disabled_or_missing_only_config() {
     let state = AppState::from_config(isolated_test_config("system-config-batch-no-eligible"))
         .await
@@ -1054,7 +1204,10 @@ async fn test_llm_rejects_empty_text_response() {
     )
     .unwrap();
     assert_eq!(payload["success"], false);
-    assert!(payload["message"].as_str().unwrap().contains("非空文本"));
+    assert!(payload["message"]
+        .as_str()
+        .unwrap()
+        .contains("没有可确认完成"));
 }
 
 #[tokio::test]

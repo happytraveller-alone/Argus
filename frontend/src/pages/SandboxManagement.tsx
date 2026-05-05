@@ -190,9 +190,6 @@ export default function SandboxManagementPage() {
           <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
             <div>
               <h1 className="text-xl font-semibold tracking-[0.12em] text-foreground">沙箱管理</h1>
-              <p className="mt-2 text-sm text-muted-foreground">
-                查看 CubeSandbox 模板记录与沙箱任务状态；删除/清空只作用于 FAILED 模板记录/模板。
-              </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <Badge variant="outline">FAILED {failedCount}</Badge>
@@ -241,7 +238,6 @@ export default function SandboxManagementPage() {
           <div className="mb-4 flex items-center justify-between gap-3">
             <div>
               <h2 className="text-lg font-semibold tracking-[0.12em] text-foreground">沙箱状态</h2>
-              <p className="mt-1 text-sm text-muted-foreground">只读展示最近 CubeSandbox 任务与 sandboxId，不提供实例删除。</p>
             </div>
             <Badge variant="outline">最近 {tasks.length} 条</Badge>
           </div>

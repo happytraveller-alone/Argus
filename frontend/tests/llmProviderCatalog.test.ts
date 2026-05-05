@@ -28,6 +28,7 @@ test("builtin provider catalog exposes only protocol providers", () => {
 
 	assert.ok(customProvider);
 	assert.equal(customProvider.name, "OpenAI 兼容");
+	assert.ok(customProvider.models.includes("deepseek-v4-pro"));
 	assert.equal(customProvider.supportsCustomHeaders, true);
 	assert.ok(customProvider.exampleBaseUrls?.includes("https://api.openai.com/v1"));
 	assert.ok(customProvider.exampleBaseUrls?.includes("http://localhost:11434/v1"));

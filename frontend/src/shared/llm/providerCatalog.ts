@@ -30,7 +30,7 @@ export const BUILTIN_LLM_PROVIDERS: LLMProviderItem[] = [
 		name: "OpenAI 兼容",
 		description: "适用于 OpenAI 兼容站点、中转服务和自建网关。",
 		defaultModel: "gpt-5",
-		models: ["gpt-5", "gpt-5.1", "gpt-4o", "qwen-max", "deepseek-chat"],
+		models: ["gpt-5", "gpt-5.1", "gpt-4o", "qwen-max", "deepseek-chat", "deepseek-v4-pro", "deepseek-v4-flash"],
 		defaultBaseUrl: "https://api.openai.com/v1",
 		requiresApiKey: true,
 		supportsModelFetch: true,

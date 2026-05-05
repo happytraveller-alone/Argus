@@ -695,13 +695,14 @@ pub(crate) async fn reconcile_stale_templates_with_client<C: CubemasterApi>(
     }
 
     // Step 10 (opengrep): env pin validity check for CUBESANDBOX_OPENGREP_TEMPLATE_ID
-    let env_pin_opengrep_valid =
-        env_pin_opengrep.is_none_or(|pin| cm_all_ids.contains(pin));
+    let env_pin_opengrep_valid = env_pin_opengrep.is_none_or(|pin| cm_all_ids.contains(pin));
     if !env_pin_opengrep_valid {
         // Pick first ready DB record of current opengrep kind as new pin
         let new_pin_opengrep = db_active
             .iter()
-            .find(|r| r.status == TemplateStatus::Ready && r.kind == TemplateKind::current_opengrep())
+            .find(|r| {
+                r.status == TemplateStatus::Ready && r.kind == TemplateKind::current_opengrep()
+            })
             .and_then(|r| r.template_id.clone());
 
         if let Some(pin) = new_pin_opengrep {
@@ -1284,8 +1285,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let env_path = dir.path().join(".env");
 
-        let original =
-            "CUBESANDBOX_TEMPLATE_ID=tpl-old\nCUBESANDBOX_OPENGREP_TEMPLATE_ID=og-old\n";
+        let original = "CUBESANDBOX_TEMPLATE_ID=tpl-old\nCUBESANDBOX_OPENGREP_TEMPLATE_ID=og-old\n";
         std::fs::write(&env_path, original).unwrap();
         std::env::set_var("ARGUS_ENV_FILE", env_path.to_str().unwrap());
 

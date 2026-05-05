@@ -15,9 +15,7 @@ use tar::{Builder, Header};
 use crate::{
     db::cubesandbox_templates::{TemplateKind, TemplateStatus},
     runtime::cubesandbox::{
-        client::{
-            CubeSandboxClient, CubeSandboxClientConfig, CubeSandboxSandbox, EnvdProcessOutput,
-        },
+        client::{CubeSandboxClient, CubeSandboxClientConfig, CubeSandboxSandbox},
         config::CubeSandboxConfig,
         helper::{run_helper_command, should_run_local_lifecycle, CubeSandboxHelperCommand},
         opengrep_pool::PoolGuard,
@@ -207,7 +205,39 @@ impl OpengrepSandboxSession {
         let script = build_opengrep_runner_script(&payload)?;
         let output = client.run_command(sandbox, &script).await?;
         tracing::info!(task_id = %self.task_id, stage = "command_done", elapsed_ms = self.t0.elapsed().as_millis() as u64);
-        let mut result = parse_opengrep_output(output)?;
+
+        let envelope_path = output
+            .stdout
+            .lines()
+            .rev()
+            .find_map(|line| line.strip_prefix("ARGUS_OPENGREP_RESULT_PATH="))
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(str::to_string);
+        let envelope_bytes = match envelope_path {
+            Some(path) => {
+                let bytes = client
+                    .read_file(sandbox, &path)
+                    .await
+                    .with_context(|| format!("reading opengrep envelope from {path}"))?;
+                tracing::info!(
+                    task_id = %self.task_id,
+                    stage = "envelope_fetched",
+                    elapsed_ms = self.t0.elapsed().as_millis() as u64,
+                    envelope_bytes = bytes.len() as u64,
+                );
+                bytes
+            }
+            None => {
+                bail!(
+                    "CubeSandbox Opengrep output missing result path marker (exit={:?}) stdout={} stderr={}",
+                    output.exit_code,
+                    truncate_for_error(&output.stdout),
+                    truncate_for_error(&output.stderr)
+                );
+            }
+        };
+        let mut result = parse_opengrep_envelope_bytes(&envelope_bytes)?;
         result.sandbox_id = sandbox.sandbox_id.clone();
         Ok(result)
     }
@@ -561,24 +591,9 @@ fn build_opengrep_runner_script(payload: &CubeSandboxOpengrepRequest) -> Result<
     ))
 }
 
-fn parse_opengrep_output(output: EnvdProcessOutput) -> Result<CubeSandboxOpengrepOutput> {
-    let envelope = output
-        .stdout
-        .lines()
-        .rev()
-        .find_map(|line| line.strip_prefix("ARGUS_OPENGREP_RESULT="));
-    let Some(envelope) = envelope else {
-        if output.exit_code.unwrap_or(0) != 0 {
-            bail!(
-                "CubeSandbox Opengrep process failed exit={:?} stdout={} stderr={}",
-                output.exit_code,
-                truncate_for_error(&output.stdout),
-                truncate_for_error(&output.stderr)
-            );
-        }
-        bail!("CubeSandbox Opengrep output missing result envelope");
-    };
-    let parsed: CubeSandboxOpengrepEnvelope = serde_json::from_str(envelope)?;
+fn parse_opengrep_envelope_bytes(bytes: &[u8]) -> Result<CubeSandboxOpengrepOutput> {
+    let parsed: CubeSandboxOpengrepEnvelope =
+        serde_json::from_slice(bytes).context("decoding opengrep envelope JSON")?;
     Ok(CubeSandboxOpengrepOutput {
         results_text: decode_text(&parsed.results_b64, "opengrep results")?,
         summary_json: parsed.summary,
@@ -714,7 +729,15 @@ envelope = {
     "stderr_b64": b64_text(stderr),
     "exit_code": proc.returncode,
 }
-print("ARGUS_OPENGREP_RESULT=" + json.dumps(envelope, separators=(",", ":")))
+# A4-lite continued: write envelope to a sandbox-side file and emit only the
+# path marker on stdout. The Rust client downloads the file via envd /files
+# GET, sidestepping the stdout/stderr length cap that truncates large scans.
+result_path = "/tmp/argus-opengrep-result.json"
+pathlib.Path(result_path).write_text(
+    json.dumps(envelope, separators=(",", ":")),
+    encoding="utf-8",
+)
+print("ARGUS_OPENGREP_RESULT_PATH=" + result_path)
 "#;
 
 #[cfg(test)]
@@ -737,12 +760,12 @@ mod tests {
 
         assert!(script.starts_with("set -e\n"));
         assert!(script.contains("python3 - \"$_ARGUS_PAYLOAD\" <<'PY'"));
-        assert!(script.contains("ARGUS_OPENGREP_RESULT="));
+        assert!(script.contains("ARGUS_OPENGREP_RESULT_PATH="));
         assert!(script.ends_with("exit $_ARGUS_RC\n"));
     }
 
     #[test]
-    fn parse_opengrep_output_reads_result_envelope() {
+    fn parse_opengrep_envelope_bytes_reads_result() {
         let envelope = json!({
             "results_b64": STANDARD.encode("{\"results\":[]}\n"),
             "summary": {"status": "scan_completed", "exit_code": 0},
@@ -751,15 +774,9 @@ mod tests {
             "stderr_b64": STANDARD.encode("stderr\n"),
             "exit_code": 0,
         });
-        let output = EnvdProcessOutput {
-            stdout: format!("noise\nARGUS_OPENGREP_RESULT={envelope}\n"),
-            stderr: String::new(),
-            stdout_truncated: false,
-            stderr_truncated: false,
-            exit_code: Some(0),
-        };
+        let bytes = serde_json::to_vec(&envelope).expect("envelope serializes");
 
-        let parsed = parse_opengrep_output(output).expect("envelope should parse");
+        let parsed = parse_opengrep_envelope_bytes(&bytes).expect("envelope bytes should parse");
         assert_eq!(parsed.results_text, "{\"results\":[]}\n");
         assert_eq!(parsed.log_text, "log\n");
         assert_eq!(parsed.scan_exit_code, 0);

@@ -39,6 +39,8 @@ pub fn provider_catalog() -> Vec<ProviderCatalogItem> {
                 "gpt-4o".to_string(),
                 "qwen-max".to_string(),
                 "deepseek-chat".to_string(),
+                "deepseek-v4-pro".to_string(),
+                "deepseek-v4-flash".to_string(),
             ],
             default_base_url: "https://api.openai.com/v1".to_string(),
             requires_api_key: true,

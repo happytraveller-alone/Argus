@@ -56,8 +56,11 @@ async fn list_template_management_overview(
         .filter(|record| record.status == TemplateStatus::Failed)
         .count();
     let templates = if let Some(raw) = query.status.as_deref().filter(|s| !s.trim().is_empty()) {
-        let allowed: std::collections::HashSet<&str> =
-            raw.split(',').map(str::trim).filter(|s| !s.is_empty()).collect();
+        let allowed: std::collections::HashSet<&str> = raw
+            .split(',')
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .collect();
         all_templates
             .into_iter()
             .filter(|record| allowed.contains(record.status.as_str()))
@@ -517,7 +520,10 @@ mod tests {
 
     // --- Phase 6: ?status= filter tests ---
 
-    fn make_record_with_status(kind: TemplateKind, status: TemplateStatus) -> CubesandboxTemplateRecord {
+    fn make_record_with_status(
+        kind: TemplateKind,
+        status: TemplateStatus,
+    ) -> CubesandboxTemplateRecord {
         CubesandboxTemplateRecord {
             status,
             ..sample_record(kind)
@@ -529,8 +535,11 @@ mod tests {
         status_param: Option<&str>,
     ) -> Vec<&'a CubesandboxTemplateRecord> {
         if let Some(raw) = status_param.filter(|s| !s.trim().is_empty()) {
-            let allowed: std::collections::HashSet<&str> =
-                raw.split(',').map(str::trim).filter(|s| !s.is_empty()).collect();
+            let allowed: std::collections::HashSet<&str> = raw
+                .split(',')
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .collect();
             records
                 .iter()
                 .filter(|r| allowed.contains(r.status.as_str()))
@@ -562,7 +571,9 @@ mod tests {
         ];
         let filtered = apply_status_filter(&records, Some("ready,building"));
         assert_eq!(filtered.len(), 2);
-        assert!(filtered.iter().all(|r| r.status == TemplateStatus::Ready || r.status == TemplateStatus::Building));
+        assert!(filtered
+            .iter()
+            .all(|r| r.status == TemplateStatus::Ready || r.status == TemplateStatus::Building));
     }
 
     #[test]
@@ -603,6 +614,9 @@ mod tests {
         // apply status=ready filter
         let filtered = apply_status_filter(&all_templates, Some("ready"));
         assert_eq!(filtered.len(), 1, "filtered list should contain only ready");
-        assert_eq!(failed_count, 2, "failed_count must reflect unfiltered all_templates");
+        assert_eq!(
+            failed_count, 2,
+            "failed_count must reflect unfiltered all_templates"
+        );
     }
 }

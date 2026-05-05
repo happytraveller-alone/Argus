@@ -225,7 +225,7 @@ pub async fn test_llm_generation(
     client: &Client,
     runtime: &RuntimeLlmConfig,
 ) -> Result<LlmRealTestOutcome, LlmGateError> {
-    let text = match runtime.provider.as_str() {
+    match runtime.provider.as_str() {
         "openai_compatible" => test_openai_compatible(client, runtime).await?,
         "anthropic_compatible" => test_anthropic_compatible(client, runtime).await?,
         _ => {
@@ -235,12 +235,6 @@ pub async fn test_llm_generation(
             ))
         }
     };
-    if text.trim().is_empty() {
-        return Err(LlmGateError::new(
-            "empty_response",
-            "LLM 测试失败：模型返回了空文本。",
-        ));
-    }
     Ok(LlmRealTestOutcome {
         tested_at: OffsetDateTime::now_utc()
             .format(&Rfc3339)
@@ -256,7 +250,7 @@ pub async fn test_llm_generation(
 async fn test_openai_compatible(
     client: &Client,
     runtime: &RuntimeLlmConfig,
-) -> Result<String, LlmGateError> {
+) -> Result<(), LlmGateError> {
     let url = format!(
         "{}/chat/completions",
         runtime.base_url.trim_end_matches('/')
@@ -276,19 +270,13 @@ async fn test_openai_compatible(
         .map_err(|error| {
             LlmGateError::new("request_failed", format!("LLM 测试请求失败：{error}"))
         })?;
-    parse_json_response(response, |json| {
-        json.pointer("/choices/0/message/content")
-            .and_then(Value::as_str)
-            .or_else(|| json.pointer("/choices/0/text").and_then(Value::as_str))
-            .map(ToString::to_string)
-    })
-    .await
+    parse_chat_completion_response(response).await
 }
 
 async fn test_anthropic_compatible(
     client: &Client,
     runtime: &RuntimeLlmConfig,
-) -> Result<String, LlmGateError> {
+) -> Result<(), LlmGateError> {
     let url = format!("{}/messages", runtime.base_url.trim_end_matches('/'));
     let response = client
         .post(url)
@@ -303,23 +291,46 @@ async fn test_anthropic_compatible(
         .map_err(|error| {
             LlmGateError::new("request_failed", format!("LLM 测试请求失败：{error}"))
         })?;
-    parse_json_response(response, |json| {
-        json.get("content")
-            .and_then(Value::as_array)
-            .and_then(|items| {
-                items
-                    .iter()
-                    .find_map(|item| item.get("text").and_then(Value::as_str))
-            })
-            .map(ToString::to_string)
-    })
-    .await
+    parse_anthropic_response(response).await
 }
 
-async fn parse_json_response(
-    response: reqwest::Response,
-    text: impl FnOnce(&Value) -> Option<String>,
-) -> Result<String, LlmGateError> {
+async fn parse_chat_completion_response(response: reqwest::Response) -> Result<(), LlmGateError> {
+    let json = parse_success_json_response(response).await?;
+    let Some(choice) = json
+        .get("choices")
+        .and_then(Value::as_array)
+        .and_then(|choices| choices.first())
+    else {
+        return Err(LlmGateError::new(
+            "invalid_response",
+            "LLM 测试失败：响应中缺少 choices。",
+        ));
+    };
+
+    if chat_choice_has_completion_signal(choice) {
+        return Ok(());
+    }
+
+    Err(LlmGateError::new(
+        "invalid_response",
+        "LLM 测试失败：响应中没有可确认完成的内容、工具调用或结束状态。",
+    ))
+}
+
+async fn parse_anthropic_response(response: reqwest::Response) -> Result<(), LlmGateError> {
+    let json = parse_success_json_response(response).await?;
+    if content_value_has_text(json.get("content"))
+        || json.get("stop_reason").and_then(Value::as_str).is_some()
+    {
+        return Ok(());
+    }
+    Err(LlmGateError::new(
+        "invalid_response",
+        "LLM 测试失败：响应中没有可确认完成的内容或结束状态。",
+    ))
+}
+
+async fn parse_success_json_response(response: reqwest::Response) -> Result<Value, LlmGateError> {
     let status = response.status();
     if !status.is_success() {
         return Err(LlmGateError::new(
@@ -327,20 +338,48 @@ async fn parse_json_response(
             format!("LLM 测试失败：服务返回 HTTP {status}。"),
         ));
     }
-    let json = response.json::<Value>().await.map_err(|error| {
+    response.json::<Value>().await.map_err(|error| {
         LlmGateError::new(
             "invalid_response",
             format!("LLM 测试响应不是有效 JSON：{error}"),
         )
-    })?;
-    text(&json)
-        .filter(|value| !value.trim().is_empty())
-        .ok_or_else(|| {
-            LlmGateError::new(
-                "empty_response",
-                "LLM 测试失败：响应中没有可解析的非空文本。",
-            )
-        })
+    })
+}
+
+fn chat_choice_has_completion_signal(choice: &Value) -> bool {
+    if content_value_has_text(choice.pointer("/message/content"))
+        || content_value_has_text(choice.get("text"))
+        || choice
+            .pointer("/message/tool_calls")
+            .and_then(Value::as_array)
+            .is_some_and(|items| !items.is_empty())
+        || choice
+            .pointer("/message/function_call")
+            .is_some_and(|value| !value.is_null())
+    {
+        return true;
+    }
+
+    choice
+        .get("finish_reason")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .is_some_and(|reason| !reason.is_empty() && reason != "null")
+}
+
+fn content_value_has_text(value: Option<&Value>) -> bool {
+    match value {
+        Some(Value::String(text)) => !text.trim().is_empty(),
+        Some(Value::Array(items)) => items.iter().any(|item| {
+            content_value_has_text(item.get("text"))
+                || content_value_has_text(item.get("content"))
+                || item.as_str().is_some_and(|text| !text.trim().is_empty())
+        }),
+        Some(Value::Object(map)) => {
+            content_value_has_text(map.get("text")) || content_value_has_text(map.get("content"))
+        }
+        _ => false,
+    }
 }
 
 pub fn runtime_headers(runtime: &RuntimeLlmConfig) -> Result<HeaderMap, LlmGateError> {
