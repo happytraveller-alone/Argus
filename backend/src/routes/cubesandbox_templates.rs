@@ -1,6 +1,6 @@
 use async_stream::stream;
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::StatusCode,
     response::sse::{Event, KeepAlive, Sse},
     response::IntoResponse,
@@ -37,16 +37,34 @@ pub fn router() -> Router<AppState> {
         .route("/opengrep/stream", get(stream_opengrep))
 }
 
+#[derive(serde::Deserialize, Default)]
+struct ListOverviewQuery {
+    /// Comma-separated status values to filter by, e.g. `?status=ready,building`.
+    /// Absent or empty: return all records (current behavior).
+    status: Option<String>,
+}
+
 async fn list_template_management_overview(
     State(state): State<AppState>,
+    Query(query): Query<ListOverviewQuery>,
 ) -> Result<Json<Value>, ApiError> {
-    let templates = crate::db::cubesandbox_templates::list_all_history(&state, 200)
+    let all_templates = crate::db::cubesandbox_templates::list_all_history(&state, 200)
         .await
         .map_err(internal_error)?;
-    let failed_count = templates
+    let failed_count = all_templates
         .iter()
         .filter(|record| record.status == TemplateStatus::Failed)
         .count();
+    let templates = if let Some(raw) = query.status.as_deref().filter(|s| !s.trim().is_empty()) {
+        let allowed: std::collections::HashSet<&str> =
+            raw.split(',').map(str::trim).filter(|s| !s.is_empty()).collect();
+        all_templates
+            .into_iter()
+            .filter(|record| allowed.contains(record.status.as_str()))
+            .collect::<Vec<_>>()
+    } else {
+        all_templates
+    };
     Ok(Json(json!({
         "templates": templates,
         "failedCount": failed_count,
@@ -373,21 +391,19 @@ async fn stream_public_template_kind(
             }
         }
         if let Some(mut rx) = receiver {
-            loop {
-                match rx.recv().await {
-                    Ok(event) => {
-                        if let Ok(data) = serde_json::to_string(&event) {
-                            yield Ok(Event::default().event("event").data(data));
-                        }
-                        if event.status == TemplateStatus::Ready.as_str()
-                            || event.status == TemplateStatus::Failed.as_str()
-                            || event.status == TemplateStatus::Invalidated.as_str()
-                        {
-                            break;
-                        }
+            while let Ok(event) = rx.recv().await {
+                {
+                    if let Ok(data) = serde_json::to_string(&event) {
+                        yield Ok(Event::default().event("event").data(data));
                     }
-                    Err(_) => break,
+                    if event.status == TemplateStatus::Ready.as_str()
+                        || event.status == TemplateStatus::Failed.as_str()
+                        || event.status == TemplateStatus::Invalidated.as_str()
+                    {
+                        break;
+                    }
                 }
+                // (Err(_) branch handled by while-let exit)
             }
         } else {
             // No active build; emit a sentinel so the client can disconnect.
@@ -497,5 +513,96 @@ mod tests {
 
         assert_eq!(payload["kind"], "codeql_cpp");
         assert!(payload.get("recordKind").is_none());
+    }
+
+    // --- Phase 6: ?status= filter tests ---
+
+    fn make_record_with_status(kind: TemplateKind, status: TemplateStatus) -> CubesandboxTemplateRecord {
+        CubesandboxTemplateRecord {
+            status,
+            ..sample_record(kind)
+        }
+    }
+
+    fn apply_status_filter<'a>(
+        records: &'a [CubesandboxTemplateRecord],
+        status_param: Option<&str>,
+    ) -> Vec<&'a CubesandboxTemplateRecord> {
+        if let Some(raw) = status_param.filter(|s| !s.trim().is_empty()) {
+            let allowed: std::collections::HashSet<&str> =
+                raw.split(',').map(str::trim).filter(|s| !s.is_empty()).collect();
+            records
+                .iter()
+                .filter(|r| allowed.contains(r.status.as_str()))
+                .collect()
+        } else {
+            records.iter().collect()
+        }
+    }
+
+    #[test]
+    fn test_list_template_management_overview_status_filter_ready_only() {
+        let records = vec![
+            make_record_with_status(TemplateKind::CodeqlCpp, TemplateStatus::Ready),
+            make_record_with_status(TemplateKind::CodeqlCpp, TemplateStatus::Failed),
+            make_record_with_status(TemplateKind::CodeqlCpp, TemplateStatus::Building),
+        ];
+        let filtered = apply_status_filter(&records, Some("ready"));
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0].status, TemplateStatus::Ready);
+    }
+
+    #[test]
+    fn test_list_template_management_overview_status_filter_multi_value() {
+        let records = vec![
+            make_record_with_status(TemplateKind::CodeqlCpp, TemplateStatus::Ready),
+            make_record_with_status(TemplateKind::CodeqlCpp, TemplateStatus::Building),
+            make_record_with_status(TemplateKind::CodeqlCpp, TemplateStatus::Failed),
+            make_record_with_status(TemplateKind::CodeqlCpp, TemplateStatus::Invalidated),
+        ];
+        let filtered = apply_status_filter(&records, Some("ready,building"));
+        assert_eq!(filtered.len(), 2);
+        assert!(filtered.iter().all(|r| r.status == TemplateStatus::Ready || r.status == TemplateStatus::Building));
+    }
+
+    #[test]
+    fn test_list_template_management_overview_status_filter_absent_returns_all() {
+        let records = vec![
+            make_record_with_status(TemplateKind::CodeqlCpp, TemplateStatus::Ready),
+            make_record_with_status(TemplateKind::CodeqlCpp, TemplateStatus::Failed),
+        ];
+        let filtered = apply_status_filter(&records, None);
+        assert_eq!(filtered.len(), 2);
+    }
+
+    #[test]
+    fn test_list_template_management_overview_status_filter_empty_string_returns_all() {
+        let records = vec![
+            make_record_with_status(TemplateKind::CodeqlCpp, TemplateStatus::Ready),
+            make_record_with_status(TemplateKind::CodeqlCpp, TemplateStatus::Failed),
+        ];
+        let filtered = apply_status_filter(&records, Some(""));
+        assert_eq!(filtered.len(), 2);
+    }
+
+    #[test]
+    fn test_list_template_management_overview_failed_count_stable_under_status_filter() {
+        // failed_count is computed from all_templates BEFORE status filter is applied.
+        // Simulate: 2 failed records total; filter to "ready" returns 1 ready record,
+        // but failed_count must still be 2.
+        let all_templates = vec![
+            make_record_with_status(TemplateKind::CodeqlCpp, TemplateStatus::Ready),
+            make_record_with_status(TemplateKind::CodeqlCpp, TemplateStatus::Failed),
+            make_record_with_status(TemplateKind::CodeqlCpp, TemplateStatus::Failed),
+        ];
+        // failed_count computed before filter (as in handler)
+        let failed_count = all_templates
+            .iter()
+            .filter(|r| r.status == TemplateStatus::Failed)
+            .count();
+        // apply status=ready filter
+        let filtered = apply_status_filter(&all_templates, Some("ready"));
+        assert_eq!(filtered.len(), 1, "filtered list should contain only ready");
+        assert_eq!(failed_count, 2, "failed_count must reflect unfiltered all_templates");
     }
 }

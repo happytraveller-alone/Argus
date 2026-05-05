@@ -201,6 +201,7 @@ export default function TaskManagementStatic() {
 						lockMode
 						allowUploadProject
 						primaryCreateLabel="创建静态审计任务"
+						navigateOnSuccess={false}
 					/>
 				</Suspense>
 			) : null}

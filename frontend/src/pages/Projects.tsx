@@ -15,7 +15,7 @@ export default function Projects() {
 			renderCreateScanDialog={(props) =>
 				props.open ? (
 					<Suspense fallback={null}>
-						<CreateProjectScanDialog {...props} />
+						<CreateProjectScanDialog {...props} navigateOnSuccess={false} />
 					</Suspense>
 				) : null
 			}

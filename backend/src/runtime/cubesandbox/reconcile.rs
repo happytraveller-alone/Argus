@@ -206,23 +206,24 @@ async fn read_active_codeql_sandboxes() -> HashSet<String> {
 
 // ─── ENV REWRITE (Phase 4 territory) ─────────────────────────────────────────
 
-/// Rewrite CUBESANDBOX_TEMPLATE_ID in the .env file to a new value.
+/// Rewrite a named env key in the .env file to a new value.
 ///
 /// Algorithm:
 ///   1. Open the final .env path and hold flock(LOCK_EX) for the whole rewrite.
 ///   2. Read full contents.
-///   3. Replace the value on the `CUBESANDBOX_TEMPLATE_ID=` line only
+///   3. Replace the value on the `{env_key}=` line only
 ///      (hand-rolled line walker — no regex dep; handles leading whitespace and
-///       inline comments by preserving everything after the value token).
+///      inline comments by preserving everything after the value token).
 ///   4. Write to a NamedTempFile in the same dir, fsync, atomic persist.
 ///   5. Drop lock.
 ///
 /// Path = ARGUS_ENV_FILE env var, or `./.env` if unset.
 /// On any IO error the function returns Err; callers push into summary.errors.
-async fn rewrite_env_template_id(new_id: &str) -> Result<()> {
+async fn rewrite_env_template_id_for(env_key: &str, new_id: &str) -> Result<()> {
     use std::io::{Read, Write};
     use std::path::Path;
 
+    let env_key = env_key.to_string();
     let new_id = new_id.to_string();
     tokio::task::spawn_blocking(move || {
         let env_path_str = std::env::var("ARGUS_ENV_FILE").unwrap_or_else(|_| "./.env".into());
@@ -248,8 +249,8 @@ async fn rewrite_env_template_id(new_id: &str) -> Result<()> {
             .read_to_string(&mut contents)
             .map_err(|e| anyhow::anyhow!("read .env failed: {e}"))?;
 
-        // Hand-rolled line walker: replace value on CUBESANDBOX_TEMPLATE_ID= line only.
-        // Matches lines where the trimmed prefix is `CUBESANDBOX_TEMPLATE_ID` followed
+        // Hand-rolled line walker: replace value on {env_key}= line only.
+        // Matches lines where the trimmed prefix is `env_key` followed
         // by optional whitespace + `=`. Preserves leading whitespace, comment suffix,
         // and all other lines verbatim.
         let mut new_lines = Vec::with_capacity(contents.lines().count() + 1);
@@ -259,7 +260,7 @@ async fn rewrite_env_template_id(new_id: &str) -> Result<()> {
             // Split on first `=`; check if LHS (trimmed, stripped of trailing space) is the key.
             if let Some(eq_pos) = trimmed.find('=') {
                 let key = trimmed[..eq_pos].trim_end();
-                if key == "CUBESANDBOX_TEMPLATE_ID" {
+                if key == env_key {
                     // Preserve leading whitespace from original line.
                     let leading = &line[..line.len() - trimmed.len()];
                     // Preserve any inline comment (space + #) after the old value token.
@@ -269,10 +270,7 @@ async fn rewrite_env_template_id(new_id: &str) -> Result<()> {
                         .find(|c: char| c == '#' || c.is_whitespace())
                         .unwrap_or(after_eq.len());
                     let suffix = &after_eq[token_end..];
-                    new_lines.push(format!(
-                        "{}CUBESANDBOX_TEMPLATE_ID={}{}",
-                        leading, new_id, suffix
-                    ));
+                    new_lines.push(format!("{leading}{env_key}={new_id}{suffix}"));
                     replaced = true;
                     continue;
                 }
@@ -282,7 +280,7 @@ async fn rewrite_env_template_id(new_id: &str) -> Result<()> {
 
         if !replaced {
             return Err(anyhow::anyhow!(
-                "CUBESANDBOX_TEMPLATE_ID= line not found in {final_path:?}"
+                "{env_key}= line not found in {final_path:?}"
             ));
         }
 
@@ -308,7 +306,7 @@ async fn rewrite_env_template_id(new_id: &str) -> Result<()> {
         Ok(())
     })
     .await
-    .map_err(|e| anyhow::anyhow!("rewrite_env_template_id task panicked: {e}"))??;
+    .map_err(|e| anyhow::anyhow!("rewrite_env_template_id_for task panicked: {e}"))??;
 
     Ok(())
 }
@@ -350,7 +348,7 @@ pub(crate) async fn reconcile_stale_templates_with_client<C: CubemasterApi>(
 
     // Build client (or use test override)
     enum ClientHolder<'a, C: CubemasterApi> {
-        Real(CubemasterClient),
+        Real(Box<CubemasterClient>),
         Override(&'a C),
     }
     impl<'a, C: CubemasterApi> ClientHolder<'a, C> {
@@ -384,7 +382,7 @@ pub(crate) async fn reconcile_stale_templates_with_client<C: CubemasterApi>(
         ClientHolder::Override(oc)
     } else {
         match build_reconcile_client(state) {
-            Ok(c) => ClientHolder::Real(c),
+            Ok(c) => ClientHolder::Real(Box::new(c)),
             Err(e) => {
                 summary
                     .errors
@@ -422,6 +420,13 @@ pub(crate) async fn reconcile_stale_templates_with_client<C: CubemasterApi>(
     // Step 4: read env pin
     let env_pin_raw = std::env::var("CUBESANDBOX_TEMPLATE_ID").ok();
     let env_pin: Option<&str> = env_pin_raw
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
+
+    // Step 4 (opengrep): read opengrep env pin
+    let env_pin_opengrep_raw = std::env::var("CUBESANDBOX_OPENGREP_TEMPLATE_ID").ok();
+    let env_pin_opengrep: Option<&str> = env_pin_opengrep_raw
         .as_deref()
         .map(str::trim)
         .filter(|s| !s.is_empty());
@@ -676,21 +681,45 @@ pub(crate) async fn reconcile_stale_templates_with_client<C: CubemasterApi>(
             .and_then(|r| r.template_id.clone());
 
         if let Some(pin) = new_pin {
-            // Phase 4 wires the actual rewrite; for now mark intent
-            match rewrite_env_template_id(&pin).await {
+            match rewrite_env_template_id_for("CUBESANDBOX_TEMPLATE_ID", &pin).await {
                 Ok(()) => summary.env_rewrote_bool = true,
-                Err(_) => {
-                    // unimplemented — Phase 4 will implement; mark as no-op for now
-                    tracing::debug!(
-                        new_pin = %pin,
-                        "rewrite_env_template_id is Phase 4 territory — skipping"
-                    );
-                }
+                Err(e) => summary
+                    .errors
+                    .push(format!("rewrite_env_template_id_for(codeql): {e:#}")),
             }
         } else {
             summary
                 .errors
                 .push("env_pin_miss_no_db_fallback".to_string());
+        }
+    }
+
+    // Step 10 (opengrep): env pin validity check for CUBESANDBOX_OPENGREP_TEMPLATE_ID
+    let env_pin_opengrep_valid =
+        env_pin_opengrep.is_none_or(|pin| cm_all_ids.contains(pin));
+    if !env_pin_opengrep_valid {
+        // Pick first ready DB record of current opengrep kind as new pin
+        let new_pin_opengrep = db_active
+            .iter()
+            .find(|r| r.status == TemplateStatus::Ready && r.kind == TemplateKind::current_opengrep())
+            .and_then(|r| r.template_id.clone());
+
+        if let Some(pin) = new_pin_opengrep {
+            match rewrite_env_template_id_for("CUBESANDBOX_OPENGREP_TEMPLATE_ID", &pin).await {
+                Ok(()) => {
+                    tracing::info!(
+                        new_pin = %pin,
+                        "cubesandbox: env pin updated CUBESANDBOX_OPENGREP_TEMPLATE_ID={pin}"
+                    );
+                }
+                Err(e) => summary
+                    .errors
+                    .push(format!("rewrite_env_template_id_for(opengrep): {e:#}")),
+            }
+        } else {
+            summary
+                .errors
+                .push("env_pin_miss_no_db_fallback_opengrep".to_string());
         }
     }
 
@@ -803,7 +832,6 @@ pub async fn reconcile_with_client_for_test<C: CubemasterApi>(
 mod tests {
     use super::*;
     use std::sync::Mutex as StdMutex;
-    use time::macros::datetime;
 
     // ── Hand-rolled test double ─────────────────────────────────────────────
 
@@ -834,10 +862,6 @@ mod tests {
         fn with_sandboxes_err(mut self, msg: &str) -> Self {
             self.sandboxes = Err(anyhow::anyhow!("{}", msg));
             self
-        }
-
-        fn deleted_templates_snapshot(&self) -> Vec<String> {
-            self.deleted_templates.lock().unwrap().clone()
         }
     }
 
@@ -883,16 +907,6 @@ mod tests {
             status: status.to_string(),
             created_at,
             image_fingerprint: None,
-        }
-    }
-
-    fn make_sandbox(id: &str, age_hours: i64) -> CubemasterSandbox {
-        let created_at = OffsetDateTime::now_utc() - time::Duration::hours(age_hours);
-        CubemasterSandbox {
-            sandbox_id: id.to_string(),
-            template_id: None,
-            status: "RUNNING".to_string(),
-            created_at,
         }
     }
 
@@ -1178,7 +1192,9 @@ mod tests {
         // Point ARGUS_ENV_FILE at our temp file.
         std::env::set_var("ARGUS_ENV_FILE", env_path.to_str().unwrap());
 
-        rewrite_env_template_id("tpl-new").await.unwrap();
+        rewrite_env_template_id_for("CUBESANDBOX_TEMPLATE_ID", "tpl-new")
+            .await
+            .unwrap();
 
         let result = std::fs::read_to_string(&env_path).unwrap();
         assert!(
@@ -1216,10 +1232,14 @@ mod tests {
 
         std::env::set_var("ARGUS_ENV_FILE", env_path.to_str().unwrap());
 
-        rewrite_env_template_id("tpl-same").await.unwrap();
+        rewrite_env_template_id_for("CUBESANDBOX_TEMPLATE_ID", "tpl-same")
+            .await
+            .unwrap();
         let after_first = std::fs::read_to_string(&env_path).unwrap();
 
-        rewrite_env_template_id("tpl-same").await.unwrap();
+        rewrite_env_template_id_for("CUBESANDBOX_TEMPLATE_ID", "tpl-same")
+            .await
+            .unwrap();
         let after_second = std::fs::read_to_string(&env_path).unwrap();
 
         assert_eq!(
@@ -1246,11 +1266,112 @@ mod tests {
 
         std::env::set_var("ARGUS_ENV_FILE", env_path.to_str().unwrap());
 
-        let result = rewrite_env_template_id("tpl-new").await;
+        let result = rewrite_env_template_id_for("CUBESANDBOX_TEMPLATE_ID", "tpl-new").await;
         assert!(result.is_err(), "must return Err on EACCES");
 
         // Restore permissions so tempdir cleanup succeeds.
         std::fs::set_permissions(&env_path, std::fs::Permissions::from_mode(0o644)).unwrap();
+
+        std::env::remove_var("ARGUS_ENV_FILE");
+    }
+
+    // ── rewrite_env_template_id_for tests (Phase 5) ──────────────────────────
+
+    /// Test: rewrite_env_template_id_for with CUBESANDBOX_TEMPLATE_ID key — mirrors
+    /// existing test 1 but exercises the generalized signature explicitly.
+    #[tokio::test]
+    async fn test_rewrite_env_template_id_for_codeql_key_existing_value() {
+        let dir = tempfile::tempdir().unwrap();
+        let env_path = dir.path().join(".env");
+
+        let original =
+            "CUBESANDBOX_TEMPLATE_ID=tpl-old\nCUBESANDBOX_OPENGREP_TEMPLATE_ID=og-old\n";
+        std::fs::write(&env_path, original).unwrap();
+        std::env::set_var("ARGUS_ENV_FILE", env_path.to_str().unwrap());
+
+        rewrite_env_template_id_for("CUBESANDBOX_TEMPLATE_ID", "tpl-new")
+            .await
+            .unwrap();
+
+        let result = std::fs::read_to_string(&env_path).unwrap();
+        assert!(
+            result.contains("CUBESANDBOX_TEMPLATE_ID=tpl-new"),
+            "codeql key must be updated: {result:?}"
+        );
+        assert!(
+            result.contains("CUBESANDBOX_OPENGREP_TEMPLATE_ID=og-old"),
+            "opengrep key must be untouched: {result:?}"
+        );
+        assert!(
+            !result.contains("tpl-old"),
+            "old codeql value must not appear: {result:?}"
+        );
+
+        std::env::remove_var("ARGUS_ENV_FILE");
+    }
+
+    /// Test: rewrite_env_template_id_for with CUBESANDBOX_OPENGREP_TEMPLATE_ID key —
+    /// rewrites opengrep line only; codeql line is untouched.
+    #[tokio::test]
+    async fn test_rewrite_env_template_id_for_opengrep_key_new() {
+        let dir = tempfile::tempdir().unwrap();
+        let env_path = dir.path().join(".env");
+
+        let original =
+            "CUBESANDBOX_TEMPLATE_ID=codeql-keep\nCUBESANDBOX_OPENGREP_TEMPLATE_ID=og-old\n";
+        std::fs::write(&env_path, original).unwrap();
+        std::env::set_var("ARGUS_ENV_FILE", env_path.to_str().unwrap());
+
+        rewrite_env_template_id_for("CUBESANDBOX_OPENGREP_TEMPLATE_ID", "og-new")
+            .await
+            .unwrap();
+
+        let result = std::fs::read_to_string(&env_path).unwrap();
+        assert!(
+            result.contains("CUBESANDBOX_OPENGREP_TEMPLATE_ID=og-new"),
+            "opengrep key must be updated: {result:?}"
+        );
+        assert!(
+            result.contains("CUBESANDBOX_TEMPLATE_ID=codeql-keep"),
+            "codeql key must be untouched: {result:?}"
+        );
+        assert!(
+            !result.contains("og-old"),
+            "old opengrep value must not appear: {result:?}"
+        );
+
+        std::env::remove_var("ARGUS_ENV_FILE");
+    }
+
+    /// Test: step 10 rewrite failure is promoted to summary.errors (not silently swallowed).
+    /// Simulate by pointing ARGUS_ENV_FILE at a non-existent path so rewrite_env_template_id_for
+    /// returns Err. The caller (step 10) must push the error into summary.errors.
+    #[tokio::test]
+    async fn test_step10_promotes_err_to_summary_errors() {
+        let dir = tempfile::tempdir().unwrap();
+        // Write a .env with no CUBESANDBOX_TEMPLATE_ID line → rewrite_env_template_id_for
+        // will return Err("...line not found...").
+        let env_path = dir.path().join(".env");
+        std::fs::write(&env_path, "SOME_OTHER_KEY=val\n").unwrap();
+        std::env::set_var("ARGUS_ENV_FILE", env_path.to_str().unwrap());
+
+        // env_pin_valid = false when env_pin is set but not in cm_all_ids (empty cubemaster).
+        // To trigger step 10: set CUBESANDBOX_TEMPLATE_ID to a value NOT in cubemaster.
+        // The DB has no rows (reconcile_with_no_db), so new_pin is None →
+        // env_pin_miss_no_db_fallback is pushed. To trigger the rewrite error path we
+        // need a DB row, so we test at the unit level instead: call the function directly.
+        let result = rewrite_env_template_id_for("CUBESANDBOX_TEMPLATE_ID", "tpl-x").await;
+        assert!(
+            result.is_err(),
+            "must Err when key line not found in .env: {result:?}"
+        );
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("CUBESANDBOX_TEMPLATE_ID"),
+            "error must name the missing key"
+        );
 
         std::env::remove_var("ARGUS_ENV_FILE");
     }

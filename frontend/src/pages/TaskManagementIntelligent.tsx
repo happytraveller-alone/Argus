@@ -175,6 +175,7 @@ export default function TaskManagementIntelligent() {
 							void refresh();
 						}}
 						initialMode="intelligent"
+						navigateOnSuccess={false}
 					/>
 				</Suspense>
 			) : null}

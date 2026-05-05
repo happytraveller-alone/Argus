@@ -27,6 +27,7 @@ impl TemplateKind {
         }
     }
 
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(value: &str) -> Result<Self> {
         match value {
             "codeql_cpp" => Ok(Self::CodeqlCpp),
@@ -58,6 +59,7 @@ impl TemplateStatus {
         }
     }
 
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(value: &str) -> Result<Self> {
         match value {
             "pending" => Ok(Self::Pending),

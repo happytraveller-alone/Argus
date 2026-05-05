@@ -545,6 +545,10 @@ cube_ensure_install() {
   cube_wait_for_predicate "CubeMaster API (127.0.0.1:${CUBE_API_PORT_DEFAULT}/health)" cube_api_healthy "$CUBE_BOOTSTRAP_TIMEOUT"
 }
 
+# Source cubesandbox lib (double-source guard is inside the lib itself).
+# shellcheck source=scripts/cubesandbox-lib.sh
+[[ -z "${CUBESANDBOX_LIB_LOADED:-}" ]] && source "$(dirname "${BASH_SOURCE[0]}")/scripts/cubesandbox-lib.sh"
+
 cube_persist_template_id() {
   local id="$1"
   local tmp
@@ -566,6 +570,216 @@ cube_persist_template_id() {
   mv "$tmp" "$ARGUS_ENV_FILE"
   chmod 600 "$ARGUS_ENV_FILE" 2>/dev/null || true
   log "Persisted CUBESANDBOX_TEMPLATE_ID=${id} in ${ARGUS_ENV_FILE}."
+}
+
+cube_persist_opengrep_template_id() {
+  local id="$1"
+  local tmp
+  tmp="$(mktemp "${ARGUS_ENV_FILE}.tmp.XXXXXX")"
+  awk -v id="$id" '
+    BEGIN { replaced = 0 }
+    /^[[:space:]]*CUBESANDBOX_OPENGREP_TEMPLATE_ID[[:space:]]*=/ {
+      print "CUBESANDBOX_OPENGREP_TEMPLATE_ID=" id
+      replaced = 1
+      next
+    }
+    { print }
+    END {
+      if (!replaced) {
+        print "CUBESANDBOX_OPENGREP_TEMPLATE_ID=" id
+      }
+    }
+  ' "$ARGUS_ENV_FILE" > "$tmp"
+  mv "$tmp" "$ARGUS_ENV_FILE"
+  chmod 600 "$ARGUS_ENV_FILE" 2>/dev/null || true
+  log "Persisted CUBESANDBOX_OPENGREP_TEMPLATE_ID=${id} in ${ARGUS_ENV_FILE}."
+}
+
+cube_inventory_templates() {
+  local zombie_hours="${ARGUS_CUBE_INVENTORY_ZOMBIE_HOURS:-6}"
+  log "cube inventory: scanning templates (zombie_hours=${zombie_hours})..."
+
+  # Read .env-pinned IDs up-front — used for fallback kind-detection and
+  # inviolability guard (MAJOR #1 and MAJOR #2).
+  local env_pin_codeql env_pin_opengrep
+  env_pin_codeql="$(read_env_value CUBESANDBOX_TEMPLATE_ID)"
+  env_pin_opengrep="$(read_env_value CUBESANDBOX_OPENGREP_TEMPLATE_ID)"
+
+  local raw_json
+  raw_json="$(cubesandbox_template_list --json 2>&1)" || {
+    fail "cube inventory: cubemastercli tpl list failed (rc=$?); cannot proceed."
+  }
+
+  local winners
+  winners="$(python3 - "$zombie_hours" "$env_pin_codeql" "$env_pin_opengrep" <<'PYEOF'
+import sys, json, datetime, re
+
+zombie_hours = float(sys.argv[1])
+env_pin_codeql  = sys.argv[2] if len(sys.argv) > 2 else ""
+env_pin_opengrep = sys.argv[3] if len(sys.argv) > 3 else ""
+now = datetime.datetime.utcnow()
+
+raw = sys.stdin.read().strip()
+# Attempt JSON parse; if not JSON, treat as tabular (no winner, just warn).
+try:
+    records = json.loads(raw)
+except Exception:
+    print("PARSE_FAIL", flush=True)
+    sys.exit(0)
+
+buckets = {"codeql_cpp": [], "opengrep": []}
+
+# Build reverse map from env-pin id → kind for fallback detection
+pin_to_kind = {}
+if env_pin_codeql:
+    pin_to_kind[env_pin_codeql] = "codeql_cpp"
+if env_pin_opengrep:
+    pin_to_kind[env_pin_opengrep] = "opengrep"
+
+kind_method = "substring"  # audit log: which path was taken
+
+for r in records:
+    image_ref = r.get("image_ref") or ""
+    tid = r.get("template_id") or r.get("id") or ""
+    status = (r.get("status") or "").upper()
+    created_at_str = r.get("created_at") or ""
+
+    # Determine kind from image_ref substring (AS-1 normal path)
+    if "codeql" in image_ref:
+        kind = "codeql_cpp"
+    elif "opengrep" in image_ref:
+        kind = "opengrep"
+    else:
+        # Fallback: match against .env-pinned IDs (MAJOR #1)
+        if tid and tid in pin_to_kind:
+            kind = pin_to_kind[tid]
+            kind_method = "env-pin-fallback"
+            print(f"WARNING:unknown_bucket_fallback tid={tid} image_ref={image_ref!r} kind_via_env_pin={kind}", flush=True)
+        else:
+            print(f"WARNING:unknown_bucket tid={tid} image_ref={image_ref!r} (no env-pin match; skipping)", flush=True)
+            continue
+
+    # Parse created_at
+    created_at = None
+    for fmt in ("%Y-%m-%dT%H:%M:%SZ", "%Y-%m-%dT%H:%M:%S.%fZ", "%Y-%m-%dT%H:%M:%S"):
+        try:
+            created_at = datetime.datetime.strptime(created_at_str[:26].rstrip("Z"), fmt.rstrip("Z"))
+            break
+        except Exception:
+            pass
+
+    age_hours = (now - created_at).total_seconds() / 3600.0 if created_at else 0.0
+
+    # Determine action
+    if status == "FAILED":
+        action = "delete"
+    elif status in ("RUNNING", "BUILDING"):
+        action = "delete" if age_hours >= zombie_hours else "keep"
+    elif status == "READY":
+        action = "candidate"  # ranked later
+    else:
+        action = "keep"  # unknown status: skip
+
+    buckets[kind].append({
+        "tid": tid, "status": status, "created_at": created_at,
+        "created_at_str": created_at_str, "action": action,
+    })
+
+print(f"KIND_METHOD:{kind_method}", flush=True)
+
+winner_codeql = ""
+winner_opengrep = ""
+
+for kind, entries in buckets.items():
+    # Sort READY candidates newest-first
+    ready = sorted(
+        [e for e in entries if e["action"] == "candidate"],
+        key=lambda e: e["created_at"] or datetime.datetime.min,
+        reverse=True,
+    )
+    # Winner = rank 0 (newest READY)
+    if ready:
+        winner = ready[0]
+        if kind == "codeql_cpp":
+            winner_codeql = winner["tid"]
+        else:
+            winner_opengrep = winner["tid"]
+        # surplus READY → delete
+        for surplus in ready[1:]:
+            print(f"DELETE:{surplus['tid']}", flush=True)
+
+    # Emit deletes for FAILED + zombies
+    for e in entries:
+        if e["action"] == "delete":
+            print(f"DELETE:{e['tid']}", flush=True)
+
+print(f"WINNER_CODEQL:{winner_codeql}", flush=True)
+print(f"WINNER_OPENGREP:{winner_opengrep}", flush=True)
+PYEOF
+  <<< "$raw_json")" || {
+    fail "cube inventory: Python parse step failed (rc=$?)."
+  }
+
+  # Check for parse failure (tabular fallback)
+  if grep -q '^PARSE_FAIL' <<< "$winners"; then
+    log "WARNING: cube inventory: tpl list output was not JSON; skipping inventory (tabular mode not supported for deletion)."
+    return 0
+  fi
+
+  # Log which kind-detection path was taken (audit trail for MAJOR #1)
+  local kind_method
+  kind_method="$(grep '^KIND_METHOD:' <<< "$winners" | cut -d: -f2-)"
+  log "cube inventory: kind-detection method=${kind_method:-unknown}"
+
+  # Emit warnings for unknown buckets
+  while IFS= read -r line; do
+    [[ "$line" == WARNING:* ]] && log "WARNING: cube inventory: ${line#WARNING:}"
+  done <<< "$winners"
+
+  # Process deletes — with env-pin inviolability guard (MAJOR #2)
+  while IFS= read -r line; do
+    if [[ "$line" == DELETE:* ]]; then
+      local tid="${line#DELETE:}"
+      # Inviolability guard: never delete a template that is currently pinned in .env
+      if [[ -n "$env_pin_codeql"   && "$tid" == "$env_pin_codeql"   ]]; then
+        log "WARNING: cube inventory: refusing to delete .env-pinned template ${tid} (kind=codeql_cpp); use shutdown --hard if you really want this gone."
+        continue
+      fi
+      if [[ -n "$env_pin_opengrep" && "$tid" == "$env_pin_opengrep" ]]; then
+        log "WARNING: cube inventory: refusing to delete .env-pinned template ${tid} (kind=opengrep); use shutdown --hard if you really want this gone."
+        continue
+      fi
+      log "cube inventory: deleting template ${tid}..."
+      local rc=0
+      cubesandbox_template_delete "$tid" || rc=$?
+      if [[ $rc -eq 2 ]]; then
+        log "WARNING: cube inventory: delete ${tid} rejected (unsafe ID, rc=2); continuing."
+      elif [[ $rc -ne 0 ]]; then
+        log "WARNING: cube inventory: delete ${tid} returned rc=${rc}; continuing."
+      fi
+    fi
+  done <<< "$winners"
+
+  # Persist winners to .env
+  local winner_codeql winner_opengrep
+  winner_codeql="$(grep '^WINNER_CODEQL:' <<< "$winners" | cut -d: -f2-)"
+  winner_opengrep="$(grep '^WINNER_OPENGREP:' <<< "$winners" | cut -d: -f2-)"
+
+  if [[ -n "$winner_codeql" ]]; then
+    log "cube inventory: codeql_cpp winner=${winner_codeql}"
+    cube_persist_template_id "$winner_codeql"
+  else
+    log "cube inventory: no READY codeql_cpp template found; .env unchanged."
+  fi
+
+  if [[ -n "$winner_opengrep" ]]; then
+    log "cube inventory: opengrep winner=${winner_opengrep}"
+    cube_persist_opengrep_template_id "$winner_opengrep"
+  else
+    log "cube inventory: no READY opengrep template found; .env unchanged."
+  fi
+
+  log "cube inventory: done."
 }
 
 cube_reset_template_id() {
@@ -682,6 +896,7 @@ ensure_cubesandbox() {
     if "$RESET_CUBESANDBOX_TEMPLATE"; then
       cube_reset_template_id
     fi
+    cube_inventory_templates
     cube_ensure_template
     log "cubesandbox host-side bootstrap complete (fast path)."
     return 0
@@ -693,6 +908,7 @@ ensure_cubesandbox() {
   if "$RESET_CUBESANDBOX_TEMPLATE"; then
     cube_reset_template_id
   fi
+  cube_inventory_templates
   cube_ensure_template
   log "cubesandbox host-side bootstrap complete."
 }

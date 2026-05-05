@@ -89,9 +89,13 @@ export interface SandboxTemplateResetSummary {
   record: CubesandboxTemplateRecord;
 }
 
-export async function getSandboxTemplateManagementOverview(): Promise<SandboxTemplateManagementOverview> {
+export async function getSandboxTemplateManagementOverview(
+  statusFilter?: string,
+): Promise<SandboxTemplateManagementOverview> {
+  const params = statusFilter ? { status: statusFilter } : undefined;
   const response = await apiClient.get<SandboxTemplateManagementOverview>(
     "/cubesandbox/templates",
+    { params },
   );
   return response.data;
 }

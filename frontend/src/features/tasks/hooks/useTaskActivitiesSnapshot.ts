@@ -26,6 +26,7 @@ export function useTaskActivitiesSnapshot(
 		autoLoad = true,
 		forceInitial = false,
 		pollingIntervalMs,
+		idlePollingIntervalMs,
 	} = options;
 	const [storeState, setStoreState] = useState(() =>
 		getTaskActivitiesStoreState(),
@@ -64,6 +65,19 @@ export function useTaskActivitiesSnapshot(
 			window.clearInterval(timer);
 		};
 	}, [isPageVisible, pollingIntervalMs, hasActiveTasks]);
+
+	useEffect(() => {
+		if (!idlePollingIntervalMs || idlePollingIntervalMs <= 0) return;
+		if (hasActiveTasks) return;
+		if (!isPageVisible || document.hidden) return;
+		const timer = window.setInterval(() => {
+			if (document.hidden) return;
+			void refreshTaskActivitiesSnapshot();
+		}, idlePollingIntervalMs);
+		return () => {
+			window.clearInterval(timer);
+		};
+	}, [isPageVisible, idlePollingIntervalMs, hasActiveTasks]);
 
 	useEffect(() => {
 		const handleVisibilityChange = () => {

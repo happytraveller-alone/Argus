@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { RefreshCw, RotateCcw, Search, Trash2 } from "lucide-react";
+import { History, RefreshCw, RotateCcw, Search, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -57,17 +57,22 @@ export default function SandboxManagementPage() {
   const [cleanupRunning, setCleanupRunning] = useState(false);
   const [deletingRecordId, setDeletingRecordId] = useState<string | null>(null);
   const [resettingKind, setResettingKind] = useState<"codeql_cpp" | "opengrep" | null>(null);
+  /** AC-A4: default hide invalidated/failed; toggle to show full history */
+  const [showFullHistory, setShowFullHistory] = useState(false);
 
   const filteredTemplates = useMemo(() => {
     const keyword = searchTerm.trim().toLowerCase();
     return templates.filter((record) => matchesTemplate(record, keyword));
   }, [searchTerm, templates]);
 
-  async function loadData() {
+  const DEFAULT_STATUS_FILTER = "ready,building";
+
+  async function loadData(fullHistory = showFullHistory) {
     setLoading(true);
     try {
+      const statusFilter = fullHistory ? undefined : DEFAULT_STATUS_FILTER;
       const [overview, taskRecords] = await Promise.all([
-        getSandboxTemplateManagementOverview(),
+        getSandboxTemplateManagementOverview(statusFilter),
         listCubeSandboxTasks(50),
       ]);
       setTemplates(overview.templates);
@@ -81,9 +86,17 @@ export default function SandboxManagementPage() {
     }
   }
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: loadData is intentionally omitted — it is a plain function recreated each render; adding it would cause an infinite loop. Initial fetch only.
   useEffect(() => {
     void loadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: loadData is intentionally omitted — see above. Re-runs only when showFullHistory changes.
+  useEffect(() => {
+    void loadData(showFullHistory);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showFullHistory]);
 
   async function handleDeleteFailed(record: CubesandboxTemplateRecord) {
     if (record.status !== "failed" && record.status !== "invalidated") return;
@@ -142,6 +155,7 @@ export default function SandboxManagementPage() {
       await loadData();
       for (let attempt = 0; attempt < 120; attempt += 1) {
         await sleep(3000);
+        // Poll with full history during reset to catch all status transitions
         const overview = await getSandboxTemplateManagementOverview();
         setTemplates(overview.templates);
         setFailedCount(overview.failedCount);
@@ -182,6 +196,14 @@ export default function SandboxManagementPage() {
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <Badge variant="outline">FAILED {failedCount}</Badge>
+              <Button
+                size="sm"
+                variant={showFullHistory ? "secondary" : "outline"}
+                onClick={() => setShowFullHistory((prev) => !prev)}
+              >
+                <History className="mr-2 h-4 w-4" />
+                {showFullHistory ? "隐藏历史" : "显示完整历史"}
+              </Button>
               <Button size="sm" variant="outline" onClick={() => void loadData()} disabled={loading}>
                 <RefreshCw className="mr-2 h-4 w-4" />
                 刷新
