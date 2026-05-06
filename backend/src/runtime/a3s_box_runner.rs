@@ -3,11 +3,12 @@ use flate2::{write::GzEncoder, Compression, GzBuilder};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{
-    collections::{BTreeMap, HashSet},
+    collections::{BTreeMap, HashMap, HashSet},
     env, fs,
     io::{Read, Write},
     path::{Path, PathBuf},
     process::{Command, Stdio},
+    sync::{LazyLock, Mutex},
     thread,
     time::{Duration, Instant},
 };
@@ -20,11 +21,14 @@ const MGMT_CMD_OUTPUT_LIMIT_BYTES: usize = 1_048_576;
 const SCANNER_MOUNT_PATH: &str = "/scan";
 const DEFAULT_A3S_BOX_BIN: &str = "a3s-box";
 const DEFAULT_A3S_BOX_TIMEOUT_SECONDS: u64 = 900;
+const DEFAULT_A3S_BOX_STARTUP_TIMEOUT_SECONDS: u64 = 45;
 const DEFAULT_A3S_BOX_RUNNER_ROOT: &str = "/tmp/argus/a3s-box-runs";
 const DEFAULT_CONTAINER_CLI_BIN: &str = "docker";
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct A3sBoxRunnerSpec {
+    #[serde(default)]
+    pub task_id: Option<String>,
     pub scanner_type: String,
     pub image: String,
     pub workspace_dir: String,
@@ -68,6 +72,7 @@ impl Default for A3sBoxRunnerSpec {
     fn default() -> Self {
         Self {
             scanner_type: String::new(),
+            task_id: None,
             image: String::new(),
             workspace_dir: String::new(),
             command: Vec::new(),
@@ -114,6 +119,9 @@ struct RunnerMetaContext<'a> {
     log_retention: &'a str,
 }
 
+static ACTIVE_A3S_BOXES: LazyLock<Mutex<HashMap<String, String>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+
 fn a3s_box_bin() -> String {
     env::var("A3S_BOX_BIN")
         .ok()
@@ -139,6 +147,13 @@ fn a3s_box_cleanup_timeout() -> u64 {
         .unwrap_or(30)
 }
 
+fn a3s_box_startup_timeout() -> u64 {
+    env::var("A3S_BOX_STARTUP_TIMEOUT_SECONDS")
+        .ok()
+        .and_then(|value| value.trim().parse::<u64>().ok())
+        .unwrap_or(DEFAULT_A3S_BOX_STARTUP_TIMEOUT_SECONDS)
+}
+
 fn a3s_box_auto_load_docker_image() -> bool {
     env::var("A3S_BOX_AUTO_LOAD_DOCKER_IMAGE")
         .ok()
@@ -157,6 +172,44 @@ fn container_cli_bin() -> String {
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())
         .unwrap_or_else(|| DEFAULT_CONTAINER_CLI_BIN.to_string())
+}
+
+fn register_active_task_box(task_id: Option<&str>, box_name: &str) {
+    let Some(task_id) = task_id else {
+        return;
+    };
+    ACTIVE_A3S_BOXES
+        .lock()
+        .expect("active a3s-box registry")
+        .insert(task_id.to_string(), box_name.to_string());
+}
+
+fn unregister_active_task_box(task_id: Option<&str>, box_name: &str) {
+    let Some(task_id) = task_id else {
+        return;
+    };
+    let mut active = ACTIVE_A3S_BOXES.lock().expect("active a3s-box registry");
+    if active.get(task_id).is_some_and(|current| current == box_name) {
+        active.remove(task_id);
+    }
+}
+
+pub fn stop_active_task_sync(task_id: &str) -> bool {
+    let box_name = ACTIVE_A3S_BOXES
+        .lock()
+        .expect("active a3s-box registry")
+        .get(task_id)
+        .cloned();
+    match box_name {
+        Some(box_name) => {
+            let stopped = stop_box_sync(&box_name);
+            if stopped {
+                unregister_active_task_box(Some(task_id), &box_name);
+            }
+            stopped
+        }
+        None => false,
+    }
 }
 
 fn ensure_workspace_artifacts(workspace_dir: &str) -> Result<(PathBuf, PathBuf, PathBuf)> {
@@ -290,6 +343,141 @@ fn run_command_capture(
             .map_err(|_| anyhow::anyhow!("join a3s-box stderr reader"))??,
     )
     .to_string();
+
+    Ok(CommandCapture {
+        timed_out,
+        status_code: exit_status.and_then(|status| status.code()),
+        stdout,
+        stderr,
+    })
+}
+
+fn a3s_box_workload_exec_ready(binary: &str, box_name: &str) -> Result<(), String> {
+    let args = vec!["top".to_string(), box_name.to_string()];
+    let capture = run_command_capture(
+        binary,
+        &args,
+        Some(Duration::from_secs(5)),
+        MGMT_CMD_OUTPUT_LIMIT_BYTES,
+        MGMT_CMD_OUTPUT_LIMIT_BYTES,
+    )
+    .map_err(|error| error.to_string())?;
+    if command_succeeded(&capture) {
+        Ok(())
+    } else {
+        Err(command_failed_text(&capture))
+    }
+}
+
+fn run_a3s_box_workload_capture(
+    binary: &str,
+    args: &[String],
+    timeout: Option<Duration>,
+    stdout_limit_bytes: usize,
+    stderr_limit_bytes: usize,
+    box_name: &str,
+    startup_timeout: Duration,
+) -> Result<CommandCapture> {
+    let mut child = Command::new(binary)
+        .args(args)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .with_context(|| format!("run a3s-box command: {}", args.join(" ")))?;
+
+    let stdout = child.stdout.take().context("capture a3s-box stdout")?;
+    let stderr = child.stderr.take().context("capture a3s-box stderr")?;
+
+    let stdout_handle = thread::spawn(move || -> Result<Vec<u8>> {
+        read_limited(stdout, stdout_limit_bytes).context("read a3s-box stdout")
+    });
+    let stderr_handle = thread::spawn(move || -> Result<Vec<u8>> {
+        read_limited(stderr, stderr_limit_bytes).context("read a3s-box stderr")
+    });
+
+    let started_at = Instant::now();
+    let mut timed_out = false;
+    let mut startup_ready = startup_timeout.is_zero();
+    let mut last_probe_at = Instant::now()
+        .checked_sub(Duration::from_secs(5))
+        .unwrap_or_else(Instant::now);
+    let mut last_probe_error = String::new();
+    let mut timeout_detail = String::new();
+    let exit_status = loop {
+        if let Some(status) = child.try_wait().context("poll a3s-box child status")? {
+            if !startup_ready && last_probe_error.contains("Exec socket not found") {
+                timed_out = true;
+                timeout_detail = format!(
+                    "a3s-box run exited before exec socket became ready; status={:?}; last_probe={}",
+                    status.code(),
+                    if last_probe_error.trim().is_empty() {
+                        "no probe output"
+                    } else {
+                        last_probe_error.trim()
+                    }
+                );
+                cleanup_box(binary, Some(box_name));
+            }
+            break Some(status);
+        }
+
+        let elapsed = started_at.elapsed();
+        if !startup_ready && last_probe_at.elapsed() >= Duration::from_secs(2) {
+            last_probe_at = Instant::now();
+            match a3s_box_workload_exec_ready(binary, box_name) {
+                Ok(()) => startup_ready = true,
+                Err(error) => last_probe_error = error,
+            }
+        }
+        if !startup_ready && elapsed >= startup_timeout {
+            timed_out = true;
+            timeout_detail = format!(
+                "a3s-box startup timed out after {}s before exec socket became ready; last_probe={}",
+                startup_timeout.as_secs(),
+                if last_probe_error.trim().is_empty() {
+                    "no probe output"
+                } else {
+                    last_probe_error.trim()
+                }
+            );
+            let _ = child.kill();
+            cleanup_box(binary, Some(box_name));
+            break child.wait().ok();
+        }
+        if timeout.is_some_and(|limit| elapsed >= limit) {
+            timed_out = true;
+            timeout_detail = format!(
+                "a3s-box run timed out after {}s",
+                timeout
+                    .map(|d| d.as_secs())
+                    .unwrap_or(DEFAULT_A3S_BOX_TIMEOUT_SECONDS)
+            );
+            let _ = child.kill();
+            cleanup_box(binary, Some(box_name));
+            break child.wait().ok();
+        }
+        thread::sleep(Duration::from_millis(50));
+    };
+
+    let stdout = String::from_utf8_lossy(
+        &stdout_handle
+            .join()
+            .map_err(|_| anyhow::anyhow!("join a3s-box stdout reader"))??,
+    )
+    .to_string();
+    let mut stderr = String::from_utf8_lossy(
+        &stderr_handle
+            .join()
+            .map_err(|_| anyhow::anyhow!("join a3s-box stderr reader"))??,
+    )
+    .to_string();
+    if !timeout_detail.is_empty() {
+        if !stderr.ends_with('\n') && !stderr.is_empty() {
+            stderr.push('\n');
+        }
+        stderr.push_str(&timeout_detail);
+        stderr.push('\n');
+    }
 
     Ok(CommandCapture {
         timed_out,
@@ -997,6 +1185,182 @@ fn rewrite_runner_env(
         .collect()
 }
 
+fn shell_quote(value: &str) -> String {
+    if value.is_empty() {
+        return "''".to_string();
+    }
+    let mut quoted = String::from("'");
+    for ch in value.chars() {
+        if ch == '\'' {
+            quoted.push_str("'\\''");
+        } else {
+            quoted.push(ch);
+        }
+    }
+    quoted.push('\'');
+    quoted
+}
+
+fn shell_command_array(command: &[String]) -> String {
+    command
+        .iter()
+        .map(|value| shell_quote(value))
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn is_workspace_path(value: &str, workspace: &Path) -> bool {
+    let path = Path::new(value);
+    path.is_absolute() && (path == workspace || path.starts_with(workspace))
+}
+
+fn local_file_path(local_root: &str, original_path: &str, fallback_name: &str) -> String {
+    let file_name = Path::new(original_path)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .filter(|name| !name.is_empty())
+        .unwrap_or(fallback_name);
+    format!("{local_root}/output/{file_name}")
+}
+
+fn build_localized_opengrep_command(
+    command: &[String],
+    workspace: &Path,
+    box_name: &str,
+) -> Vec<String> {
+    if command.first().map(String::as_str) != Some("opengrep-scan") {
+        return command.to_vec();
+    }
+
+    let mut localized = command.to_vec();
+    let mut copy_pairs: Vec<(String, String)> = Vec::new();
+    let mut copy_back_pairs: Vec<(String, String)> = Vec::new();
+    let local_root = format!("/tmp/argus-a3s-opengrep-{box_name}");
+    let mut config_index = 0usize;
+
+    let mut index = 0usize;
+    while index + 1 < command.len() {
+        match command[index].as_str() {
+            "--target" => {
+                let source = &command[index + 1];
+                if is_workspace_path(source, workspace) {
+                    let local_source = format!("{local_root}/source");
+                    copy_pairs.push((source.clone(), local_source.clone()));
+                    localized[index + 1] = local_source;
+                }
+                index += 2;
+            }
+            "--config" => {
+                let source = &command[index + 1];
+                if is_workspace_path(source, workspace) {
+                    let local_config = format!("{local_root}/config-{config_index}");
+                    config_index += 1;
+                    copy_pairs.push((source.clone(), local_config.clone()));
+                    localized[index + 1] = local_config;
+                }
+                index += 2;
+            }
+            "--manifest" => {
+                let source = &command[index + 1];
+                if is_workspace_path(source, workspace) {
+                    let local_manifest = format!("{local_root}/image-rules.manifest");
+                    copy_pairs.push((source.clone(), local_manifest.clone()));
+                    localized[index + 1] = local_manifest;
+                }
+                index += 2;
+            }
+            "--output" => {
+                let target = &command[index + 1];
+                if is_workspace_path(target, workspace) {
+                    let local_output = local_file_path(&local_root, target, "results.json");
+                    copy_back_pairs.push((local_output.clone(), target.clone()));
+                    localized[index + 1] = local_output;
+                }
+                index += 2;
+            }
+            "--summary" => {
+                let target = &command[index + 1];
+                if is_workspace_path(target, workspace) {
+                    let local_summary = local_file_path(&local_root, target, "summary.json");
+                    copy_back_pairs.push((local_summary.clone(), target.clone()));
+                    localized[index + 1] = local_summary;
+                }
+                index += 2;
+            }
+            "--log" => {
+                let target = &command[index + 1];
+                if is_workspace_path(target, workspace) {
+                    let local_log = local_file_path(&local_root, target, "opengrep.log");
+                    copy_back_pairs.push((local_log.clone(), target.clone()));
+                    localized[index + 1] = local_log;
+                }
+                index += 2;
+            }
+            _ => {
+                index += 1;
+            }
+        }
+    }
+
+    if copy_pairs.is_empty() && copy_back_pairs.is_empty() {
+        return command.to_vec();
+    }
+
+    let mut script = String::from(
+        r#"set -Eeuo pipefail
+copy_path() {
+  src="$1"
+  dst="$2"
+  if [ -d "$src" ]; then
+    rm -rf "$dst"
+    mkdir -p "$dst"
+    (cd "$src" && tar -cf - .) | (cd "$dst" && tar -xf -)
+  elif [ -f "$src" ]; then
+    mkdir -p "$(dirname "$dst")"
+    cp -p -- "$src" "$dst"
+  else
+    echo "missing localized opengrep input: $src" >&2
+    exit 2
+  fi
+}
+copy_back_file() {
+  src="$1"
+  dst="$2"
+  if [ -e "$src" ]; then
+    mkdir -p "$(dirname "$dst")"
+    cp -f -- "$src" "$dst"
+  fi
+}
+"#,
+    );
+    script.push_str(&format!("local_root={}\n", shell_quote(&local_root)));
+    script.push_str("rm -rf \"$local_root\"\nmkdir -p \"$local_root/output\"\n");
+    script.push_str("trap 'rm -rf \"$local_root\"' EXIT\n");
+    script.push_str("echo 'ARGUS_A3S_LOCALIZE copy_start' >&2\n");
+    for (source, target) in &copy_pairs {
+        script.push_str(&format!(
+            "copy_path {} {}\n",
+            shell_quote(source),
+            shell_quote(target)
+        ));
+    }
+    script.push_str("echo 'ARGUS_A3S_LOCALIZE scan_start' >&2\n");
+    script.push_str("set +e\n");
+    script.push_str(&shell_command_array(&localized));
+    script.push_str("\nstatus=$?\nset -e\n");
+    script.push_str("echo \"ARGUS_A3S_LOCALIZE scan_done status=${status}\" >&2\n");
+    for (source, target) in &copy_back_pairs {
+        script.push_str(&format!(
+            "copy_back_file {} {}\n",
+            shell_quote(source),
+            shell_quote(target)
+        ));
+    }
+    script.push_str("exit \"$status\"\n");
+
+    vec!["bash".to_string(), "-lc".to_string(), script]
+}
+
 fn write_runner_meta(
     runner_meta_path: &Path,
     spec: &A3sBoxRunnerSpec,
@@ -1092,6 +1456,8 @@ pub fn execute(spec: A3sBoxRunnerSpec) -> A3sBoxRunnerResult {
         }
         ensure_a3s_box_image_cached(&binary, &spec.image, &meta_dir)?;
         runner_command = rewrite_runner_command(&spec.command, &resolved_workspace);
+        runner_command =
+            build_localized_opengrep_command(&runner_command, &resolved_workspace, &box_name);
         runner_environment = rewrite_runner_env(&spec.env, &resolved_workspace);
 
         let mut args = vec![
@@ -1152,19 +1518,28 @@ pub fn execute(spec: A3sBoxRunnerSpec) -> A3sBoxRunnerResult {
             bail!("a3s-box virtualization unavailable before run: {error}");
         }
         active_box_name = Some(box_name.clone());
-        let capture = run_command_capture(
+        register_active_task_box(spec.task_id.as_deref(), &box_name);
+        let capture = run_a3s_box_workload_capture(
             &binary,
             &args,
             timeout,
             spec.stdout_limit_bytes,
             spec.stderr_limit_bytes,
+            &box_name,
+            Duration::from_secs(a3s_box_startup_timeout()),
         )?;
         if let Some(error) = a3s_box_virtualization_error_text(&capture.stdout, &capture.stderr) {
             cleanup_box(&binary, active_box_name.as_deref());
+            unregister_active_task_box(spec.task_id.as_deref(), &box_name);
             bail!("a3s-box virtualization failed during run: {error}");
         }
         if capture.timed_out {
             cleanup_box(&binary, active_box_name.as_deref());
+            unregister_active_task_box(spec.task_id.as_deref(), &box_name);
+            let detail = command_failed_text(&capture);
+            if !detail.trim().is_empty() {
+                bail!("{detail}");
+            }
             bail!(
                 "a3s-box run timed out after {}s",
                 timeout
@@ -1197,6 +1572,7 @@ pub fn execute(spec: A3sBoxRunnerSpec) -> A3sBoxRunnerResult {
         };
 
         active_box_name = None;
+        unregister_active_task_box(spec.task_id.as_deref(), &box_name);
         Ok(A3sBoxRunnerResult {
             success,
             box_name: Some(box_name.clone()),
@@ -1241,6 +1617,7 @@ pub fn execute(spec: A3sBoxRunnerSpec) -> A3sBoxRunnerResult {
     };
 
     cleanup_box(&binary, active_box_name.as_deref());
+    unregister_active_task_box(spec.task_id.as_deref(), &box_name);
     let meta_context = RunnerMetaContext {
         runner_command: &runner_command,
         runner_environment: &runner_environment,
@@ -1336,6 +1713,14 @@ case "$cmd" in
     printf 'Virtualization: available\n'
     ;;
   run)
+    if [ "${FAKE_A3S_BOX_EXEC_RUN:-0}" = "1" ]; then
+      while [ "$#" -gt 0 ] && [ "$1" != "--" ]; do
+        shift
+      done
+      [ "$#" -gt 0 ] || exit 69
+      shift
+      exec "$@"
+    fi
     printf '%s' "${FAKE_A3S_BOX_STDOUT:-}"
     printf '%s' "${FAKE_A3S_BOX_STDERR:-}" >&2
     exit "${FAKE_A3S_BOX_EXIT_CODE:-0}"
@@ -1640,8 +2025,144 @@ esac
             "--env RULE_ROOT={}/rules",
             workspace_dir.display()
         )));
-        assert!(logged.contains(&format!("--target {}/source", workspace_dir.display())));
+        assert!(
+            logged.contains(&format!("{}/source", workspace_dir.display())),
+            "localized wrapper should copy the workspace source: {logged}"
+        );
+        assert!(
+            logged.contains("/tmp/argus-a3s-opengrep-"),
+            "opengrep should scan guest-local paths: {logged}"
+        );
         assert!(workspace_dir.join("meta/a3s-box-runner.json").exists());
+    }
+
+    #[test]
+    fn execute_localizes_opengrep_workspace_before_scanning() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        let temp_dir = TempDir::new().unwrap();
+        let fake_log = temp_dir.path().join("a3s-box.log");
+        let fake_a3s_box = fake_a3s_box_script(&temp_dir);
+        let workspace_dir = temp_dir.path().join("workspace");
+        fs::create_dir_all(workspace_dir.join("source")).unwrap();
+        fs::create_dir_all(workspace_dir.join("opengrep-rules")).unwrap();
+        fs::create_dir_all(workspace_dir.join("output")).unwrap();
+        fs::write(workspace_dir.join("source/Main.java"), "class Main {}\n").unwrap();
+        fs::write(workspace_dir.join("opengrep-rules/demo.yaml"), "rules: []\n").unwrap();
+        let fake_opengrep_scan = temp_dir.path().join("opengrep-scan");
+        fs::write(
+            &fake_opengrep_scan,
+            r#"#!/bin/sh
+set -eu
+target=""
+config=""
+output=""
+summary=""
+log=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --target) target="$2"; shift 2 ;;
+    --config) config="$2"; shift 2 ;;
+    --output) output="$2"; shift 2 ;;
+    --summary) summary="$2"; shift 2 ;;
+    --log) log="$2"; shift 2 ;;
+    *) shift ;;
+  esac
+done
+case "$target" in /tmp/argus-a3s-opengrep-*/source) ;; *) echo "bad target: $target" >&2; exit 70 ;; esac
+case "$config" in /tmp/argus-a3s-opengrep-*/config-0) ;; *) echo "bad config: $config" >&2; exit 71 ;; esac
+mkdir -p "$(dirname "$output")" "$(dirname "$summary")" "$(dirname "$log")"
+printf '{"results":[]}\n' > "$output"
+printf '{"status":"scan_completed"}\n' > "$summary"
+printf 'localized scan ok\n' > "$log"
+"#,
+        )
+        .unwrap();
+        let mut permissions = fs::metadata(&fake_opengrep_scan).unwrap().permissions();
+        permissions.set_mode(0o755);
+        fs::set_permissions(&fake_opengrep_scan, permissions).unwrap();
+
+        let _bin = EnvVarGuard::set("A3S_BOX_BIN", fake_a3s_box.to_str().unwrap());
+        let _log = EnvVarGuard::set("FAKE_A3S_BOX_LOG", fake_log.to_str().unwrap());
+        let _exec = EnvVarGuard::set("FAKE_A3S_BOX_EXEC_RUN", "1");
+        let original_path = env::var("PATH").unwrap_or_default();
+        let _path = EnvVarGuard::set(
+            "PATH",
+            &format!("{}:{original_path}", temp_dir.path().display()),
+        );
+
+        let result = execute(A3sBoxRunnerSpec {
+            scanner_type: "opengrep".to_string(),
+            image: "argus/opengrep-runner:test".to_string(),
+            workspace_dir: workspace_dir.display().to_string(),
+            command: vec![
+                "opengrep-scan".to_string(),
+                "--target".to_string(),
+                workspace_dir.join("source").display().to_string(),
+                "--config".to_string(),
+                workspace_dir.join("opengrep-rules").display().to_string(),
+                "--output".to_string(),
+                workspace_dir.join("output/results.json").display().to_string(),
+                "--summary".to_string(),
+                workspace_dir.join("output/summary.json").display().to_string(),
+                "--log".to_string(),
+                workspace_dir.join("output/opengrep.log").display().to_string(),
+            ],
+            timeout_seconds: 60,
+            env: BTreeMap::new(),
+            expected_exit_codes: vec![0, 1],
+            capture_stdout_path: Some("output/stdout.txt".to_string()),
+            capture_stderr_path: Some("output/stderr.txt".to_string()),
+            memory_limit_mb: None,
+            cpu_limit: None,
+            pids_limit: None,
+            network_disabled: false,
+            ..Default::default()
+        });
+
+        assert!(result.success, "{:?}", result.error);
+        let logged = fs::read_to_string(fake_log).unwrap();
+        assert!(
+            logged.contains("bash -lc"),
+            "opengrep command should run through localization wrapper: {logged}"
+        );
+        assert!(
+            logged.contains("/tmp/argus-a3s-opengrep-"),
+            "localized scan should use guest-local /tmp paths: {logged}"
+        );
+        assert!(
+            fs::read_to_string(workspace_dir.join("output/stderr.txt"))
+                .unwrap()
+                .contains("ARGUS_A3S_LOCALIZE scan_start")
+        );
+        assert_eq!(
+            fs::read_to_string(workspace_dir.join("output/results.json")).unwrap(),
+            "{\"results\":[]}\n"
+        );
+        assert_eq!(
+            fs::read_to_string(workspace_dir.join("output/summary.json")).unwrap(),
+            "{\"status\":\"scan_completed\"}\n"
+        );
+        assert_eq!(
+            fs::read_to_string(workspace_dir.join("output/opengrep.log")).unwrap(),
+            "localized scan ok\n"
+        );
+    }
+
+    #[test]
+    fn stop_active_task_sync_removes_registered_box() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        let temp_dir = TempDir::new().unwrap();
+        let fake_log = temp_dir.path().join("a3s-box.log");
+        let fake_a3s_box = fake_a3s_box_script(&temp_dir);
+        let _bin = EnvVarGuard::set("A3S_BOX_BIN", fake_a3s_box.to_str().unwrap());
+        let _log = EnvVarGuard::set("FAKE_A3S_BOX_LOG", fake_log.to_str().unwrap());
+
+        register_active_task_box(Some("task-1"), "argus-opengrep-testbox");
+        assert!(stop_active_task_sync("task-1"));
+        unregister_active_task_box(Some("task-1"), "argus-opengrep-testbox");
+
+        let logged = fs::read_to_string(fake_log).unwrap();
+        assert!(logged.contains("rm|--force argus-opengrep-testbox"));
     }
 
     #[test]

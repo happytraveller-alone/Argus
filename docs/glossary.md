@@ -78,6 +78,13 @@
 - **不是什么**：旧多引擎静态审计调度器，也不是 CodeQL 扫描主路径；CubeSandbox 选项不是默认值，未传或未知 `opengrep_sandbox` 仍回落到 Dockerfile 容器。
 - **主要入口**：`docker/opengrep-runner.Dockerfile`、`docker/opengrep-scan.sh`、`backend/src/scan/opengrep.rs`、`backend/src/scan/opengrep_cubesandbox.rs`、`oci/cubesandbox/opengrep.Dockerfile`、`frontend/src/components/scan/create-scan-task/StaticEngineConfigDialog.tsx`；backend 按任务动态创建临时 runner 容器或 CubeSandbox sandbox，任务结束后清理。
 
+### 沙箱预热池 / Standby pool of one-shot sandboxes
+
+- **是什么**：2026-05-06 引入的单次性沙箱预热层，把 microVM 生命周期（创建+连接 ~60s）移出扫描关键路径。后端在启动时按 `OPENGREP_STANDBY_POOL_SIZE` / `CODEQL_STANDBY_POOL_SIZE` / `A3S_BOX_STANDBY_POOL_SIZE`（默认各 2）预热若干就绪沙箱；扫描分发时 `pool.take()` 拿一个 ready 沙箱直接用，扫完销毁；后台 `refill_in_background` 立即补一个进池。每个沙箱**仍然只服务一次扫描**（cold-start isolation 保留），不存在状态污染。
+- **不是什么**：**不是**旧 multi-use warm pool（已在 2026-05-05 commit `63af399f` 删除）。"warm pool" 复用同一沙箱跑多次扫描，状态污染风险大；"standby pool" 每次取出即用即销，纯粹是**latency 优化**，不是 state-sharing。PR 标题 / 注释 / 识别符使用 "standby pool" / "pre-warm"，不要再用 "warm pool"。
+- **主要入口**：`backend/src/runtime/sandbox_pool.rs`（generic `SandboxPool<T: Sandbox>` + `Priority::OnDemand|Refill` semaphore + `OnShutdownDestroy` 回调）、`backend/src/runtime/cubesandbox/pool.rs`（`CubesandboxHandle` + `CubesandboxFactory`）、`backend/src/runtime/a3s_box/pool.rs`（`A3sBoxHandle` + `A3sBoxFactory`，Option C.β image-cache-only）、`backend/src/main.rs` 启动 + shutdown 串接、`backend/src/runtime/cubesandbox/reconcile.rs` orphan 联合。
+- **维护提示**：cubemaster `host_path` (proto field 8 of `VolumeMounts`) 在当前部署被 ADR-Variant-B 否决（Phase A.0 探针 FAIL），所以 cubesandbox 源码上传仍是 gzip+`write_file`，**不是** zero-copy bind mount；如果 cubemaster 端后来 honor 了 `metadata["host-mount"]` 注解，重跑 `backend/tests/cubesandbox_hostpath_probe.rs` PASS 后即可切 Variant-A 路径。a3s-box 同理受 single-shot CLI 限制走 Option C.β。三个 `*_STANDBY_POOL_DISABLED` env 变量是 kill switch（回滚到 2026-05-06 之前的纯冷启动行为，无 503，只是慢）。
+
 ### agent preflight
 
 - **是什么**：`/api/v1/system-config/agent-preflight`，当前仍存在于 `backend/src/routes/system_config.rs`，用于按 LLM 配置优先级做连接测试并检查 runner readiness。

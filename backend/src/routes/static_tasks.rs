@@ -970,6 +970,7 @@ async fn interrupt_opengrep_task(
     AxumPath(task_id): AxumPath<String>,
 ) -> Result<Json<Value>, ApiError> {
     let _ = opengrep_cubesandbox::cancel_opengrep_scan(&task_id).await;
+    let _ = a3s_box_runner::stop_active_task_sync(&task_id);
     interrupt_static_task(&state, "opengrep", &task_id).await
 }
 
@@ -3536,6 +3537,11 @@ async fn run_opengrep_scan_inner(
     let stdout_rel_path = format!("output/stdout-{}.txt", Uuid::new_v4());
     let stderr_rel_path = format!("output/stderr-{}.txt", Uuid::new_v4());
     let sandbox_label = options.sandbox.as_str();
+    let mut effective_executor_label = match sandbox_label {
+        "oci_cubesandbox" => "oci_cubesandbox".to_string(),
+        "a3s_box" => "a3s_box".to_string(),
+        _ => "docker_runner".to_string(),
+    };
     match options.sandbox {
         OpengrepSandboxKind::DockerfileContainer => {
             let scanner_image = state.config.scanner_opengrep_image.clone();
@@ -3555,6 +3561,7 @@ async fn run_opengrep_scan_inner(
                 runner_resources,
                 OpengrepRunnerPaths {
                     container_source_dir,
+                    manifest_container_path: None,
                     config_container_path: config_container_path.as_deref(),
                     output_container_path: &output_container_path,
                     summary_rel_path: &summary_rel_path,
@@ -3581,8 +3588,30 @@ async fn run_opengrep_scan_inner(
         OpengrepSandboxKind::A3sBox => {
             let scanner_image = state.config.scanner_opengrep_a3s_box_image.clone();
             let container_source_dir = workspace_container_path(&workspace_dir, &source_dir)?;
-            let config_container_path = rule_inputs
-                .workspace_rules_dir
+            let manifest_host_path = if rule_inputs.image_rule_manifest_paths.is_empty() {
+                None
+            } else {
+                let path = workspace_dir.join("image-rules.manifest");
+                tokio::fs::write(
+                    &path,
+                    format!("{}\n", rule_inputs.image_rule_manifest_paths.join("\n")),
+                )
+                .await?;
+                Some(path)
+            };
+            let manifest_container_path = manifest_host_path
+                .as_ref()
+                .map(|path| workspace_container_path(&workspace_dir, path))
+                .transpose()?;
+            let user_rules_host_path = if rule_inputs.user_rule_count > 0 {
+                rule_inputs
+                    .workspace_rules_dir
+                    .as_ref()
+                    .map(|path| path.join("user"))
+            } else {
+                None
+            };
+            let config_container_path = user_rules_host_path
                 .as_ref()
                 .map(|path| workspace_container_path(&workspace_dir, path))
                 .transpose()?;
@@ -3597,6 +3626,7 @@ async fn run_opengrep_scan_inner(
                 runner_resources,
                 OpengrepRunnerPaths {
                     container_source_dir: &container_source_dir,
+                    manifest_container_path: manifest_container_path.as_deref(),
                     config_container_path: config_container_path.as_deref(),
                     output_container_path: &output_container_path,
                     summary_rel_path: &summary_rel_path,
@@ -3606,6 +3636,10 @@ async fn run_opengrep_scan_inner(
                     stderr_rel_path: &stderr_rel_path,
                 },
             );
+            let spec = a3s_box_runner::A3sBoxRunnerSpec {
+                task_id: Some(task_id.to_string()),
+                ..spec
+            };
 
             let runner_result =
                 tokio::task::spawn_blocking(move || a3s_box_runner::execute(spec)).await?;
@@ -3616,81 +3650,58 @@ async fn run_opengrep_scan_inner(
                     Some(&workspace_dir.join(&log_rel_path)),
                 )
                 .await;
-                let _ = tokio::fs::remove_dir_all(&workspace_dir).await;
-                return Err(format!("opengrep A3S Box scan failed: {error_msg}").into());
+                update_scan_progress(
+                    state,
+                    task_id,
+                    45.0,
+                    "fallback_oci_cubesandbox",
+                    &format!(
+                        "a3s-box opengrep scan failed or stalled; falling back to CubeSandbox OCI: {error_msg}"
+                    ),
+                )
+                .await;
+                run_opengrep_cubesandbox_scan_to_workspace(
+                    state,
+                    task_id,
+                    &workspace_dir,
+                    &source_dir,
+                    &rule_inputs,
+                    runner_resources,
+                    OpengrepWorkspaceOutputPaths {
+                        output_rel_path: &output_rel_path,
+                        summary_rel_path: &summary_rel_path,
+                        log_rel_path: &log_rel_path,
+                        stdout_rel_path: &stdout_rel_path,
+                        stderr_rel_path: &stderr_rel_path,
+                    },
+                )
+                .await
+                .map_err(|fallback_error| {
+                    format!(
+                        "opengrep A3S Box scan failed: {error_msg}; CubeSandbox OCI fallback failed: {fallback_error}"
+                    )
+                })?;
+                effective_executor_label = "a3s_box_fallback_oci_cubesandbox".to_string();
             }
         }
         OpengrepSandboxKind::OciCubesandbox => {
-            let rules_dir = rule_inputs
-                .workspace_rules_dir
-                .as_ref()
-                .ok_or("opengrep CubeSandbox scan requires materialized rules directory")?;
-            let scan_output = opengrep_cubesandbox::run_opengrep_scan(
+            run_opengrep_cubesandbox_scan_to_workspace(
                 state,
-                opengrep_cubesandbox::CubeSandboxOpengrepInput {
-                    task_id,
-                    workspace_dir: &workspace_dir,
-                    source_dir: &source_dir,
-                    rules_dir,
-                    image_rule_manifest_paths: &rule_inputs.image_rule_manifest_paths,
-                    jobs: runner_resources.jobs,
-                    max_memory_mb: state.config.opengrep_scan_max_memory_mb,
+                task_id,
+                &workspace_dir,
+                &source_dir,
+                &rule_inputs,
+                runner_resources,
+                OpengrepWorkspaceOutputPaths {
+                    output_rel_path: &output_rel_path,
+                    summary_rel_path: &summary_rel_path,
+                    log_rel_path: &log_rel_path,
+                    stdout_rel_path: &stdout_rel_path,
+                    stderr_rel_path: &stderr_rel_path,
                 },
             )
             .await?;
             drop(resource_permit);
-            let scan_exit_code = scan_output.scan_exit_code;
-            let failure_detail = if scan_exit_code != 0 && scan_exit_code != 1 {
-                let summary_reason = scan_output
-                    .summary_json
-                    .get("reason")
-                    .and_then(Value::as_str)
-                    .unwrap_or_default();
-                let summary_debug = scan_output
-                    .summary_json
-                    .get("argus_oci_debug")
-                    .map(Value::to_string)
-                    .unwrap_or_default();
-                first_non_empty_excerpt(&[
-                    scan_output.log_text.as_str(),
-                    scan_output.stderr_text.as_str(),
-                    scan_output.stdout_text.as_str(),
-                    summary_debug.as_str(),
-                    summary_reason,
-                ])
-                .unwrap_or_else(|| "no opengrep output available".to_string())
-            } else {
-                String::new()
-            };
-            tokio::fs::write(
-                workspace_dir.join(&output_rel_path),
-                scan_output.results_text,
-            )
-            .await?;
-            tokio::fs::write(
-                workspace_dir.join(&summary_rel_path),
-                serde_json::to_string(&scan_output.summary_json)?,
-            )
-            .await?;
-            tokio::fs::write(workspace_dir.join(&log_rel_path), scan_output.log_text).await?;
-            tokio::fs::write(
-                workspace_dir.join(&stdout_rel_path),
-                scan_output.stdout_text,
-            )
-            .await?;
-            tokio::fs::write(
-                workspace_dir.join(&stderr_rel_path),
-                scan_output.stderr_text,
-            )
-            .await?;
-            if scan_exit_code != 0 && scan_exit_code != 1 {
-                let _ = tokio::fs::remove_dir_all(&workspace_dir).await;
-                return Err(format!(
-                    "opengrep CubeSandbox scan failed: exit_code={} detail={}",
-                    scan_exit_code, failure_detail
-                )
-                .into());
-            }
         }
     }
 
@@ -3776,7 +3787,7 @@ async fn run_opengrep_scan_inner(
         record.extra = json!({
             "engine": "opengrep",
             "opengrep_sandbox": sandbox_label,
-            "executor": match sandbox_label { "oci_cubesandbox" => "oci_cubesandbox", "a3s_box" => "a3s_box", _ => "docker_runner" },
+            "executor": effective_executor_label,
             "error_count": error_count,
             "warning_count": warning_count,
             "high_confidence_count": high_confidence_count,
@@ -3887,6 +3898,7 @@ fn prune_static_scan_test_and_fuzz_paths(
 
 struct OpengrepRunnerPaths<'a> {
     container_source_dir: &'a str,
+    manifest_container_path: Option<&'a str>,
     config_container_path: Option<&'a str>,
     output_container_path: &'a str,
     summary_rel_path: &'a str,
@@ -3894,6 +3906,94 @@ struct OpengrepRunnerPaths<'a> {
     log_container_path: &'a str,
     stdout_rel_path: &'a str,
     stderr_rel_path: &'a str,
+}
+
+struct OpengrepWorkspaceOutputPaths<'a> {
+    output_rel_path: &'a str,
+    summary_rel_path: &'a str,
+    log_rel_path: &'a str,
+    stdout_rel_path: &'a str,
+    stderr_rel_path: &'a str,
+}
+
+async fn run_opengrep_cubesandbox_scan_to_workspace(
+    state: &AppState,
+    task_id: &str,
+    workspace_dir: &std::path::Path,
+    source_dir: &std::path::Path,
+    rule_inputs: &OpengrepRunnerInputs,
+    runner_resources: OpengrepRunnerResources,
+    paths: OpengrepWorkspaceOutputPaths<'_>,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let rules_dir = rule_inputs
+        .workspace_rules_dir
+        .as_ref()
+        .ok_or("opengrep CubeSandbox scan requires materialized rules directory")?;
+    let scan_output = opengrep_cubesandbox::run_opengrep_scan(
+        state,
+        opengrep_cubesandbox::CubeSandboxOpengrepInput {
+            task_id,
+            workspace_dir,
+            source_dir,
+            rules_dir,
+            image_rule_manifest_paths: &rule_inputs.image_rule_manifest_paths,
+            jobs: runner_resources.jobs,
+            max_memory_mb: state.config.opengrep_scan_max_memory_mb,
+        },
+    )
+    .await?;
+    let scan_exit_code = scan_output.scan_exit_code;
+    let failure_detail = if scan_exit_code != 0 && scan_exit_code != 1 {
+        let summary_reason = scan_output
+            .summary_json
+            .get("reason")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+        let summary_debug = scan_output
+            .summary_json
+            .get("argus_oci_debug")
+            .map(Value::to_string)
+            .unwrap_or_default();
+        first_non_empty_excerpt(&[
+            scan_output.log_text.as_str(),
+            scan_output.stderr_text.as_str(),
+            scan_output.stdout_text.as_str(),
+            summary_debug.as_str(),
+            summary_reason,
+        ])
+        .unwrap_or_else(|| "no opengrep output available".to_string())
+    } else {
+        String::new()
+    };
+    tokio::fs::write(
+        workspace_dir.join(paths.output_rel_path),
+        scan_output.results_text,
+    )
+    .await?;
+    tokio::fs::write(
+        workspace_dir.join(paths.summary_rel_path),
+        serde_json::to_string(&scan_output.summary_json)?,
+    )
+    .await?;
+    tokio::fs::write(workspace_dir.join(paths.log_rel_path), scan_output.log_text).await?;
+    tokio::fs::write(
+        workspace_dir.join(paths.stdout_rel_path),
+        scan_output.stdout_text,
+    )
+    .await?;
+    tokio::fs::write(
+        workspace_dir.join(paths.stderr_rel_path),
+        scan_output.stderr_text,
+    )
+    .await?;
+    if scan_exit_code != 0 && scan_exit_code != 1 {
+        return Err(format!(
+            "opengrep CubeSandbox scan failed: exit_code={} detail={}",
+            scan_exit_code, failure_detail
+        )
+        .into());
+    }
+    Ok(())
 }
 
 fn build_opengrep_runner_spec(
@@ -3908,7 +4008,7 @@ fn build_opengrep_runner_spec(
         image,
         workspace_dir: workspace_dir.display().to_string(),
         command: opengrep::build_scan_command(&opengrep::ScanCommandArgs {
-            manifest_path: None,
+            manifest_path: paths.manifest_container_path,
             config_dir: paths.config_container_path,
             target_dir: paths.container_source_dir,
             output_path: paths.output_container_path,
@@ -3942,10 +4042,11 @@ fn build_opengrep_a3s_box_runner_spec(
 ) -> a3s_box_runner::A3sBoxRunnerSpec {
     a3s_box_runner::A3sBoxRunnerSpec {
         scanner_type: "opengrep".to_string(),
+        task_id: None,
         image,
         workspace_dir: workspace_dir.display().to_string(),
         command: opengrep::build_scan_command(&opengrep::ScanCommandArgs {
-            manifest_path: None,
+            manifest_path: paths.manifest_container_path,
             config_dir: paths.config_container_path,
             target_dir: paths.container_source_dir,
             output_path: paths.output_container_path,
@@ -3972,6 +4073,7 @@ fn build_opengrep_a3s_box_runner_spec(
 struct OpengrepRunnerInputs {
     workspace_rules_dir: Option<PathBuf>,
     image_rule_manifest_paths: Vec<String>,
+    user_rule_count: usize,
 }
 
 async fn prepare_opengrep_runner_inputs(
@@ -3999,6 +4101,7 @@ async fn prepare_opengrep_runner_inputs(
     Ok(Some(OpengrepRunnerInputs {
         workspace_rules_dir: Some(rules_root),
         image_rule_manifest_paths,
+        user_rule_count,
     }))
 }
 
@@ -6257,6 +6360,7 @@ rules:
             },
             OpengrepRunnerPaths {
                 container_source_dir: "/scan/source",
+                manifest_container_path: None,
                 config_container_path: Some("/scan/opengrep-rules"),
                 output_container_path: "/scan/output/results-001.json",
                 summary_rel_path: "output/summary-001.json",
@@ -6321,6 +6425,7 @@ rules:
             inputs.image_rule_manifest_paths,
             vec!["rules_opengrep/python/sqlalchemy-sql-injection.yaml".to_string()]
         );
+        assert_eq!(inputs.user_rule_count, 0);
         assert!(
             inputs
                 .workspace_rules_dir
@@ -6524,6 +6629,7 @@ rules:
             resources,
             OpengrepRunnerPaths {
                 container_source_dir: "/tmp/workspace/source",
+                manifest_container_path: Some("/tmp/workspace/image-rules.manifest"),
                 config_container_path: Some("/tmp/workspace/opengrep-rules"),
                 output_container_path: "/tmp/workspace/output/results.json",
                 summary_rel_path: "output/summary.json",
@@ -6548,6 +6654,10 @@ rules:
         assert!(spec.command.contains(&"--target".to_string()));
         assert!(spec.command.contains(&"/tmp/workspace/source".to_string()));
         assert!(spec.command.contains(&"--config".to_string()));
+        assert!(spec.command.contains(&"--manifest".to_string()));
+        assert!(spec
+            .command
+            .contains(&"/tmp/workspace/image-rules.manifest".to_string()));
         assert!(spec
             .command
             .contains(&"/tmp/workspace/opengrep-rules".to_string()));
