@@ -384,3 +384,80 @@ Do not manually duplicate hook-owned activation state unless recovering from mis
 ## Setup
 
 Execute `omx setup` to install all components. Execute `omx doctor` to verify installation.
+
+
+<claude-mem-context>
+# Memory Context
+
+# [argus] recent context, 2026-05-07 5:47am GMT+8
+
+Legend: 🎯session 🔴bugfix 🟣feature 🔄refactor ✅change 🔵discovery ⚖️decision 🚨security_alert 🔐security_note
+Format: ID TIME TYPE TITLE
+Fetch details: get_observations([IDs]) | Search: mem-search skill
+
+Stats: 50 obs (24,453t read) | 935,041t work | 97% savings
+
+### May 4, 2026
+182 4:37a 🔵 Multi-layer template cleanup gap root cause analysis complete
+180 4:52a 🔵 Backend provision state machine lacks cubemaster template deletion integration
+181 " 🔵 Template cleanup removes filesystem paths but not containerd snapshots
+184 4:54a ⚖️ Deep-dive interview completed with comprehensive spec ready for implementation
+185 5:04a 🔵 Multi-layer template cleanup architecture analyzed and documented
+186 5:05a 🔵 Implementation infrastructure exists for all 5 acceptance criteria
+187 5:07a 🔵 Cubemaster Template Cleanup Architecture: 9 Spec Corrections via Code Inspection
+188 " 🔵 Cubemaster Template Cleanup: Cubelet Containerd Snapshotter Fix Required (Phase 3 Critical Path)
+189 5:10a 🔵 Implementation Plan Validation: 4 Changes Required Before Execution
+190 5:33a 🔵 CubeSandbox codeql-cpp template provision fails due to disk exhaustion during rootfs population
+191 " 🔴 CodeQL C++ Template Disk Space Exhaustion Fixed via Distribution Slimming
+192 10:07a 🔵 ext4 Template Image Sizing Formula and Overhead Calculation
+193 " 🔵 sandbox-code Base Image is Upstream Prebuilt Artifact, Not Vendored
+194 " 🔄 Extended Dockerfile Slimming: Stage 0 Base Image Cleanup Added to codeql-cpp.Dockerfile
+195 10:13a 🔄 Added CodeQL Documentation and Platform-Specific Cleanup to codeql-cpp.Dockerfile
+196 10:14a 🟣 New Diagnostic Script: probe-codeql-cpp-rootfs-sizes.sh for Image Footprint Analysis
+207 10:42a ⚖️ Deep-interview investigation framework initialized for sandbox storage capacity issue
+208 " 🚨 Session isolation vulnerability in deep-interview state writes
+209 " 🔵 Codebase exploration reveals CodeQL sandbox sizing architecture across distributed services
+210 10:46a 🔵 Root cause confirmed: ext4 sizing capacity ceiling at 8 GiB with 460 MB metadata overhead
+211 " 🔵 CodeQL CubeSandbox Storage Root Cause: Runtime Writable Layer Undersized
+212 " ⚖️ 5-Phase Implementation Plan: 16Gi Writable Layer + Defense-in-Depth
+213 11:11a ✅ Ralplan Consensus Iteration 2: Plan v2 Authored with 6 Critic Revisions Applied
+214 11:35a ⚖️ CodeQL CubeSandbox Storage 16Gi Scale-Up Plan (FINAL, Iteration 2 + 3 Patches)
+S28 Extract and codify domain expertise from consensus-finalized CubeSandbox storage plan; create reusable project skills for future issue routing and pattern matching (May 4, 11:51 AM)
+215 1:16p 🟣 Three expertise skills created documenting CubeSandbox storage architecture and argus integration patterns
+S29 Resume Phase 4 build completion and proceed with AC6 probe verification (Phase 4 Step 2) (May 4, 1:17 PM)
+216 1:19p ✅ Phase 2 execution initiated: Formula overhead patching task created
+218 " 🔵 File content snapshots acquired for Phase 0-2 execution; existing Stage 0 slim, formula target, and .env state verified
+219 " 🔵 cubemastercli default endpoint mismatch: 0.0.0.0:8089 fails, --address 127.0.0.1:8089 succeeds
+217 " 🔵 Phase 0-2 pre-execution baseline gathered; mirror sync confirmed identical; current state captured
+220 1:30p 🔴 Critical: cubesandbox-quickstart.sh cubemastercli --address patch introduced space-loss bug
+221 1:33p 🔴 CRITICAL REGRESSION: cubesandbox-quickstart.sh has malformed cubemastercli commands after bad replace operation
+222 1:35p 🔴 cubemastercli explicit address binding fix
+223 " 🔵 System health verification post-fix: disk utilization and template registry state
+224 " ⚖️ Phase 4 execution initiated: rebuild codeql-cpp image with explicit address binding
+225 " 🔵 Phase 4 Step 1 image build in progress: SSH connection established, docker registry pulled
+S30 Complete Phase 4 Step 1 image build and prepare for Phase 4 Step 2 AC6 probe verification (May 4, 1:38 PM)
+226 1:42p 🟣 AC6 Rootfs Size Probe: Rebuilt codeql-cpp Image Passes 2.8G ≤ 2.9GiB Acceptance Criterion
+S31 Generate Phase 3.5 + Phase 4 completion and verification report for CubeSandbox storage optimization, documenting all code changes, architectural decisions, and acceptance criteria verification (May 4, 1:42 PM)
+228 3:20p 🔵 Stage 0.5 Dockerfile Cleanup Failed: Dropped Languages Still Present in Image
+229 3:21p 🔵 Service Startup Failures: Port 49999 (Uvicorn) Unreachable; Logging Infrastructure Missing
+227 " 🔵 Phase 4 Step 5 Template Provisioning Failed: Built Image Missing from Registry
+230 3:25p 🔴 Critical Python Package Dependencies Broken: Jupyter and Uvicorn Import Failures
+S32 Generate Phase 3.5 + Phase 4 completion report, then initiate Phase 5 (env.example back-sync) - write production .env configuration back to env.example template excluding sensitive credentials (May 4, 3:25 PM)
+S33 Complete Phase 3.5 + Phase 4 finalization; prepare Phase 5 (env.example back-sync) awaiting user confirmation (May 4, 3:51 PM)
+S34 Back-port .env configuration to env.example (excluding model provider credentials) - Phase 5 completion with full AC validation (May 4, 3:51 PM)
+S35 Phase 5 completion: Back-port .env configuration to env.example with security-first credential handling and all acceptance criteria verified (May 4, 3:52 PM)
+S36 Fix CodeQL OOM errors in Argus CodeQL analysis: small files failing because sandbox memory (2 GiB) was exceeded by backend default allocation (6144 MB) (May 4, 4:01 PM)
+231 4:05p 🔵 CodeQL Memory Configuration Architecture in Argus
+232 " 🔵 CodeQL Memory Allocation Parameters and Defaults
+233 " 🔵 CodeQL Memory Configuration Stack Complete Flow
+234 " 🔴 CodeQL OOM on startup: memory allocation mismatch between backend default and sandbox VM cap
+236 4:10p ✅ Backend container recreated to apply CODEQL_RAM_MB and CODEQL_THREADS overrides
+235 4:11p 🔵 Configuration applied to files but container still running with old defaults
+237 " 🔵 Backend container successfully loaded corrected CODEQL memory environment variables
+S37 Fix CodeQL OOM errors on small source files in Argus: backend defaults to 6144 MB memory allocation but CubeSandbox VMs cap at 2 GiB, causing query evaluator to fail at startup regardless of code size (May 4, 4:13 PM)
+238 4:16p 🔵 Database connectivity issue blocks verification of CodeQL fix after container recreation
+239 " 🔵 Database exists but earlier query used wrong case; API routing issue persists; backend logs empty
+240 4:17p 🔵 Database schema missing CodeQL event logging tables; backend logs completely empty
+
+Access 935k tokens of past work via get_observations([IDs]) or mem-search skill.
+</claude-mem-context>

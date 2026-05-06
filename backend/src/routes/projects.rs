@@ -1603,7 +1603,8 @@ fn build_metrics(
     let mut completed_tasks = 0;
     let mut running_tasks = 0;
     let mut opengrep_tasks = 0;
-    let mut static_counts = SeverityMetricCounts::default();
+    let mut latest_successful_static_tasks: BTreeMap<&'static str, &task_state::StaticTaskRecord> =
+        BTreeMap::new();
     let mut last_completed_task_at: Option<String> = None;
 
     if let Some(snapshot) = task_snapshot {
@@ -1612,22 +1613,29 @@ fn build_metrics(
                 continue;
             }
             total_tasks += 1;
-            if record.engine == "opengrep" {
+            if record.engine.eq_ignore_ascii_case("opengrep") {
                 opengrep_tasks += 1;
             }
             add_task_status_counts(&record.status, &mut completed_tasks, &mut running_tasks);
             if is_completed_task_status(&record.status) {
                 update_latest_timestamp(
                     &mut last_completed_task_at,
-                    record.updated_at.as_deref().unwrap_or(&record.created_at),
+                    static_task_completed_at(record),
                 );
-            }
-            if record.engine == "opengrep" {
-                static_counts.add(static_task_severity_counts(record));
+                if project_management_static_engine_key(&record.engine).is_some() {
+                    insert_latest_successful_static_task(
+                        &mut latest_successful_static_tasks,
+                        record,
+                    );
+                }
             }
         }
     }
 
+    let mut static_counts = SeverityMetricCounts::default();
+    for record in latest_successful_static_tasks.values() {
+        static_counts.add(static_task_severity_counts(record));
+    }
     let aggregate_counts = static_counts;
 
     ProjectManagementMetricsResponse {
@@ -1683,6 +1691,46 @@ fn update_latest_timestamp(current: &mut Option<String>, candidate: &str) {
     if current.as_deref().is_none_or(|value| candidate > value) {
         *current = Some(candidate.to_string());
     }
+}
+
+fn project_management_static_engine_key(engine: &str) -> Option<&'static str> {
+    match engine.to_ascii_lowercase().as_str() {
+        "codeql" => Some("codeql"),
+        "opengrep" => Some("opengrep"),
+        _ => None,
+    }
+}
+
+fn insert_latest_successful_static_task<'a>(
+    latest_by_engine: &mut BTreeMap<&'static str, &'a task_state::StaticTaskRecord>,
+    candidate: &'a task_state::StaticTaskRecord,
+) {
+    let Some(engine) = project_management_static_engine_key(&candidate.engine) else {
+        return;
+    };
+    let should_replace = latest_by_engine
+        .get(engine)
+        .is_none_or(|current| compare_static_task_recency(candidate, current).is_gt());
+    if should_replace {
+        latest_by_engine.insert(engine, candidate);
+    }
+}
+
+fn compare_static_task_recency(
+    left: &task_state::StaticTaskRecord,
+    right: &task_state::StaticTaskRecord,
+) -> std::cmp::Ordering {
+    static_task_completed_at(left)
+        .cmp(static_task_completed_at(right))
+        .then_with(|| left.id.cmp(&right.id))
+}
+
+fn static_task_completed_at(record: &task_state::StaticTaskRecord) -> &str {
+    record
+        .updated_at
+        .as_deref()
+        .filter(|value| !value.is_empty())
+        .unwrap_or(&record.created_at)
 }
 
 fn static_task_severity_counts(record: &task_state::StaticTaskRecord) -> SeverityMetricCounts {

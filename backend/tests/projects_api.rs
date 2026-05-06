@@ -748,6 +748,131 @@ async fn project_management_metrics_include_cumulative_opengrep_findings() {
 }
 
 #[tokio::test]
+async fn project_management_metrics_use_latest_successful_static_engine_findings() {
+    let state = AppState::from_config(isolated_test_config("projects-static-latest-metrics"))
+        .await
+        .expect("state should build");
+    let app = build_router(state.clone(), ShutdownGate::default());
+    let project_id = create_project_named(&app, "Latest Static Metrics").await;
+
+    let mut snapshot = task_state::load_snapshot(&state)
+        .await
+        .expect("snapshot should load");
+    let static_task = |engine: &str,
+                       id: &str,
+                       status: &str,
+                       created_at: &str,
+                       updated_at: &str,
+                       severities: &[&str]| {
+        task_state::StaticTaskRecord {
+            id: id.to_string(),
+            engine: engine.to_string(),
+            project_id: project_id.clone(),
+            name: id.to_string(),
+            status: status.to_string(),
+            target_path: ".".to_string(),
+            total_findings: severities.len() as i64,
+            scan_duration_ms: 1234,
+            files_scanned: 8,
+            created_at: created_at.to_string(),
+            updated_at: Some(updated_at.to_string()),
+            findings: severities
+                .iter()
+                .enumerate()
+                .map(|(index, severity)| {
+                    let finding_id = format!("{id}-finding-{index}");
+                    task_state::StaticFindingRecord {
+                        id: finding_id.clone(),
+                        scan_task_id: id.to_string(),
+                        status: "open".to_string(),
+                        payload: json!({"id": finding_id, "severity": severity}),
+                    }
+                })
+                .collect(),
+            ..Default::default()
+        }
+    };
+    for record in [
+        static_task(
+            "opengrep",
+            "opengrep-old",
+            "completed",
+            "2026-04-26T09:00:00Z",
+            "2026-04-26T09:01:00Z",
+            &["CRITICAL", "HIGH", "MEDIUM"],
+        ),
+        static_task(
+            "OpenGrep",
+            "opengrep-new",
+            "completed",
+            "2026-04-26T11:00:00Z",
+            "2026-04-26T11:01:00Z",
+            &["ERROR", "WARNING"],
+        ),
+        static_task(
+            "codeql",
+            "codeql-old",
+            "completed",
+            "2026-04-26T10:00:00Z",
+            "2026-04-26T10:01:00Z",
+            &["CRITICAL", "HIGH"],
+        ),
+        static_task(
+            "CodeQL",
+            "codeql-new",
+            "completed",
+            "2026-04-26T12:00:00Z",
+            "2026-04-26T12:01:00Z",
+            &["CRITICAL", "HIGH", "ERROR"],
+        ),
+        static_task(
+            "opengrep",
+            "opengrep-failed-newest",
+            "failed",
+            "2026-04-26T13:00:00Z",
+            "2026-04-26T13:01:00Z",
+            &["CRITICAL", "CRITICAL"],
+        ),
+    ] {
+        snapshot.static_tasks.insert(record.id.clone(), record);
+    }
+    task_state::save_snapshot(&state, &snapshot)
+        .await
+        .expect("snapshot should save");
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::get("/api/v1/projects?include_metrics=true")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let payload: Value =
+        serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
+    let project = payload
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|item| item["id"] == project_id)
+        .expect("project should be listed");
+    let metrics = &project["management_metrics"];
+
+    assert_eq!(metrics["total_tasks"], 5);
+    assert_eq!(metrics["completed_tasks"], 4);
+    assert_eq!(metrics["opengrep_tasks"], 3);
+    assert_eq!(metrics["static_high"], 1);
+    assert_eq!(metrics["static_medium"], 1);
+    assert_eq!(metrics["static_low"], 3);
+    assert_eq!(metrics["high"], 1);
+    assert_eq!(metrics["medium"], 1);
+    assert_eq!(metrics["low"], 3);
+    assert_eq!(metrics["last_completed_task_at"], "2026-04-26T12:01:00Z");
+}
+
+#[tokio::test]
 async fn project_management_metrics_ignore_static_summary_counts_without_detail_findings() {
     let state = AppState::from_config(isolated_test_config("projects-static-metrics-no-details"))
         .await
