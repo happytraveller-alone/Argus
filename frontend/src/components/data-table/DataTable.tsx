@@ -397,6 +397,7 @@ export function DataTable<TData extends RowData>({
     manualPagination: isManualPagination,
     manualFiltering: isManualPagination,
     manualSorting: isManualPagination,
+    autoResetPageIndex: false,
     rowCount: remoteTotalCount ?? undefined,
     enableRowSelection: selection?.enableRowSelection,
     enableColumnResizing,

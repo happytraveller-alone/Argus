@@ -79,6 +79,40 @@ pub struct AppConfig {
     pub cubesandbox_cubemaster_base_url: String,
     /// Timeout in seconds for cubemaster template-deletion HTTP requests.
     pub cubesandbox_cubemaster_cleanup_timeout_seconds: u64,
+
+    // ── Standby pool config (Phase A.3) ──────────────────────────────────────
+
+    /// Target standby count for OpengrepDedicated pool slots.
+    /// Env: OPENGREP_STANDBY_POOL_SIZE, default 2.
+    pub opengrep_standby_pool_size: usize,
+    /// Kill switch: when true, OpengrepDedicated pool is fully bypassed.
+    /// Env: OPENGREP_STANDBY_POOL_DISABLED, default false.
+    pub opengrep_standby_pool_disabled: bool,
+    /// Target standby count for CodeqlCpp pool slots.
+    /// Env: CODEQL_STANDBY_POOL_SIZE, default 2.
+    /// Read now; used in Phase B.
+    pub codeql_standby_pool_size: usize,
+    /// Kill switch for CodeqlCpp pool.
+    /// Env: CODEQL_STANDBY_POOL_DISABLED, default false.
+    /// Read now; used in Phase B.
+    pub codeql_standby_pool_disabled: bool,
+    /// Hard global cap on total standby sandboxes across all kinds.
+    /// Env: ARGUS_MAX_TOTAL_STANDBY, default 8.
+    /// TODO(A.3): derive default from host RAM via sysinfo (backend/src/config.rs).
+    pub max_total_standby: usize,
+    /// Ceiling for the creation_slots semaphore (concurrent sandbox creates).
+    /// Env: CUBEMASTER_CAPACITY, default 4.
+    pub cubemaster_capacity: usize,
+
+    // ── a3s-box standby pool config (Phase C.3) ───────────────────────────────
+
+    /// Target standby count for a3s-box OpengrepDedicated pool slots.
+    /// Env: A3S_BOX_STANDBY_POOL_SIZE, default 2.
+    /// Each slot is an image-cache warmup entry (Option C.β — no running VM).
+    pub a3s_box_standby_pool_size: usize,
+    /// Kill switch: when true, a3s-box standby pool is fully bypassed.
+    /// Env: A3S_BOX_STANDBY_POOL_DISABLED, default false.
+    pub a3s_box_standby_pool_disabled: bool,
 }
 
 impl AppConfig {
@@ -220,6 +254,14 @@ impl AppConfig {
                 "CUBESANDBOX_CUBEMASTER_CLEANUP_TIMEOUT_SECONDS",
                 30,
             ),
+            opengrep_standby_pool_size: parse_usize_env("OPENGREP_STANDBY_POOL_SIZE", 2),
+            opengrep_standby_pool_disabled: parse_bool_env("OPENGREP_STANDBY_POOL_DISABLED", false),
+            codeql_standby_pool_size: parse_usize_env("CODEQL_STANDBY_POOL_SIZE", 2),
+            codeql_standby_pool_disabled: parse_bool_env("CODEQL_STANDBY_POOL_DISABLED", false),
+            max_total_standby: parse_usize_env("ARGUS_MAX_TOTAL_STANDBY", 8),
+            cubemaster_capacity: parse_usize_env("CUBEMASTER_CAPACITY", 4),
+            a3s_box_standby_pool_size: parse_usize_env("A3S_BOX_STANDBY_POOL_SIZE", 2),
+            a3s_box_standby_pool_disabled: parse_bool_env("A3S_BOX_STANDBY_POOL_DISABLED", false),
         })
     }
 
@@ -302,6 +344,14 @@ impl AppConfig {
             cubesandbox_stderr_limit_bytes: 65_536,
             cubesandbox_cubemaster_base_url: String::new(),
             cubesandbox_cubemaster_cleanup_timeout_seconds: 30,
+            opengrep_standby_pool_size: 0,
+            opengrep_standby_pool_disabled: true,
+            codeql_standby_pool_size: 0,
+            codeql_standby_pool_disabled: true,
+            max_total_standby: 8,
+            cubemaster_capacity: 4,
+            a3s_box_standby_pool_size: 0,
+            a3s_box_standby_pool_disabled: true,
         }
     }
 }

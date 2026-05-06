@@ -128,6 +128,7 @@ test("TaskActivitiesListTable locks ten-row pagination and scrollable task table
 	);
 
 	assert.match(markup, /共 12 条/);
+	assert.match(markup, /第 1 \/ 2 页/);
 	assert.match(markup, /Paged Task 1/);
 	assert.match(markup, /Paged Task 10/);
 	assert.doesNotMatch(markup, /Paged Task 11/);

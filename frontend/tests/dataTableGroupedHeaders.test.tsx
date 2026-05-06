@@ -1,9 +1,21 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import React, { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 globalThis.React = React;
+
+const frontendDir = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "..",
+);
+const dataTablePath = path.join(
+  frontendDir,
+  "src/components/data-table/DataTable.tsx",
+);
 
 async function importOrFail<TModule = Record<string, unknown>>(
   relativePath: string,
@@ -99,6 +111,12 @@ test("DataTable remote pagination uses server total instead of current page row 
   );
 
   assert.match(markup, /共 37 条，第 2 \/ 4 页/);
+});
+
+test("DataTable keeps the selected page across live data refreshes", () => {
+  const source = readFileSync(dataTablePath, "utf8");
+
+  assert.match(source, /autoResetPageIndex:\s*false/);
 });
 
 test("DataTable sizes columns from the current page header and cell content", async () => {

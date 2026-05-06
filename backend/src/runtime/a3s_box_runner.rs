@@ -1140,6 +1140,40 @@ pub fn default_runner_root() -> PathBuf {
     a3s_box_runner_root()
 }
 
+/// Ensure the a3s-box OCI image cache is warm for `image`, for use by the pool factory.
+///
+/// This is the public entry-point used by `A3sBoxFactory::create()` (Phase C.1).
+/// It creates a temporary meta directory under `a3s_box_runner_root()`, calls
+/// `ensure_a3s_box_image_cached`, and returns the path to the argus marker file
+/// that serves as proof of cache warmth.
+///
+/// Returns `Ok(marker_path)` where `marker_path` is the `.id` marker file
+/// written by the cache routine, or an empty `PathBuf` when no marker dir is
+/// configured (i.e. `HOME` is unset) — the cache is still warm in that case;
+/// the caller records the path for observability only.
+pub fn ensure_image_cached_for_pool(image: &str) -> anyhow::Result<std::path::PathBuf> {
+    let runner_root = a3s_box_runner_root();
+    let meta_dir = runner_root.join("pool-warmup");
+    fs::create_dir_all(&meta_dir).with_context(|| {
+        format!(
+            "ensure_image_cached_for_pool: create meta dir: {}",
+            meta_dir.display()
+        )
+    })?;
+
+    let binary = a3s_box_bin();
+    ensure_a3s_box_image_cached(&binary, image, &meta_dir)?;
+
+    // Return the marker file path for observability (may not exist when HOME is unset).
+    let marker_path = a3s_box_argus_marker_dir()
+        .map(|dir| {
+            let marker_name = a3s_box_cache_marker_name(image);
+            dir.join(format!("{marker_name}.id"))
+        })
+        .unwrap_or_default();
+    Ok(marker_path)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

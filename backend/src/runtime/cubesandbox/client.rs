@@ -117,6 +117,49 @@ impl CubeSandboxClient {
         Ok(response.json().await?)
     }
 
+    /// Create a sandbox with one host-directory mount via the CubeAPI `host-mount` metadata key.
+    ///
+    /// The CubeAPI translates `metadata["host-mount"]` into a cubemaster annotation which
+    /// cubemaster converts to a bind-mount of `host_path` → `container_path` inside the sandbox.
+    ///
+    /// `host_path`      — absolute path on the cubemaster host (must exist at RPC time).
+    /// `container_path` — absolute path inside the sandbox container.
+    /// `read_only`      — whether to mount read-only.
+    pub async fn create_sandbox_with_host_mount(
+        &self,
+        host_path: &str,
+        container_path: &str,
+        read_only: bool,
+    ) -> Result<CubeSandboxSandbox> {
+        let mount_spec = serde_json::to_string(&json!([{
+            "hostPath":  host_path,
+            "mountPath": container_path,
+            "readOnly":  read_only,
+        }]))?;
+        let response = self
+            .http_client
+            .post(self.join_api("sandboxes")?)
+            .json(&json!({
+                "templateID": self.config.template_id,
+                "timeout": self.config.execution_timeout_seconds,
+                "metadata": {
+                    "host-mount": mount_spec,
+                },
+            }))
+            .send()
+            .await?;
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            bail!(
+                "CubeSandbox create_with_host_mount failed: {} body={}",
+                status,
+                truncate_utf8(body, 512).0
+            );
+        }
+        Ok(response.json().await?)
+    }
+
     pub async fn connect_sandbox(&self, sandbox_id: &str) -> Result<()> {
         let response = self
             .http_client

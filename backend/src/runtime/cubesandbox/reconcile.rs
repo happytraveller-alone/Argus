@@ -195,19 +195,54 @@ fn protected_set(
 
 // ─── ACTIVE SANDBOX SNAPSHOT ─────────────────────────────────────────────────
 
-/// Read the set of active sandbox IDs from ACTIVE_CODEQL_SANDBOXES.
-/// Safe from async context — acquires only a std::sync::Mutex.
-/// Returns empty set at startup (before HTTP server bind, no scans are active).
-async fn read_active_codeql_sandboxes() -> HashSet<String> {
-    tokio::task::spawn_blocking(codeql_cubesandbox::snapshot_active_sandbox_ids)
+/// Read the set of active sandbox IDs for codeql cubesandbox.
+///
+/// Unions two sources:
+///   1. In-flight scan IDs from `ACTIVE_CODEQL_SANDBOXES` (scans spawned but not yet cleaned up).
+///   2. Standby pool entries of kind `CodeqlCpp` from `state.cubesandbox_pool`, if present.
+///
+/// This ensures reconcile never garbage-collects sandboxes held in the standby pool.
+/// The snapshot is non-live: concurrent `take()` calls may remove pool entries after this returns.
+async fn read_active_codeql_sandboxes(state: &AppState) -> HashSet<String> {
+    let mut active = tokio::task::spawn_blocking(codeql_cubesandbox::snapshot_active_sandbox_ids)
         .await
-        .unwrap_or_default()
+        .unwrap_or_default();
+
+    // Phase D.1: union standby pool entries so reconcile doesn't orphan-delete them.
+    if let Some(pool) = &state.cubesandbox_pool {
+        for sandbox_ref in pool.read_active().await {
+            // kind_debug is the Debug-format of TemplateKind — "CodeqlCpp" for CodeqlCpp variant.
+            if sandbox_ref.kind_debug == "CodeqlCpp" {
+                active.insert(sandbox_ref.id);
+            }
+        }
+    }
+
+    active
 }
 
-async fn read_active_opengrep_sandboxes() -> HashSet<String> {
-    tokio::task::spawn_blocking(opengrep_cubesandbox::snapshot_active_sandbox_ids)
-        .await
-        .unwrap_or_default()
+/// Read the set of active sandbox IDs for opengrep cubesandbox.
+///
+/// Unions two sources:
+///   1. In-flight scan IDs from `ACTIVE_OPENGREP_SANDBOXES`.
+///   2. Standby pool entries of kind `OpengrepDedicated` from `state.cubesandbox_pool`, if present.
+async fn read_active_opengrep_sandboxes(state: &AppState) -> HashSet<String> {
+    let mut active =
+        tokio::task::spawn_blocking(opengrep_cubesandbox::snapshot_active_sandbox_ids)
+            .await
+            .unwrap_or_default();
+
+    // Phase D.1: union standby pool entries so reconcile doesn't orphan-delete them.
+    if let Some(pool) = &state.cubesandbox_pool {
+        for sandbox_ref in pool.read_active().await {
+            // kind_debug is the Debug-format of TemplateKind — "OpengrepDedicated".
+            if sandbox_ref.kind_debug == "OpengrepDedicated" {
+                active.insert(sandbox_ref.id);
+            }
+        }
+    }
+
+    active
 }
 
 // ─── ENV REWRITE (Phase 4 territory) ─────────────────────────────────────────
@@ -604,8 +639,8 @@ pub(crate) async fn reconcile_stale_templates_with_client<C: CubemasterApi>(
     // SKIPPED when cubemaster_list_failed=true (cannot safely determine orphans without
     // a complete cubemaster list — we'd false-positive delete every DB-tracked template).
     // protected = template_ids from DB active + env_pin + in-process active (empty at startup)
-    let mut in_process_active = read_active_codeql_sandboxes().await;
-    in_process_active.extend(read_active_opengrep_sandboxes().await);
+    let mut in_process_active = read_active_codeql_sandboxes(state).await;
+    in_process_active.extend(read_active_opengrep_sandboxes(state).await);
     // Note: read_active_codeql_sandboxes returns sandbox_ids (not template_ids).
     // For forward-orphan protection we need template_ids. In_process_active here
     // contributes task_ids which are keys in the map; at startup it is always empty.
@@ -755,9 +790,9 @@ pub(crate) async fn reconcile_stale_templates_with_client<C: CubemasterApi>(
                 summary.orphan_sandbox_check_skipped = true;
             } else {
                 // Step 12: orphan sandbox cleanup (real data)
-                // Collect active sandbox ids for comparison
-                let mut active_sb_ids = read_active_codeql_sandboxes().await;
-                active_sb_ids.extend(read_active_opengrep_sandboxes().await);
+                // Collect active sandbox ids for comparison (includes standby pool — Phase D.1)
+                let mut active_sb_ids = read_active_codeql_sandboxes(state).await;
+                active_sb_ids.extend(read_active_opengrep_sandboxes(state).await);
                 let now_sb = OffsetDateTime::now_utc();
                 for sb in &cm_sandboxes {
                     let age = now_sb - sb.created_at;

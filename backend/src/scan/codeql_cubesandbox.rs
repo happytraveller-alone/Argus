@@ -143,6 +143,75 @@ pub struct CodeqlSandboxSession {
 
 impl CodeqlSandboxSession {
     pub async fn start(state: &AppState, task_id: &str) -> Result<Self> {
+        let t0 = std::time::Instant::now();
+
+        // ── Pool-first acquisition (Phase B.1) ───────────────────────────────
+        //
+        // Try to take a pre-warmed sandbox from the standby pool.  On pool miss
+        // (starvation, kill switch, or pool not configured) fall back to the
+        // original synchronous cold-start path — no 503, no error surface.
+        if let Some(pool) = state.cubesandbox_pool.as_ref() {
+            let kind = TemplateKind::CodeqlCpp;
+            if let Some(handle) = pool.take(&kind).await {
+                // Pool hit: spawn a background refill so the slot is replenished
+                // while our source upload runs in parallel.
+                pool.refill_in_background(kind).await;
+
+                tracing::info!(
+                    task_id = %task_id,
+                    stage = "standby_acquired",
+                    sandbox_id = %handle.sandbox_id,
+                    elapsed_ms = t0.elapsed().as_millis() as u64,
+                    "using pre-warmed standby sandbox"
+                );
+
+                if take_cancel_request(task_id) {
+                    crate::runtime::cubesandbox::best_effort_delete_sandbox(
+                        &handle.client,
+                        &handle.sandbox_id,
+                        task_id,
+                        "cancel_after_pool_take",
+                    )
+                    .await;
+                    bail!(
+                        "CodeQL CubeSandbox scan cancelled after pool take for task {task_id}"
+                    );
+                }
+
+                // Re-wrap handle into the session shape.
+                let sandbox = CubeSandboxSandbox {
+                    sandbox_id: handle.sandbox_id.clone(),
+                    template_id: handle.template_id.clone(),
+                    client_id: String::new(),
+                    envd_version: String::new(),
+                    domain: None,
+                };
+                let client = (*handle.client).clone();
+                register_active_sandbox(
+                    task_id,
+                    ActiveCodeqlSandbox {
+                        client: client.clone(),
+                        sandbox_id: handle.sandbox_id.clone(),
+                    },
+                );
+                return Ok(Self {
+                    task_id: task_id.to_string(),
+                    template_id: handle.template_id.clone(),
+                    client,
+                    sandbox,
+                });
+            } else {
+                // Pool miss: log starvation metric and fall through to cold-start.
+                tracing::info!(
+                    task_id = %task_id,
+                    stage = "standby_pool_starvation",
+                    template = "CodeqlCpp",
+                    "pool returned None; falling back to cold-start"
+                );
+            }
+        }
+
+        // ── Cold-start fallback (original path, unchanged) ────────────────────
         let config = CubeSandboxConfig::load_runtime(state).await?;
         config.validate_for_execution()?;
         let template_id = ensure_template_id_or_wait(state, &config, task_id).await?;

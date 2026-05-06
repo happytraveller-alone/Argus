@@ -408,7 +408,6 @@ export default function TaskActivitiesListTable({
 					pagination={{
 						enabled: true,
 						pageSizeOptions: [10, 20, 50],
-						infoLabel: () => `共 ${activities.length} 条`,
 					}}
 					tableClassName="min-w-[760px]"
 					fillContainerWidth
