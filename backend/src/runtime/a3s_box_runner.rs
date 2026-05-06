@@ -1,9 +1,11 @@
 use anyhow::{bail, Context, Result};
+use flate2::{write::GzEncoder, Compression, GzBuilder};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::{
     collections::{BTreeMap, HashSet},
     env, fs,
-    io::Read,
+    io::{Read, Write},
     path::{Path, PathBuf},
     process::{Command, Stdio},
     thread,
@@ -16,6 +18,7 @@ const SCANNER_MOUNT_PATH: &str = "/scan";
 const DEFAULT_A3S_BOX_BIN: &str = "a3s-box";
 const DEFAULT_A3S_BOX_TIMEOUT_SECONDS: u64 = 900;
 const DEFAULT_A3S_BOX_RUNNER_ROOT: &str = "/tmp/argus/a3s-box-runs";
+const DEFAULT_CONTAINER_CLI_BIN: &str = "docker";
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct A3sBoxRunnerSpec {
@@ -93,6 +96,26 @@ fn a3s_box_cleanup_timeout() -> u64 {
         .and_then(|value| value.trim().parse::<u64>().ok())
         .filter(|value| *value > 0)
         .unwrap_or(30)
+}
+
+fn a3s_box_auto_load_docker_image() -> bool {
+    env::var("A3S_BOX_AUTO_LOAD_DOCKER_IMAGE")
+        .ok()
+        .map(|value| {
+            matches!(
+                value.trim().to_ascii_lowercase().as_str(),
+                "1" | "true" | "yes" | "on"
+            )
+        })
+        .unwrap_or(true)
+}
+
+fn container_cli_bin() -> String {
+    env::var("CONTAINER_CLI")
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| DEFAULT_CONTAINER_CLI_BIN.to_string())
 }
 
 fn ensure_workspace_artifacts(workspace_dir: &str) -> Result<(PathBuf, PathBuf, PathBuf)> {
@@ -218,6 +241,632 @@ fn run_command_capture(
     })
 }
 
+fn command_failed_text(capture: &CommandCapture) -> String {
+    let stderr = capture.stderr.trim();
+    if !stderr.is_empty() {
+        return stderr.to_string();
+    }
+    let stdout = capture.stdout.trim();
+    if !stdout.is_empty() {
+        return stdout.to_string();
+    }
+    match capture.status_code {
+        Some(code) => format!("exit code {code}"),
+        None => "process terminated without an exit code".to_string(),
+    }
+}
+
+fn command_succeeded(capture: &CommandCapture) -> bool {
+    !capture.timed_out && capture.status_code == Some(0)
+}
+
+fn a3s_box_virtualization_error_text(stdout: &str, stderr: &str) -> Option<String> {
+    let combined = format!("{stdout}\n{stderr}");
+    for needle in [
+        "Virtualization: not available",
+        "KVM is not available",
+        "Error creating the Kvm object",
+        "Exec socket did not appear",
+    ] {
+        if combined.contains(needle) {
+            return Some(needle.to_string());
+        }
+    }
+    None
+}
+
+fn a3s_box_image_inspect(binary: &str, image: &str) -> Option<CommandCapture> {
+    let args = vec!["image-inspect".to_string(), image.to_string()];
+    run_command_capture(binary, &args, Some(Duration::from_secs(30)))
+        .ok()
+        .filter(command_succeeded)
+}
+
+fn digest_sha256_hex(digest: &str) -> Option<&str> {
+    let value = digest.strip_prefix("sha256:")?;
+    if value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn sha256_hex(bytes: &[u8]) -> String {
+    let digest = Sha256::digest(bytes);
+    format!("{digest:x}")
+}
+
+fn gzip_bytes_for_oci_layer(bytes: &[u8]) -> Result<Vec<u8>> {
+    let mut encoder: GzEncoder<Vec<u8>> = GzBuilder::new()
+        .mtime(0)
+        .write(Vec::new(), Compression::default());
+    encoder.write_all(bytes).context("gzip OCI layer bytes")?;
+    encoder.finish().context("finish gzip OCI layer")
+}
+
+fn append_path_recursive(
+    builder: &mut tar::Builder<fs::File>,
+    base_dir: &Path,
+    path: &Path,
+) -> Result<()> {
+    let relative_path = path
+        .strip_prefix(base_dir)
+        .with_context(|| format!("derive archive path for {}", path.display()))?;
+    if relative_path.as_os_str().is_empty() {
+        return Ok(());
+    }
+    let metadata =
+        fs::metadata(path).with_context(|| format!("stat archive path: {}", path.display()))?;
+    if metadata.is_dir() {
+        builder
+            .append_dir(relative_path, path)
+            .with_context(|| format!("append archive dir: {}", relative_path.display()))?;
+        let mut children = fs::read_dir(path)
+            .with_context(|| format!("read archive dir: {}", path.display()))?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .with_context(|| format!("collect archive dir entries: {}", path.display()))?;
+        children.sort_by_key(|entry| entry.path());
+        for child in children {
+            append_path_recursive(builder, base_dir, &child.path())?;
+        }
+    } else if metadata.is_file() {
+        builder
+            .append_path_with_name(path, relative_path)
+            .with_context(|| format!("append archive file: {}", relative_path.display()))?;
+    }
+    Ok(())
+}
+
+fn convert_docker_archive_to_a3s_oci_archive(input_path: &Path, output_path: &Path) -> Result<()> {
+    let work_dir = tempfile::Builder::new()
+        .prefix("argus-a3s-oci-")
+        .tempdir()
+        .context("create temporary OCI conversion directory")?;
+
+    let input = fs::File::open(input_path)
+        .with_context(|| format!("open Docker image archive: {}", input_path.display()))?;
+    let mut archive = tar::Archive::new(input);
+    archive
+        .unpack(work_dir.path())
+        .with_context(|| format!("unpack Docker image archive: {}", input_path.display()))?;
+
+    let blobs_dir = work_dir.path().join("blobs").join("sha256");
+    let index_path = work_dir.path().join("index.json");
+    let index_bytes = fs::read(&index_path).with_context(|| {
+        format!(
+            "read OCI index from Docker archive: {}",
+            index_path.display()
+        )
+    })?;
+    let mut index_json: serde_json::Value =
+        serde_json::from_slice(&index_bytes).context("parse OCI index from Docker archive")?;
+    let manifests = index_json
+        .get_mut("manifests")
+        .and_then(serde_json::Value::as_array_mut)
+        .context("OCI index missing manifests array")?;
+
+    for manifest_entry in manifests {
+        let manifest_digest = manifest_entry
+            .get("digest")
+            .and_then(serde_json::Value::as_str)
+            .and_then(digest_sha256_hex)
+            .context("OCI index manifest digest must be sha256")?
+            .to_string();
+        let manifest_path = blobs_dir.join(&manifest_digest);
+        let manifest_bytes = fs::read(&manifest_path)
+            .with_context(|| format!("read OCI manifest blob: {}", manifest_path.display()))?;
+        let mut manifest_json: serde_json::Value =
+            serde_json::from_slice(&manifest_bytes).context("parse OCI manifest blob")?;
+        let layers = manifest_json
+            .get_mut("layers")
+            .and_then(serde_json::Value::as_array_mut)
+            .context("OCI manifest missing layers array")?;
+
+        let mut manifest_changed = false;
+        for layer in layers {
+            let media_type = layer
+                .get("mediaType")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or_default();
+            let is_uncompressed_layer = matches!(
+                media_type,
+                "application/vnd.oci.image.layer.v1.tar"
+                    | "application/vnd.docker.image.rootfs.diff.tar"
+            );
+            if !is_uncompressed_layer {
+                continue;
+            }
+
+            let layer_digest = layer
+                .get("digest")
+                .and_then(serde_json::Value::as_str)
+                .and_then(digest_sha256_hex)
+                .context("OCI layer digest must be sha256")?
+                .to_string();
+            let layer_path = blobs_dir.join(&layer_digest);
+            let layer_bytes = fs::read(&layer_path)
+                .with_context(|| format!("read OCI layer blob: {}", layer_path.display()))?;
+            let gzipped_layer = gzip_bytes_for_oci_layer(&layer_bytes)?;
+            let gzipped_digest = sha256_hex(&gzipped_layer);
+            let gzipped_path = blobs_dir.join(&gzipped_digest);
+            fs::write(&gzipped_path, &gzipped_layer)
+                .with_context(|| format!("write gzipped OCI layer: {}", gzipped_path.display()))?;
+            if gzipped_path != layer_path {
+                let _ = fs::remove_file(&layer_path);
+            }
+
+            layer["mediaType"] =
+                serde_json::Value::String("application/vnd.oci.image.layer.v1.tar+gzip".into());
+            layer["digest"] = serde_json::Value::String(format!("sha256:{gzipped_digest}"));
+            layer["size"] =
+                serde_json::Value::Number(serde_json::Number::from(gzipped_layer.len() as u64));
+            manifest_changed = true;
+        }
+
+        if manifest_changed {
+            let updated_manifest =
+                serde_json::to_vec(&manifest_json).context("serialize updated OCI manifest")?;
+            let updated_digest = sha256_hex(&updated_manifest);
+            let updated_manifest_path = blobs_dir.join(&updated_digest);
+            fs::write(&updated_manifest_path, &updated_manifest).with_context(|| {
+                format!(
+                    "write updated OCI manifest: {}",
+                    updated_manifest_path.display()
+                )
+            })?;
+            if updated_manifest_path != manifest_path {
+                let _ = fs::remove_file(&manifest_path);
+            }
+            manifest_entry["digest"] =
+                serde_json::Value::String(format!("sha256:{updated_digest}"));
+            manifest_entry["size"] =
+                serde_json::Value::Number(serde_json::Number::from(updated_manifest.len() as u64));
+        }
+    }
+
+    fs::write(
+        &index_path,
+        serde_json::to_vec(&index_json).context("serialize updated OCI index")?,
+    )
+    .with_context(|| format!("write updated OCI index: {}", index_path.display()))?;
+    let _ = fs::remove_file(work_dir.path().join("manifest.json"));
+    let _ = fs::remove_file(work_dir.path().join("repositories"));
+
+    if let Some(parent) = output_path.parent() {
+        fs::create_dir_all(parent)
+            .with_context(|| format!("create OCI archive parent: {}", parent.display()))?;
+    }
+    let output = fs::File::create(output_path).with_context(|| {
+        format!(
+            "create A3S-compatible OCI archive: {}",
+            output_path.display()
+        )
+    })?;
+    let mut builder = tar::Builder::new(output);
+    for relative in ["oci-layout", "index.json", "blobs"] {
+        append_path_recursive(
+            &mut builder,
+            work_dir.path(),
+            &work_dir.path().join(relative),
+        )?;
+    }
+    builder.finish().with_context(|| {
+        format!(
+            "finish A3S-compatible OCI archive: {}",
+            output_path.display()
+        )
+    })
+}
+
+fn a3s_box_cached_image_needs_reload(inspect_stdout: &str) -> Result<bool> {
+    let inspect_json: serde_json::Value =
+        serde_json::from_str(inspect_stdout).context("parse a3s-box image-inspect JSON")?;
+    let digest = inspect_json
+        .get("Digest")
+        .and_then(serde_json::Value::as_str)
+        .and_then(digest_sha256_hex)
+        .context("a3s-box image-inspect JSON missing sha256 Digest")?;
+    let Some(home_dir) = env::var_os("HOME").map(PathBuf::from) else {
+        return Ok(false);
+    };
+    let cache_dir = home_dir
+        .join(".a3s")
+        .join("images")
+        .join("sha256")
+        .join(digest);
+    if !cache_dir.exists() {
+        return Ok(false);
+    }
+    if cache_dir.join("manifest.json").exists() || cache_dir.join("repositories").exists() {
+        return Ok(true);
+    }
+    let index_path = cache_dir.join("index.json");
+    if !index_path.exists() {
+        return Ok(false);
+    }
+
+    let index_json: serde_json::Value = serde_json::from_slice(
+        &fs::read(&index_path)
+            .with_context(|| format!("read cached a3s-box OCI index: {}", index_path.display()))?,
+    )
+    .context("parse cached a3s-box OCI index")?;
+    let Some(manifests) = index_json
+        .get("manifests")
+        .and_then(serde_json::Value::as_array)
+    else {
+        return Ok(true);
+    };
+    for manifest_entry in manifests {
+        let Some(manifest_digest) = manifest_entry
+            .get("digest")
+            .and_then(serde_json::Value::as_str)
+            .and_then(digest_sha256_hex)
+        else {
+            return Ok(true);
+        };
+        let manifest_path = cache_dir.join("blobs").join("sha256").join(manifest_digest);
+        let manifest_json: serde_json::Value =
+            serde_json::from_slice(&fs::read(&manifest_path).with_context(|| {
+                format!(
+                    "read cached a3s-box OCI manifest: {}",
+                    manifest_path.display()
+                )
+            })?)
+            .context("parse cached a3s-box OCI manifest")?;
+        let Some(layers) = manifest_json
+            .get("layers")
+            .and_then(serde_json::Value::as_array)
+        else {
+            return Ok(true);
+        };
+        for layer in layers {
+            if matches!(
+                layer
+                    .get("mediaType")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or_default(),
+                "application/vnd.oci.image.layer.v1.tar"
+                    | "application/vnd.docker.image.rootfs.diff.tar"
+            ) {
+                return Ok(true);
+            }
+        }
+    }
+    Ok(false)
+}
+
+fn a3s_box_image_cached(binary: &str, image: &str) -> bool {
+    let Some(capture) = a3s_box_image_inspect(binary, image) else {
+        return false;
+    };
+    !a3s_box_cached_image_needs_reload(&capture.stdout).unwrap_or(false)
+}
+
+fn a3s_box_cache_marker_name(image: &str) -> String {
+    image
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() || matches!(ch, '.' | '_' | '-') {
+                ch
+            } else {
+                '_'
+            }
+        })
+        .collect()
+}
+
+fn a3s_box_argus_marker_dir() -> Option<PathBuf> {
+    env::var_os("HOME")
+        .map(PathBuf::from)
+        .map(|home| home.join(".a3s").join("argus").join("source-images"))
+}
+
+fn read_trimmed_file(path: &Path) -> Option<String> {
+    fs::read_to_string(path).ok().map(|value| value.trim().to_string())
+}
+
+fn write_marker_file(path: &Path, value: &str) -> Result<()> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)
+            .with_context(|| format!("create a3s-box marker parent: {}", parent.display()))?;
+    }
+    fs::write(path, format!("{value}\n"))
+        .with_context(|| format!("write a3s-box marker: {}", path.display()))
+}
+
+fn remove_a3s_box_rootfs_cache_for_image(image: &str) -> Result<usize> {
+    let Some(home_dir) = env::var_os("HOME").map(PathBuf::from) else {
+        return Ok(0);
+    };
+    let cache_dir = home_dir.join(".a3s").join("cache").join("rootfs");
+    if !cache_dir.is_dir() {
+        return Ok(0);
+    }
+
+    let mut removed = 0;
+    for entry in fs::read_dir(&cache_dir)
+        .with_context(|| format!("read a3s-box rootfs cache dir: {}", cache_dir.display()))?
+    {
+        let entry = entry.with_context(|| {
+            format!(
+                "read a3s-box rootfs cache entry under {}",
+                cache_dir.display()
+            )
+        })?;
+        let meta_path = entry.path();
+        if !meta_path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .is_some_and(|name| name.ends_with(".meta.json"))
+        {
+            continue;
+        }
+        let meta_json: serde_json::Value =
+            match serde_json::from_slice(&fs::read(&meta_path).with_context(|| {
+                format!("read a3s-box rootfs cache metadata: {}", meta_path.display())
+            })?) {
+                Ok(value) => value,
+                Err(_) => continue,
+            };
+        if meta_json
+            .get("description")
+            .and_then(serde_json::Value::as_str)
+            != Some(image)
+        {
+            continue;
+        }
+        let key = meta_json
+            .get("key")
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_string)
+            .or_else(|| {
+                meta_path
+                    .file_name()
+                    .and_then(|name| name.to_str())
+                    .and_then(|name| name.strip_suffix(".meta.json"))
+                    .map(str::to_string)
+            });
+        if let Some(key) = key {
+            let rootfs_path = cache_dir.join(key);
+            if rootfs_path.exists() {
+                fs::remove_dir_all(&rootfs_path).with_context(|| {
+                    format!(
+                        "remove stale a3s-box rootfs cache: {}",
+                        rootfs_path.display()
+                    )
+                })?;
+            }
+        }
+        let _ = fs::remove_file(&meta_path);
+        removed += 1;
+    }
+    Ok(removed)
+}
+
+fn docker_image_id(container_cli: &str, image: &str) -> Option<String> {
+    let args = vec![
+        "image".to_string(),
+        "inspect".to_string(),
+        "--format".to_string(),
+        "{{.Id}}".to_string(),
+        image.to_string(),
+    ];
+    let capture = run_command_capture(container_cli, &args, Some(Duration::from_secs(30))).ok()?;
+    if !command_succeeded(&capture) {
+        return None;
+    }
+    let image_id = capture.stdout.trim();
+    (!image_id.is_empty()).then(|| image_id.to_string())
+}
+
+fn legacy_docker_image_source(image: &str) -> Option<String> {
+    image
+        .strip_prefix("argus/")
+        .map(|rest| format!("Argus/{rest}"))
+}
+
+fn ensure_a3s_box_image_cached(binary: &str, image: &str, meta_dir: &Path) -> Result<()> {
+    let container_cli = container_cli_bin();
+    let mut source_image = image.to_string();
+    let mut source_image_id = docker_image_id(&container_cli, &source_image);
+    if source_image_id.is_none() {
+        if let Some(legacy_source) = legacy_docker_image_source(image) {
+            if let Some(legacy_id) = docker_image_id(&container_cli, &legacy_source) {
+                source_image_id = Some(legacy_id);
+                source_image = legacy_source;
+            }
+        }
+    }
+
+    let mut force_reload = false;
+    if let (Some(marker_dir), Some(source_id)) =
+        (a3s_box_argus_marker_dir(), source_image_id.as_deref())
+    {
+        let marker_name = a3s_box_cache_marker_name(image);
+        let image_marker = marker_dir.join(format!("{marker_name}.id"));
+        let rootfs_marker = marker_dir.join(format!("{marker_name}.rootfs.id"));
+        if read_trimmed_file(&rootfs_marker).as_deref() != Some(source_id) {
+            remove_a3s_box_rootfs_cache_for_image(image)?;
+            write_marker_file(&rootfs_marker, source_id)?;
+        }
+        if read_trimmed_file(&image_marker).as_deref() != Some(source_id) {
+            force_reload = true;
+        }
+    }
+
+    if a3s_box_image_cached(binary, image) && !force_reload {
+        return Ok(());
+    }
+    if !a3s_box_auto_load_docker_image() {
+        return Ok(());
+    }
+
+    if source_image_id.is_none() {
+        let inspect_args = vec![
+            "image".to_string(),
+            "inspect".to_string(),
+            source_image.clone(),
+        ];
+        let inspect =
+            run_command_capture(&container_cli, &inspect_args, Some(Duration::from_secs(30)))
+                .unwrap_or(CommandCapture {
+                    timed_out: false,
+                    status_code: Some(1),
+                    stdout: String::new(),
+                    stderr: String::new(),
+                });
+        if !command_succeeded(&inspect) {
+            if let Some(legacy_source) = legacy_docker_image_source(image) {
+                let legacy_inspect_args = vec![
+                    "image".to_string(),
+                    "inspect".to_string(),
+                    legacy_source.clone(),
+                ];
+                let legacy_inspect = run_command_capture(
+                    &container_cli,
+                    &legacy_inspect_args,
+                    Some(Duration::from_secs(30)),
+                )
+                .unwrap_or(CommandCapture {
+                    timed_out: false,
+                    status_code: Some(1),
+                    stdout: String::new(),
+                    stderr: String::new(),
+                });
+                if !command_succeeded(&legacy_inspect) {
+                    return Ok(());
+                }
+                source_image = legacy_source;
+            } else {
+                return Ok(());
+            }
+        }
+    }
+
+    remove_a3s_box_rootfs_cache_for_image(image)?;
+    let rmi_args = vec!["rmi".to_string(), image.to_string()];
+    let _ = run_command_capture(binary, &rmi_args, Some(Duration::from_secs(60)));
+
+    if source_image_id.is_none() {
+        source_image_id = docker_image_id(&container_cli, &source_image);
+    }
+
+    if source_image_id.is_none() {
+        let inspect_args = vec![
+            "image".to_string(),
+            "inspect".to_string(),
+            source_image.clone(),
+        ];
+        let inspect =
+            run_command_capture(&container_cli, &inspect_args, Some(Duration::from_secs(30)))
+                .unwrap_or(CommandCapture {
+                    timed_out: false,
+                    status_code: Some(1),
+                    stdout: String::new(),
+                    stderr: String::new(),
+                });
+        if !command_succeeded(&inspect) {
+            if let Some(legacy_source) = legacy_docker_image_source(image) {
+                let legacy_inspect_args = vec![
+                    "image".to_string(),
+                    "inspect".to_string(),
+                    legacy_source.clone(),
+                ];
+                let legacy_inspect = run_command_capture(
+                    &container_cli,
+                    &legacy_inspect_args,
+                    Some(Duration::from_secs(30)),
+                )
+                .unwrap_or(CommandCapture {
+                    timed_out: false,
+                    status_code: Some(1),
+                    stdout: String::new(),
+                    stderr: String::new(),
+                });
+                if !command_succeeded(&legacy_inspect) {
+                    return Ok(());
+                }
+                source_image = legacy_source;
+            } else {
+                return Ok(());
+            }
+        }
+    }
+
+    let docker_tar_path = meta_dir.join(format!("a3s-box-image-docker-{}.tar", Uuid::new_v4()));
+    let oci_tar_path = meta_dir.join(format!("a3s-box-image-oci-{}.tar", Uuid::new_v4()));
+    let save_args = vec![
+        "save".to_string(),
+        source_image,
+        "-o".to_string(),
+        docker_tar_path.display().to_string(),
+    ];
+    let save = run_command_capture(&container_cli, &save_args, Some(Duration::from_secs(300)))
+        .with_context(|| format!("save Docker image for a3s-box cache: {image}"))?;
+    if !command_succeeded(&save) {
+        let _ = fs::remove_file(&docker_tar_path);
+        bail!(
+            "save Docker image for a3s-box cache failed: {}",
+            command_failed_text(&save)
+        );
+    }
+    convert_docker_archive_to_a3s_oci_archive(&docker_tar_path, &oci_tar_path)
+        .with_context(|| format!("convert Docker image archive to A3S-compatible OCI: {image}"))?;
+    let _ = fs::remove_file(&docker_tar_path);
+
+    let load_args = vec![
+        "load".to_string(),
+        "-i".to_string(),
+        oci_tar_path.display().to_string(),
+        "-t".to_string(),
+        image.to_string(),
+    ];
+    let load = run_command_capture(binary, &load_args, Some(Duration::from_secs(300)))
+        .with_context(|| format!("load Docker image into a3s-box cache: {image}"))?;
+    let _ = fs::remove_file(&oci_tar_path);
+    if !command_succeeded(&load) {
+        bail!(
+            "load Docker image into a3s-box cache failed: {}",
+            command_failed_text(&load)
+        );
+    }
+
+    if !a3s_box_image_cached(binary, image) {
+        bail!("a3s-box image cache did not retain loaded image: {image}");
+    }
+    if let (Some(marker_dir), Some(source_id)) =
+        (a3s_box_argus_marker_dir(), source_image_id.as_deref())
+    {
+        let marker_name = a3s_box_cache_marker_name(image);
+        write_marker_file(&marker_dir.join(format!("{marker_name}.id")), source_id)?;
+        write_marker_file(
+            &marker_dir.join(format!("{marker_name}.rootfs.id")),
+            source_id,
+        )?;
+    }
+    Ok(())
+}
+
 fn rewrite_mount_path(value: &str, workspace: &Path) -> String {
     if value == SCANNER_MOUNT_PATH {
         return workspace.display().to_string();
@@ -334,6 +983,7 @@ pub fn execute(spec: A3sBoxRunnerSpec) -> A3sBoxRunnerResult {
         if spec.network_disabled {
             bail!("a3s-box CLI does not support network_disabled yet; refusing to start without a verified no-network mode");
         }
+        ensure_a3s_box_image_cached(&binary, &spec.image, &meta_dir)?;
         runner_command = rewrite_runner_command(&spec.command, &resolved_workspace);
         runner_environment = rewrite_runner_env(&spec.env, &resolved_workspace);
 
@@ -376,8 +1026,28 @@ pub fn execute(spec: A3sBoxRunnerSpec) -> A3sBoxRunnerResult {
         } else {
             Some(Duration::from_secs(spec.timeout_seconds))
         };
+        let info_capture = run_command_capture(
+            &binary,
+            &["info".to_string()],
+            Some(Duration::from_secs(30)),
+        )?;
+        if !command_succeeded(&info_capture) {
+            bail!(
+                "a3s-box info failed before run: {}",
+                command_failed_text(&info_capture)
+            );
+        }
+        if let Some(error) =
+            a3s_box_virtualization_error_text(&info_capture.stdout, &info_capture.stderr)
+        {
+            bail!("a3s-box virtualization unavailable before run: {error}");
+        }
         active_box_name = Some(box_name.clone());
         let capture = run_command_capture(&binary, &args, timeout)?;
+        if let Some(error) = a3s_box_virtualization_error_text(&capture.stdout, &capture.stderr) {
+            cleanup_box(&binary, active_box_name.as_deref());
+            bail!("a3s-box virtualization failed during run: {error}");
+        }
         if capture.timed_out {
             cleanup_box(&binary, active_box_name.as_deref());
             bail!(
@@ -513,6 +1183,9 @@ cmd="${1:-}"
 shift || true
 printf '%s|%s\n' "$cmd" "$*" >> "$log_file"
 case "$cmd" in
+  info)
+    printf 'Virtualization: available\n'
+    ;;
   run)
     printf '%s' "${FAKE_A3S_BOX_STDOUT:-}"
     printf '%s' "${FAKE_A3S_BOX_STDERR:-}" >&2
@@ -528,6 +1201,232 @@ esac
         permissions.set_mode(0o755);
         fs::set_permissions(&script_path, permissions).unwrap();
         script_path
+    }
+
+    fn fake_a3s_box_cache_script(temp_dir: &TempDir) -> PathBuf {
+        let script_path = temp_dir.path().join("fake-a3s-box-cache.sh");
+        let script = r#"#!/bin/sh
+set -eu
+log_file="${FAKE_A3S_BOX_LOG:?}"
+cache_marker="${FAKE_A3S_BOX_CACHE_MARKER:?}"
+cmd="${1:-}"
+shift || true
+printf '%s|%s\n' "$cmd" "$*" >> "$log_file"
+case "$cmd" in
+  info)
+    printf 'Virtualization: available\n'
+    ;;
+  image-inspect)
+    [ -f "$cache_marker" ]
+    ;;
+  load)
+    loaded_archive="${FAKE_A3S_BOX_LOADED_ARCHIVE:-}"
+    if [ -n "$loaded_archive" ]; then
+      input=""
+      while [ "$#" -gt 0 ]; do
+        if [ "$1" = "-i" ]; then
+          shift
+          input="${1:-}"
+        fi
+        shift || true
+      done
+      [ -n "$input" ] || exit 68
+      cp "$input" "$loaded_archive"
+    fi
+    touch "$cache_marker"
+    printf 'loaded\n'
+    ;;
+  run)
+    printf 'scan ok\n'
+    ;;
+  rm)
+    printf 'removed\n'
+    ;;
+  *)
+    exit 67
+    ;;
+esac
+"#;
+        fs::write(&script_path, script).expect("write fake a3s-box cache script");
+        let mut permissions = fs::metadata(&script_path).unwrap().permissions();
+        permissions.set_mode(0o755);
+        fs::set_permissions(&script_path, permissions).unwrap();
+        script_path
+    }
+
+    fn fake_container_cli_script(temp_dir: &TempDir) -> PathBuf {
+        let script_path = temp_dir.path().join("fake-docker.sh");
+        let script = r#"#!/bin/sh
+set -eu
+log_file="${FAKE_CONTAINER_CLI_LOG:?}"
+archive="${FAKE_CONTAINER_CLI_ARCHIVE:?}"
+printf '%s\n' "$*" >> "$log_file"
+case "${1:-}" in
+  image)
+    [ "${2:-}" = "inspect" ] || exit 64
+    exit 0
+    ;;
+  save)
+    output=""
+    while [ "$#" -gt 0 ]; do
+      if [ "$1" = "-o" ]; then
+        shift
+        output="${1:-}"
+      fi
+      shift || true
+    done
+    [ -n "$output" ] || exit 65
+    mkdir -p "$(dirname "$output")"
+    cp "$archive" "$output"
+    ;;
+  *)
+    exit 66
+    ;;
+esac
+"#;
+        fs::write(&script_path, script).expect("write fake container cli script");
+        let mut permissions = fs::metadata(&script_path).unwrap().permissions();
+        permissions.set_mode(0o755);
+        fs::set_permissions(&script_path, permissions).unwrap();
+        script_path
+    }
+
+    fn append_test_tar_bytes(builder: &mut tar::Builder<fs::File>, path: &str, bytes: &[u8]) {
+        let mut header = tar::Header::new_gnu();
+        header.set_mode(0o644);
+        header.set_size(bytes.len() as u64);
+        header.set_cksum();
+        builder.append_data(&mut header, path, bytes).unwrap();
+    }
+
+    fn write_fake_docker_oci_archive(temp_dir: &TempDir) -> PathBuf {
+        let mut layer_bytes = Vec::new();
+        {
+            let mut layer_builder = tar::Builder::new(&mut layer_bytes);
+            let payload = b"fake layer payload\n";
+            let mut header = tar::Header::new_gnu();
+            header.set_path("fake.txt").unwrap();
+            header.set_mode(0o644);
+            header.set_size(payload.len() as u64);
+            header.set_cksum();
+            layer_builder.append(&header, &payload[..]).unwrap();
+            layer_builder.finish().unwrap();
+        }
+
+        let layer_digest = sha256_hex(&layer_bytes);
+        let config = serde_json::json!({
+            "architecture": "amd64",
+            "os": "linux",
+            "config": {
+                "Cmd": ["opengrep-scan", "--self-test"],
+                "WorkingDir": "/scan"
+            },
+            "rootfs": {
+                "type": "layers",
+                "diff_ids": [format!("sha256:{layer_digest}")]
+            }
+        });
+        let config_bytes = serde_json::to_vec(&config).unwrap();
+        let config_digest = sha256_hex(&config_bytes);
+        let manifest = serde_json::json!({
+            "schemaVersion": 2,
+            "mediaType": "application/vnd.oci.image.manifest.v1+json",
+            "config": {
+                "mediaType": "application/vnd.oci.image.config.v1+json",
+                "digest": format!("sha256:{config_digest}"),
+                "size": config_bytes.len()
+            },
+            "layers": [{
+                "mediaType": "application/vnd.oci.image.layer.v1.tar",
+                "digest": format!("sha256:{layer_digest}"),
+                "size": layer_bytes.len()
+            }]
+        });
+        let manifest_bytes = serde_json::to_vec(&manifest).unwrap();
+        let manifest_digest = sha256_hex(&manifest_bytes);
+        let index = serde_json::json!({
+            "schemaVersion": 2,
+            "mediaType": "application/vnd.oci.image.index.v1+json",
+            "manifests": [{
+                "mediaType": "application/vnd.oci.image.manifest.v1+json",
+                "digest": format!("sha256:{manifest_digest}"),
+                "size": manifest_bytes.len(),
+                "annotations": {
+                    "io.containerd.image.name": "docker.io/argus/opengrep-runner:test",
+                    "org.opencontainers.image.ref.name": "test"
+                }
+            }]
+        });
+
+        let archive_path = temp_dir.path().join("fake-docker-image.tar");
+        let file = fs::File::create(&archive_path).unwrap();
+        let mut builder = tar::Builder::new(file);
+        append_test_tar_bytes(
+            &mut builder,
+            "oci-layout",
+            br#"{"imageLayoutVersion":"1.0.0"}"#,
+        );
+        append_test_tar_bytes(
+            &mut builder,
+            "index.json",
+            &serde_json::to_vec(&index).unwrap(),
+        );
+        append_test_tar_bytes(
+            &mut builder,
+            &format!("blobs/sha256/{manifest_digest}"),
+            &manifest_bytes,
+        );
+        append_test_tar_bytes(
+            &mut builder,
+            &format!("blobs/sha256/{config_digest}"),
+            &config_bytes,
+        );
+        append_test_tar_bytes(
+            &mut builder,
+            &format!("blobs/sha256/{layer_digest}"),
+            &layer_bytes,
+        );
+        append_test_tar_bytes(&mut builder, "manifest.json", b"[]");
+        append_test_tar_bytes(&mut builder, "repositories", b"{}");
+        builder.finish().unwrap();
+        archive_path
+    }
+
+    fn assert_archive_has_only_a3s_compatible_oci_layers(archive_path: &Path) {
+        let unpack_dir = tempfile::Builder::new()
+            .prefix("argus-a3s-loaded-")
+            .tempdir()
+            .unwrap();
+        let file = fs::File::open(archive_path).unwrap();
+        let mut archive = tar::Archive::new(file);
+        archive.unpack(unpack_dir.path()).unwrap();
+        assert!(
+            !unpack_dir.path().join("manifest.json").exists(),
+            "converted A3S OCI archive must drop Docker manifest.json"
+        );
+        assert!(
+            !unpack_dir.path().join("repositories").exists(),
+            "converted A3S OCI archive must drop Docker repositories metadata"
+        );
+        let index: serde_json::Value =
+            serde_json::from_slice(&fs::read(unpack_dir.path().join("index.json")).unwrap())
+                .unwrap();
+        let manifest_digest = index["manifests"][0]["digest"]
+            .as_str()
+            .and_then(digest_sha256_hex)
+            .unwrap();
+        let manifest_path = unpack_dir
+            .path()
+            .join("blobs")
+            .join("sha256")
+            .join(manifest_digest);
+        let manifest: serde_json::Value =
+            serde_json::from_slice(&fs::read(manifest_path).unwrap()).unwrap();
+        let layers = manifest["layers"].as_array().unwrap();
+        assert!(!layers.is_empty());
+        assert!(layers.iter().all(|layer| {
+            layer["mediaType"].as_str() == Some("application/vnd.oci.image.layer.v1.tar+gzip")
+        }));
     }
 
     #[test]
@@ -629,6 +1528,74 @@ esac
     }
 
     #[test]
+    fn execute_loads_missing_a3s_image_from_local_container_cache() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        let temp_dir = TempDir::new().unwrap();
+        let fake_a3s_log = temp_dir.path().join("a3s-box.log");
+        let fake_container_log = temp_dir.path().join("container-cli.log");
+        let fake_container_archive = write_fake_docker_oci_archive(&temp_dir);
+        let fake_loaded_archive = temp_dir.path().join("loaded-a3s-oci.tar");
+        let cache_marker = temp_dir.path().join("image-cached");
+        let fake_a3s_box = fake_a3s_box_cache_script(&temp_dir);
+        let fake_container_cli = fake_container_cli_script(&temp_dir);
+        let workspace_dir = temp_dir.path().join("workspace");
+        fs::create_dir_all(&workspace_dir).unwrap();
+
+        let _bin = EnvVarGuard::set("A3S_BOX_BIN", fake_a3s_box.to_str().unwrap());
+        let _log = EnvVarGuard::set("FAKE_A3S_BOX_LOG", fake_a3s_log.to_str().unwrap());
+        let _marker = EnvVarGuard::set("FAKE_A3S_BOX_CACHE_MARKER", cache_marker.to_str().unwrap());
+        let _container_cli =
+            EnvVarGuard::set("CONTAINER_CLI", fake_container_cli.to_str().unwrap());
+        let _container_log = EnvVarGuard::set(
+            "FAKE_CONTAINER_CLI_LOG",
+            fake_container_log.to_str().unwrap(),
+        );
+        let _container_archive = EnvVarGuard::set(
+            "FAKE_CONTAINER_CLI_ARCHIVE",
+            fake_container_archive.to_str().unwrap(),
+        );
+        let _loaded_archive = EnvVarGuard::set(
+            "FAKE_A3S_BOX_LOADED_ARCHIVE",
+            fake_loaded_archive.to_str().unwrap(),
+        );
+
+        let result = execute(A3sBoxRunnerSpec {
+            scanner_type: "opengrep".to_string(),
+            image: "argus/opengrep-runner:test".to_string(),
+            workspace_dir: workspace_dir.display().to_string(),
+            command: vec!["opengrep-scan".to_string()],
+            timeout_seconds: 60,
+            env: BTreeMap::new(),
+            expected_exit_codes: vec![0],
+            capture_stdout_path: Some("output/stdout.txt".to_string()),
+            capture_stderr_path: None,
+            memory_limit_mb: None,
+            cpu_limit: None,
+            pids_limit: None,
+            network_disabled: false,
+        });
+
+        assert!(result.success, "{:?}", result.error);
+        assert!(
+            cache_marker.exists(),
+            "a3s-box load should populate image cache"
+        );
+        let a3s_logged = fs::read_to_string(fake_a3s_log).unwrap();
+        assert!(a3s_logged.contains("image-inspect|argus/opengrep-runner:test"));
+        assert!(a3s_logged.contains("load|-i "));
+        assert!(a3s_logged.contains("-t argus/opengrep-runner:test"));
+        assert!(a3s_logged.contains("run|"));
+        let container_logged = fs::read_to_string(fake_container_log).unwrap();
+        assert!(container_logged.contains("image inspect argus/opengrep-runner:test"));
+        assert!(container_logged.contains("save argus/opengrep-runner:test -o "));
+        assert_archive_has_only_a3s_compatible_oci_layers(&fake_loaded_archive);
+        assert_eq!(
+            fs::read_to_string(workspace_dir.join("output/stdout.txt")).unwrap(),
+            "scan ok\n"
+        );
+    }
+
+    #[test]
     fn execute_rejects_unsupported_network_disabled_mode() {
         let _lock = ENV_LOCK.lock().unwrap();
         let temp_dir = TempDir::new().unwrap();
@@ -663,6 +1630,67 @@ esac
             .unwrap_or_default()
             .contains("network_disabled"));
         assert!(!fake_log.exists(), "a3s-box must not start after rejection");
+    }
+
+    #[test]
+    fn execute_rejects_unavailable_a3s_virtualization_before_run() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        let temp_dir = TempDir::new().unwrap();
+        let fake_log = temp_dir.path().join("a3s-box.log");
+        let script_path = temp_dir.path().join("fake-a3s-box-no-kvm.sh");
+        fs::write(
+            &script_path,
+            r#"#!/bin/sh
+set -eu
+printf '%s|%s\n' "${1:-}" "$*" >> "${FAKE_A3S_BOX_LOG:?}"
+case "${1:-}" in
+  info)
+    printf 'Virtualization: not available (Configuration error: KVM is not available: /dev/kvm not found.)\n'
+    ;;
+  *)
+    exit 64
+    ;;
+esac
+"#,
+        )
+        .unwrap();
+        let mut permissions = fs::metadata(&script_path).unwrap().permissions();
+        permissions.set_mode(0o755);
+        fs::set_permissions(&script_path, permissions).unwrap();
+        let workspace_dir = temp_dir.path().join("workspace");
+        fs::create_dir_all(&workspace_dir).unwrap();
+
+        let _bin = EnvVarGuard::set("A3S_BOX_BIN", script_path.to_str().unwrap());
+        let _log = EnvVarGuard::set("FAKE_A3S_BOX_LOG", fake_log.to_str().unwrap());
+
+        let result = execute(A3sBoxRunnerSpec {
+            scanner_type: "opengrep".to_string(),
+            image: "argus/opengrep-runner:test".to_string(),
+            workspace_dir: workspace_dir.display().to_string(),
+            command: vec!["opengrep-scan".to_string()],
+            timeout_seconds: 60,
+            env: BTreeMap::new(),
+            expected_exit_codes: vec![0],
+            capture_stdout_path: None,
+            capture_stderr_path: None,
+            memory_limit_mb: None,
+            cpu_limit: None,
+            pids_limit: None,
+            network_disabled: false,
+        });
+
+        assert!(!result.success);
+        assert!(result
+            .error
+            .as_deref()
+            .unwrap_or_default()
+            .contains("a3s-box virtualization unavailable before run"));
+        let logged = fs::read_to_string(fake_log).unwrap();
+        assert!(logged.contains("info|"));
+        assert!(
+            !logged.contains("run|"),
+            "a3s-box run must not start without KVM"
+        );
     }
 
     #[test]

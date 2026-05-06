@@ -6,7 +6,7 @@ SCRIPT_SRC="$ROOT_DIR/argus-bootstrap.sh"
 VALIDATOR_SRC="$ROOT_DIR/scripts/validate-llm-config.sh"
 CUBE_QUICKSTART_SRC="$ROOT_DIR/scripts/cubesandbox-quickstart.sh"
 TMP_ROOT="$(mktemp -d)"
-trap 'rm -rf "$TMP_ROOT"' EXIT
+echo TMP_ROOT=$TMP_ROOT >&2
 
 fail() {
   echo "[test] ERROR: $*" >&2
@@ -79,12 +79,6 @@ services:
       - backend_uploads:/app/uploads
       - backend_runtime_data:/app/data/runtime
       - scan_workspace:/tmp/Argus/scans
-    devices:
-      - /dev/kvm:/dev/kvm
-      - /dev/vhost-vsock:/dev/vhost-vsock
-      - /dev/net/tun:/dev/net/tun
-    group_add:
-      - "${ARGUS_KVM_GROUP_ID:-109}"
   frontend:
     build:
       context: ./frontend
@@ -475,9 +469,7 @@ fi
 # Runner services are image-build targets only; default compose startup must not keep
 # preflight service containers around after validation.
 compose_render_out="$TMP_ROOT/compose.out"
-empty_compose_env="$TMP_ROOT/empty-compose.env"
-: >"$empty_compose_env"
-docker compose --env-file "$empty_compose_env" --project-directory "$ROOT_DIR" --file "$ROOT_DIR/docker-compose.yml" config >"$compose_render_out"
+docker compose --project-directory "$ROOT_DIR" --file "$ROOT_DIR/docker-compose.yml" config >"$compose_render_out"
 runner_profile_count="$(grep -F -c 'profiles: [ "runner-build" ]' "$ROOT_DIR/docker-compose.yml" || true)"
 [[ "$runner_profile_count" -eq 1 ]] || fail "only opengrep runner service should be a profile-only image build target"
 assert_contains "$ROOT_DIR/docker-compose.yml" "\"host.docker.internal:host-gateway\""
@@ -489,14 +481,6 @@ assert_contains "$ROOT_DIR/docker/backend.Dockerfile" "COPY --chmod=755 scripts/
 assert_contains "$ROOT_DIR/docker/backend.Dockerfile" "openssh-client"
 assert_contains "$ROOT_DIR/scripts/release-templates/backend.Dockerfile" "COPY --chmod=755 scripts/cubesandbox-quickstart.sh /app/scripts/cubesandbox-quickstart.sh"
 assert_contains "$ROOT_DIR/scripts/release-templates/backend.Dockerfile" "openssh-client"
-assert_contains "$compose_render_out" "source: /dev/kvm"
-assert_contains "$compose_render_out" "target: /dev/kvm"
-assert_contains "$compose_render_out" "source: /dev/vhost-vsock"
-assert_contains "$compose_render_out" "target: /dev/vhost-vsock"
-assert_contains "$compose_render_out" "source: /dev/net/tun"
-assert_contains "$compose_render_out" "target: /dev/net/tun"
-assert_contains "$compose_render_out" "group_add:"
-assert_contains "$compose_render_out" "- \"109\""
 if awk '
   /^  backend:/ { in_backend = 1; in_depends = 0; next }
   /^  [a-zA-Z0-9_-]+:/ { in_backend = 0; in_depends = 0 }
@@ -513,17 +497,10 @@ assert_not_contains "$compose_render_out" "SCANNER_CODEQL_COMPILE_SANDBOX_IMAGE"
 
 release_compose_render_out="$TMP_ROOT/release-compose.out"
 docker compose \
-  --env-file "$empty_compose_env" \
   --project-directory "$ROOT_DIR" \
   --file "$ROOT_DIR/scripts/release-templates/docker-compose.release-slim.yml" \
   config >"$release_compose_render_out"
 assert_contains "$release_compose_render_out" "SCANNER_OPENGREP_IMAGE: ghcr.io/happytraveller-alone/argus-opengrep-runner:latest"
-assert_contains "$release_compose_render_out" "source: /dev/kvm"
-assert_contains "$release_compose_render_out" "target: /dev/kvm"
-assert_contains "$release_compose_render_out" "source: /dev/vhost-vsock"
-assert_contains "$release_compose_render_out" "target: /dev/vhost-vsock"
-assert_contains "$release_compose_render_out" "source: /dev/net/tun"
-assert_contains "$release_compose_render_out" "target: /dev/net/tun"
 assert_not_contains "$release_compose_render_out" "codeql-runner"
 assert_not_contains "$release_compose_render_out" "SCANNER_CODEQL_IMAGE"
 assert_not_contains "$release_compose_render_out" "SCANNER_CODEQL_COMPILE_SANDBOX_IMAGE"

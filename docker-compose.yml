@@ -11,7 +11,7 @@
 services:
 
   opengrep-runner:
-    image: ${SCANNER_OPENGREP_IMAGE:-Argus/opengrep-runner-local:latest}
+    image: ${SCANNER_OPENGREP_IMAGE:-argus/opengrep-runner-local:latest}
     profiles: [ "runner-build" ]
     pull_policy: never
     build:
@@ -91,6 +91,12 @@ services:
       - ./scripts/cubesandbox-quickstart.sh:/app/scripts/cubesandbox-quickstart.sh:ro
       - scan_workspace:/tmp/Argus/scans
       - ${DOCKER_SOCKET_PATH:-/var/run/docker.sock}:/var/run/docker.sock
+    devices:
+      - /dev/kvm:/dev/kvm
+      - /dev/vhost-vsock:/dev/vhost-vsock
+      - /dev/net/tun:/dev/net/tun
+    group_add:
+      - "${ARGUS_KVM_GROUP_ID:-109}"
     environment:
       BIND_ADDR: 0.0.0.0:${Argus_BACKEND_PORT:-18000}
       DATABASE_URL: postgresql+asyncpg://postgres:postgres@127.0.0.1:5432/${POSTGRES_DB:-Argus}
@@ -130,8 +136,8 @@ services:
       BACKEND_PYPI_INDEX_PRIMARY: ${BACKEND_PYPI_INDEX_PRIMARY:-}
       BACKEND_PYPI_INDEX_FALLBACK: ${BACKEND_PYPI_INDEX_FALLBACK:-}
       BACKEND_PYPI_INDEX_CANDIDATES: ${BACKEND_PYPI_INDEX_CANDIDATES:-https://mirrors.aliyun.com/pypi/simple/,https://pypi.tuna.tsinghua.edu.cn/simple,https://pypi.mirrors.ustc.edu.cn/simple/,https://mirrors.cloud.tencent.com/pypi/simple/,https://mirrors.huaweicloud.com/repository/pypi/simple/,https://mirrors.bfsu.edu.cn/pypi/web/simple/,https://pypi.org/simple}
-      SCANNER_OPENGREP_IMAGE: ${SCANNER_OPENGREP_IMAGE:-Argus/opengrep-runner-local:latest}
-      SCANNER_OPENGREP_A3S_BOX_IMAGE: ${SCANNER_OPENGREP_A3S_BOX_IMAGE:-${SCANNER_OPENGREP_IMAGE:-Argus/opengrep-runner-local:latest}}
+      SCANNER_OPENGREP_IMAGE: ${SCANNER_OPENGREP_IMAGE:-argus/opengrep-runner-local:latest}
+      SCANNER_OPENGREP_A3S_BOX_IMAGE: ${SCANNER_OPENGREP_A3S_BOX_IMAGE:-${SCANNER_OPENGREP_IMAGE:-argus/opengrep-runner-local:latest}}
       CODEQL_LLM_ALLOW_SOURCE_SNIPPETS: "${CODEQL_LLM_ALLOW_SOURCE_SNIPPETS:-true}"
       CODEQL_ALLOW_NETWORK_DURING_BUILD: "${CODEQL_ALLOW_NETWORK_DURING_BUILD:-true}"
       CODEQL_MAX_BUILD_INFERENCE_ROUNDS: "${CODEQL_MAX_BUILD_INFERENCE_ROUNDS:-3}"

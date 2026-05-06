@@ -31,6 +31,12 @@ services:
       - backend_runtime_data:/app/data/runtime
       - scan_workspace:/tmp/Argus/scans
       - ${DOCKER_SOCKET_PATH:-/var/run/docker.sock}:/var/run/docker.sock
+    devices:
+      - /dev/kvm:/dev/kvm
+      - /dev/vhost-vsock:/dev/vhost-vsock
+      - /dev/net/tun:/dev/net/tun
+    group_add:
+      - "${ARGUS_KVM_GROUP_ID:-109}"
     ports:
       - "${Argus_BACKEND_PORT:-18000}:8000"
     environment:

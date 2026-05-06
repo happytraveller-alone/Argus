@@ -1006,7 +1006,7 @@ esac
 
         let result = execute(RunnerSpec {
             scanner_type: "opengrep".to_string(),
-            image: "Argus/opengrep-runner:latest".to_string(),
+            image: "argus/opengrep-runner:latest".to_string(),
             workspace_dir: workspace_dir.display().to_string(),
             command: vec!["opengrep-scan".to_string(), "--self-test".to_string()],
             timeout_seconds: 30,
@@ -1054,7 +1054,7 @@ esac
 
         let result = execute(RunnerSpec {
             scanner_type: "opengrep".to_string(),
-            image: "Argus/opengrep-runner:latest".to_string(),
+            image: "argus/opengrep-runner:latest".to_string(),
             workspace_dir: workspace_dir.display().to_string(),
             command: vec!["opengrep-scan".to_string(), "--self-test".to_string()],
             timeout_seconds: 30,
@@ -1098,7 +1098,7 @@ esac
 
         let result = execute(RunnerSpec {
             scanner_type: "opengrep".to_string(),
-            image: "Argus/opengrep-runner-local:latest".to_string(),
+            image: "argus/opengrep-runner-local:latest".to_string(),
             workspace_dir: workspace_dir.display().to_string(),
             command: vec!["opengrep-scan".to_string(), "--self-test".to_string()],
             timeout_seconds: 0,
@@ -1142,7 +1142,7 @@ esac
 
         let result = execute(RunnerSpec {
             scanner_type: "opengrep".to_string(),
-            image: "Argus/opengrep-runner:latest".to_string(),
+            image: "argus/opengrep-runner:latest".to_string(),
             workspace_dir: workspace_dir.display().to_string(),
             command: vec![
                 "opengrep".to_string(),
@@ -1197,7 +1197,7 @@ esac
 
         let result = execute(RunnerSpec {
             scanner_type: "opengrep".to_string(),
-            image: "Argus/opengrep-runner:latest".to_string(),
+            image: "argus/opengrep-runner:latest".to_string(),
             workspace_dir: workspace_dir.display().to_string(),
             command: vec![
                 "opengrep".to_string(),
@@ -1251,7 +1251,7 @@ esac
 
         let result = execute(RunnerSpec {
             scanner_type: "opengrep".to_string(),
-            image: "Argus/opengrep-runner:latest".to_string(),
+            image: "argus/opengrep-runner:latest".to_string(),
             workspace_dir: temp_dir
                 .path()
                 .join("elsewhere/task-1")
@@ -1303,7 +1303,7 @@ esac
 
         let result = execute(RunnerSpec {
             scanner_type: "opengrep".to_string(),
-            image: "Argus/opengrep-runner-local:latest".to_string(),
+            image: "argus/opengrep-runner-local:latest".to_string(),
             workspace_dir: workspace_dir.display().to_string(),
             command: vec!["opengrep".to_string(), "--version".to_string()],
             timeout_seconds: 0,
@@ -1343,7 +1343,7 @@ esac
 
         let result = execute(RunnerSpec {
             scanner_type: "opengrep".to_string(),
-            image: "Argus/opengrep-runner-local:latest".to_string(),
+            image: "argus/opengrep-runner-local:latest".to_string(),
             workspace_dir: workspace_dir.display().to_string(),
             command: vec![
                 "opengrep".to_string(),
@@ -1399,7 +1399,7 @@ esac
 
         let result = execute(RunnerSpec {
             scanner_type: "opengrep".to_string(),
-            image: "Argus/opengrep-runner-local:latest".to_string(),
+            image: "argus/opengrep-runner-local:latest".to_string(),
             workspace_dir: workspace_dir.display().to_string(),
             command: vec!["opengrep".to_string(), "scan".to_string()],
             timeout_seconds: 0,
@@ -1456,7 +1456,7 @@ esac
 
         let result = execute(RunnerSpec {
             scanner_type: "opengrep".to_string(),
-            image: "Argus/opengrep-runner-local:latest".to_string(),
+            image: "argus/opengrep-runner-local:latest".to_string(),
             workspace_dir: workspace_dir.display().to_string(),
             command: vec!["opengrep-scan".to_string(), "--self-test".to_string()],
             timeout_seconds: 30,
@@ -1551,7 +1551,7 @@ esac
 
         let result = execute(RunnerSpec {
             scanner_type: "opengrep".to_string(),
-            image: "Argus/opengrep-runner-local:latest".to_string(),
+            image: "argus/opengrep-runner-local:latest".to_string(),
             workspace_dir: workspace_dir.display().to_string(),
             command: vec!["opengrep-scan".to_string(), "--self-test".to_string()],
             timeout_seconds: 30,
@@ -1619,7 +1619,7 @@ esac
 
         let result = execute(RunnerSpec {
             scanner_type: "opengrep".to_string(),
-            image: "Argus/opengrep-runner-local:latest".to_string(),
+            image: "argus/opengrep-runner-local:latest".to_string(),
             workspace_dir: workspace_dir.display().to_string(),
             command: vec!["opengrep-scan".to_string(), "--self-test".to_string()],
             timeout_seconds: 0,
@@ -1671,7 +1671,7 @@ esac
 
         let result = execute(RunnerSpec {
             scanner_type: "opengrep".to_string(),
-            image: "Argus/opengrep-runner-local:latest".to_string(),
+            image: "argus/opengrep-runner-local:latest".to_string(),
             workspace_dir: workspace_dir.display().to_string(),
             command: vec!["opengrep-scan".to_string(), "--self-test".to_string()],
             timeout_seconds: 30,

@@ -230,7 +230,7 @@ RUN --mount=type=cache,id=argus-backend-runtime-apt-lists,target=/var/lib/apt/li
 
 RUN groupadd --gid 1001 appgroup \
   && useradd --uid 1001 --gid appgroup --no-create-home --shell /usr/sbin/nologin appuser \
-  && mkdir -p /app/assets /app/scripts /app/uploads/zip_files /app/data/runtime/xdg-data /app/data/runtime/xdg-cache /app/data/runtime/xdg-config /app/.cubesandbox \
+  && mkdir -p /app/assets /app/scripts /app/uploads/zip_files /app/data/runtime/home /app/data/runtime/xdg-data /app/data/runtime/xdg-cache /app/data/runtime/xdg-config /app/.cubesandbox \
   && chown -R appuser:appgroup /app/uploads /app/data /app/.cubesandbox
 
 WORKDIR /app
@@ -245,6 +245,7 @@ COPY --from=backend-assets-archive /opt/backend-assets/scan_rule_assets.tar.gz /
 
 ENV BIND_ADDR=0.0.0.0:8000
 ENV ZIP_STORAGE_PATH=/app/uploads/zip_files
+ENV HOME=/app/data/runtime/home
 ENV XDG_DATA_HOME=/app/data/runtime/xdg-data
 ENV XDG_CACHE_HOME=/app/data/runtime/xdg-cache
 ENV XDG_CONFIG_HOME=/app/data/runtime/xdg-config

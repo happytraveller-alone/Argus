@@ -77,7 +77,7 @@ ensure_rules_root() {
   fi
 
   mkdir -p "$RULES_ROOT"
-  tar -xzf "$RULES_ARCHIVE" -C "$RULES_ROOT"
+  tar --no-same-owner --no-same-permissions -xzf "$RULES_ARCHIVE" -C "$RULES_ROOT"
 }
 
 results_json_ready() {

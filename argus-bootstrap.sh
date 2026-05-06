@@ -402,7 +402,53 @@ ensure_env_key_default() {
   log "Added ${key}=${default_value} to ${ARGUS_ENV_FILE} (legacy .env upgrade)."
 }
 
+write_env_key_value() {
+  local key="$1"
+  local value="$2"
+  local tmp
+  [[ -f "$ARGUS_ENV_FILE" ]] || return 0
+  tmp="$(mktemp "${ARGUS_ENV_FILE}.tmp.XXXXXX")"
+  awk -v key="$key" -v value="$value" '
+    BEGIN { replaced = 0 }
+    $0 ~ "^[[:space:]]*" key "[[:space:]]*=" {
+      print key "=" value
+      replaced = 1
+      next
+    }
+    { print }
+    END {
+      if (!replaced) {
+        print key "=" value
+      }
+    }
+  ' "$ARGUS_ENV_FILE" > "$tmp"
+  mv "$tmp" "$ARGUS_ENV_FILE"
+  chmod 600 "$ARGUS_ENV_FILE" 2>/dev/null || true
+}
+
+normalize_legacy_opengrep_image_env() {
+  local key="$1"
+  local value
+  value="$(read_env_value "$key")"
+  case "$value" in
+    Argus/opengrep-runner-local:latest)
+      write_env_key_value "$key" "argus/opengrep-runner-local:latest"
+      log "Normalized ${key}=argus/opengrep-runner-local:latest for OCI-compatible A3S Box image refs."
+      ;;
+    Argus/opengrep-runner:latest)
+      write_env_key_value "$key" "argus/opengrep-runner:latest"
+      log "Normalized ${key}=argus/opengrep-runner:latest for OCI-compatible A3S Box image refs."
+      ;;
+  esac
+}
+
 ensure_root_env_keys() {
+  ensure_env_key_default \
+    "SCANNER_OPENGREP_IMAGE" \
+    "argus/opengrep-runner-local:latest" \
+    "Local lowercase OCI tag for Docker and A3S Box OpenGrep scans."
+  normalize_legacy_opengrep_image_env "SCANNER_OPENGREP_IMAGE"
+  normalize_legacy_opengrep_image_env "SCANNER_OPENGREP_A3S_BOX_IMAGE"
   ensure_env_key_default \
     "CUBESANDBOX_BOOTSTRAP_AUTO" \
     "$CUBESANDBOX_BOOTSTRAP_AUTO_DEFAULT" \
@@ -972,6 +1018,10 @@ ensure_cubesandbox() {
     log "Stub mode: skipping cubesandbox host-side bootstrap."
     return 0
   fi
+  if "$DRY_RUN"; then
+    log "Dry-run: skipping cubesandbox host-side bootstrap."
+    return 0
+  fi
   if ! is_wsl2_host; then
     log "cubesandbox host-side auto-bootstrap is only supported on WSL2 + KVM hosts. Detected non-WSL2 environment; skipping. Set CUBESANDBOX_BOOTSTRAP_AUTO=false in .env to silence this notice."
     return 0
@@ -1206,6 +1256,257 @@ build_runner_images() {
   run_cmd docker compose --project-directory "$ROOT_DIR" --file "$COMPOSE_FILE" --project-name "$PROJECT_NAME" build opengrep-runner
 }
 
+a3s_box_opengrep_image_ref() {
+  local image
+  image="${SCANNER_OPENGREP_A3S_BOX_IMAGE:-}"
+  [[ -z "$image" ]] && image="$(read_env_value SCANNER_OPENGREP_A3S_BOX_IMAGE)"
+  [[ -z "$image" ]] && image="${SCANNER_OPENGREP_IMAGE:-}"
+  [[ -z "$image" ]] && image="$(read_env_value SCANNER_OPENGREP_IMAGE)"
+  [[ -z "$image" ]] && image="argus/opengrep-runner-local:latest"
+  case "$image" in
+    Argus/opengrep-runner-local:latest) image="argus/opengrep-runner-local:latest" ;;
+    Argus/opengrep-runner:latest) image="argus/opengrep-runner:latest" ;;
+  esac
+  printf '%s' "$image"
+}
+
+load_a3s_box_opengrep_image() {
+  local image legacy_source
+  image="$(a3s_box_opengrep_image_ref)"
+  legacy_source=""
+  case "$image" in
+    argus/*) legacy_source="Argus/${image#argus/}" ;;
+  esac
+  log "Ensuring backend A3S Box cache has OpenGrep image: ${image}"
+  run_cmd docker compose --project-directory "$ROOT_DIR" --file "$COMPOSE_FILE" --project-name "$PROJECT_NAME" \
+    exec -T backend sh -lc '
+      set -eu
+      runtime_home="${ARGUS_BACKEND_HOME:-/app/data/runtime/home}"
+      mkdir -p "$runtime_home"
+      chown appuser:appgroup "$runtime_home"
+      chmod 0700 "$runtime_home"
+      export HOME="$runtime_home"
+      exec su -m -s /bin/sh appuser -c '"'"'
+        set -eu
+        image="$1"
+        legacy_source="$2"
+        inspect_file="/tmp/argus-a3s-opengrep-runner-inspect.$$"
+        docker_tmp="/tmp/argus-a3s-opengrep-runner-docker.tar"
+        oci_tmp="/tmp/argus-a3s-opengrep-runner-oci.tar"
+        source_image="$image"
+        source_image_id=""
+        marker_dir="${HOME:-/app/data/runtime/home}/.a3s/argus/source-images"
+        marker_name="$(printf "%s" "$image" | sed "s/[^A-Za-z0-9._-]/_/g")"
+        marker_file="$marker_dir/${marker_name}.id"
+        rootfs_marker_file="$marker_dir/${marker_name}.rootfs.id"
+        trap "rm -f \"\$inspect_file\" \"\$docker_tmp\" \"\$oci_tmp\"" EXIT
+        remove_a3s_rootfs_cache_for_image() {
+          python3 - "$1" "${HOME:-/app/data/runtime/home}/.a3s/cache/rootfs" <<PYEOF
+import json
+import shutil
+import sys
+from pathlib import Path
+
+image = sys.argv[1]
+cache = Path(sys.argv[2])
+if not cache.is_dir():
+    raise SystemExit(0)
+
+removed = 0
+for meta_path in sorted(cache.glob("*.meta.json")):
+    try:
+        meta = json.loads(meta_path.read_text())
+    except Exception:
+        continue
+    if meta.get("description") != image:
+        continue
+    key = meta.get("key") or meta_path.name.removesuffix(".meta.json")
+    rootfs_path = cache / key
+    shutil.rmtree(rootfs_path, ignore_errors=True)
+    meta_path.unlink(missing_ok=True)
+    removed += 1
+
+if removed:
+    suffix = "y" if removed == 1 else "ies"
+    print(f"Removed {removed} stale A3S Box rootfs cache entr{suffix} for {image}.")
+PYEOF
+        }
+        sync_rootfs_marker() {
+          if [ -n "$source_image_id" ]; then
+            mkdir -p "$marker_dir"
+            printf "%s\n" "$source_image_id" > "$rootfs_marker_file"
+          fi
+        }
+        if source_image_id="$(docker image inspect --format "{{.Id}}" "$source_image" 2>/dev/null)"; then
+          :
+        elif [ -n "$legacy_source" ] && source_image_id="$(docker image inspect --format "{{.Id}}" "$legacy_source" 2>/dev/null)"; then
+          source_image="$legacy_source"
+        else
+          source_image_id=""
+        fi
+        if [ -n "$source_image_id" ]; then
+          rootfs_source_id=""
+          if [ -f "$rootfs_marker_file" ]; then
+            rootfs_source_id="$(cat "$rootfs_marker_file" 2>/dev/null || true)"
+          fi
+          if [ "$rootfs_source_id" != "$source_image_id" ]; then
+            echo "A3S Box rootfs cache source changed or is untracked; clearing rootfs cache: $image"
+            remove_a3s_rootfs_cache_for_image "$image"
+            sync_rootfs_marker
+          fi
+        fi
+        if a3s-box image-inspect "$image" >"$inspect_file" 2>/dev/null; then
+          digest="$(sed -n "s/.*\"Digest\"[[:space:]]*:[[:space:]]*\"sha256:\([0-9a-fA-F]\{64\}\)\".*/\1/p" "$inspect_file" | head -n 1)"
+          cache_dir="${HOME:-/app/data/runtime/home}/.a3s/images/sha256/${digest}"
+          if [ -n "$source_image_id" ]; then
+            cached_source_id=""
+            if [ -f "$marker_file" ]; then
+              cached_source_id="$(cat "$marker_file" 2>/dev/null || true)"
+            fi
+            if [ "$cached_source_id" != "$source_image_id" ]; then
+              echo "A3S Box image cache source changed or is untracked; reloading: $image"
+              remove_a3s_rootfs_cache_for_image "$image"
+              a3s-box rmi "$image" >/dev/null 2>&1 || true
+              rm -f "$inspect_file"
+            fi
+          fi
+        fi
+        if [ -s "$inspect_file" ] && a3s-box image-inspect "$image" >"$inspect_file" 2>/dev/null; then
+          digest="$(sed -n "s/.*\"Digest\"[[:space:]]*:[[:space:]]*\"sha256:\([0-9a-fA-F]\{64\}\)\".*/\1/p" "$inspect_file" | head -n 1)"
+          cache_dir="${HOME:-/app/data/runtime/home}/.a3s/images/sha256/${digest}"
+          if [ -z "$digest" ] || [ ! -d "$cache_dir" ]; then
+            echo "A3S Box image already cached: $image"
+            exit 0
+          fi
+          if [ ! -f "$cache_dir/manifest.json" ] &&
+             [ ! -f "$cache_dir/repositories" ] &&
+             ! grep -R -E "\"mediaType\"[[:space:]]*:[[:space:]]*\"application/vnd\\.(oci|docker)\\.image\\.(layer\\.v1|rootfs\\.diff)\\.tar\"" "$cache_dir/blobs/sha256" >/dev/null 2>&1; then
+            echo "A3S Box image already cached: $image"
+            exit 0
+          fi
+          echo "A3S Box image cache uses Docker/uncompressed layers; reloading as A3S-compatible OCI: $image"
+          remove_a3s_rootfs_cache_for_image "$image"
+          a3s-box rmi "$image" >/dev/null 2>&1 || true
+        fi
+        rm -f "$inspect_file"
+        if a3s-box image-inspect "$image" >/dev/null 2>&1; then
+          echo "A3S Box image already cached: $image"
+          exit 0
+        fi
+        source_image="$image"
+        if ! docker image inspect "$source_image" >/dev/null 2>&1; then
+          if [ -n "$legacy_source" ] && docker image inspect "$legacy_source" >/dev/null 2>&1; then
+            source_image="$legacy_source"
+            if [ -z "$source_image_id" ]; then
+              source_image_id="$(docker image inspect --format "{{.Id}}" "$legacy_source" 2>/dev/null || true)"
+            fi
+          else
+            echo "Docker image not available for A3S Box cache: $image" >&2
+            exit 1
+          fi
+        fi
+        rm -f "$docker_tmp" "$oci_tmp"
+        docker save "$source_image" -o "$docker_tmp"
+        echo "Converting Docker image archive to A3S-compatible OCI archive for A3S Box."
+        python3 - "$docker_tmp" "$oci_tmp" <<PYEOF
+import gzip
+import hashlib
+import io
+import json
+import shutil
+import sys
+import tarfile
+import tempfile
+from pathlib import Path
+
+source = Path(sys.argv[1])
+target = Path(sys.argv[2])
+work = Path(tempfile.mkdtemp(prefix="argus-a3s-oci-"))
+
+def sha256_hex(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+def digest_hex(value: str) -> str:
+    prefix = "sha256:"
+    if not value.startswith(prefix):
+        raise RuntimeError(f"unsupported digest: {value}")
+    digest = value[len(prefix):]
+    if len(digest) != 64:
+        raise RuntimeError(f"unsupported digest: {value}")
+    return digest
+
+def add_tree(archive: tarfile.TarFile, path: Path, arcname: str) -> None:
+    archive.add(path, arcname=arcname, recursive=False)
+    if path.is_dir():
+        for child in sorted(path.iterdir()):
+            add_tree(archive, child, f"{arcname}/{child.name}")
+
+try:
+    with tarfile.open(source, "r") as archive:
+        archive.extractall(work)
+
+    blobs = work / "blobs" / "sha256"
+    index_path = work / "index.json"
+    index = json.loads(index_path.read_text())
+    for manifest_entry in index.get("manifests", []):
+        manifest_path = blobs / digest_hex(manifest_entry["digest"])
+        manifest = json.loads(manifest_path.read_text())
+        changed = False
+        for layer in manifest.get("layers", []):
+            if layer.get("mediaType") not in {
+                "application/vnd.oci.image.layer.v1.tar",
+                "application/vnd.docker.image.rootfs.diff.tar",
+            }:
+                continue
+            layer_path = blobs / digest_hex(layer["digest"])
+            raw = layer_path.read_bytes()
+            buffer = io.BytesIO()
+            with gzip.GzipFile(fileobj=buffer, mode="wb", mtime=0) as gz:
+                gz.write(raw)
+            compressed = buffer.getvalue()
+            compressed_digest = sha256_hex(compressed)
+            compressed_path = blobs / compressed_digest
+            compressed_path.write_bytes(compressed)
+            if compressed_path != layer_path:
+                layer_path.unlink(missing_ok=True)
+            layer["mediaType"] = "application/vnd.oci.image.layer.v1.tar+gzip"
+            layer["digest"] = f"sha256:{compressed_digest}"
+            layer["size"] = len(compressed)
+            changed = True
+        if changed:
+            payload = json.dumps(manifest, separators=(",", ":")).encode()
+            manifest_digest = sha256_hex(payload)
+            updated_manifest_path = blobs / manifest_digest
+            updated_manifest_path.write_bytes(payload)
+            if updated_manifest_path != manifest_path:
+                manifest_path.unlink(missing_ok=True)
+            manifest_entry["digest"] = f"sha256:{manifest_digest}"
+            manifest_entry["size"] = len(payload)
+
+    index_path.write_text(json.dumps(index, separators=(",", ":")))
+    for extra in ("manifest.json", "repositories"):
+        (work / extra).unlink(missing_ok=True)
+
+    target.unlink(missing_ok=True)
+    with tarfile.open(target, "w") as archive:
+        for name in ("oci-layout", "index.json", "blobs"):
+            add_tree(archive, work / name, name)
+finally:
+    shutil.rmtree(work, ignore_errors=True)
+PYEOF
+        a3s-box load -i "$oci_tmp" -t "$image"
+        rm -f "$docker_tmp" "$oci_tmp"
+        a3s-box image-inspect "$image" >/dev/null
+        if [ -n "$source_image_id" ]; then
+          mkdir -p "$marker_dir"
+          printf "%s\n" "$source_image_id" > "$marker_file"
+          printf "%s\n" "$source_image_id" > "$rootfs_marker_file"
+        fi
+        echo "A3S Box image cached: $image"
+      '"'"' sh "$1" "$2"
+    ' sh "$image" "$legacy_source"
+}
+
 wait_for_backend() {
   if "$DRY_RUN" || is_truthy "$STUB_DOCKER"; then
     log "Stub/dry-run: checking backend readiness once at $BACKEND_HEALTH_URL."
@@ -1394,6 +1695,7 @@ start_stack() {
   build_runner_images
   compose_up_backend_detached
   wait_for_backend
+  load_a3s_box_opengrep_image
   import_backend_env
   ensure_backend_cubesandbox_templates_ready
   compose_up_frontend_detached

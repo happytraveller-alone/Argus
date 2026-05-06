@@ -80,7 +80,7 @@ fn compose_and_backend_image_support_host_cubesandbox_runtime() {
 fn compose_exposes_a3s_box_opengrep_image_override() {
     assert!(
         ROOT_COMPOSE.contains(
-            "SCANNER_OPENGREP_A3S_BOX_IMAGE: ${SCANNER_OPENGREP_A3S_BOX_IMAGE:-${SCANNER_OPENGREP_IMAGE:-Argus/opengrep-runner-local:latest}}"
+            "SCANNER_OPENGREP_A3S_BOX_IMAGE: ${SCANNER_OPENGREP_A3S_BOX_IMAGE:-${SCANNER_OPENGREP_IMAGE:-argus/opengrep-runner-local:latest}}"
         ),
         "root compose must let A3S Box OpenGrep scans use a dedicated image while defaulting to the normal runner image"
     );
@@ -123,6 +123,11 @@ fn backend_images_download_a3s_box_v203_binary_package_for_target_arch() {
                 && dockerfile.contains("COPY --from=a3s-box-binary-src /opt/a3s-box/lib/ /usr/local/lib/")
                 && dockerfile.contains("ENV LD_LIBRARY_PATH=/usr/local/lib"),
             "{name} must copy only release binaries/libs into runtime and expose libkrun to the loader"
+        );
+        assert!(
+            dockerfile.contains("/app/data/runtime/home")
+                && dockerfile.contains("ENV HOME=/app/data/runtime/home"),
+            "{name} must give appuser a writable HOME for the A3S Box image store"
         );
         assert!(
             dockerfile.contains("rm -rf /tmp/a3s-box /tmp/a3s-box.tar.gz"),
@@ -233,6 +238,19 @@ fn opengrep_cubesandbox_image_exposes_envd_health_probe() {
 }
 
 #[test]
+fn backend_compose_exposes_a3s_microvm_devices() {
+    for compose in [ROOT_COMPOSE, RELEASE_COMPOSE] {
+        assert!(
+            compose.contains("/dev/kvm:/dev/kvm")
+                && compose.contains("/dev/vhost-vsock:/dev/vhost-vsock")
+                && compose.contains("/dev/net/tun:/dev/net/tun")
+                && compose.contains("${ARGUS_KVM_GROUP_ID:-109}"),
+            "backend compose service must expose KVM/vsock/tun devices and kvm group access for A3S Box MicroVM scans"
+        );
+    }
+}
+
+#[test]
 fn opengrep_runner_publish_uses_oci_image_media_types() {
     assert!(
         DOCKER_PUBLISH_WORKFLOW.contains(
@@ -254,7 +272,7 @@ fn opengrep_runner_publish_uses_oci_image_media_types() {
 fn opengrep_rebuild_verify_script_rebuilds_image_and_scans_in_container() {
     assert!(
         OPENGREP_REBUILD_VERIFY_SCRIPT
-            .contains("SCANNER_OPENGREP_IMAGE:-Argus/opengrep-runner-local:latest"),
+            .contains("SCANNER_OPENGREP_IMAGE:-argus/opengrep-runner-local:latest"),
         "script must default to the same local opengrep runner image used by compose"
     );
     assert!(

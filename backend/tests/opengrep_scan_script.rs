@@ -353,6 +353,70 @@ fn opengrep_scan_self_test_exercises_rule_batch_staging() {
 }
 
 #[test]
+fn opengrep_scan_extracts_bundled_rules_without_owner_or_permission_restore() {
+    let fixture = ScriptFixture::new();
+    let missing_rules_root = fixture._temp_dir.path().join("rules-from-archive");
+    let rules_archive = fixture._temp_dir.path().join("rules.tar.gz");
+    let tar_args_path = fixture._temp_dir.path().join("tar-args.txt");
+    fs::write(&rules_archive, b"fake archive").expect("write fake archive");
+
+    let fake_tar = fixture._temp_dir.path().join("bin/tar");
+    fs::write(
+        &fake_tar,
+        format!(
+            r#"#!/usr/bin/env bash
+set -euo pipefail
+printf ' %s ' "$*" > {}
+dest=""
+prev=""
+while [ "$#" -gt 0 ]; do
+  if [ "$prev" = "C" ]; then
+    dest="$1"
+    prev=""
+  elif [ "$1" = "-C" ]; then
+    prev="C"
+  fi
+  shift
+done
+if [ -z "$dest" ]; then
+  echo "missing -C destination" >&2
+  exit 1
+fi
+mkdir -p "$dest/rules_opengrep"
+"#,
+            shell_quote(tar_args_path.to_string_lossy().as_ref())
+        ),
+    )
+    .expect("write fake tar");
+    make_executable(&fake_tar);
+
+    let output = Command::new("bash")
+        .arg(&fixture.script_path)
+        .arg("--self-test")
+        .env("PATH", &fixture.path_env)
+        .env("OPENGREP_RULES_ROOT", &missing_rules_root)
+        .env("OPENGREP_RULES_ARCHIVE", &rules_archive)
+        .output()
+        .expect("run opengrep-scan self-test");
+
+    assert!(
+        output.status.success(),
+        "self-test should extract bundled rules without owner/permission restore\nstdout={}\nstderr={}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let tar_args = fs::read_to_string(tar_args_path).expect("tar args");
+    assert!(
+        tar_args.contains(" --no-same-owner "),
+        "rule archive extraction must not try to restore uid/gid ownership in A3S Box\nargs={tar_args}"
+    );
+    assert!(
+        tar_args.contains(" --no-same-permissions "),
+        "rule archive extraction must not try to restore archived permissions in A3S Box\nargs={tar_args}"
+    );
+}
+
+#[test]
 fn opengrep_scan_uses_primary_output_file_contract() {
     let fixture = ScriptFixture::new();
     let args_path = fixture._temp_dir.path().join("args.txt");

@@ -2,6 +2,7 @@
 set -eu
 
 scan_root="${SCAN_WORKSPACE_ROOT:-/tmp/Argus/scans}"
+runtime_home="${ARGUS_BACKEND_HOME:-/app/data/runtime/home}"
 assets_root="/app/assets"
 assets_archive="$assets_root/scan_rule_assets.tar.gz"
 assets_dir="$assets_root/scan_rule_assets"
@@ -9,6 +10,9 @@ assets_dir="$assets_root/scan_rule_assets"
 mkdir -p "$scan_root"
 chown appuser:appgroup "$scan_root"
 chmod 0775 "$scan_root"
+mkdir -p "$runtime_home"
+chown appuser:appgroup "$runtime_home"
+chmod 0700 "$runtime_home"
 
 docker_sock="/var/run/docker.sock"
 if [ -S "$docker_sock" ]; then
@@ -26,6 +30,20 @@ if [ -S "$docker_sock" ]; then
   fi
 fi
 
+for a3s_device in /dev/kvm /dev/vhost-vsock; do
+  if [ -e "$a3s_device" ]; then
+    device_gid="$(stat -c '%g' "$a3s_device")"
+    if ! id -G appuser | tr ' ' '\n' | grep -qx "$device_gid"; then
+      device_group="$(getent group "$device_gid" | cut -d: -f1 || true)"
+      if [ -z "$device_group" ]; then
+        device_group="a3sdevice$device_gid"
+        groupadd --gid "$device_gid" "$device_group"
+      fi
+      usermod -aG "$device_group" appuser
+    fi
+  fi
+done
+
 if [ ! -d "$assets_dir" ] && [ -f "$assets_archive" ]; then
   mkdir -p "$assets_root"
   tar -xzf "$assets_archive" -C "$assets_root"
@@ -35,4 +53,5 @@ if [ "$#" -eq 0 ]; then
   set -- /usr/local/bin/backend
 fi
 
-exec su -s /bin/sh appuser -c 'exec "$@"' sh "$@"
+export HOME="$runtime_home"
+exec su -m -s /bin/sh appuser -c 'exec "$@"' sh "$@"

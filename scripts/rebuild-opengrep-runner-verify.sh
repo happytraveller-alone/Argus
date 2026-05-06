@@ -2,7 +2,7 @@
 set -Eeuo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-IMAGE="${SCANNER_OPENGREP_IMAGE:-Argus/opengrep-runner-local:latest}"
+IMAGE="${SCANNER_OPENGREP_IMAGE:-argus/opengrep-runner-local:latest}"
 UPLOADS_VOLUME="${ARGUS_BACKEND_UPLOADS_VOLUME:-argus_backend_uploads}"
 OUTPUT_DIR=""
 PROJECT_DIR=""
@@ -31,7 +31,7 @@ Target selection, first match wins:
 
 Options:
   --image NAME           image tag to rebuild and run
-                         (default: SCANNER_OPENGREP_IMAGE or Argus/opengrep-runner-local:latest)
+                         (default: SCANNER_OPENGREP_IMAGE or argus/opengrep-runner-local:latest)
   --output-dir DIR       directory for results.json, summary.json, and opengrep.log
                          (default: .omx/reports/opengrep-image-verify-<timestamp>)
   --jobs N              opengrep jobs; 0 means half of host cores, minimum 1
