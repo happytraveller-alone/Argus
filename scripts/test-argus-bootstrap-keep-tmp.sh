@@ -469,10 +469,17 @@ fi
 # Runner services are image-build targets only; default compose startup must not keep
 # preflight service containers around after validation.
 compose_render_out="$TMP_ROOT/compose.out"
-docker compose --project-directory "$ROOT_DIR" --file "$ROOT_DIR/docker-compose.yml" config >"$compose_render_out"
+empty_compose_env="$TMP_ROOT/empty-compose.env"
+: >"$empty_compose_env"
+docker compose --env-file "$empty_compose_env" --project-directory "$ROOT_DIR" --file "$ROOT_DIR/docker-compose.yml" config >"$compose_render_out"
 runner_profile_count="$(grep -F -c 'profiles: [ "runner-build" ]' "$ROOT_DIR/docker-compose.yml" || true)"
 [[ "$runner_profile_count" -eq 1 ]] || fail "only opengrep runner service should be a profile-only image build target"
 assert_contains "$ROOT_DIR/docker-compose.yml" "\"host.docker.internal:host-gateway\""
+assert_contains "$ROOT_DIR/env.example" "VITE_API_TARGET=http://host.docker.internal:18000"
+assert_not_contains "$ROOT_DIR/env.example" "VITE_API_TARGET=http://backend:8000"
+assert_contains "$ROOT_DIR/frontend/vite.config.ts" "http://127.0.0.1:18000"
+assert_contains "$compose_render_out" "VITE_API_TARGET: http://host.docker.internal:18000"
+assert_not_contains "$compose_render_out" "VITE_API_TARGET: http://backend:8000"
 assert_contains "$ROOT_DIR/env.example" "CUBESANDBOX_API_BASE_URL=http://host.docker.internal:23000"
 assert_contains "$ROOT_DIR/env.example" "CUBESANDBOX_DATA_PLANE_BASE_URL=https://host.docker.internal:21443"
 assert_contains "$ROOT_DIR/env.example" "CUBESANDBOX_HELPER_PATH=/app/scripts/cubesandbox-quickstart.sh"
@@ -497,6 +504,7 @@ assert_not_contains "$compose_render_out" "SCANNER_CODEQL_COMPILE_SANDBOX_IMAGE"
 
 release_compose_render_out="$TMP_ROOT/release-compose.out"
 docker compose \
+  --env-file "$empty_compose_env" \
   --project-directory "$ROOT_DIR" \
   --file "$ROOT_DIR/scripts/release-templates/docker-compose.release-slim.yml" \
   config >"$release_compose_render_out"

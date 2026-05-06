@@ -442,7 +442,31 @@ normalize_legacy_opengrep_image_env() {
   esac
 }
 
+normalize_legacy_vite_api_target_env() {
+  local value backend_port target
+  value="$(read_env_value VITE_API_TARGET)"
+  backend_port="$(read_env_value Argus_BACKEND_PORT)"
+  [[ -n "$backend_port" ]] || backend_port="$BACKEND_PORT"
+  [[ -n "$backend_port" ]] || backend_port="18000"
+  target="http://host.docker.internal:${backend_port}"
+  case "$value" in
+    http://backend:8000|http://backend:"${backend_port}")
+      write_env_key_value "VITE_API_TARGET" "$target"
+      log "Normalized VITE_API_TARGET=${target}; backend uses host networking, so Docker service DNS 'backend' is not a valid Vite proxy target."
+      ;;
+  esac
+}
+
 ensure_root_env_keys() {
+  local backend_port
+  backend_port="$(read_env_value Argus_BACKEND_PORT)"
+  [[ -n "$backend_port" ]] || backend_port="$BACKEND_PORT"
+  [[ -n "$backend_port" ]] || backend_port="18000"
+  ensure_env_key_default \
+    "VITE_API_TARGET" \
+    "http://host.docker.internal:${backend_port}" \
+    "Frontend dev proxy target. Backend uses host networking, so use host.docker.internal rather than Docker service DNS."
+  normalize_legacy_vite_api_target_env
   ensure_env_key_default \
     "SCANNER_OPENGREP_IMAGE" \
     "argus/opengrep-runner-local:latest" \
