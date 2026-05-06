@@ -1,19 +1,18 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
-import { History, RefreshCw, RotateCcw, Search, Trash2 } from "lucide-react";
+import { History, RefreshCw, RotateCcw, Search } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import type { CubesandboxTemplateRecord } from "@/shared/api/cubesandboxTemplates";
 import {
-  cleanupFailedSandboxTemplates,
   deleteFailedSandboxTemplateRecord,
   getSandboxTemplateManagementOverview,
   resetSandboxTemplateKind,
 } from "@/shared/api/cubesandboxTemplates";
 import { listCubeSandboxTasks, type CubeSandboxTaskRecord } from "@/shared/api/cubesandboxTasks";
 import SandboxTemplatesTable from "@/pages/sandbox-management/SandboxTemplatesTable";
+import SandboxTasksTable from "@/pages/sandbox-management/SandboxTasksTable";
 
 function matchesTemplate(record: CubesandboxTemplateRecord, keyword: string) {
   if (!keyword) return true;
@@ -33,38 +32,6 @@ function matchesTemplate(record: CubesandboxTemplateRecord, keyword: string) {
   return haystack.includes(keyword);
 }
 
-function formatTaskTime(value: string | null | undefined) {
-  if (!value) return "-";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString("zh-CN", {
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
-function taskEngineLabel(task: CubeSandboxTaskRecord) {
-  const engine = String(task.metadata?.engine || "").toLowerCase();
-  if (engine === "opengrep") return "OpenGrep";
-  if (engine === "codeql") return "CodeQL";
-  return "-";
-}
-
-function taskProjectName(task: CubeSandboxTaskRecord) {
-  return String(task.metadata?.projectName || task.metadata?.projectId || "-");
-}
-
-function taskDetailPath(task: CubeSandboxTaskRecord) {
-  const explicit = typeof task.metadata?.detailPath === "string" ? task.metadata.detailPath : "";
-  if (explicit) return explicit;
-  const engine = String(task.metadata?.engine || "").toLowerCase();
-  if (engine === "codeql") return `/codeql-analysis/${task.taskId}?codeqlTaskId=${task.taskId}&engine=codeql`;
-  if (engine === "opengrep") return `/static-analysis/${task.taskId}?opengrepTaskId=${task.taskId}`;
-  return "";
-}
-
 function sleep(ms: number) {
   return new Promise((resolve) => globalThis.setTimeout(resolve, ms));
 }
@@ -72,10 +39,8 @@ function sleep(ms: number) {
 export default function SandboxManagementPage() {
   const [templates, setTemplates] = useState<CubesandboxTemplateRecord[]>([]);
   const [tasks, setTasks] = useState<CubeSandboxTaskRecord[]>([]);
-  const [failedCount, setFailedCount] = useState(0);
   const [searchTerm, setSearchTerm] = useState("");
   const [loading, setLoading] = useState(false);
-  const [cleanupRunning, setCleanupRunning] = useState(false);
   const [deletingRecordId, setDeletingRecordId] = useState<string | null>(null);
   const [resettingKind, setResettingKind] = useState<"codeql_cpp" | "opengrep" | null>(null);
   /** AC-A4: default hide invalidated/failed; toggle to show full history */
@@ -97,7 +62,6 @@ export default function SandboxManagementPage() {
         listCubeSandboxTasks(50),
       ]);
       setTemplates(overview.templates);
-      setFailedCount(overview.failedCount);
       setTasks(taskRecords);
     } catch (error) {
       console.error("Failed to load sandbox management data:", error);
@@ -144,28 +108,6 @@ export default function SandboxManagementPage() {
     }
   }
 
-  async function handleCleanupFailed() {
-    if (
-      typeof window !== "undefined" &&
-      !window.confirm("确认清空所有 FAILED 模板冗余记录？不会删除运行中沙箱实例。")
-    ) {
-      return;
-    }
-    setCleanupRunning(true);
-    try {
-      const result = await cleanupFailedSandboxTemplates();
-      toast.success("FAILED 模板清理完成", {
-        description: `扫描 ${result.scannedFailed ?? 0} 条，删除记录 ${result.deletedRecords} 条，删除模板 ${result.deletedTemplates} 个。`,
-      });
-      await loadData();
-    } catch (error) {
-      console.error("Failed to cleanup failed sandbox templates:", error);
-      toast.error("清空 FAILED 模板失败");
-    } finally {
-      setCleanupRunning(false);
-    }
-  }
-
   async function handleReset(kind: "codeql_cpp" | "opengrep") {
     setResettingKind(kind);
     try {
@@ -179,7 +121,6 @@ export default function SandboxManagementPage() {
         // Poll with full history during reset to catch all status transitions
         const overview = await getSandboxTemplateManagementOverview();
         setTemplates(overview.templates);
-        setFailedCount(overview.failedCount);
         const latest = overview.templates.find((record) => {
           const recordKind = record.kind === "opengrep_dedicated" ? "opengrep" : record.kind;
           return recordKind === kind;
@@ -213,23 +154,6 @@ export default function SandboxManagementPage() {
               <h1 className="text-xl font-semibold tracking-[0.12em] text-foreground">沙箱管理</h1>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <Badge variant="outline">FAILED {failedCount}</Badge>
-              <Button
-                size="sm"
-                variant={showFullHistory ? "secondary" : "outline"}
-                onClick={() => setShowFullHistory((prev) => !prev)}
-              >
-                <History className="mr-2 h-4 w-4" />
-                {showFullHistory ? "隐藏历史" : "显示完整历史"}
-              </Button>
-              <Button size="sm" variant="outline" onClick={() => void loadData()} disabled={loading}>
-                <RefreshCw className="mr-2 h-4 w-4" />
-                刷新
-              </Button>
-              <Button size="sm" variant="outline" onClick={handleCleanupFailed} disabled={cleanupRunning || failedCount === 0}>
-                <Trash2 className="mr-2 h-4 w-4" />
-                清空 FAILED 模板
-              </Button>
               <Button size="sm" variant="outline" onClick={() => void handleReset("codeql_cpp")} disabled={resettingKind !== null}>
                 <RotateCcw className="mr-2 h-4 w-4" />
                 重置 CodeQL
@@ -237,6 +161,18 @@ export default function SandboxManagementPage() {
               <Button size="sm" variant="outline" onClick={() => void handleReset("opengrep")} disabled={resettingKind !== null}>
                 <RotateCcw className="mr-2 h-4 w-4" />
                 重置 OpenGrep
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => void loadData()} disabled={loading}>
+                <RefreshCw className="mr-2 h-4 w-4" />
+                刷新
+              </Button>
+              <Button
+                size="sm"
+                variant={showFullHistory ? "secondary" : "outline"}
+                onClick={() => setShowFullHistory((prev) => !prev)}
+              >
+                <History className="mr-2 h-4 w-4" />
+                显示完整历史
               </Button>
             </div>
           </div>
@@ -262,53 +198,7 @@ export default function SandboxManagementPage() {
             </div>
             <Badge variant="outline">运行中/最近 {tasks.length} 条</Badge>
           </div>
-          <div className="overflow-hidden rounded-xl border border-border/75">
-            <table className="w-full text-sm">
-              <thead className="bg-muted/70 text-muted-foreground">
-                <tr>
-                  <th className="border-b border-border p-3 text-left">任务 ID</th>
-                  <th className="border-b border-border p-3 text-left">类型</th>
-                  <th className="border-b border-border p-3 text-left">项目</th>
-                  <th className="border-b border-border p-3 text-left">状态</th>
-                  <th className="border-b border-border p-3 text-left">Sandbox ID</th>
-                  <th className="border-b border-border p-3 text-left">清理状态</th>
-                  <th className="border-b border-border p-3 text-left">任务</th>
-                  <th className="border-b border-border p-3 text-left">更新时间</th>
-                </tr>
-              </thead>
-              <tbody>
-                {tasks.length === 0 ? (
-                  <tr>
-                    <td className="p-4 text-center text-muted-foreground" colSpan={8}>暂无运行中沙箱或任务状态</td>
-                  </tr>
-                ) : (
-                  tasks.map((task) => {
-                    const detailPath = taskDetailPath(task);
-                    return (
-                      <tr key={`${task.taskId}:${task.sandboxId ?? "none"}`}>
-                        <td className="border-b border-border/70 p-3 text-muted-foreground">{task.taskId}</td>
-                        <td className="border-b border-border/70 p-3">{taskEngineLabel(task)}</td>
-                        <td className="border-b border-border/70 p-3 text-muted-foreground">{taskProjectName(task)}</td>
-                        <td className="border-b border-border/70 p-3">{task.status}</td>
-                        <td className="border-b border-border/70 p-3 text-muted-foreground">{task.sandboxId ?? "-"}</td>
-                        <td className="border-b border-border/70 p-3 text-muted-foreground">{task.cleanupStatus}</td>
-                        <td className="border-b border-border/70 p-3">
-                          {detailPath ? (
-                            <Button asChild size="sm" variant="outline">
-                              <Link to={detailPath}>查看任务</Link>
-                            </Button>
-                          ) : (
-                            <span className="text-muted-foreground">-</span>
-                          )}
-                        </td>
-                        <td className="border-b border-border/70 p-3 text-muted-foreground">{formatTaskTime(task.updatedAt)}</td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
+          <SandboxTasksTable rows={tasks} />
         </section>
       </div>
     </div>

@@ -80,13 +80,15 @@ services:
     env_file:
       - path: ${ARGUS_ENV_FILE:-./.env}
         required: true
+      - path: ${ARGUS_LLM_ENV_FILE:-./.argus-llm.env}
+        required: true
     network_mode: host
     volumes:
       - backend_uploads:/app/uploads
       - backend_runtime_data:/app/data/runtime
       - backend_cubesandbox_data:/app/.cubesandbox
       - ./oci:/app/oci:ro
-      - ./.env:/app/.env
+      - ${ARGUS_ENV_FILE:-./.env}:/app/.env
       - ./docker/opengrep-scan.sh:/app/docker/opengrep-scan.sh:ro
       - ./scripts/cubesandbox-quickstart.sh:/app/scripts/cubesandbox-quickstart.sh:ro
       - scan_workspace:/tmp/Argus/scans

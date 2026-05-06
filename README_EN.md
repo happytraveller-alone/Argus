@@ -13,10 +13,10 @@ This release branch keeps only the slim-source files required to run Argus. Reco
 ## Before You Start
 
 1. Make sure Docker Compose is installed and the Docker daemon is reachable.
-2. Keep the root `env.example`. On first run, if root `.env` does not exist, `./argus-bootstrap.sh` copies `env.example` to `.env`, auto-generates `SECRET_KEY`, tells you to fill it, and exits.
-3. Fill the LLM settings in `.env`, then run `./argus-bootstrap.sh` again. You can also run `./scripts/validate-llm-config.sh --env-file ./.env` first to confirm the LLM config.
+2. Keep root `env.example` and `llm.env.example`. On first run, `./argus-bootstrap.sh` creates `.env` for SECRET_KEY/advanced overrides, copies `llm.env.example` to `.argus-llm.env`, tells you to fill the LLM file, and exits.
+3. Fill the LLM settings in `.argus-llm.env`, then run `./argus-bootstrap.sh` again. You can also run `./scripts/validate-llm-config.sh --env-file ./.argus-llm.env` first. Most users only need `.argus-llm.env`; all other settings use defaults.
 
-`argus-bootstrap.sh` calls `scripts/validate-llm-config.sh --env-file ./.env` before any Docker cleanup or startup action. If env/LLM validation fails, bootstrap exits and asks you to reconfigure.
+`argus-bootstrap.sh` calls `scripts/validate-llm-config.sh --env-file ./.argus-llm.env` before any Docker cleanup or startup action. If LLM validation fails, bootstrap exits and asks you to reconfigure.
 
 On WSL2 hosts the script also runs the CubeSandbox host-side bootstrap (doctor → prepare-vm → run-vm-background → install → provision-codeql-cpp-template). On a fresh clone where the VM, CubeMaster API, or CodeQL C/C++ template is missing, each step builds itself; on subsequent runs each step is skipped via its readiness check (SSH port, HTTP `/health`, or `CUBESANDBOX_TEMPLATE_ID` in `.env`). The OpenGrep CubeSandbox template does not reuse the CodeQL/sandbox-code image; when a task selects `opengrep_sandbox=oci_cubesandbox`, `/api/v1/cubesandbox/templates/opengrep/*` builds an independent template through the internal `opengrep_dedicated` record kind. Skip host-side bootstrap with `--skip-cubesandbox` or set `CUBESANDBOX_BOOTSTRAP_AUTO=false` in `.env`; run only the cubesandbox stage with `--cubesandbox-only`; force a template rebuild with `--cubesandbox-reset`. Non-WSL2 hosts skip the stage with a notice.
 

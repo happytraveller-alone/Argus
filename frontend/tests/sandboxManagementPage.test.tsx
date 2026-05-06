@@ -16,6 +16,8 @@ test("SandboxTemplatesTable renders project-style template management columns an
           kind: "codeql_cpp",
           status: "ready",
           templateId: "tpl-ready",
+          artifactId: "artifact-ready",
+          jobId: "job-ready",
           imageRef: "argus/codeql:latest",
           imageFingerprint: "sha256:ready",
           errorMessage: null,
@@ -29,6 +31,8 @@ test("SandboxTemplatesTable renders project-style template management columns an
           kind: "opengrep",
           status: "invalidated",
           templateId: "tpl-invalidated",
+          artifactId: null,
+          jobId: "job-invalidated",
           imageRef: "argus/opengrep:latest",
           imageFingerprint: null,
           errorMessage: "template invalidated",
@@ -48,7 +52,8 @@ test("SandboxTemplatesTable renders project-style template management columns an
   assert.match(markup, /记录状态/);
   assert.match(markup, /模板 \/ 镜像/);
   assert.match(markup, /镜像/);
-  assert.match(markup, /错误摘要/);
+  assert.match(markup, /摘要/);
+  assert.doesNotMatch(markup, /错误摘要/);
   assert.match(markup, /操作/);
   assert.match(markup, /删除 FAILED \/ INVALIDATED/);
   assert.match(markup, /仅 FAILED \/ INVALIDATED 可删/);

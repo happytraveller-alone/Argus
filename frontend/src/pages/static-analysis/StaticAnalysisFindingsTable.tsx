@@ -233,6 +233,7 @@ export function getColumns(input: {
 			enableSorting: false,
 			meta: {
 				label: "操作",
+				align: "center",
 				minWidth: 280,
 			},
 			cell: ({ row }) => {
@@ -258,7 +259,7 @@ export function getColumns(input: {
 				);
 
 				return (
-					<div className="flex items-center gap-1.5 flex-wrap">
+					<div className="flex items-center justify-center gap-1.5 flex-wrap">
 						<Button
 							asChild
 							size="sm"

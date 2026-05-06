@@ -198,6 +198,25 @@ test("StaticAnalysisFindingsTable can hide the engine column for CodeQL-only det
 	assert.match(markup, /codeql-rule/);
 });
 
+test("StaticAnalysisFindingsTable centers action content", async () => {
+	const tableModule = await loadTableModule();
+
+	const columns = tableModule.getColumns({
+		currentRoute: "/static-analysis/task-1",
+		showEngineColumn: false,
+		updatingKey: null,
+		onToggleStatus: (_row: UnifiedFindingRow, _target: FindingStatus) => {},
+	});
+	const actionsColumn = columns.find((column) => column.id === "actions");
+	const actionsMeta = actionsColumn?.meta as { align?: string } | undefined;
+
+	assert.equal(actionsMeta?.align, "center");
+	const markup = renderTable(tableModule.default, {
+		showEngineColumn: false,
+	});
+	assert.match(markup, /justify-center/);
+});
+
 test("StaticAnalysisFindingsTable narrows rule column and fills the page width", async () => {
 	const tableModule = await loadTableModule();
 

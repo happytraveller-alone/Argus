@@ -113,9 +113,9 @@ function buildColumns(
     },
     {
       id: "error",
-      header: "错误摘要",
+      header: "摘要",
       meta: {
-        label: "错误摘要",
+        label: "摘要",
         minWidth: 180,
         headerClassName: `${HEADER_CELL_CLASSNAME} ${DIVIDER_CELL_CLASSNAME}`,
         headerContentClassName: HEADER_CONTENT_CLASSNAME,

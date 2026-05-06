@@ -622,7 +622,7 @@ pub async fn import_env(
             sync_python_user_config_mirror(&state, Some(&merged)).await?;
             Ok(Json(import_response(
                 true,
-                "已从 .argus-intelligent-audit.env 导入并完成 LLM 测试。",
+                "已从 .argus-llm.env 导入并完成 LLM 测试。",
                 &imported_llm,
                 Some(metadata),
                 None,

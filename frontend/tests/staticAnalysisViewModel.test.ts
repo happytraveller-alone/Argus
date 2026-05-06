@@ -434,6 +434,44 @@ test("buildStaticAnalysisHeaderSummary prefers resolved project name over projec
   assert.equal(summary.projectName, "Resolved Project Name");
 });
 
+test("buildStaticAnalysisHeaderSummary exposes Opengrep scan scheme label", () => {
+	const baseTask = {
+		id: "og-1",
+		project_id: "project-1",
+		project_name: "Demo",
+		status: "completed",
+		created_at: "2026-05-01T00:00:00Z",
+		updated_at: "2026-05-01T00:00:02Z",
+		scan_duration_ms: 2000,
+		total_findings: 1,
+	};
+
+	assert.equal(
+		viewModel.buildStaticAnalysisHeaderSummary({
+			opengrepTask: { ...baseTask, opengrep_sandbox: "dockerfile_container" },
+			codeqlTask: null,
+			enabledEngines: ["opengrep"],
+		}).scanSchemeLabel,
+		"Docker 容器方案",
+	);
+	assert.equal(
+		viewModel.buildStaticAnalysisHeaderSummary({
+			opengrepTask: { ...baseTask, opengrep_sandbox: "oci_cubesandbox" },
+			codeqlTask: null,
+			enabledEngines: ["opengrep"],
+		}).scanSchemeLabel,
+		"CubeSandbox 沙箱方案",
+	);
+	assert.equal(
+		viewModel.buildStaticAnalysisHeaderSummary({
+			opengrepTask: { ...baseTask, opengrep_sandbox: "a3s_box" },
+			codeqlTask: null,
+			enabledEngines: ["opengrep"],
+		}).scanSchemeLabel,
+		"A3S 沙箱方案",
+	);
+});
+
 test("resolveStaticAnalysisProjectNameFallback applies task, lookup, id fallback order", () => {
   assert.equal(
     viewModel.resolveStaticAnalysisProjectNameFallback({

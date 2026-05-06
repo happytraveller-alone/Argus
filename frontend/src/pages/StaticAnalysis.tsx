@@ -158,6 +158,7 @@ export default function StaticAnalysis() {
   );
   const headerTags = useMemo(
     () => [
+      ...(headerSummary.scanSchemeLabel ? [headerSummary.scanSchemeLabel] : []),
       headerSummary.projectName,
       `${Math.round(headerSummary.progressPercent)}%`,
       headerSummary.durationLabel,
@@ -289,7 +290,7 @@ export default function StaticAnalysis() {
           loadingInitial={loadingInitial}
           rows={unifiedRows}
           state={tableState}
-          showEngineColumn={!isCodeqlOnlyDetail}
+          showEngineColumn={false}
           onStateChange={setTableState}
           updatingKey={updatingKey}
           onToggleStatus={handleToggleStatus}

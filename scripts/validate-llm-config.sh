@@ -3,9 +3,9 @@ set -Eeuo pipefail
 
 SCRIPT_NAME="$(basename "$0")"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-DEFAULT_ENV_FILE="$ROOT_DIR/.env"
-TEMPLATE_FILE="$ROOT_DIR/env.example"
-ENV_FILE="${ARGUS_ENV_FILE:-$DEFAULT_ENV_FILE}"
+DEFAULT_ENV_FILE="$ROOT_DIR/.argus-llm.env"
+TEMPLATE_FILE="$ROOT_DIR/llm.env.example"
+ENV_FILE="${ARGUS_LLM_ENV_FILE:-$DEFAULT_ENV_FILE}"
 
 usage() {
   cat <<USAGE
@@ -15,14 +15,10 @@ Usage:
   scripts/$SCRIPT_NAME [--env-file <path>]
 
 Required keys:
-  SECRET_KEY
   LLM_PROVIDER
   LLM_API_KEY
   LLM_MODEL
   LLM_BASE_URL
-  AGENT_ENABLED
-  AGENT_MAX_ITERATIONS
-  AGENT_TIMEOUT
 USAGE
 }
 
@@ -59,7 +55,7 @@ ensure_template() {
   if [[ -f "$TEMPLATE_FILE" ]]; then
     return 0
   fi
-  fail "Root env template does not exist: $TEMPLATE_FILE"
+  fail "LLM env template does not exist: $TEMPLATE_FILE"
 }
 
 read_env_value() {
@@ -134,49 +130,20 @@ validate_provider() {
   esac
 }
 
-validate_boolean_true() {
-  local key="$1"
-  local value="$2"
-  case "$value" in
-    true|TRUE|1|yes|YES|on|ON)
-      return 0
-      ;;
-    *)
-      fail "$key must be enabled before bootstrap."
-      ;;
-  esac
-}
-
-validate_positive_int() {
-  local key="$1"
-  local value="$2"
-  if [[ ! "$value" =~ ^[0-9]+$ ]] || (( value <= 0 )); then
-    fail "$key must be a positive integer."
-  fi
-}
-
 main() {
   parse_args "$@"
   ensure_template
   [[ -f "$ENV_FILE" ]] || fail "LLM env file does not exist. A template is available at $TEMPLATE_FILE."
 
-  local secret_key provider api_key model base_url agent_enabled max_iterations agent_timeout
-  secret_key="$(require_key SECRET_KEY)"
+  local provider api_key model base_url
   provider="$(require_key LLM_PROVIDER)"
   api_key="$(require_key LLM_API_KEY)"
   model="$(require_key LLM_MODEL)"
   base_url="$(require_key LLM_BASE_URL)"
-  agent_enabled="$(require_key AGENT_ENABLED)"
-  max_iterations="$(require_key AGENT_MAX_ITERATIONS)"
-  agent_timeout="$(require_key AGENT_TIMEOUT)"
 
   validate_provider "$provider"
-  validate_boolean_true AGENT_ENABLED "$agent_enabled"
-  validate_positive_int AGENT_MAX_ITERATIONS "$max_iterations"
-  validate_positive_int AGENT_TIMEOUT "$agent_timeout"
 
   for key_and_value in \
-    "SECRET_KEY=$secret_key" \
     "LLM_API_KEY=$api_key" \
     "LLM_MODEL=$model" \
     "LLM_BASE_URL=$base_url"

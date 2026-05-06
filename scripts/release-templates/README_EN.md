@@ -10,24 +10,26 @@ This release branch is intended for end users. You only need to configure the ap
 
 ## 2. First-Time Setup
 
-Keep the root `env.example`. If root `.env` does not exist, bootstrap copies the template, auto-generates `SECRET_KEY`, and exits:
+Keep root `env.example` and `llm.env.example`. First bootstrap creates `.env` for SECRET_KEY/advanced overrides, copies `llm.env.example` to `.argus-llm.env`, and exits:
 
 ```bash
 ./argus-bootstrap.sh --wait-exit -- default
 ```
 
-Open the root `.env` and set at least:
+Open root `.argus-llm.env` and set at least:
 
 - `LLM_PROVIDER`
 - `LLM_API_KEY`
 - `LLM_MODEL`
+- `LLM_BASE_URL`
 
 Example:
 
 ```env
-LLM_PROVIDER=openai
+LLM_PROVIDER=openai_compatible
 LLM_API_KEY=your-api-key
 LLM_MODEL=gpt-4o-mini
+LLM_BASE_URL=https://api.openai.com/v1
 ```
 
 What these values mean:
@@ -35,12 +37,13 @@ What these values mean:
 - `LLM_PROVIDER`: the LLM provider you want to use
 - `LLM_API_KEY`: your API key for that provider
 - `LLM_MODEL`: the model name
+- `LLM_BASE_URL`: compatible API base URL
 - `SECRET_KEY`: bootstrap generates this automatically; you usually do not need to set it manually
 
 You can validate the LLM config before startup:
 
 ```bash
-./scripts/validate-llm-config.sh --env-file ./.env
+./scripts/validate-llm-config.sh --env-file ./.argus-llm.env
 ```
 
 By default, Compose publishes the frontend on host port `13000` and the backend on `18000` to avoid collisions with common local development services on `3000` / `8000`. Set `Argus_FRONTEND_PORT=3000 Argus_BACKEND_PORT=8000` when starting the stack if you need the old host ports.

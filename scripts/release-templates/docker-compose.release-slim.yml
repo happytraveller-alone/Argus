@@ -26,6 +26,8 @@ services:
     env_file:
       - path: ${ARGUS_ENV_FILE:-./.env}
         required: true
+      - path: ${ARGUS_LLM_ENV_FILE:-./.argus-llm.env}
+        required: true
     volumes:
       - backend_uploads:/app/uploads
       - backend_runtime_data:/app/data/runtime

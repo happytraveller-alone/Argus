@@ -156,6 +156,46 @@ const findingColumns: AppColumnDef<IntelligentTaskFinding, unknown>[] = [
 	},
 ];
 
+const eventLogColumns: AppColumnDef<IntelligentTaskRecord["eventLog"][number], unknown>[] = [
+	{
+		id: "kind",
+		accessorFn: (row) => row.kind,
+		header: "类型",
+		meta: {
+			label: "类型",
+			align: "left",
+			width: 120,
+		},
+		cell: ({ row }) => <span className="text-sky-300">{row.original.kind}</span>,
+	},
+	{
+		id: "timestamp",
+		accessorFn: (row) => row.timestamp,
+		header: "时间",
+		meta: {
+			label: "时间",
+			align: "left",
+			minWidth: 180,
+		},
+		cell: ({ row }) => (
+			<span className="text-muted-foreground">{row.original.timestamp}</span>
+		),
+	},
+	{
+		id: "message",
+		accessorFn: (row) => row.message ?? "-",
+		header: "消息",
+		meta: {
+			label: "消息",
+			align: "left",
+			minWidth: 260,
+		},
+		cell: ({ row }) => (
+			<span className="text-foreground/80">{row.original.message ?? "-"}</span>
+		),
+	},
+];
+
 export default function AgentAuditDetail() {
 	const { taskId } = useParams<{ taskId: string }>();
 	const location = useLocation();
@@ -410,39 +450,16 @@ export default function AgentAuditDetail() {
 					{/* Event log */}
 					<div className="rounded-lg border border-border/60 bg-card/40 p-4">
 						<SectionTitle>事件日志 ({eventLog.length})</SectionTitle>
-						{eventLog.length === 0 ? (
-							<p className="font-mono text-xs text-muted-foreground">
-								暂无事件
-							</p>
-						) : (
-							<div className="overflow-auto font-mono text-xs">
-								<table className="min-w-[540px]">
-									<thead>
-										<tr className="grid grid-cols-[6rem_10rem_minmax(0,1fr)] gap-x-4 border-b border-border/60 py-1.5 text-left font-semibold uppercase tracking-wider text-foreground/60">
-											<th scope="col">类型</th>
-											<th scope="col">时间</th>
-											<th scope="col">消息</th>
-										</tr>
-									</thead>
-									<tbody>
-										{eventLog.map((entry) => (
-											<tr
-												key={`${entry.kind}:${entry.timestamp}:${entry.message ?? ""}`}
-												className="grid grid-cols-[6rem_10rem_minmax(0,1fr)] gap-x-4 border-b border-border/30 py-1.5 last:border-0"
-											>
-												<td className="text-sky-300">{entry.kind}</td>
-												<td className="text-muted-foreground">
-													{entry.timestamp}
-												</td>
-												<td className="text-foreground/80">
-													{entry.message ?? "-"}
-												</td>
-											</tr>
-										))}
-									</tbody>
-								</table>
-							</div>
-						)}
+						<DataTable
+							data={eventLog}
+							columns={eventLogColumns}
+							toolbar={false}
+							pagination={false}
+							className="border-border/30 bg-transparent"
+							tableClassName="min-w-[540px]"
+							tableContainerClassName="rounded-sm border-0"
+							emptyState={{ title: "暂无事件" }}
+						/>
 					</div>
 				</div>
 			</div>

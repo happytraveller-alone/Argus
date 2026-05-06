@@ -15,10 +15,10 @@
 ## 启动前准备
 
 1. 确保本机已安装 Docker Compose，并且 Docker daemon 可访问。
-2. 保留根目录 `env.example`。首次运行 `./argus-bootstrap.sh` 时，如果根目录 `.env` 不存在，脚本会复制 `env.example` 为 `.env`，自动生成 `SECRET_KEY`，提示你填写配置后退出。
-3. 填写 `.env` 中的 LLM 配置后，再次运行 `./argus-bootstrap.sh`；也可以先运行 `./scripts/validate-llm-config.sh --env-file ./.env` 确认 LLM 配置无误。
+2. 保留根目录 `env.example` 和 `llm.env.example`。首次运行 `./argus-bootstrap.sh` 时，脚本会生成 `.env`（SECRET_KEY/高级覆盖）并复制 `llm.env.example` 为 `.argus-llm.env`，提示你填写 LLM 配置后退出。
+3. 填写 `.argus-llm.env` 中的 LLM 配置后，再次运行 `./argus-bootstrap.sh`；也可以先运行 `./scripts/validate-llm-config.sh --env-file ./.argus-llm.env` 确认 LLM 配置无误。普通用户通常只需要改 `.argus-llm.env`，其它配置走默认。
 
-`argus-bootstrap.sh` 会在任何 Docker 清理或启动动作前调用 `scripts/validate-llm-config.sh --env-file ./.env` 校验 env/LLM 配置。校验失败时脚本会退出并提示重新配置。
+`argus-bootstrap.sh` 会在任何 Docker 清理或启动动作前调用 `scripts/validate-llm-config.sh --env-file ./.argus-llm.env` 校验 LLM 配置。校验失败时脚本会退出并提示重新配置。
 
 WSL2 主机上还会自动跑一遍 CubeSandbox 主机侧引导（doctor → prepare-vm → run-vm-background → install → provision-codeql-cpp-template），首次启动如果 VM/CubeMaster API/CodeQL C/C++ 模板缺失会自动构建；每一步都基于就绪检查（SSH/HTTP/`.env` 中的 `CUBESANDBOX_TEMPLATE_ID`）做幂等跳过。Opengrep 的 CubeSandbox 模板不复用 CodeQL/sandbox-code 镜像，选择 `opengrep_sandbox=oci_cubesandbox` 时会通过 `/api/v1/cubesandbox/templates/opengrep/*` 和 `opengrep_dedicated` 内部记录按需构建独立模板。需要跳过主机侧引导可加 `--skip-cubesandbox` 或在 `.env` 设置 `CUBESANDBOX_BOOTSTRAP_AUTO=false`；只想构建沙箱跳过 Compose 用 `--cubesandbox-only`；想强制重建模板用 `--cubesandbox-reset`。非 WSL2 主机会自动跳过这段并打印提示。
 

@@ -124,6 +124,7 @@ validate_release_tree() {
     "README_EN.md"
     "docker-compose.yml"
     "env.example"
+    "llm.env.example"
 
     "docker/backend.Dockerfile"
     "docker/frontend.Dockerfile"

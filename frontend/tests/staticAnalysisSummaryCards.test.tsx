@@ -94,6 +94,7 @@ test("StaticAnalysis detail renders header tags instead of standalone summary-ca
   );
 
   assert.match(source, /aria-label="静态审计概要标签"/);
+  assert.match(source, /headerSummary\.scanSchemeLabel/);
   assert.match(source, /headerSummary\.projectName/);
   assert.match(source, /`\$\{Math\.round\(headerSummary\.progressPercent\)\}%`/);
   assert.match(source, /headerSummary\.durationLabel/);
@@ -112,7 +113,7 @@ test("StaticAnalysis uses the CodeQL-only 6:4 split for first-run task detail", 
 
   assert.match(source, /isCodeqlOnlyDetail/);
   assert.match(source, /lg:grid-cols-\[minmax\(0,6fr\)_minmax\(0,4fr\)\]/);
-  assert.match(source, /showEngineColumn=\{!isCodeqlOnlyDetail\}/);
+  assert.match(source, /showEngineColumn=\{false\}/);
   assert.match(source, /lg:h-\[calc\(100vh-11rem\)\]/);
 });
 

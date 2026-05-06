@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
-import { Plus, Search } from "lucide-react";
+import { ClipboardPlus, Plus, Search } from "lucide-react";
 import { toast } from "sonner";
 
 import DeferredSection from "@/components/performance/DeferredSection";
@@ -118,6 +118,20 @@ export default function TaskManagementIntelligent() {
 		<div className="relative flex h-screen flex-col gap-6 overflow-hidden bg-background p-6 font-mono">
 			<div className="absolute inset-0 cyber-grid-subtle pointer-events-none" />
 
+			<div className="relative z-10 flex flex-wrap items-center justify-between gap-3">
+				<div>
+					<h1 className="text-xl font-semibold tracking-[0.12em] text-foreground">智能审计任务</h1>
+					<p className="mt-1 text-xs text-muted-foreground">查看智能扫描队列，或直接创建新的智能扫描。</p>
+				</div>
+				<Button
+					className="cyber-btn-primary h-9 px-4"
+					onClick={() => setShowCreateDialog(true)}
+				>
+					<ClipboardPlus className="w-4 h-4 mr-2" />
+					创建扫描
+				</Button>
+			</div>
+
 			<div className="flex flex-wrap items-center justify-end gap-3">
 				<div className="flex min-w-0 flex-1 items-center gap-3">
 					<div className="relative w-full max-w-sm">
@@ -148,7 +162,7 @@ export default function TaskManagementIntelligent() {
 						onClick={() => setShowCreateDialog(true)}
 					>
 						<Plus className="w-3.5 h-3.5 mr-1.5" />
-						新建扫描任务
+						创建扫描
 					</Button>
 				</div>
 			</div>

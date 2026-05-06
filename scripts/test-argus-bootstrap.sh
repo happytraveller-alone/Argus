@@ -57,6 +57,7 @@ new_fixture() {
   cp "$ROOT_DIR/scripts/cubesandbox-lib.sh" "$dir/scripts/cubesandbox-lib.sh"
   cp "$CUBE_QUICKSTART_SRC" "$dir/scripts/cubesandbox-quickstart.sh"
   cp "$ROOT_DIR/env.example" "$dir/env.example"
+  cp "$ROOT_DIR/llm.env.example" "$dir/llm.env.example"
   chmod +x "$dir/argus-bootstrap.sh"
   chmod +x "$dir/scripts/validate-llm-config.sh"
   chmod +x "$dir/scripts/cubesandbox-quickstart.sh"
@@ -70,6 +71,8 @@ services:
       context: .
     env_file:
       - path: "${ARGUS_ENV_FILE:-./.env}"
+        required: true
+      - path: "${ARGUS_LLM_ENV_FILE:-./.argus-llm.env}"
         required: true
     environment:
       ARGUS_RESET_IMPORT_TOKEN: "${ARGUS_RESET_IMPORT_TOKEN:-}"
@@ -122,6 +125,8 @@ SECRET_KEY=local_test_secret_0123456789abcdef
 ALGORITHM=HS256
 ACCESS_TOKEN_EXPIRE_MINUTES=11520
 DOCKER_SOCKET_PATH=/var/run/docker.sock
+ENV
+  cat > "$dir/.argus-llm.env" <<'ENV'
 LLM_PROVIDER=openai_compatible
 LLM_API_KEY=SECRET_SENTINEL_SHOULD_NOT_PRINT
 LLM_MODEL=gpt-5
@@ -129,13 +134,7 @@ LLM_BASE_URL=https://api.openai.com/v1
 LLM_TIMEOUT=150
 LLM_TEMPERATURE=0.1
 LLM_MAX_TOKENS=4096
-AGENT_ENABLED=true
-AGENT_MAX_ITERATIONS=5
 AGENT_TIMEOUT=1800
-ENABLE_PARALLEL_ANALYSIS=true
-ENABLE_PARALLEL_VERIFICATION=true
-ANALYSIS_MAX_WORKERS=5
-VERIFICATION_MAX_WORKERS=3
 ENV
 }
 
@@ -151,7 +150,7 @@ assert_contains "$help_out" "keep-cache"
 assert_contains "$help_out" "aggressive"
 assert_contains "$help_out" "Compatible with both bash and zsh"
 assert_contains "$help_out" "Start modes:"
-assert_contains "$help_out" "env.example"
+assert_contains "$help_out" "llm.env.example"
 assert_contains "$help_out" ".env"
 assert_contains "$help_out" "docker system prune -af --volumes"
 assert_contains "$help_out" "docker compose up -d --build"
@@ -163,7 +162,7 @@ assert_contains "$help_out" "scripts/validate-llm-config.sh --env-file"
 validator_dir="$(new_fixture validator)"
 write_valid_config "$validator_dir"
 validator_out="$validator_dir/validator.out"
-( cd "$validator_dir" && ./scripts/validate-llm-config.sh --env-file ./.env ) >"$validator_out" 2>&1
+( cd "$validator_dir" && ./scripts/validate-llm-config.sh --env-file ./.argus-llm.env ) >"$validator_out" 2>&1
 assert_contains "$validator_out" "LLM env config is valid"
 
 # Parser rejects invalid post-separator modes before config or Docker work.
@@ -198,17 +197,18 @@ set -e
 assert_contains "$flag_after_out" "Unknown run mode: --wait-exit"
 assert_not_contains "$flag_after_out" "docker compose"
 
-# Missing root .env exits before Docker cleanup after copying env.example.
+# Missing env exits before Docker cleanup after creating runtime and LLM templates.
 missing_dir="$(new_fixture missing)"
 missing_out="$missing_dir/missing.out"
 set +e
 ( cd "$missing_dir" && CI=true ARGUS_STUB_DOCKER=true ./argus-bootstrap.sh ) >"$missing_out" 2>&1
 missing_rc=$?
 set -e
-[[ "$missing_rc" -ne 0 ]] || fail "Missing .env should stop bootstrap after copying template"
-assert_contains "$missing_out" "Created .env from env.example"
+[[ "$missing_rc" -ne 0 ]] || fail "Missing env should stop bootstrap after creating template"
+assert_contains "$missing_out" "Created runtime .env"
+assert_contains "$missing_out" "Created dedicated LLM env from llm.env.example"
 assert_contains "$missing_out" "Generated SECRET_KEY in root .env"
-assert_contains "$missing_out" "scripts/validate-llm-config.sh --env-file ./.env"
+assert_contains "$missing_out" "scripts/validate-llm-config.sh --env-file ./.argus-llm.env"
 assert_not_contains "$missing_out" "docker compose"
 assert_not_contains "$missing_out" "docker system prune"
 assert_not_contains "$missing_out" "curl -fsS"
@@ -221,12 +221,12 @@ missing_secret="$(grep '^SECRET_KEY=' "$missing_dir/.env" | cut -d= -f2-)"
 missing_secret_dir="$(new_fixture missing-secret)"
 cat > "$missing_secret_dir/.env" <<'ENV'
 DOCKER_SOCKET_PATH=/var/run/docker.sock
+ENV
+cat > "$missing_secret_dir/.argus-llm.env" <<'ENV'
 LLM_PROVIDER=openai_compatible
 LLM_API_KEY=sk-your-api-key
 LLM_MODEL=gpt-5
 LLM_BASE_URL=https://api.openai.com/v1
-AGENT_ENABLED=true
-AGENT_MAX_ITERATIONS=5
 AGENT_TIMEOUT=1800
 ENV
 missing_secret_out="$missing_secret_dir/missing-secret.out"
@@ -247,12 +247,12 @@ placeholder_secret_dir="$(new_fixture placeholder-secret)"
 cat > "$placeholder_secret_dir/.env" <<'ENV'
 SECRET_KEY=your-super-secret-key-change-this-in-production
 DOCKER_SOCKET_PATH=/var/run/docker.sock
+ENV
+cat > "$placeholder_secret_dir/.argus-llm.env" <<'ENV'
 LLM_PROVIDER=openai_compatible
 LLM_API_KEY=sk-your-api-key
 LLM_MODEL=gpt-5
 LLM_BASE_URL=https://api.openai.com/v1
-AGENT_ENABLED=true
-AGENT_MAX_ITERATIONS=5
 AGENT_TIMEOUT=1800
 ENV
 placeholder_secret_out="$placeholder_secret_dir/placeholder-secret.out"
@@ -281,12 +281,12 @@ placeholder_dir="$(new_fixture placeholder)"
 cat > "$placeholder_dir/.env" <<'ENV'
 SECRET_KEY=local_test_secret_0123456789abcdef
 DOCKER_SOCKET_PATH=/var/run/docker.sock
+ENV
+cat > "$placeholder_dir/.argus-llm.env" <<'ENV'
 LLM_PROVIDER=openai_compatible
 LLM_API_KEY=sk-your-api-key
 LLM_MODEL=gpt-5
 LLM_BASE_URL=https://api.openai.com/v1
-AGENT_ENABLED=true
-AGENT_MAX_ITERATIONS=5
 AGENT_TIMEOUT=1800
 ENV
 placeholder_out="$placeholder_dir/placeholder.out"
@@ -301,8 +301,8 @@ assert_not_contains "$placeholder_out" "docker system prune"
 # Missing required key exits before Docker cleanup in non-interactive mode.
 missing_key_dir="$(new_fixture missing-key)"
 write_valid_config "$missing_key_dir"
-grep -v '^LLM_MODEL=' "$missing_key_dir/.env" > "$missing_key_dir/.env.tmp"
-mv "$missing_key_dir/.env.tmp" "$missing_key_dir/.env"
+grep -v '^LLM_MODEL=' "$missing_key_dir/.argus-llm.env" > "$missing_key_dir/.argus-llm.env.tmp"
+mv "$missing_key_dir/.argus-llm.env.tmp" "$missing_key_dir/.argus-llm.env"
 missing_key_out="$missing_key_dir/missing-key.out"
 set +e
 ( cd "$missing_key_dir" && CI=true ARGUS_STUB_DOCKER=true ./argus-bootstrap.sh ) >"$missing_key_out" 2>&1
@@ -329,6 +329,7 @@ assert_contains "$valid_out" "build opengrep-runner"
 assert_not_contains "$valid_out" "build opengrep-runner codeql-runner"
 assert_contains "$valid_out" "up -d --build"
 assert_contains "$valid_out" "ARGUS_ENV_FILE=$valid_dir/.env"
+assert_contains "$valid_out" "ARGUS_LLM_ENV_FILE=$valid_dir/.argus-llm.env"
 assert_contains "$valid_out" "ARGUS_RESET_IMPORT_TOKEN="
 assert_contains "$valid_out" "redacted-import-token"
 assert_contains "$valid_out" "curl -fsS http://127.0.0.1:18000/health"
@@ -449,7 +450,7 @@ assert_contains "$dry_out" "[dry-run] curl -fsS -X POST"
 assert_contains "$dry_out" "redacted-import-token"
 assert_no_global_prune_execution "$dry_out"
 
-# docker/env is retired; root env.example is the only environment template surface.
+# docker/env is retired; root env.example plus llm.env.example are the only environment template surfaces.
 retired_env_out="$TMP_ROOT/docker-env-retired.out"
 while IFS= read -r tracked_env_path; do
   if [ -e "$ROOT_DIR/$tracked_env_path" ]; then
@@ -457,7 +458,7 @@ while IFS= read -r tracked_env_path; do
     fail "docker/env should not contain tracked environment templates"
   fi
 done < <(git -C "$ROOT_DIR" ls-files docker/env)
-if rg -n "docker/env|\\.env\\.example" \
+if rg -n "docker/env|(^|[^[:alnum:]_-])\\.env\\.example" \
   "$ROOT_DIR/argus-bootstrap.sh" \
   "$ROOT_DIR/docker-compose.yml" \
   "$ROOT_DIR/scripts/validate-llm-config.sh" \
@@ -476,12 +477,18 @@ fi
 # preflight service containers around after validation.
 compose_render_out="$TMP_ROOT/compose.out"
 empty_compose_env="$TMP_ROOT/empty-compose.env"
-: >"$empty_compose_env"
+cat >"$empty_compose_env" <<ENV
+ARGUS_ENV_FILE=$TMP_ROOT/compose-root.env
+ARGUS_LLM_ENV_FILE=$TMP_ROOT/compose-llm.env
+ENV
+: >"$TMP_ROOT/compose-root.env"
+: >"$TMP_ROOT/compose-llm.env"
 docker compose --env-file "$empty_compose_env" --project-directory "$ROOT_DIR" --file "$ROOT_DIR/docker-compose.yml" config >"$compose_render_out"
 runner_profile_count="$(grep -F -c 'profiles: [ "runner-build" ]' "$ROOT_DIR/docker-compose.yml" || true)"
 [[ "$runner_profile_count" -eq 1 ]] || fail "only opengrep runner service should be a profile-only image build target"
 assert_contains "$ROOT_DIR/docker-compose.yml" "\"host.docker.internal:host-gateway\""
 assert_contains "$ROOT_DIR/env.example" "VITE_API_TARGET=http://host.docker.internal:18000"
+assert_contains "$ROOT_DIR/llm.env.example" "LLM_PROVIDER=openai_compatible"
 assert_not_contains "$ROOT_DIR/env.example" "VITE_API_TARGET=http://backend:8000"
 assert_contains "$ROOT_DIR/frontend/vite.config.ts" "http://127.0.0.1:18000"
 assert_contains "$compose_render_out" "VITE_API_TARGET: http://host.docker.internal:18000"

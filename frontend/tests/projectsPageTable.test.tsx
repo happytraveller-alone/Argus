@@ -62,6 +62,7 @@ test("ProjectsTable renders hover metric popovers without nested trigger frames"
 					detailPath: "/projects/p1",
 					detailState: { from: "/projects" },
 					sizeText: "10 文件 / 200 行",
+					sizeBytes: 1024,
 					vulnerabilityStats: {
 						critical: 3,
 						high: 5,
@@ -80,6 +81,7 @@ test("ProjectsTable renders hover metric popovers without nested trigger frames"
 					metricsStatus: "ready",
 					metricsStatusMessage: null,
 					actions: {
+						canDelete: true,
 						canCreateScan: true,
 						canBrowseCode: true,
 						browseCodePath: "/projects/p1/code-browser",
@@ -94,6 +96,7 @@ test("ProjectsTable renders hover metric popovers without nested trigger frames"
 					detailPath: "/projects/p2",
 					detailState: { from: "/projects" },
 					sizeText: "-",
+					sizeBytes: 0,
 					vulnerabilityStats: {
 						critical: 0,
 						high: 1,
@@ -112,6 +115,7 @@ test("ProjectsTable renders hover metric popovers without nested trigger frames"
 					metricsStatus: "pending",
 					metricsStatusMessage: "指标同步中...",
 					actions: {
+						canDelete: true,
 						canCreateScan: true,
 						canBrowseCode: false,
 						browseCodePath: "/projects/p2/code-browser",
@@ -121,6 +125,7 @@ test("ProjectsTable renders hover metric popovers without nested trigger frames"
 				},
 			],
 			onCreateScan: () => {},
+			onDeleteProject: () => {},
 		})),
 	);
 
@@ -206,6 +211,7 @@ test("ProjectsTable hides zero-count vulnerability severities and shows empty pl
 					detailPath: "/projects/p1",
 					detailState: { from: "/projects" },
 					sizeText: "1.00 Mb",
+					sizeBytes: 1024 * 1024,
 					vulnerabilityStats: {
 						critical: 0,
 						high: 2,
@@ -224,6 +230,7 @@ test("ProjectsTable hides zero-count vulnerability severities and shows empty pl
 					metricsStatus: "ready",
 					metricsStatusMessage: null,
 					actions: {
+						canDelete: true,
 						canCreateScan: true,
 						canBrowseCode: true,
 						browseCodePath: "/projects/p1/code-browser",
@@ -238,6 +245,7 @@ test("ProjectsTable hides zero-count vulnerability severities and shows empty pl
 					detailPath: "/projects/p2",
 					detailState: { from: "/projects" },
 					sizeText: "2.00 Mb",
+					sizeBytes: 2 * 1024 * 1024,
 					vulnerabilityStats: {
 						critical: 0,
 						high: 0,
@@ -256,6 +264,7 @@ test("ProjectsTable hides zero-count vulnerability severities and shows empty pl
 					metricsStatus: "ready",
 					metricsStatusMessage: null,
 					actions: {
+						canDelete: true,
 						canCreateScan: true,
 						canBrowseCode: true,
 						browseCodePath: "/projects/p2/code-browser",
@@ -265,6 +274,7 @@ test("ProjectsTable hides zero-count vulnerability severities and shows empty pl
 				},
 			],
 			onCreateScan: () => {},
+			onDeleteProject: () => {},
 		})),
 	);
 
@@ -290,6 +300,7 @@ test("ProjectsTable keeps metric popovers but removes the old outer trigger fram
 					detailPath: "/projects/p1",
 					detailState: { from: "/projects" },
 					sizeText: "1.00 Mb",
+					sizeBytes: 1024 * 1024,
 					vulnerabilityStats: {
 						critical: 1,
 						high: 2,
@@ -308,6 +319,7 @@ test("ProjectsTable keeps metric popovers but removes the old outer trigger fram
 					metricsStatus: "ready",
 					metricsStatusMessage: null,
 					actions: {
+						canDelete: true,
 						canCreateScan: true,
 						canBrowseCode: true,
 						browseCodePath: "/projects/p1/code-browser",
@@ -317,6 +329,7 @@ test("ProjectsTable keeps metric popovers but removes the old outer trigger fram
 				},
 			],
 			onCreateScan: () => {},
+			onDeleteProject: () => {},
 		})),
 	);
 

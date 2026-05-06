@@ -5,8 +5,9 @@ SCRIPT_NAME="$(basename "$0")"
 ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
 COMPOSE_FILE="$ROOT_DIR/docker-compose.yml"
 LLM_CONFIG_VALIDATOR="$ROOT_DIR/scripts/validate-llm-config.sh"
-ARGUS_ENV_EXAMPLE="$ROOT_DIR/env.example"
 ARGUS_ENV_FILE="${ARGUS_ENV_FILE:-$ROOT_DIR/.env}"
+ARGUS_LLM_ENV_EXAMPLE="$ROOT_DIR/llm.env.example"
+ARGUS_LLM_ENV_FILE="${ARGUS_LLM_ENV_FILE:-$ROOT_DIR/.argus-llm.env}"
 PROJECT_NAME="${COMPOSE_PROJECT_NAME:-argus}"
 DRY_RUN=false
 WAIT_EXIT=false
@@ -79,12 +80,15 @@ Shell support:
   bash $SCRIPT_NAME / zsh $SCRIPT_NAME.
 
 Environment:
-  Root env template: env.example
+  LLM env template:  llm.env.example
+  LLM env file:      .argus-llm.env
   Runtime env file:  .env
-  First run without .env copies env.example to .env, prints the required
-  follow-up command, and exits before Docker cleanup/startup. Fill .env, or run
-  scripts/validate-llm-config.sh --env-file ./.env to confirm the LLM config,
-  then run ./$SCRIPT_NAME again.
+  First run creates .argus-llm.env from llm.env.example and creates .env for
+  generated SECRET_KEY / advanced overrides, then exits before Docker cleanup.
+  Fill only .argus-llm.env for normal use, or run
+  scripts/validate-llm-config.sh --env-file ./.argus-llm.env to confirm the LLM
+  config, then run ./$SCRIPT_NAME again. Existing legacy LLM values in .env are
+  migrated into .argus-llm.env automatically.
 
 Run modes:
   default      Safe default. Preserve data volumes and Docker image/build cache.
@@ -216,9 +220,10 @@ redact_arg_for_log() {
   printf '%s' "$arg"
 }
 
-read_env_value() {
-  local key="$1"
-  [[ -f "$ARGUS_ENV_FILE" ]] || return 0
+read_env_value_from_file() {
+  local file="$1"
+  local key="$2"
+  [[ -f "$file" ]] || return 0
   awk -v key="$key" '
     /^[[:space:]]*#/ { next }
     /^[[:space:]]*$/ { next }
@@ -242,7 +247,17 @@ read_env_value() {
         print found
       }
     }
-  ' "$ARGUS_ENV_FILE"
+  ' "$file"
+}
+
+read_env_value() {
+  local key="$1"
+  read_env_value_from_file "$ARGUS_ENV_FILE" "$key"
+}
+
+read_llm_env_value() {
+  local key="$1"
+  read_env_value_from_file "$ARGUS_LLM_ENV_FILE" "$key"
 }
 
 is_placeholder_value() {
@@ -287,7 +302,8 @@ run_compose() {
 validate_llm_config() {
   [[ -x "$LLM_CONFIG_VALIDATOR" ]] || fail "LLM config validator is missing or not executable: $LLM_CONFIG_VALIDATOR"
   ensure_root_env_file
-  "$LLM_CONFIG_VALIDATOR" --env-file "$ARGUS_ENV_FILE"
+  ensure_llm_env_file
+  "$LLM_CONFIG_VALIDATOR" --env-file "$ARGUS_LLM_ENV_FILE"
 }
 
 ensure_root_env_file() {
@@ -295,14 +311,69 @@ ensure_root_env_file() {
     ensure_secret_key
     return 0
   fi
-  [[ -f "$ARGUS_ENV_EXAMPLE" ]] || fail "Root env template is missing: $ARGUS_ENV_EXAMPLE"
-  cp "$ARGUS_ENV_EXAMPLE" "$ARGUS_ENV_FILE"
+  cat > "$ARGUS_ENV_FILE" <<'ENV'
+# Argus runtime env.
+# Generated automatically. Normal users only need .argus-llm.env.
+# Add advanced overrides here only when defaults are not enough.
+ENV
   chmod 600 "$ARGUS_ENV_FILE" 2>/dev/null || true
   ensure_secret_key
-  log "Created .env from env.example: $ARGUS_ENV_FILE"
+  log "Created runtime .env for generated SECRET_KEY and advanced overrides: $ARGUS_ENV_FILE"
+}
+
+legacy_llm_env_is_configured() {
+  local provider api_key model base_url
+  provider="$(read_env_value_from_file "$ARGUS_ENV_FILE" LLM_PROVIDER)"
+  api_key="$(read_env_value_from_file "$ARGUS_ENV_FILE" LLM_API_KEY)"
+  model="$(read_env_value_from_file "$ARGUS_ENV_FILE" LLM_MODEL)"
+  base_url="$(read_env_value_from_file "$ARGUS_ENV_FILE" LLM_BASE_URL)"
+  [[ -n "$provider" && -n "$api_key" && -n "$model" && -n "$base_url" ]] || return 1
+  ! is_placeholder_value "$api_key" && ! is_placeholder_value "$model" && ! is_placeholder_value "$base_url"
+}
+
+copy_legacy_llm_env_file() {
+  local keys=(
+    LLM_PROVIDER
+    LLM_API_KEY
+    LLM_MODEL
+    LLM_BASE_URL
+    LLM_TIMEOUT
+    LLM_TEMPERATURE
+    LLM_MAX_TOKENS
+    LLM_FIRST_TOKEN_TIMEOUT
+    LLM_STREAM_TIMEOUT
+    LLM_CUSTOM_HEADERS
+    AGENT_TIMEOUT
+  )
+  {
+    printf '# Argus dedicated LLM env.\n'
+    printf '# Migrated from legacy .env; secrets redacted in logs only.\n'
+    local key value
+    for key in "${keys[@]}"; do
+      value="$(read_env_value_from_file "$ARGUS_ENV_FILE" "$key")"
+      [[ -n "$value" ]] || continue
+      printf '%s=%s\n' "$key" "$value"
+    done
+  } > "$ARGUS_LLM_ENV_FILE"
+  chmod 600 "$ARGUS_LLM_ENV_FILE" 2>/dev/null || true
+  log "Created dedicated LLM env from legacy .env: $ARGUS_LLM_ENV_FILE (secrets redacted)."
+}
+
+ensure_llm_env_file() {
+  if [[ -f "$ARGUS_LLM_ENV_FILE" ]]; then
+    return 0
+  fi
+  if legacy_llm_env_is_configured; then
+    copy_legacy_llm_env_file
+    return 0
+  fi
+  [[ -f "$ARGUS_LLM_ENV_EXAMPLE" ]] || fail "LLM env template is missing: $ARGUS_LLM_ENV_EXAMPLE"
+  cp "$ARGUS_LLM_ENV_EXAMPLE" "$ARGUS_LLM_ENV_FILE"
+  chmod 600 "$ARGUS_LLM_ENV_FILE" 2>/dev/null || true
+  log "Created dedicated LLM env from llm.env.example: $ARGUS_LLM_ENV_FILE"
   cat >&2 <<MESSAGE
-[argus-bootstrap] 已自动生成 SECRET_KEY；请填写 .env 中的 LLM 配置后再次运行 ./argus-bootstrap.sh。
-[argus-bootstrap] 也可以先运行 ./scripts/validate-llm-config.sh --env-file ./.env 确认配置无误后再运行脚本。
+[argus-bootstrap] 已自动生成 SECRET_KEY；请填写 .argus-llm.env 中的 LLM 配置后再次运行 ./argus-bootstrap.sh。
+[argus-bootstrap] 也可以先运行 ./scripts/validate-llm-config.sh --env-file ./.argus-llm.env 确认配置无误后再运行脚本。
 MESSAGE
   exit 1
 }
@@ -1255,6 +1326,7 @@ compose_up_detached() {
   log "Starting Argus detached"
   run_cmd env \
     "ARGUS_ENV_FILE=$ARGUS_ENV_FILE" \
+    "ARGUS_LLM_ENV_FILE=$ARGUS_LLM_ENV_FILE" \
     "ARGUS_RESET_IMPORT_TOKEN=$ARGUS_RESET_IMPORT_TOKEN" \
     docker compose --project-directory "$ROOT_DIR" --file "$COMPOSE_FILE" --project-name "$PROJECT_NAME" up -d --build
 }
@@ -1263,6 +1335,7 @@ compose_up_backend_detached() {
   log "Starting Argus backend prerequisites detached (frontend is gated until CubeSandbox templates are ready)"
   run_cmd env \
     "ARGUS_ENV_FILE=$ARGUS_ENV_FILE" \
+    "ARGUS_LLM_ENV_FILE=$ARGUS_LLM_ENV_FILE" \
     "ARGUS_RESET_IMPORT_TOKEN=$ARGUS_RESET_IMPORT_TOKEN" \
     docker compose --project-directory "$ROOT_DIR" --file "$COMPOSE_FILE" --project-name "$PROJECT_NAME" up -d --build db redis backend
 }
@@ -1271,6 +1344,7 @@ compose_up_frontend_detached() {
   log "Starting Argus frontend on port ${FRONTEND_PORT}"
   run_cmd env \
     "ARGUS_ENV_FILE=$ARGUS_ENV_FILE" \
+    "ARGUS_LLM_ENV_FILE=$ARGUS_LLM_ENV_FILE" \
     "ARGUS_RESET_IMPORT_TOKEN=$ARGUS_RESET_IMPORT_TOKEN" \
     docker compose --project-directory "$ROOT_DIR" --file "$COMPOSE_FILE" --project-name "$PROJECT_NAME" up -d --build frontend
 }
@@ -1569,11 +1643,11 @@ import_backend_env() {
     printf '%s
 ' "$response"
   else
-    fail "backend LLM env import/test failed. 请重新配置 $ARGUS_ENV_FILE 后再运行 bootstrap。"
+    fail "backend LLM env import/test failed. 请重新配置 $ARGUS_LLM_ENV_FILE 后再运行 bootstrap。"
   fi
 
   if printf '%s' "$response" | grep -Eq '"success"[[:space:]]*:[[:space:]]*false'; then
-    fail "backend LLM env import/test returned failure. 请重新配置 $ARGUS_ENV_FILE 后再运行 bootstrap。"
+    fail "backend LLM env import/test returned failure. 请重新配置 $ARGUS_LLM_ENV_FILE 后再运行 bootstrap。"
   fi
   log "Backend LLM env import/test succeeded; response was sanitized by backend."
 }

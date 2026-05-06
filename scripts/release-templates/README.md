@@ -10,24 +10,26 @@
 
 ## 2. 首次配置
 
-保留根目录 `env.example`。如果根目录 `.env` 不存在，运行 bootstrap 会复制模板、自动生成 `SECRET_KEY` 并退出：
+保留根目录 `env.example` 和 `llm.env.example`。首次运行 bootstrap 会生成 `.env`（SECRET_KEY/高级覆盖）并复制 `llm.env.example` 为 `.argus-llm.env` 后退出：
 
 ```bash
 ./argus-bootstrap.sh --wait-exit -- default
 ```
 
-打开根目录 `.env`，至少填写以下配置：
+打开根目录 `.argus-llm.env`，至少填写以下配置：
 
 - `LLM_PROVIDER`
 - `LLM_API_KEY`
 - `LLM_MODEL`
+- `LLM_BASE_URL`
 
 常见示例：
 
 ```env
-LLM_PROVIDER=openai
+LLM_PROVIDER=openai_compatible
 LLM_API_KEY=your-api-key
 LLM_MODEL=gpt-4o-mini
+LLM_BASE_URL=https://api.openai.com/v1
 ```
 
 说明：
@@ -35,12 +37,13 @@ LLM_MODEL=gpt-4o-mini
 - `LLM_PROVIDER`：选择你要使用的大模型提供方
 - `LLM_API_KEY`：对应提供方的 API Key
 - `LLM_MODEL`：模型名称
+- `LLM_BASE_URL`：兼容接口地址
 - `SECRET_KEY`：bootstrap 会自动生成，通常不需要手动填写
 
 可先运行校验脚本确认 LLM 配置无误：
 
 ```bash
-./scripts/validate-llm-config.sh --env-file ./.env
+./scripts/validate-llm-config.sh --env-file ./.argus-llm.env
 ```
 
 默认情况下，Compose 会把前端发布到宿主机 `13000` 端口、后端发布到 `18000` 端口，以避免和常见本地开发服务的 `3000` / `8000` 端口冲突。如需恢复旧端口，启动时设置 `Argus_FRONTEND_PORT=3000 Argus_BACKEND_PORT=8000`。

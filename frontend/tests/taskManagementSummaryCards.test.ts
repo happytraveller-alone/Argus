@@ -48,12 +48,14 @@ test("static and intelligent task pages use inline status badges instead of summ
 	assert.match(staticSource, /stats\.running/);
 	assert.match(staticSource, /stats\.failed/);
 	assert.match(staticSource, /Badge/);
+	assert.match(staticSource, /创建扫描/);
 
 	assert.doesNotMatch(intelligentSource, /TaskManagementSummaryCards/);
 	assert.match(intelligentSource, /stats\.completed/);
 	assert.match(intelligentSource, /stats\.running/);
 	assert.match(intelligentSource, /stats\.failed/);
 	assert.match(intelligentSource, /Badge/);
+	assert.match(intelligentSource, /创建扫描/);
 });
 
 test("static task management search input filters the visible task table", () => {

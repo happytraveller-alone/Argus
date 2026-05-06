@@ -239,7 +239,7 @@ test("navigation model returns grouped routes in configured order", async () => 
 			},
 			{
 				id: "devTest",
-				paths: ["/data-management"],
+				paths: ["/data-management", "/sandbox-management"],
 				active: false,
 			},
 		],

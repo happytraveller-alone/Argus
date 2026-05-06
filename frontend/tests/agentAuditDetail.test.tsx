@@ -154,9 +154,10 @@ test("AgentAuditDetail renders durationMs in header tag", () => {
 
 test("AgentAuditDetail renders eventLog with kind and timestamp columns", () => {
 	assert.match(source, /eventLog/);
-	assert.match(source, /<th scope="col">类型<\/th>/);
-	assert.match(source, /entry\.kind/);
-	assert.match(source, /entry\.timestamp/);
+	assert.match(source, /eventLogColumns/);
+	assert.match(source, /header: "类型"/);
+	assert.match(source, /row\.original\.kind/);
+	assert.match(source, /row\.original\.timestamp/);
 });
 
 // ---------------------------------------------------------------------------

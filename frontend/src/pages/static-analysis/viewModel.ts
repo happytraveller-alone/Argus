@@ -10,6 +10,10 @@ import {
 } from "@/shared/utils/staticAnalysisSeverity";
 
 export type Engine = "opengrep" | "codeql";
+export type OpengrepSandboxMode =
+  | "dockerfile_container"
+  | "oci_cubesandbox"
+  | "a3s_box";
 export type EngineFilter = "all" | Engine;
 export type FindingStatus = "open" | "verified" | "false_positive";
 export type StatusFilter = "all" | FindingStatus;
@@ -33,6 +37,8 @@ export interface StaticAnalysisSummaryTaskLike
   files_scanned?: number | null;
   error_message?: string | null;
   diagnostics_summary?: string | null;
+  opengrep_sandbox?: string | null;
+  requested_opengrep_sandbox?: string | null;
 }
 
 export interface StaticAnalysisProgressSummary {
@@ -70,11 +76,20 @@ export interface StaticAnalysisTaskStatusSummary {
 
 export interface StaticAnalysisHeaderSummary {
   projectName: string;
+  scanSchemeLabel: string | null;
   statusLabel: string;
   progressPercent: number;
   durationLabel: string;
   totalFindings: number;
   aggregateStatus: StaticAnalysisAggregateStatus | "pending";
+}
+
+export function getStaticAnalysisScanSchemeLabel(
+  sandbox?: string | null,
+): string {
+  if (sandbox === "oci_cubesandbox") return "CubeSandbox 沙箱方案";
+  if (sandbox === "a3s_box") return "A3S 沙箱方案";
+  return "Docker 容器方案";
 }
 
 export interface CodeqlExplorationProgressEventLike {
@@ -745,6 +760,12 @@ export function buildStaticAnalysisHeaderSummary(input: {
 
   return {
     projectName,
+    scanSchemeLabel: input.opengrepTask
+      ? getStaticAnalysisScanSchemeLabel(
+          input.opengrepTask.opengrep_sandbox ||
+            input.opengrepTask.requested_opengrep_sandbox,
+        )
+      : null,
     statusLabel: statusSummary.aggregateLabel,
     progressPercent: progressSummary.progressPercent,
     durationLabel: formatStaticAnalysisDuration(totalScanDurationMs),
