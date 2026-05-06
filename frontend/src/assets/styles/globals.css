@@ -658,19 +658,15 @@
 		box-shadow: var(--glow-cyan);
 	}
 
-	/* ============ Grid Background ============ */
+	/* ============ Solid Page Background ============ */
 	.cyber-grid {
-		background-image:
-			linear-gradient(var(--cyber-border-accent) 1px, transparent 1px),
-			linear-gradient(90deg, var(--cyber-border-accent) 1px, transparent 1px);
-		background-size: 32px 32px;
+		background: hsl(var(--background));
+		background-image: none;
 	}
 
 	.cyber-grid-subtle {
-		background-image:
-			linear-gradient(rgba(14, 181, 196, 0.02) 1px, transparent 1px),
-			linear-gradient(90deg, rgba(14, 181, 196, 0.02) 1px, transparent 1px);
-		background-size: 24px 24px;
+		background: hsl(var(--background));
+		background-image: none;
 	}
 
 	/* ============ Gradient Background ============ */
@@ -696,16 +692,10 @@
 	}
 
 	.home-hero-grid {
-		background-image:
-			linear-gradient(rgba(71, 123, 190, 0.06) 1px, transparent 1px),
-			linear-gradient(90deg, rgba(71, 123, 190, 0.06) 1px, transparent 1px);
-		background-size: 42px 42px;
-		mask-image: linear-gradient(
-			180deg,
-			rgba(0, 0, 0, 0.55),
-			rgba(0, 0, 0, 0.1)
-		);
-		opacity: 0.38;
+		background: hsl(var(--background));
+		background-image: none;
+		mask-image: none;
+		opacity: 1;
 	}
 
 	.home-hero-veil {
