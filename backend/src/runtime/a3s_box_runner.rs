@@ -58,6 +58,16 @@ pub struct A3sBoxRunnerSpec {
     /// Defaults to 1 MiB. Excess output is replaced by a sentinel suffix.
     #[serde(default = "default_a3s_box_stderr_limit_bytes")]
     pub stderr_limit_bytes: usize,
+    /// Upper bound (bytes) on the workspace source directory for which the
+    /// opengrep command is rewritten to copy source into the box-local
+    /// `/tmp/argus-a3s-opengrep-{box_name}` (tmpfs) for faster reads.
+    /// Workspaces above this size run opengrep directly against the
+    /// virtiofs-mounted host workspace instead — this avoids the OOM that
+    /// the tmpfs copy would otherwise cause on a memory-capped box (e.g.
+    /// FFMPEG-scale projects). `None` keeps the legacy unconditional
+    /// localization behaviour.
+    #[serde(default)]
+    pub localize_max_source_bytes: Option<u64>,
 }
 
 fn default_a3s_box_stdout_limit_bytes() -> usize {
@@ -87,6 +97,7 @@ impl Default for A3sBoxRunnerSpec {
             network_disabled: false,
             stdout_limit_bytes: default_a3s_box_stdout_limit_bytes(),
             stderr_limit_bytes: default_a3s_box_stderr_limit_bytes(),
+            localize_max_source_bytes: None,
         }
     }
 }
@@ -1214,6 +1225,20 @@ fn is_workspace_path(value: &str, workspace: &Path) -> bool {
     path.is_absolute() && (path == workspace || path.starts_with(workspace))
 }
 
+/// Returns the value passed to `--target` in an opengrep-scan invocation, or
+/// `None` if absent. Used by the localization size gate to measure the source
+/// directory before deciding whether to copy it into box-local tmpfs.
+fn extract_opengrep_target(command: &[String]) -> Option<&str> {
+    let mut idx = 0;
+    while idx + 1 < command.len() {
+        if command[idx] == "--target" {
+            return Some(command[idx + 1].as_str());
+        }
+        idx += 1;
+    }
+    None
+}
+
 fn local_file_path(local_root: &str, original_path: &str, fallback_name: &str) -> String {
     let file_name = Path::new(original_path)
         .file_name()
@@ -1223,13 +1248,100 @@ fn local_file_path(local_root: &str, original_path: &str, fallback_name: &str) -
     format!("{local_root}/output/{file_name}")
 }
 
-fn build_localized_opengrep_command(
+/// Walk `dir` recursively, summing regular-file sizes. Returns early once the
+/// running total strictly exceeds `cap_bytes` — the caller does not need an
+/// exact size, only a yes/no answer to "is this directory bigger than the
+/// localization limit?". Symlinks and other non-regular entries are ignored;
+/// IO errors are treated as zero-cost (i.e. we err on the side of localizing
+/// when the source dir is unreadable, matching legacy behaviour).
+fn measured_dir_size_capped(dir: &Path, cap_bytes: u64) -> u64 {
+    let mut total: u64 = 0;
+    let mut stack: Vec<PathBuf> = vec![dir.to_path_buf()];
+    while let Some(current) = stack.pop() {
+        let Ok(entries) = fs::read_dir(&current) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let Ok(file_type) = entry.file_type() else {
+                continue;
+            };
+            if file_type.is_dir() {
+                stack.push(entry.path());
+            } else if file_type.is_file() {
+                if let Ok(meta) = entry.metadata() {
+                    total = total.saturating_add(meta.len());
+                    if total > cap_bytes {
+                        return total;
+                    }
+                }
+            }
+        }
+    }
+    total
+}
+
+/// Localizes opengrep-scan commands by copying workspace inputs into the
+/// box-local `/tmp/argus-a3s-opengrep-{box_name}` (tmpfs) for fast reads,
+/// then copies output files back to the host-mounted workspace. When the
+/// `--target` argument resolves to an existing directory inside the workspace
+/// and that directory's recursive size exceeds `localize_max_source_bytes`,
+/// localization is skipped and the original command is returned unchanged so
+/// opengrep reads source directly via the virtiofs-mounted workspace. This
+/// preserves the perf optimisation introduced in commit 22fbb587 for typical
+/// projects while avoiding tmpfs OOM on FFMPEG-scale workloads.
+fn build_localized_opengrep_command_with_limit(
     command: &[String],
     workspace: &Path,
     box_name: &str,
+    localize_max_source_bytes: Option<u64>,
+    task_id: Option<&str>,
 ) -> Vec<String> {
     if command.first().map(String::as_str) != Some("opengrep-scan") {
         return command.to_vec();
+    }
+
+    if let Some(limit) = localize_max_source_bytes {
+        if limit == 0 {
+            tracing::info!(
+                stage = "a3s_localize_decision",
+                localize = false,
+                reason = "limit_zero",
+                limit_bytes = limit,
+                task_id = task_id.unwrap_or(""),
+                "a3s opengrep localization disabled by zero limit"
+            );
+            return command.to_vec();
+        }
+        if let Some(target) = extract_opengrep_target(command) {
+            let target_path = Path::new(target);
+            if target_path.is_absolute()
+                && target_path.starts_with(workspace)
+                && target_path.is_dir()
+            {
+                let measured = measured_dir_size_capped(target_path, limit);
+                if measured > limit {
+                    tracing::info!(
+                        stage = "a3s_localize_decision",
+                        localize = false,
+                        reason = "source_exceeds_limit",
+                        source_bytes = measured,
+                        limit_bytes = limit,
+                        task_id = task_id.unwrap_or(""),
+                        "a3s opengrep source dir exceeds localization limit; running on virtiofs mount"
+                    );
+                    return command.to_vec();
+                } else {
+                    tracing::info!(
+                        stage = "a3s_localize_decision",
+                        localize = true,
+                        source_bytes = measured,
+                        limit_bytes = limit,
+                        task_id = task_id.unwrap_or(""),
+                        "a3s opengrep localizing workspace source to box-local /tmp"
+                    );
+                }
+            }
+        }
     }
 
     let mut localized = command.to_vec();
@@ -1456,8 +1568,13 @@ pub fn execute(spec: A3sBoxRunnerSpec) -> A3sBoxRunnerResult {
         }
         ensure_a3s_box_image_cached(&binary, &spec.image, &meta_dir)?;
         runner_command = rewrite_runner_command(&spec.command, &resolved_workspace);
-        runner_command =
-            build_localized_opengrep_command(&runner_command, &resolved_workspace, &box_name);
+        runner_command = build_localized_opengrep_command_with_limit(
+            &runner_command,
+            &resolved_workspace,
+            &box_name,
+            spec.localize_max_source_bytes,
+            spec.task_id.as_deref(),
+        );
         runner_environment = rewrite_runner_env(&spec.env, &resolved_workspace);
 
         let mut args = vec![
@@ -2424,5 +2541,144 @@ esac
             "stderr should end with truncation sentinel, got: {:?}",
             &result.stderr[result.stderr.len().saturating_sub(80)..]
         );
+    }
+
+    fn write_dummy_source(workspace: &std::path::Path, total_bytes: usize) {
+        let source = workspace.join("source");
+        fs::create_dir_all(&source).expect("create source dir");
+        // Write a single file of `total_bytes` zero bytes — measured_dir_size_capped
+        // sums regular-file sizes via metadata.len() so the actual content
+        // doesn't matter, only the file size on disk.
+        let buf = vec![0u8; total_bytes];
+        fs::write(source.join("blob.bin"), &buf).expect("write blob");
+    }
+
+    fn opengrep_command(workspace: &std::path::Path) -> Vec<String> {
+        vec![
+            "opengrep-scan".to_string(),
+            "--target".to_string(),
+            workspace.join("source").display().to_string(),
+            "--output".to_string(),
+            workspace.join("output/results.json").display().to_string(),
+            "--summary".to_string(),
+            workspace.join("output/summary.json").display().to_string(),
+            "--log".to_string(),
+            workspace.join("output/opengrep.log").display().to_string(),
+            "--jobs".to_string(),
+            "2".to_string(),
+            "--max-memory".to_string(),
+            "2048".to_string(),
+        ]
+    }
+
+    #[test]
+    fn localize_skipped_when_source_exceeds_limit() {
+        let temp = tempfile::tempdir().expect("temp");
+        let workspace = temp.path().canonicalize().expect("canonicalize");
+        write_dummy_source(&workspace, 4_096); // 4 KiB
+        let cmd = opengrep_command(&workspace);
+
+        let out = build_localized_opengrep_command_with_limit(
+            &cmd,
+            &workspace,
+            "test-box",
+            Some(1024), // 1 KiB cap → 4 KiB source exceeds it
+            Some("task-large"),
+        );
+
+        assert_eq!(out, cmd, "command must be unchanged when source exceeds limit");
+    }
+
+    #[test]
+    fn localize_applied_when_source_fits_limit() {
+        let temp = tempfile::tempdir().expect("temp");
+        let workspace = temp.path().canonicalize().expect("canonicalize");
+        write_dummy_source(&workspace, 1_024); // 1 KiB
+        let cmd = opengrep_command(&workspace);
+
+        let out = build_localized_opengrep_command_with_limit(
+            &cmd,
+            &workspace,
+            "test-box",
+            Some(64 * 1024), // 64 KiB cap → 1 KiB source fits
+            Some("task-small"),
+        );
+
+        // Localization wraps the command in a bash -lc script with copy_path/copy_back_file.
+        assert_eq!(out.len(), 3, "localized command should be ['bash', '-lc', SCRIPT]");
+        assert_eq!(out[0], "bash");
+        assert_eq!(out[1], "-lc");
+        assert!(out[2].contains("copy_path"));
+        assert!(out[2].contains("/tmp/argus-a3s-opengrep-test-box"));
+    }
+
+    #[test]
+    fn localize_limit_zero_disables_localization() {
+        let temp = tempfile::tempdir().expect("temp");
+        let workspace = temp.path().canonicalize().expect("canonicalize");
+        write_dummy_source(&workspace, 1_024);
+        let cmd = opengrep_command(&workspace);
+
+        let out = build_localized_opengrep_command_with_limit(
+            &cmd,
+            &workspace,
+            "test-box",
+            Some(0),
+            Some("task-zero"),
+        );
+
+        assert_eq!(out, cmd, "limit=0 must disable localization");
+    }
+
+    #[test]
+    fn localize_none_preserves_legacy_unconditional_behaviour() {
+        let temp = tempfile::tempdir().expect("temp");
+        let workspace = temp.path().canonicalize().expect("canonicalize");
+        write_dummy_source(&workspace, 8 * 1024 * 1024); // 8 MiB — would exceed a low cap
+        let cmd = opengrep_command(&workspace);
+
+        // localize_max_source_bytes = None: no size measurement, always localize.
+        let out = build_localized_opengrep_command_with_limit(
+            &cmd,
+            &workspace,
+            "test-box",
+            None,
+            None,
+        );
+
+        assert_eq!(out.len(), 3);
+        assert_eq!(out[0], "bash");
+    }
+
+    #[test]
+    fn extract_opengrep_target_finds_value() {
+        let cmd = vec![
+            "opengrep-scan".to_string(),
+            "--jobs".to_string(),
+            "4".to_string(),
+            "--target".to_string(),
+            "/some/path".to_string(),
+            "--output".to_string(),
+            "/o/r.json".to_string(),
+        ];
+        assert_eq!(extract_opengrep_target(&cmd), Some("/some/path"));
+    }
+
+    #[test]
+    fn extract_opengrep_target_returns_none_when_missing() {
+        let cmd = vec!["opengrep-scan".to_string(), "--jobs".to_string(), "4".to_string()];
+        assert_eq!(extract_opengrep_target(&cmd), None);
+    }
+
+    #[test]
+    fn measured_dir_size_capped_returns_early_on_cap_exceed() {
+        let temp = tempfile::tempdir().expect("temp");
+        let dir = temp.path();
+        // Two 4 KiB files = 8 KiB total; cap at 1 KiB → must early-return >1 KiB.
+        fs::write(dir.join("a.bin"), vec![0u8; 4096]).expect("a");
+        fs::write(dir.join("b.bin"), vec![0u8; 4096]).expect("b");
+
+        let measured = measured_dir_size_capped(dir, 1024);
+        assert!(measured > 1024, "must return a value exceeding the cap");
     }
 }

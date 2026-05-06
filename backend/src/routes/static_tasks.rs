@@ -4066,6 +4066,11 @@ fn build_opengrep_a3s_box_runner_spec(
         network_disabled: false,
         stdout_limit_bytes: config.a3s_box_stdout_limit_bytes,
         stderr_limit_bytes: config.a3s_box_stderr_limit_bytes,
+        localize_max_source_bytes: Some(
+            config
+                .argus_a3s_localize_limit_mb
+                .saturating_mul(1024 * 1024),
+        ),
     }
 }
 

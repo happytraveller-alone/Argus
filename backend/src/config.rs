@@ -59,6 +59,16 @@ pub struct AppConfig {
     pub opengrep_runner_cpu_limit: f64,
     pub opengrep_runner_cpu_limit_explicit: bool,
     pub opengrep_runner_pids_limit: u64,
+    /// Source-directory size limit (MiB) above which the a3s-box opengrep
+    /// runner skips localization (the copy of workspace source into the
+    /// box-local tmpfs `/tmp/argus-a3s-opengrep-{box_name}`) and runs
+    /// opengrep directly against the virtiofs-mounted host workspace.
+    ///
+    /// Without this gate, FFMPEG-scale projects (~86 MiB source) hit OOM in
+    /// the 2 GiB box because the tmpfs copy contests with opengrep's
+    /// `--max-memory 2048`. Set to `0` to fully disable localization.
+    /// Env: `ARGUS_A3S_LOCALIZE_LIMIT_MB`, default 50 MiB.
+    pub argus_a3s_localize_limit_mb: u64,
     pub cubesandbox_enabled: bool,
     pub cubesandbox_api_base_url: String,
     pub cubesandbox_data_plane_base_url: String,
@@ -233,6 +243,7 @@ impl AppConfig {
                 .unwrap_or(0.0),
             opengrep_runner_cpu_limit_explicit: opengrep_runner_cpu_limit_env.is_some(),
             opengrep_runner_pids_limit: parse_u64_env("OPENGREP_RUNNER_PIDS_LIMIT", 512),
+            argus_a3s_localize_limit_mb: parse_u64_env("ARGUS_A3S_LOCALIZE_LIMIT_MB", 50),
             cubesandbox_enabled: parse_bool_env("CUBESANDBOX_ENABLED", true),
             cubesandbox_api_base_url: env::var("CUBESANDBOX_API_BASE_URL")
                 .unwrap_or_else(|_| "http://127.0.0.1:23000".to_string()),
@@ -358,6 +369,7 @@ impl AppConfig {
             opengrep_runner_cpu_limit: 8.0,
             opengrep_runner_cpu_limit_explicit: true,
             opengrep_runner_pids_limit: 512,
+            argus_a3s_localize_limit_mb: 50,
             cubesandbox_enabled: false,
             cubesandbox_api_base_url: "http://127.0.0.1:23000".to_string(),
             cubesandbox_data_plane_base_url: "https://127.0.0.1:21443".to_string(),

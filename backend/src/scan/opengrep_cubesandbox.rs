@@ -8,7 +8,7 @@ use std::{
 use anyhow::{bail, Context, Result};
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use flate2::{write::GzEncoder, Compression};
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use serde_json::Value;
 use tar::{Builder, Header};
 
@@ -55,16 +55,6 @@ struct CubeSandboxOpengrepRequest {
     image_rule_manifest_paths: Vec<String>,
     jobs: usize,
     max_memory_mb: u64,
-}
-
-#[derive(Deserialize)]
-struct CubeSandboxOpengrepEnvelope {
-    results_b64: String,
-    summary: Value,
-    log_b64: String,
-    stdout_b64: String,
-    stderr_b64: String,
-    exit_code: i32,
 }
 
 #[derive(Clone)]
@@ -240,40 +230,113 @@ impl OpengrepSandboxSession {
         let output = client.run_command(sandbox, &script).await?;
         tracing::info!(task_id = %self.task_id, stage = "command_done", elapsed_ms = self.t0.elapsed().as_millis() as u64);
 
-        let envelope_path = output
-            .stdout
-            .lines()
-            .rev()
-            .find_map(|line| line.strip_prefix("ARGUS_OPENGREP_RESULT_PATH="))
-            .map(str::trim)
-            .filter(|s| !s.is_empty())
-            .map(str::to_string);
-        let envelope_bytes = match envelope_path {
-            Some(path) => {
-                let bytes = client
-                    .read_file(sandbox, &path)
-                    .await
-                    .with_context(|| format!("reading opengrep envelope from {path}"))?;
-                tracing::info!(
-                    task_id = %self.task_id,
-                    stage = "envelope_fetched",
-                    elapsed_ms = self.t0.elapsed().as_millis() as u64,
-                    envelope_bytes = bytes.len() as u64,
-                );
-                bytes
-            }
-            None => {
-                bail!(
-                    "CubeSandbox Opengrep output missing result path marker (exit={:?}) stdout={} stderr={}",
+        let markers = extract_opengrep_markers(&output.stdout);
+        if !markers.scan_done {
+            bail!(
+                "CubeSandbox Opengrep output missing SCAN_DONE marker (exit={:?}) stdout={} stderr={}",
+                output.exit_code,
+                truncate_for_error(&output.stdout),
+                truncate_for_error(&output.stderr)
+            );
+        }
+
+        // Required: results, summary. Optional (best-effort): log, stdout, stderr.
+        let results_path = markers
+            .get("RESULTS")
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "CubeSandbox Opengrep output missing RESULTS_PATH marker (exit={:?}) stdout={} stderr={}",
                     output.exit_code,
                     truncate_for_error(&output.stdout),
                     truncate_for_error(&output.stderr)
-                );
-            }
+                )
+            })?;
+        let summary_path = markers
+            .get("SUMMARY")
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "CubeSandbox Opengrep output missing SUMMARY_PATH marker (exit={:?}) stdout={} stderr={}",
+                    output.exit_code,
+                    truncate_for_error(&output.stdout),
+                    truncate_for_error(&output.stderr)
+                )
+            })?;
+
+        let results_bytes = client
+            .read_file(sandbox, results_path)
+            .await
+            .with_context(|| format!("reading opengrep results from {results_path}"))?;
+        let summary_bytes = client
+            .read_file(sandbox, summary_path)
+            .await
+            .with_context(|| format!("reading opengrep summary from {summary_path}"))?;
+        let log_bytes = match markers.get("LOG") {
+            Some(p) => client
+                .read_file(sandbox, p)
+                .await
+                .unwrap_or_else(|err| {
+                    tracing::warn!(error = %err, path = %p, "opengrep log read failed; continuing");
+                    Vec::new()
+                }),
+            None => Vec::new(),
         };
-        let mut result = parse_opengrep_envelope_bytes(&envelope_bytes)?;
-        result.sandbox_id = sandbox.sandbox_id.clone();
-        Ok(result)
+        let stdout_bytes = match markers.get("STDOUT") {
+            Some(p) => client
+                .read_file(sandbox, p)
+                .await
+                .unwrap_or_else(|err| {
+                    tracing::warn!(error = %err, path = %p, "opengrep stdout read failed; continuing");
+                    Vec::new()
+                }),
+            None => Vec::new(),
+        };
+        let stderr_bytes = match markers.get("STDERR") {
+            Some(p) => client
+                .read_file(sandbox, p)
+                .await
+                .unwrap_or_else(|err| {
+                    tracing::warn!(error = %err, path = %p, "opengrep stderr read failed; continuing");
+                    Vec::new()
+                }),
+            None => Vec::new(),
+        };
+
+        tracing::info!(
+            task_id = %self.task_id,
+            stage = "outputs_fetched",
+            elapsed_ms = self.t0.elapsed().as_millis() as u64,
+            results_bytes = results_bytes.len() as u64,
+            summary_bytes = summary_bytes.len() as u64,
+            log_bytes = log_bytes.len() as u64,
+            stdout_bytes = stdout_bytes.len() as u64,
+            stderr_bytes = stderr_bytes.len() as u64,
+        );
+
+        // results.json + summary.json must be valid UTF-8 (they are JSON we author).
+        let results_text = String::from_utf8(results_bytes)
+            .context("opengrep results.json was not valid UTF-8")?;
+        let summary_json: Value = serde_json::from_slice(&summary_bytes)
+            .context("decoding opengrep summary.json")?;
+        // Log/stdout/stderr can contain user-content; tolerate non-UTF-8 bytes.
+        let log_text = String::from_utf8_lossy(&log_bytes).into_owned();
+        let stdout_text = String::from_utf8_lossy(&stdout_bytes).into_owned();
+        let stderr_text = String::from_utf8_lossy(&stderr_bytes).into_owned();
+
+        let scan_exit_code = markers
+            .exit_code
+            .or_else(|| summary_json.get("exit_code").and_then(|v| v.as_i64()).and_then(|n| i32::try_from(n).ok()))
+            .unwrap_or(output.exit_code.unwrap_or(0));
+
+        Ok(CubeSandboxOpengrepOutput {
+            results_text,
+            summary_json,
+            log_text,
+            stdout_text,
+            stderr_text,
+            scan_exit_code,
+            sandbox_id: sandbox.sandbox_id.clone(),
+            cleanup_completed: false,
+        })
     }
 
     pub fn sandbox_id(&self) -> &str {
@@ -690,26 +753,49 @@ fn build_opengrep_runner_script(payload: &CubeSandboxOpengrepRequest) -> Result<
     ))
 }
 
-fn parse_opengrep_envelope_bytes(bytes: &[u8]) -> Result<CubeSandboxOpengrepOutput> {
-    let parsed: CubeSandboxOpengrepEnvelope =
-        serde_json::from_slice(bytes).context("decoding opengrep envelope JSON")?;
-    Ok(CubeSandboxOpengrepOutput {
-        results_text: decode_text(&parsed.results_b64, "opengrep results")?,
-        summary_json: parsed.summary,
-        log_text: decode_text(&parsed.log_b64, "opengrep log")?,
-        stdout_text: decode_text(&parsed.stdout_b64, "opengrep stdout")?,
-        stderr_text: decode_text(&parsed.stderr_b64, "opengrep stderr")?,
-        scan_exit_code: parsed.exit_code,
-        sandbox_id: String::new(),
-        cleanup_completed: false,
-    })
+/// Markers emitted by the in-sandbox Python wrapper. Each `*_PATH` line gives
+/// a sandbox-side absolute path that the Rust client can fetch via
+/// `client.read_file`. `EXIT_CODE` carries opengrep-scan's exit code (Python
+/// emits this even on internal timeouts so the result envelope is always
+/// well-defined). `SCAN_DONE=1` is the completion sentinel — its absence means
+/// the wrapper script crashed mid-flight (e.g. OOM-kill) and outputs are not
+/// trustworthy.
+#[derive(Debug, Default, PartialEq, Eq)]
+struct OpengrepMarkers {
+    paths: HashMap<String, String>,
+    exit_code: Option<i32>,
+    scan_done: bool,
 }
 
-fn decode_text(value: &str, label: &str) -> Result<String> {
-    let bytes = STANDARD
-        .decode(value)
-        .with_context(|| format!("invalid {label} base64"))?;
-    String::from_utf8(bytes).with_context(|| format!("invalid {label} utf8"))
+impl OpengrepMarkers {
+    fn get(&self, key: &str) -> Option<&str> {
+        self.paths.get(key).map(String::as_str)
+    }
+}
+
+fn extract_opengrep_markers(stdout: &str) -> OpengrepMarkers {
+    let mut markers = OpengrepMarkers::default();
+    for line in stdout.lines() {
+        let line = line.trim();
+        let Some(rest) = line.strip_prefix("ARGUS_OPENGREP_") else {
+            continue;
+        };
+        if let Some(value) = rest.strip_prefix("SCAN_DONE=") {
+            if value.trim() == "1" {
+                markers.scan_done = true;
+            }
+        } else if let Some(value) = rest.strip_prefix("EXIT_CODE=") {
+            if let Ok(code) = value.trim().parse::<i32>() {
+                markers.exit_code = Some(code);
+            }
+        } else if let Some((key, value)) = rest.split_once("_PATH=") {
+            let value = value.trim();
+            if !value.is_empty() {
+                markers.paths.insert(key.to_string(), value.to_string());
+            }
+        }
+    }
+    markers
 }
 
 fn truncate_for_error(value: &str) -> String {
@@ -789,8 +875,8 @@ output_dir.mkdir(parents=True, exist_ok=True)
 results = output_dir / "results.json"
 summary = output_dir / "summary.json"
 log = output_dir / "opengrep.log"
-stdout = output_dir / "opengrep.stdout"
-stderr = output_dir / "opengrep.stderr"
+stdout_path = output_dir / "opengrep.stdout"
+stderr_path = output_dir / "opengrep.stderr"
 
 cmd = [
     "opengrep-scan",
@@ -811,17 +897,40 @@ if workspace_rules.exists() and (any(workspace_rules.rglob("*.yml")) or any(work
     cmd.extend(["--config", str(workspace_rules)])
 run_env = os.environ.copy()
 run_env.update({"LANG": "C.UTF-8", "LC_ALL": "C.UTF-8", "PYTHONUTF8": "1"})
-proc = subprocess.run(cmd, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=900, env=run_env)
+# First-principles memory fix: opengrep-scan output is redirected directly to
+# files on the sandbox writable layer. Python never holds stdout/stderr in
+# RAM (no subprocess.PIPE buffering), and we never read result/log files back
+# into memory or base64-encode them. The Rust side downloads each file
+# individually via the envd /files API. This bounds peak Python memory to a
+# few MB regardless of scan output size, eliminating the OOM that killed
+# FFMPEG-scale scans before they could emit completion markers.
+returncode = -1
+timed_out = False
+try:
+    with stdout_path.open("wb") as _so, stderr_path.open("wb") as _se:
+        proc = subprocess.run(cmd, stdout=_so, stderr=_se, timeout=900, env=run_env)
+    returncode = proc.returncode
+except subprocess.TimeoutExpired as exc:
+    timed_out = True
+    returncode = -1
+    # Best-effort note in stderr file so the Rust side can surface a useful error.
+    try:
+        with stderr_path.open("ab") as _se:
+            _se.write(f"\nopengrep-scan exceeded internal timeout of {exc.timeout}s; killed by wrapper\n".encode("utf-8"))
+    except Exception:
+        pass
 _t["opengrep_done"] = time.perf_counter()
 print(f"STAGE_TIMING opengrep_done={_t['opengrep_done']-_t['extract_done']:.3f}s", file=sys.stderr)
-stdout.write_text(proc.stdout or "", encoding="utf-8")
-stderr.write_text(proc.stderr or "", encoding="utf-8")
 if not summary.exists():
     summary.write_text(
         json.dumps(
             {
-                "status": "scan_completed" if proc.returncode in (0, 1) else "scan_failed",
-                "reason": "" if proc.returncode in (0, 1) else f"opengrep-scan exited {proc.returncode}",
+                "status": "scan_completed" if (not timed_out and returncode in (0, 1)) else "scan_failed",
+                "reason": ""
+                    if (not timed_out and returncode in (0, 1))
+                    else (f"opengrep-scan timed out after wrapper internal timeout"
+                          if timed_out
+                          else f"opengrep-scan exited {returncode}"),
                 "results_path": str(results),
                 "log_path": str(log),
             },
@@ -829,48 +938,43 @@ if not summary.exists():
         ) + "\n",
         encoding="utf-8",
     )
-if not results.exists() and proc.returncode in (0, 1):
+if not results.exists() and not timed_out and returncode in (0, 1):
     results.write_text('{"results":[]}\n', encoding="utf-8")
 summary_payload = json.loads(summary.read_text(encoding="utf-8"))
-summary_payload["exit_code"] = proc.returncode
-if proc.returncode not in (0, 1) and not summary_payload.get("reason"):
-    summary_payload["reason"] = f"opengrep-scan exited {proc.returncode}"
+summary_payload["exit_code"] = returncode
+if timed_out and not summary_payload.get("reason"):
+    summary_payload["reason"] = "opengrep-scan timed out after wrapper internal timeout"
+elif (not timed_out) and returncode not in (0, 1) and not summary_payload.get("reason"):
+    summary_payload["reason"] = f"opengrep-scan exited {returncode}"
 summary_payload["argus_oci_debug"] = {
     "manifest_count": len(manifest_entries),
     "baked_rules": bool(_use_baked),
     "workspace_rules": str(workspace_rules),
     "workspace_rules_exists": workspace_rules.exists(),
     "command": cmd,
+    "timed_out": bool(timed_out),
 }
-
-def b64_text(path):
-    if not path.exists():
-        return ""
-    return base64.b64encode(path.read_bytes()).decode("ascii")
-
-envelope = {
-    "results_b64": b64_text(results),
-    "summary": summary_payload,
-    "log_b64": b64_text(log),
-    "stdout_b64": b64_text(stdout),
-    "stderr_b64": b64_text(stderr),
-    "exit_code": proc.returncode,
-}
-# A4-lite continued: write envelope to a sandbox-side file and emit only the
-# path marker on stdout. The Rust client downloads the file via envd /files
-# GET, sidestepping the stdout/stderr length cap that truncates large scans.
-result_path = "/tmp/argus-opengrep-result.json"
-pathlib.Path(result_path).write_text(
-    json.dumps(envelope, separators=(",", ":")),
+# Persist the augmented summary back to disk so the Rust side reads the
+# canonical version (with exit_code and argus_oci_debug merged in).
+summary.write_text(
+    json.dumps(summary_payload, separators=(",", ":")) + "\n",
     encoding="utf-8",
 )
-print("ARGUS_OPENGREP_RESULT_PATH=" + result_path)
+# Emit per-file path markers and a completion sentinel. The Rust client
+# downloads each file via the envd /files API. SCAN_DONE=1 must come last so
+# its presence implies all earlier markers and on-disk files are intact.
+print(f"ARGUS_OPENGREP_RESULTS_PATH={results}")
+print(f"ARGUS_OPENGREP_SUMMARY_PATH={summary}")
+print(f"ARGUS_OPENGREP_LOG_PATH={log}")
+print(f"ARGUS_OPENGREP_STDOUT_PATH={stdout_path}")
+print(f"ARGUS_OPENGREP_STDERR_PATH={stderr_path}")
+print(f"ARGUS_OPENGREP_EXIT_CODE={returncode}")
+print("ARGUS_OPENGREP_SCAN_DONE=1")
 "#;
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
 
     #[test]
     fn opengrep_cubesandbox_uses_dedicated_template_kind() {
@@ -890,8 +994,19 @@ mod tests {
         assert!(script.contains("python3 - \"$_ARGUS_PAYLOAD\" <<'PY'"));
         assert!(script.contains("--manifest"));
         assert!(script.contains("\"PYTHONUTF8\": \"1\""));
-        assert!(script.contains("summary_payload[\"reason\"]"));
-        assert!(script.contains("ARGUS_OPENGREP_RESULT_PATH="));
+        // New per-file markers + completion sentinel must all be present.
+        assert!(script.contains("ARGUS_OPENGREP_RESULTS_PATH="));
+        assert!(script.contains("ARGUS_OPENGREP_SUMMARY_PATH="));
+        assert!(script.contains("ARGUS_OPENGREP_LOG_PATH="));
+        assert!(script.contains("ARGUS_OPENGREP_STDOUT_PATH="));
+        assert!(script.contains("ARGUS_OPENGREP_STDERR_PATH="));
+        assert!(script.contains("ARGUS_OPENGREP_EXIT_CODE="));
+        assert!(script.contains("ARGUS_OPENGREP_SCAN_DONE=1"));
+        // No b64 envelope anywhere — guard against regressions.
+        assert!(!script.contains("results_b64"));
+        assert!(!script.contains("envelope"));
+        // TimeoutExpired path must keep the wrapper alive so markers still emit.
+        assert!(script.contains("TimeoutExpired"));
         assert!(script.ends_with("exit $_ARGUS_RC\n"));
     }
 
@@ -933,21 +1048,77 @@ mod tests {
     }
 
     #[test]
-    fn parse_opengrep_envelope_bytes_reads_result() {
-        let envelope = json!({
-            "results_b64": STANDARD.encode("{\"results\":[]}\n"),
-            "summary": {"status": "scan_completed", "exit_code": 0},
-            "log_b64": STANDARD.encode("log\n"),
-            "stdout_b64": STANDARD.encode("stdout\n"),
-            "stderr_b64": STANDARD.encode("stderr\n"),
-            "exit_code": 0,
-        });
-        let bytes = serde_json::to_vec(&envelope).expect("envelope serializes");
+    fn extract_opengrep_markers_parses_complete_manifest() {
+        let stdout = "noise before\n\
+             ARGUS_OPENGREP_RESULTS_PATH=/tmp/argus-opengrep-work/output/results.json\n\
+             ARGUS_OPENGREP_SUMMARY_PATH=/tmp/argus-opengrep-work/output/summary.json\n\
+             ARGUS_OPENGREP_LOG_PATH=/tmp/argus-opengrep-work/output/opengrep.log\n\
+             ARGUS_OPENGREP_STDOUT_PATH=/tmp/argus-opengrep-work/output/opengrep.stdout\n\
+             ARGUS_OPENGREP_STDERR_PATH=/tmp/argus-opengrep-work/output/opengrep.stderr\n\
+             ARGUS_OPENGREP_EXIT_CODE=0\n\
+             ARGUS_OPENGREP_SCAN_DONE=1\n";
 
-        let parsed = parse_opengrep_envelope_bytes(&bytes).expect("envelope bytes should parse");
-        assert_eq!(parsed.results_text, "{\"results\":[]}\n");
-        assert_eq!(parsed.log_text, "log\n");
-        assert_eq!(parsed.scan_exit_code, 0);
+        let m = extract_opengrep_markers(stdout);
+
+        assert!(m.scan_done);
+        assert_eq!(m.exit_code, Some(0));
+        assert_eq!(
+            m.get("RESULTS"),
+            Some("/tmp/argus-opengrep-work/output/results.json")
+        );
+        assert_eq!(
+            m.get("SUMMARY"),
+            Some("/tmp/argus-opengrep-work/output/summary.json")
+        );
+        assert_eq!(
+            m.get("LOG"),
+            Some("/tmp/argus-opengrep-work/output/opengrep.log")
+        );
+        assert_eq!(
+            m.get("STDOUT"),
+            Some("/tmp/argus-opengrep-work/output/opengrep.stdout")
+        );
+        assert_eq!(
+            m.get("STDERR"),
+            Some("/tmp/argus-opengrep-work/output/opengrep.stderr")
+        );
+    }
+
+    #[test]
+    fn extract_opengrep_markers_missing_scan_done_means_incomplete() {
+        let stdout = "ARGUS_OPENGREP_RESULTS_PATH=/tmp/r.json\n\
+             ARGUS_OPENGREP_SUMMARY_PATH=/tmp/s.json\n";
+
+        let m = extract_opengrep_markers(stdout);
+
+        assert!(!m.scan_done);
+        assert!(m.exit_code.is_none());
+        assert_eq!(m.get("RESULTS"), Some("/tmp/r.json"));
+    }
+
+    #[test]
+    fn extract_opengrep_markers_ignores_unrelated_output() {
+        let stdout = "STAGE_TIMING extract_done=0.05s\n\
+             some other line\n\
+             ARGUS_OPENGREP_SCAN_DONE=1\n";
+
+        let m = extract_opengrep_markers(stdout);
+
+        assert!(m.scan_done);
+        assert!(m.paths.is_empty());
+    }
+
+    #[test]
+    fn extract_opengrep_markers_skips_empty_path_values() {
+        let stdout = "ARGUS_OPENGREP_RESULTS_PATH=\n\
+             ARGUS_OPENGREP_SUMMARY_PATH=/tmp/s.json\n\
+             ARGUS_OPENGREP_SCAN_DONE=1\n";
+
+        let m = extract_opengrep_markers(stdout);
+
+        assert!(m.scan_done);
+        assert_eq!(m.get("RESULTS"), None);
+        assert_eq!(m.get("SUMMARY"), Some("/tmp/s.json"));
     }
 
     #[test]
