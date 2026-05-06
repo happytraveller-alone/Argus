@@ -3713,9 +3713,12 @@ async fn run_opengrep_scan_inner(
     update_scan_progress(state, task_id, 75.0, "parsing", "parsing scan results").await;
 
     let results_path = workspace_dir.join(&output_rel_path);
-    let json_text = read_opengrep_results_text(&results_path)
-        .await
-        .map_err(|error| format!("opengrep results unavailable: {error}"))?;
+    let json_text = read_opengrep_results_text(
+        &results_path,
+        state.config.opengrep_results_json_limit_bytes,
+    )
+    .await
+    .map_err(|error| format!("opengrep results unavailable: {error}"))?;
     if !opengrep::scan_output_has_results_array(&json_text) {
         let _ = tokio::fs::remove_dir_all(&workspace_dir).await;
         return Err("opengrep output missing results array".into());
@@ -3817,12 +3820,36 @@ async fn run_opengrep_scan_inner(
     Ok(())
 }
 
-async fn read_opengrep_results_text(results_path: &std::path::Path) -> Result<String, String> {
-    tokio::fs::read_to_string(results_path)
+async fn read_opengrep_results_text(
+    results_path: &std::path::Path,
+    limit_bytes: usize,
+) -> Result<String, String> {
+    let metadata = tokio::fs::metadata(results_path)
         .await
-        .map_err(|results_error| {
-            format!("missing opengrep results output: results_error={results_error}")
-        })
+        .map_err(|e| format!("missing opengrep results output: stat results.json: {e}"))?;
+    let file_size = metadata.len();
+    if file_size > limit_bytes as u64 {
+        return Err(format!(
+            "results.json size {file_size} bytes exceeds \
+             OPENGREP_RESULTS_JSON_LIMIT_BYTES={limit_bytes}; \
+             scan likely produced too many findings or rule output was too verbose. \
+             Increase the limit or refine the rule set."
+        ));
+    }
+    let mut file = tokio::fs::File::open(results_path)
+        .await
+        .map_err(|e| format!("open results.json: {e}"))?;
+    use tokio::io::AsyncReadExt;
+    // Pre-allocate up to known size to avoid repeated grow.
+    let cap = (file_size as usize).min(limit_bytes);
+    let mut bytes = Vec::with_capacity(cap.min(64 * 1024));
+    (&mut file)
+        .take(limit_bytes as u64)
+        .read_to_end(&mut bytes)
+        .await
+        .map_err(|e| format!("read results.json: {e}"))?;
+    String::from_utf8(bytes)
+        .map_err(|e| format!("results.json is not valid UTF-8: {e}"))
 }
 
 fn prune_static_scan_test_and_fuzz_paths(
@@ -3936,6 +3963,8 @@ fn build_opengrep_a3s_box_runner_spec(
         cpu_limit: Some(resources.cpu_limit),
         pids_limit: Some(config.opengrep_runner_pids_limit),
         network_disabled: false,
+        stdout_limit_bytes: config.a3s_box_stdout_limit_bytes,
+        stderr_limit_bytes: config.a3s_box_stderr_limit_bytes,
     }
 }
 
@@ -6538,7 +6567,7 @@ rules:
         let temp_dir = tempfile::tempdir().expect("temp dir");
         let missing_path = temp_dir.path().join("missing-results.json");
 
-        let error = read_opengrep_results_text(&missing_path)
+        let error = read_opengrep_results_text(&missing_path, 1024 * 1024)
             .await
             .expect_err("missing results should error");
 
@@ -6553,11 +6582,29 @@ rules:
             .await
             .expect("write results");
 
-        let text = read_opengrep_results_text(&results_path)
+        let text = read_opengrep_results_text(&results_path, 1024 * 1024)
             .await
             .expect("results file should be read");
 
         assert!(text.contains("\"check_id\":\"demo\""), "{text}");
+    }
+
+    #[tokio::test]
+    async fn read_opengrep_results_text_rejects_oversize() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let results_path = temp_dir.path().join("results.json");
+        tokio::fs::write(&results_path, vec![0u8; 1024])
+            .await
+            .expect("write oversize file");
+
+        let error = read_opengrep_results_text(&results_path, 512)
+            .await
+            .expect_err("oversize file should error");
+
+        assert!(
+            error.contains("exceeds OPENGREP_RESULTS_JSON_LIMIT_BYTES"),
+            "{error}"
+        );
     }
 
     #[tokio::test]

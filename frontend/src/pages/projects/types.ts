@@ -57,6 +57,9 @@ export interface ProjectsPaginationViewModel {
 	currentPage: number;
 	totalPages: number;
 	totalCount: number;
+	totalProjectCount: number;
+	pageSize: number;
+	currentPageItemCount: number;
 	items: Array<number | "ellipsis">;
 }
 

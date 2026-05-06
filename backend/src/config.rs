@@ -113,6 +113,24 @@ pub struct AppConfig {
     /// Kill switch: when true, a3s-box standby pool is fully bypassed.
     /// Env: A3S_BOX_STANDBY_POOL_DISABLED, default false.
     pub a3s_box_standby_pool_disabled: bool,
+    /// Maximum bytes captured from a3s-box subprocess stdout before truncation.
+    /// Env: A3S_BOX_STDOUT_LIMIT_BYTES, default 1 MiB.
+    ///
+    /// Increase if you observe `[a3s-box output truncated]` warnings in logs
+    /// and need full output for debugging.
+    pub a3s_box_stdout_limit_bytes: usize,
+    /// Maximum bytes captured from a3s-box subprocess stderr before truncation.
+    /// Env: A3S_BOX_STDERR_LIMIT_BYTES, default 1 MiB.
+    ///
+    /// Increase if you observe `[a3s-box output truncated]` warnings in logs
+    /// and need full output for debugging.
+    pub a3s_box_stderr_limit_bytes: usize,
+    /// Hard cap on the host-side read of the per-task `results.json` produced by opengrep.
+    /// results.json can be large for projects with many findings; default 256 MiB is generous
+    /// but bounded. Increase if you observe `[results.json exceeded limit]` errors and need
+    /// full output.
+    /// Env: OPENGREP_RESULTS_JSON_LIMIT_BYTES, default 256 MiB.
+    pub opengrep_results_json_limit_bytes: usize,
 }
 
 impl AppConfig {
@@ -262,6 +280,18 @@ impl AppConfig {
             cubemaster_capacity: parse_usize_env("CUBEMASTER_CAPACITY", 4),
             a3s_box_standby_pool_size: parse_usize_env("A3S_BOX_STANDBY_POOL_SIZE", 2),
             a3s_box_standby_pool_disabled: parse_bool_env("A3S_BOX_STANDBY_POOL_DISABLED", false),
+            a3s_box_stdout_limit_bytes: parse_usize_env(
+                "A3S_BOX_STDOUT_LIMIT_BYTES",
+                1_048_576,
+            ),
+            a3s_box_stderr_limit_bytes: parse_usize_env(
+                "A3S_BOX_STDERR_LIMIT_BYTES",
+                1_048_576,
+            ),
+            opengrep_results_json_limit_bytes: parse_usize_env(
+                "OPENGREP_RESULTS_JSON_LIMIT_BYTES",
+                268_435_456,
+            ),
         })
     }
 
@@ -352,6 +382,9 @@ impl AppConfig {
             cubemaster_capacity: 4,
             a3s_box_standby_pool_size: 0,
             a3s_box_standby_pool_disabled: true,
+            a3s_box_stdout_limit_bytes: 1_048_576,
+            a3s_box_stderr_limit_bytes: 1_048_576,
+            opengrep_results_json_limit_bytes: 268_435_456,
         }
     }
 }

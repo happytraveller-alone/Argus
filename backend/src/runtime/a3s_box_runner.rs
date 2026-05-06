@@ -14,6 +14,9 @@ use std::{
 use uuid::Uuid;
 
 const MAX_RETAINED_LOG_CHARS: usize = 12_000;
+/// Byte cap for stdout/stderr of management commands (image-inspect, rm, save, load, info).
+/// These produce small outputs; 1 MiB is generous while still bounding heap.
+const MGMT_CMD_OUTPUT_LIMIT_BYTES: usize = 1_048_576;
 const SCANNER_MOUNT_PATH: &str = "/scan";
 const DEFAULT_A3S_BOX_BIN: &str = "a3s-box";
 const DEFAULT_A3S_BOX_TIMEOUT_SECONDS: u64 = 900;
@@ -43,6 +46,44 @@ pub struct A3sBoxRunnerSpec {
     pub pids_limit: Option<u64>,
     #[serde(default)]
     pub network_disabled: bool,
+    /// Maximum bytes captured from a3s-box subprocess stdout.
+    /// Defaults to 1 MiB. Excess output is replaced by a sentinel suffix.
+    #[serde(default = "default_a3s_box_stdout_limit_bytes")]
+    pub stdout_limit_bytes: usize,
+    /// Maximum bytes captured from a3s-box subprocess stderr.
+    /// Defaults to 1 MiB. Excess output is replaced by a sentinel suffix.
+    #[serde(default = "default_a3s_box_stderr_limit_bytes")]
+    pub stderr_limit_bytes: usize,
+}
+
+fn default_a3s_box_stdout_limit_bytes() -> usize {
+    1_048_576
+}
+
+fn default_a3s_box_stderr_limit_bytes() -> usize {
+    1_048_576
+}
+
+impl Default for A3sBoxRunnerSpec {
+    fn default() -> Self {
+        Self {
+            scanner_type: String::new(),
+            image: String::new(),
+            workspace_dir: String::new(),
+            command: Vec::new(),
+            timeout_seconds: 0,
+            env: BTreeMap::new(),
+            expected_exit_codes: default_expected_exit_codes(),
+            capture_stdout_path: None,
+            capture_stderr_path: None,
+            memory_limit_mb: None,
+            cpu_limit: None,
+            pids_limit: None,
+            network_disabled: false,
+            stdout_limit_bytes: default_a3s_box_stdout_limit_bytes(),
+            stderr_limit_bytes: default_a3s_box_stderr_limit_bytes(),
+        }
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -174,10 +215,37 @@ fn format_cpu_limit(limit: f64) -> String {
     limit.ceil().to_string()
 }
 
+/// Read at most `limit` bytes from `reader` into a newly allocated `Vec<u8>`.
+/// If the stream contains more than `limit` bytes a sentinel suffix is appended
+/// so the truncation is visible in debug logs.
+fn read_limited(mut reader: impl std::io::Read, limit: usize) -> std::io::Result<Vec<u8>> {
+    let cap = limit.min(64 * 1024);
+    let mut bytes = Vec::with_capacity(cap);
+    reader.by_ref().take(limit as u64).read_to_end(&mut bytes)?;
+    if bytes.len() == limit {
+        // Attempt to detect whether the stream had more data by reading one
+        // additional byte.  If we get one the output was indeed truncated.
+        let mut probe = [0u8; 1];
+        if reader.read(&mut probe).unwrap_or(0) > 0 {
+            let sentinel = format!("...[a3s-box output truncated to {limit} bytes]");
+            bytes.extend_from_slice(sentinel.as_bytes());
+        }
+    }
+    Ok(bytes)
+}
+
+/// Capture stdout and stderr of a subprocess with per-stream byte limits.
+///
+/// # Parameters
+/// - `stdout_limit_bytes`: maximum bytes captured from stdout; excess is
+///   replaced by a sentinel suffix so truncation is visible in logs.
+/// - `stderr_limit_bytes`: same for stderr.
 fn run_command_capture(
     binary: &str,
     args: &[String],
     timeout: Option<Duration>,
+    stdout_limit_bytes: usize,
+    stderr_limit_bytes: usize,
 ) -> Result<CommandCapture> {
     let mut child = Command::new(binary)
         .args(args)
@@ -190,20 +258,10 @@ fn run_command_capture(
     let stderr = child.stderr.take().context("capture a3s-box stderr")?;
 
     let stdout_handle = thread::spawn(move || -> Result<Vec<u8>> {
-        let mut reader = stdout;
-        let mut bytes = Vec::new();
-        reader
-            .read_to_end(&mut bytes)
-            .context("read a3s-box stdout")?;
-        Ok(bytes)
+        read_limited(stdout, stdout_limit_bytes).context("read a3s-box stdout")
     });
     let stderr_handle = thread::spawn(move || -> Result<Vec<u8>> {
-        let mut reader = stderr;
-        let mut bytes = Vec::new();
-        reader
-            .read_to_end(&mut bytes)
-            .context("read a3s-box stderr")?;
-        Ok(bytes)
+        read_limited(stderr, stderr_limit_bytes).context("read a3s-box stderr")
     });
 
     let started_at = Instant::now();
@@ -277,9 +335,15 @@ fn a3s_box_virtualization_error_text(stdout: &str, stderr: &str) -> Option<Strin
 
 fn a3s_box_image_inspect(binary: &str, image: &str) -> Option<CommandCapture> {
     let args = vec!["image-inspect".to_string(), image.to_string()];
-    run_command_capture(binary, &args, Some(Duration::from_secs(30)))
-        .ok()
-        .filter(command_succeeded)
+    run_command_capture(
+        binary,
+        &args,
+        Some(Duration::from_secs(30)),
+        MGMT_CMD_OUTPUT_LIMIT_BYTES,
+        MGMT_CMD_OUTPUT_LIMIT_BYTES,
+    )
+    .ok()
+    .filter(command_succeeded)
 }
 
 fn digest_sha256_hex(digest: &str) -> Option<&str> {
@@ -671,7 +735,14 @@ fn docker_image_id(container_cli: &str, image: &str) -> Option<String> {
         "{{.Id}}".to_string(),
         image.to_string(),
     ];
-    let capture = run_command_capture(container_cli, &args, Some(Duration::from_secs(30))).ok()?;
+    let capture = run_command_capture(
+        container_cli,
+        &args,
+        Some(Duration::from_secs(30)),
+        MGMT_CMD_OUTPUT_LIMIT_BYTES,
+        MGMT_CMD_OUTPUT_LIMIT_BYTES,
+    )
+    .ok()?;
     if !command_succeeded(&capture) {
         return None;
     }
@@ -727,14 +798,19 @@ fn ensure_a3s_box_image_cached(binary: &str, image: &str, meta_dir: &Path) -> Re
             "inspect".to_string(),
             source_image.clone(),
         ];
-        let inspect =
-            run_command_capture(&container_cli, &inspect_args, Some(Duration::from_secs(30)))
-                .unwrap_or(CommandCapture {
-                    timed_out: false,
-                    status_code: Some(1),
-                    stdout: String::new(),
-                    stderr: String::new(),
-                });
+        let inspect = run_command_capture(
+            &container_cli,
+            &inspect_args,
+            Some(Duration::from_secs(30)),
+            MGMT_CMD_OUTPUT_LIMIT_BYTES,
+            MGMT_CMD_OUTPUT_LIMIT_BYTES,
+        )
+        .unwrap_or(CommandCapture {
+            timed_out: false,
+            status_code: Some(1),
+            stdout: String::new(),
+            stderr: String::new(),
+        });
         if !command_succeeded(&inspect) {
             if let Some(legacy_source) = legacy_docker_image_source(image) {
                 let legacy_inspect_args = vec![
@@ -746,6 +822,8 @@ fn ensure_a3s_box_image_cached(binary: &str, image: &str, meta_dir: &Path) -> Re
                     &container_cli,
                     &legacy_inspect_args,
                     Some(Duration::from_secs(30)),
+                    MGMT_CMD_OUTPUT_LIMIT_BYTES,
+                    MGMT_CMD_OUTPUT_LIMIT_BYTES,
                 )
                 .unwrap_or(CommandCapture {
                     timed_out: false,
@@ -765,7 +843,13 @@ fn ensure_a3s_box_image_cached(binary: &str, image: &str, meta_dir: &Path) -> Re
 
     remove_a3s_box_rootfs_cache_for_image(image)?;
     let rmi_args = vec!["rmi".to_string(), image.to_string()];
-    let _ = run_command_capture(binary, &rmi_args, Some(Duration::from_secs(60)));
+    let _ = run_command_capture(
+        binary,
+        &rmi_args,
+        Some(Duration::from_secs(60)),
+        MGMT_CMD_OUTPUT_LIMIT_BYTES,
+        MGMT_CMD_OUTPUT_LIMIT_BYTES,
+    );
 
     if source_image_id.is_none() {
         source_image_id = docker_image_id(&container_cli, &source_image);
@@ -777,14 +861,19 @@ fn ensure_a3s_box_image_cached(binary: &str, image: &str, meta_dir: &Path) -> Re
             "inspect".to_string(),
             source_image.clone(),
         ];
-        let inspect =
-            run_command_capture(&container_cli, &inspect_args, Some(Duration::from_secs(30)))
-                .unwrap_or(CommandCapture {
-                    timed_out: false,
-                    status_code: Some(1),
-                    stdout: String::new(),
-                    stderr: String::new(),
-                });
+        let inspect = run_command_capture(
+            &container_cli,
+            &inspect_args,
+            Some(Duration::from_secs(30)),
+            MGMT_CMD_OUTPUT_LIMIT_BYTES,
+            MGMT_CMD_OUTPUT_LIMIT_BYTES,
+        )
+        .unwrap_or(CommandCapture {
+            timed_out: false,
+            status_code: Some(1),
+            stdout: String::new(),
+            stderr: String::new(),
+        });
         if !command_succeeded(&inspect) {
             if let Some(legacy_source) = legacy_docker_image_source(image) {
                 let legacy_inspect_args = vec![
@@ -796,6 +885,8 @@ fn ensure_a3s_box_image_cached(binary: &str, image: &str, meta_dir: &Path) -> Re
                     &container_cli,
                     &legacy_inspect_args,
                     Some(Duration::from_secs(30)),
+                    MGMT_CMD_OUTPUT_LIMIT_BYTES,
+                    MGMT_CMD_OUTPUT_LIMIT_BYTES,
                 )
                 .unwrap_or(CommandCapture {
                     timed_out: false,
@@ -821,8 +912,14 @@ fn ensure_a3s_box_image_cached(binary: &str, image: &str, meta_dir: &Path) -> Re
         "-o".to_string(),
         docker_tar_path.display().to_string(),
     ];
-    let save = run_command_capture(&container_cli, &save_args, Some(Duration::from_secs(300)))
-        .with_context(|| format!("save Docker image for a3s-box cache: {image}"))?;
+    let save = run_command_capture(
+        &container_cli,
+        &save_args,
+        Some(Duration::from_secs(300)),
+        MGMT_CMD_OUTPUT_LIMIT_BYTES,
+        MGMT_CMD_OUTPUT_LIMIT_BYTES,
+    )
+    .with_context(|| format!("save Docker image for a3s-box cache: {image}"))?;
     if !command_succeeded(&save) {
         let _ = fs::remove_file(&docker_tar_path);
         bail!(
@@ -841,8 +938,14 @@ fn ensure_a3s_box_image_cached(binary: &str, image: &str, meta_dir: &Path) -> Re
         "-t".to_string(),
         image.to_string(),
     ];
-    let load = run_command_capture(binary, &load_args, Some(Duration::from_secs(300)))
-        .with_context(|| format!("load Docker image into a3s-box cache: {image}"))?;
+    let load = run_command_capture(
+        binary,
+        &load_args,
+        Some(Duration::from_secs(300)),
+        MGMT_CMD_OUTPUT_LIMIT_BYTES,
+        MGMT_CMD_OUTPUT_LIMIT_BYTES,
+    )
+    .with_context(|| format!("load Docker image into a3s-box cache: {image}"))?;
     let _ = fs::remove_file(&oci_tar_path);
     if !command_succeeded(&load) {
         bail!(
@@ -930,6 +1033,8 @@ fn cleanup_box(binary: &str, box_name: Option<&str>) {
             box_name.to_string(),
         ],
         Some(Duration::from_secs(a3s_box_cleanup_timeout())),
+        MGMT_CMD_OUTPUT_LIMIT_BYTES,
+        MGMT_CMD_OUTPUT_LIMIT_BYTES,
     );
 }
 
@@ -943,6 +1048,8 @@ pub fn stop_box_sync(box_name: &str) -> bool {
             box_name.to_string(),
         ],
         Some(Duration::from_secs(a3s_box_cleanup_timeout())),
+        MGMT_CMD_OUTPUT_LIMIT_BYTES,
+        MGMT_CMD_OUTPUT_LIMIT_BYTES,
     );
     matches!(output, Ok(capture) if capture.status_code == Some(0))
 }
@@ -1030,6 +1137,8 @@ pub fn execute(spec: A3sBoxRunnerSpec) -> A3sBoxRunnerResult {
             &binary,
             &["info".to_string()],
             Some(Duration::from_secs(30)),
+            MGMT_CMD_OUTPUT_LIMIT_BYTES,
+            MGMT_CMD_OUTPUT_LIMIT_BYTES,
         )?;
         if !command_succeeded(&info_capture) {
             bail!(
@@ -1043,7 +1152,13 @@ pub fn execute(spec: A3sBoxRunnerSpec) -> A3sBoxRunnerResult {
             bail!("a3s-box virtualization unavailable before run: {error}");
         }
         active_box_name = Some(box_name.clone());
-        let capture = run_command_capture(&binary, &args, timeout)?;
+        let capture = run_command_capture(
+            &binary,
+            &args,
+            timeout,
+            spec.stdout_limit_bytes,
+            spec.stderr_limit_bytes,
+        )?;
         if let Some(error) = a3s_box_virtualization_error_text(&capture.stdout, &capture.stderr) {
             cleanup_box(&binary, active_box_name.as_deref());
             bail!("a3s-box virtualization failed during run: {error}");
@@ -1495,6 +1610,7 @@ esac
             cpu_limit: Some(2.0),
             pids_limit: Some(512),
             network_disabled: false,
+            ..Default::default()
         });
 
         assert!(result.success);
@@ -1555,6 +1671,7 @@ esac
             cpu_limit: None,
             pids_limit: None,
             network_disabled: false,
+            ..Default::default()
         });
 
         assert!(result.success);
@@ -1607,6 +1724,7 @@ esac
             cpu_limit: None,
             pids_limit: None,
             network_disabled: false,
+            ..Default::default()
         });
 
         assert!(result.success, "{:?}", result.error);
@@ -1655,6 +1773,7 @@ esac
             cpu_limit: None,
             pids_limit: None,
             network_disabled: true,
+            ..Default::default()
         });
 
         assert!(!result.success);
@@ -1711,6 +1830,7 @@ esac
             cpu_limit: None,
             pids_limit: None,
             network_disabled: false,
+            ..Default::default()
         });
 
         assert!(!result.success);
@@ -1732,5 +1852,56 @@ esac
         assert_eq!(format_cpu_limit(3.5), "4");
         assert_eq!(format_cpu_limit(2.0), "2");
         assert_eq!(format_cpu_limit(0.0), "1");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn run_command_capture_truncates_stdout_at_limit() {
+        // Emit > 256 bytes to stdout via shell, verify capture <= limit + sentinel length.
+        let limit: usize = 256;
+        let sentinel = format!("...[a3s-box output truncated to {limit} bytes]");
+        let args: Vec<String> = vec![
+            "-c".to_string(),
+            "for i in $(seq 1 1000); do printf 'aaaaaaaaaa'; done".to_string(),
+        ];
+        let result = run_command_capture("sh", &args, None, limit, 1_048_576)
+            .expect("sh should run");
+        // Output must not exceed limit + sentinel length.
+        assert!(
+            result.stdout.len() <= limit + sentinel.len(),
+            "stdout len {} exceeds limit + sentinel {}",
+            result.stdout.len(),
+            limit + sentinel.len()
+        );
+        assert!(
+            result.stdout.ends_with(&sentinel),
+            "stdout should end with truncation sentinel, got: {:?}",
+            &result.stdout[result.stdout.len().saturating_sub(80)..]
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn run_command_capture_truncates_stderr_at_limit() {
+        // Emit > 256 bytes to stderr via shell, verify capture <= limit + sentinel length.
+        let limit: usize = 256;
+        let sentinel = format!("...[a3s-box output truncated to {limit} bytes]");
+        let args: Vec<String> = vec![
+            "-c".to_string(),
+            "for i in $(seq 1 1000); do printf 'bbbbbbbbbb' >&2; done".to_string(),
+        ];
+        let result = run_command_capture("sh", &args, None, 1_048_576, limit)
+            .expect("sh should run");
+        assert!(
+            result.stderr.len() <= limit + sentinel.len(),
+            "stderr len {} exceeds limit + sentinel {}",
+            result.stderr.len(),
+            limit + sentinel.len()
+        );
+        assert!(
+            result.stderr.ends_with(&sentinel),
+            "stderr should end with truncation sentinel, got: {:?}",
+            &result.stderr[result.stderr.len().saturating_sub(80)..]
+        );
     }
 }

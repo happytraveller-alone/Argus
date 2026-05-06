@@ -116,9 +116,11 @@ function getMetricsStatusMessage(metrics?: ProjectManagementMetrics | null) {
 
 interface BuildProjectsPageViewModelParams {
 	loading: boolean;
+	totalProjectCount?: number;
 	filteredProjects: Project[];
 	pagedProjects: Project[];
 	projectPage: number;
+	projectPageSize?: number;
 	totalProjectPages: number;
 	projectDetailFrom: string;
 	searchTerm: string;
@@ -130,14 +132,19 @@ export function buildProjectsPageViewModel(
 ): ProjectsPageViewModel {
 	const {
 		loading,
+		totalProjectCount: inputTotalProjectCount,
 		filteredProjects,
 		pagedProjects,
 		projectPage,
+		projectPageSize: inputProjectPageSize,
 		totalProjectPages,
 		projectDetailFrom,
 		searchTerm,
 		searchPlaceholder,
 	} = params;
+	const totalProjectCount = inputTotalProjectCount ?? filteredProjects.length;
+	const projectPageSize =
+		inputProjectPageSize ?? Math.max(pagedProjects.length, 1);
 
 	return {
 		loading,
@@ -183,6 +190,9 @@ export function buildProjectsPageViewModel(
 			currentPage: projectPage,
 			totalPages: totalProjectPages,
 			totalCount: filteredProjects.length,
+			totalProjectCount,
+			pageSize: projectPageSize,
+			currentPageItemCount: pagedProjects.length,
 			items: buildPaginationItems(projectPage, totalProjectPages),
 		},
 		emptyState: {

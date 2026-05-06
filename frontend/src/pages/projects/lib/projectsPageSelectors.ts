@@ -35,15 +35,27 @@ export function paginateItems<T>(
 	currentPage: number,
 	pageSize: number,
 ) {
-	const start = (currentPage - 1) * pageSize;
-	return items.slice(start, start + pageSize);
+	const safePageSize = Math.max(
+		MIN_PROJECT_PAGE_SIZE,
+		Math.floor(pageSize) || MIN_PROJECT_PAGE_SIZE,
+	);
+	const totalPages = Math.max(1, Math.ceil(items.length / safePageSize));
+	const safeCurrentPage = Math.min(
+		totalPages,
+		Math.max(1, Math.floor(currentPage) || 1),
+	);
+	const start = (safeCurrentPage - 1) * safePageSize;
+	return items.slice(start, start + safePageSize);
 }
 
 export function calculateResponsiveProjectsPageSize(
 	input: ResponsiveProjectsPageSizeInput,
 ) {
 	const containerHeight = Math.max(toFiniteNumber(input.containerHeight), 0);
-	const tableHeaderHeight = Math.max(toFiniteNumber(input.tableHeaderHeight), 0);
+	const tableHeaderHeight = Math.max(
+		toFiniteNumber(input.tableHeaderHeight),
+		0,
+	);
 	const paginationHeight = Math.max(toFiniteNumber(input.paginationHeight), 0);
 	const rowHeight = Math.max(toFiniteNumber(input.rowHeight), 1);
 	const availableRowsHeight = Math.max(

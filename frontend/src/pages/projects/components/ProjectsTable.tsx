@@ -260,11 +260,8 @@ function buildColumns(
         headerContentClassName: HEADER_CONTENT_CLASSNAME,
         cellClassName: `${BODY_CELL_CLASSNAME} ${DIVIDER_CELL_CLASSNAME} text-center`,
       },
-      cell: ({ row, table }) => {
-        const pageRowIndex = table
-          .getRowModel()
-          .rows.findIndex((r) => r.id === row.id);
-        return pageRowIndex + 1;
+      cell: ({ row }) => {
+        return row.original.serialNumber;
       },
     },
     {

@@ -6,6 +6,11 @@ import { SsrRouter } from "./ssrTestRouter.tsx";
 
 globalThis.React = React;
 
+type ProjectsPaginationModule =
+	typeof import("../src/pages/projects/components/ProjectsPagination.tsx");
+type ProjectsTableModule =
+	typeof import("../src/pages/projects/components/ProjectsTable.tsx");
+
 async function importOrFail<TModule = Record<string, unknown>>(
 	relativePath: string,
 ): Promise<TModule> {
@@ -18,17 +23,42 @@ async function importOrFail<TModule = Record<string, unknown>>(
 	}
 }
 
+test("ProjectsPagination renders total count, page number, and current item range", async () => {
+	const paginationModule = await importOrFail<ProjectsPaginationModule>(
+		"../src/pages/projects/components/ProjectsPagination.tsx",
+	);
+
+	const markup = renderToStaticMarkup(
+		createElement(paginationModule.default, {
+			currentPage: 3,
+			totalPages: 4,
+			totalCount: 18,
+			totalProjectCount: 42,
+			pageSize: 5,
+			currentPageItemCount: 5,
+			items: [1, 2, 3, 4],
+			onPageChange: () => {},
+		}),
+	);
+
+	assert.match(markup, /共 42 个项目，筛选出 18 个/);
+	assert.match(markup, /第 3 \/ 4 页，本页显示 11-15 项/);
+	assert.match(markup, /上一页/);
+	assert.match(markup, /下一页/);
+});
+
 test("ProjectsTable renders hover metric popovers without nested trigger frames", async () => {
-	const tableModule = await importOrFail<any>(
+	const tableModule = await importOrFail<ProjectsTableModule>(
 		"../src/pages/projects/components/ProjectsTable.tsx",
 	);
 
 	const markup = renderToStaticMarkup(
 		createElement(SsrRouter, {}, createElement(tableModule.default, {
-			rows: [
-				{
-					id: "p1",
-					name: "Demo Project",
+				rows: [
+					{
+						id: "p1",
+						serialNumber: 101,
+						name: "Demo Project",
 					detailPath: "/projects/p1",
 					detailState: { from: "/projects" },
 					sizeText: "10 文件 / 200 行",
@@ -56,10 +86,11 @@ test("ProjectsTable renders hover metric popovers without nested trigger frames"
 						browseCodeState: { from: "/projects#project-browser" },
 						browseCodeDisabledReason: null,
 					},
-				},
-				{
-					id: "p2",
-					name: "Disabled Project",
+					},
+					{
+						id: "p2",
+						serialNumber: 102,
+						name: "Disabled Project",
 					detailPath: "/projects/p2",
 					detailState: { from: "/projects" },
 					sizeText: "-",
@@ -111,6 +142,8 @@ test("ProjectsTable renders hover metric popovers without nested trigger frames"
 	assert.match(markup, /仅 ZIP 类型项目支持代码浏览/);
 	assert.match(markup, /指标同步中\.\.\./);
 	assert.match(markup, /序号/);
+	assert.match(markup, />101</);
+	assert.match(markup, />102</);
 	assert.doesNotMatch(markup, /全选当前页/);
 	assert.doesNotMatch(markup, /选择项目/);
 	assert.match(markup, /<thead[\s\S]*?<\/thead>/);
@@ -159,16 +192,17 @@ test("ProjectsTable renders hover metric popovers without nested trigger frames"
 });
 
 test("ProjectsTable hides zero-count vulnerability severities and shows empty placeholder", async () => {
-	const tableModule = await importOrFail<any>(
+	const tableModule = await importOrFail<ProjectsTableModule>(
 		"../src/pages/projects/components/ProjectsTable.tsx",
 	);
 
 	const markup = renderToStaticMarkup(
 		createElement(SsrRouter, {}, createElement(tableModule.default, {
-			rows: [
-				{
-					id: "p1",
-					name: "Mixed Risk Project",
+				rows: [
+					{
+						id: "p1",
+						serialNumber: 1,
+						name: "Mixed Risk Project",
 					detailPath: "/projects/p1",
 					detailState: { from: "/projects" },
 					sizeText: "1.00 Mb",
@@ -197,9 +231,10 @@ test("ProjectsTable hides zero-count vulnerability severities and shows empty pl
 						browseCodeDisabledReason: null,
 					},
 				},
-				{
-					id: "p2",
-					name: "Empty Risk Project",
+					{
+						id: "p2",
+						serialNumber: 2,
+						name: "Empty Risk Project",
 					detailPath: "/projects/p2",
 					detailState: { from: "/projects" },
 					sizeText: "2.00 Mb",
@@ -241,16 +276,17 @@ test("ProjectsTable hides zero-count vulnerability severities and shows empty pl
 });
 
 test("ProjectsTable keeps metric popovers but removes the old outer trigger frame", async () => {
-	const tableModule = await importOrFail<any>(
+	const tableModule = await importOrFail<ProjectsTableModule>(
 		"../src/pages/projects/components/ProjectsTable.tsx",
 	);
 
 	const markup = renderToStaticMarkup(
 		createElement(SsrRouter, {}, createElement(tableModule.default, {
-			rows: [
-				{
-					id: "p1",
-					name: "Portal Metrics Project",
+				rows: [
+					{
+						id: "p1",
+						serialNumber: 1,
+						name: "Portal Metrics Project",
 					detailPath: "/projects/p1",
 					detailState: { from: "/projects" },
 					sizeText: "1.00 Mb",

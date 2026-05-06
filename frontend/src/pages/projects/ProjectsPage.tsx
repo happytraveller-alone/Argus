@@ -1,8 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { toast } from "sonner";
 import SilentLoadingState from "@/components/performance/SilentLoadingState";
 import { useI18n } from "@/shared/i18n";
-import { useLocation } from "react-router-dom";
+import CreateProjectDialog from "./components/CreateProjectDialog";
+import EditProjectDialog from "./components/EditProjectDialog";
+import ProjectsEmptyState from "./components/ProjectsEmptyState";
+import ProjectsPagination from "./components/ProjectsPagination";
+import ProjectsTable from "./components/ProjectsTable";
+import ProjectsToolbar from "./components/ProjectsToolbar";
 import {
 	MODULE_SCROLL_DELAY_MS,
 	PROJECT_PAGE_SIZE,
@@ -11,12 +17,14 @@ import {
 	PROJECTS_TABLE_ROW_HEIGHT,
 	SUPPORTED_PROJECT_LANGUAGES,
 } from "./constants";
-import type { ProjectsPageProps } from "./types";
+import {
+	type BatchCreateZipProjectItem,
+	type BatchCreateZipProjectsProgressEvent,
+	createZipProjectsWorkflow,
+} from "./data/projectsPageWorkflows";
 import { useProjectsBrowserState } from "./hooks/useProjectsBrowserState";
 import { useProjectsPageData } from "./hooks/useProjectsPageData";
-import {
-	buildProjectsPageViewModel,
-} from "./lib/buildProjectsPageViewModel";
+import { buildProjectsPageViewModel } from "./lib/buildProjectsPageViewModel";
 import {
 	calculateResponsiveProjectsPageSize,
 	filterProjects,
@@ -24,17 +32,7 @@ import {
 	resolveAnchoredProjectsPage,
 	resolveProjectsFirstVisibleIndex,
 } from "./lib/projectsPageSelectors";
-import ProjectsToolbar from "./components/ProjectsToolbar";
-import ProjectsTable from "./components/ProjectsTable";
-import ProjectsPagination from "./components/ProjectsPagination";
-import ProjectsEmptyState from "./components/ProjectsEmptyState";
-import CreateProjectDialog from "./components/CreateProjectDialog";
-import EditProjectDialog from "./components/EditProjectDialog";
-import {
-	createZipProjectsWorkflow,
-	type BatchCreateZipProjectItem,
-	type BatchCreateZipProjectsProgressEvent,
-} from "./data/projectsPageWorkflows";
+import type { ProjectsPageProps } from "./types";
 
 function scrollToProjectBrowser() {
 	window.setTimeout(() => {
@@ -124,7 +122,9 @@ export default function ProjectsPage({
 	const tableViewportRef = useRef<HTMLDivElement | null>(null);
 	const paginationRef = useRef<HTMLDivElement | null>(null);
 	const [projectPageSize, setProjectPageSize] = useState(PROJECT_PAGE_SIZE);
-	const [deletingProjectId, setDeletingProjectId] = useState<string | null>(null);
+	const [deletingProjectId, setDeletingProjectId] = useState<string | null>(
+		null,
+	);
 	const projectPageSizeRef = useRef(projectPageSize);
 
 	const filteredProjects = useMemo(
@@ -135,18 +135,21 @@ export default function ProjectsPage({
 		1,
 		Math.ceil(filteredProjects.length / projectPageSize),
 	);
+	const currentProjectPage = Math.min(
+		totalProjectPages,
+		Math.max(1, Math.floor(browser.projectPage) || 1),
+	);
 	const pagedProjects = useMemo(
-		() =>
-			paginateItems(filteredProjects, browser.projectPage, projectPageSize),
-		[filteredProjects, browser.projectPage, projectPageSize],
+		() => paginateItems(filteredProjects, currentProjectPage, projectPageSize),
+		[filteredProjects, currentProjectPage, projectPageSize],
 	);
 	const projectDetailFrom = `${location.pathname}${location.search}${location.hash}`;
 
 	useEffect(() => {
-		if (browser.projectPage > totalProjectPages) {
-			browser.setProjectPage(totalProjectPages);
+		if (browser.projectPage !== currentProjectPage) {
+			browser.setProjectPage(currentProjectPage);
 		}
-	}, [browser, totalProjectPages]);
+	}, [browser, currentProjectPage]);
 
 	useEffect(() => {
 		browser.setProjectPage((currentPage) => {
@@ -165,6 +168,9 @@ export default function ProjectsPage({
 	}, [browser, filteredProjects.length, projectPageSize]);
 
 	useEffect(() => {
+		if (pagedProjects.length === 0) {
+			return;
+		}
 		if (typeof ResizeObserver === "undefined" || !tableViewportRef.current) {
 			return;
 		}
@@ -195,7 +201,7 @@ export default function ProjectsPage({
 			window.removeEventListener("resize", updatePageSize);
 			window.visualViewport?.removeEventListener("resize", updatePageSize);
 		};
-	}, [browser.projectPage, filteredProjects.length, totalProjectPages]);
+	}, [pagedProjects.length]);
 
 	useEffect(() => {
 		const hash = window.location.hash;
@@ -209,21 +215,28 @@ export default function ProjectsPage({
 		() =>
 			buildProjectsPageViewModel({
 				loading: data.loading,
+				totalProjectCount: data.projects.length,
 				filteredProjects,
 				pagedProjects,
-				projectPage: browser.projectPage,
+				projectPage: currentProjectPage,
+				projectPageSize,
 				totalProjectPages,
 				projectDetailFrom,
 				searchTerm: browser.searchTerm,
-				searchPlaceholder: t("projects.searchPlaceholder", "按项目名称/描述搜索"),
+				searchPlaceholder: t(
+					"projects.searchPlaceholder",
+					"按项目名称/描述搜索",
+				),
 			}),
 		[
-			browser.projectPage,
 			browser.searchTerm,
+			currentProjectPage,
 			data.loading,
+			data.projects.length,
 			filteredProjects,
 			pagedProjects,
 			projectDetailFrom,
+			projectPageSize,
 			t,
 			totalProjectPages,
 		],
@@ -237,7 +250,8 @@ export default function ProjectsPage({
 		const result = await createZipProjectsWorkflow({
 			items,
 			sharedInput,
-			createZipProject: (input, file) => dataSource.createZipProject(input, file),
+			createZipProject: (input, file) =>
+				dataSource.createZipProject(input, file),
 			onProgress,
 		});
 
@@ -368,10 +382,7 @@ export default function ProjectsPage({
 				{viewModel.loading && data.projects.length === 0 ? (
 					<SilentLoadingState className="w-full" minHeight={240} />
 				) : viewModel.rows.length > 0 ? (
-					<div
-						ref={tableViewportRef}
-						className="flex min-h-0 flex-1 flex-col"
-					>
+					<div ref={tableViewportRef} className="flex min-h-0 flex-1 flex-col">
 						<ProjectsTable
 							rows={viewModel.rows}
 							onCreateScan={(projectId) => {
@@ -388,6 +399,9 @@ export default function ProjectsPage({
 								currentPage={viewModel.pagination.currentPage}
 								totalPages={viewModel.pagination.totalPages}
 								totalCount={viewModel.pagination.totalCount}
+								totalProjectCount={viewModel.pagination.totalProjectCount}
+								pageSize={viewModel.pagination.pageSize}
+								currentPageItemCount={viewModel.pagination.currentPageItemCount}
 								items={viewModel.pagination.items}
 								onPageChange={browser.setProjectPage}
 							/>

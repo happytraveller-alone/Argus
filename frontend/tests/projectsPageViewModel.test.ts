@@ -81,6 +81,18 @@ test("projects selectors build adaptive pagination items with ellipsis", async (
 	]);
 });
 
+test("projects selectors clamp pagination before slicing items", async () => {
+	const selectors = await importOrFail<ProjectsPageSelectorsModule>(
+		"../src/pages/projects/lib/projectsPageSelectors.ts",
+	);
+	const items = Array.from({ length: 12 }, (_, index) => index + 1);
+
+	assert.deepEqual(selectors.paginateItems(items, 2, 5), [6, 7, 8, 9, 10]);
+	assert.deepEqual(selectors.paginateItems(items, 99, 5), [11, 12]);
+	assert.deepEqual(selectors.paginateItems(items, 0, 5), [1, 2, 3, 4, 5]);
+	assert.deepEqual(selectors.paginateItems(items, 1, 0), [1]);
+});
+
 test("projects selectors calculate responsive project page size from container metrics", async () => {
 	const selectors = await importOrFail<ProjectsPageSelectorsModule>(
 		"../src/pages/projects/lib/projectsPageSelectors.ts",
@@ -143,6 +155,49 @@ test("projects selectors keep the current visible anchor after page size changes
 		}),
 		2,
 	);
+});
+
+test("projects view model keeps absolute serial numbers and friendly pagination facts", async () => {
+	const builder = await importOrFail<BuildProjectsPageViewModelModule>(
+		"../src/pages/projects/lib/buildProjectsPageViewModel.ts",
+	);
+	const projects: Project[] = Array.from({ length: 15 }, (_, index) => ({
+		id: `p-${index + 1}`,
+		name: `Project ${index + 1}`,
+		description: "",
+		source_type: "zip",
+		repository_url: undefined,
+		repository_type: "other",
+		default_branch: "main",
+		programming_languages: "ts",
+		is_active: true,
+		created_at: "2024-01-01T00:00:00Z",
+		updated_at: "2024-01-01T00:00:00Z",
+	}));
+
+	const viewModel = builder.buildProjectsPageViewModel({
+		loading: false,
+		totalProjectCount: 20,
+		filteredProjects: projects,
+		pagedProjects: projects.slice(10, 15),
+		projectPage: 3,
+		projectPageSize: 5,
+		totalProjectPages: 3,
+		projectDetailFrom: "/projects",
+		searchTerm: "Project",
+		searchPlaceholder: "Search",
+	});
+
+	assert.deepEqual(
+		viewModel.rows.map((row) => row.serialNumber),
+		[11, 12, 13, 14, 15],
+	);
+	assert.equal(viewModel.pagination.totalProjectCount, 20);
+	assert.equal(viewModel.pagination.totalCount, 15);
+	assert.equal(viewModel.pagination.currentPage, 3);
+	assert.equal(viewModel.pagination.totalPages, 3);
+	assert.equal(viewModel.pagination.pageSize, 5);
+	assert.equal(viewModel.pagination.currentPageItemCount, 5);
 });
 
 test("projects view model renders archive size and zero stats when metrics pending", async () => {
