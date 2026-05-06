@@ -47,10 +47,10 @@ export default function AgentModeSelector({
   staticTools,
   onStaticToolsChange,
   disabledStaticTools,
-	onOpenStaticToolConfig,
+  onOpenStaticToolConfig,
 }: AgentModeSelectorProps) {
-	const isStaticSelected = value === "static";
-	const resolvedTools: StaticToolSelection = staticTools || {
+  const isStaticSelected = value === "static";
+  const resolvedTools: StaticToolSelection = staticTools || {
     opengrep: true,
     codeql: false,
   };
@@ -71,9 +71,9 @@ export default function AgentModeSelector({
     key: StaticTool;
     label: string;
   }> = [
-    { key: "opengrep", label: "规则扫描" },
-    { key: "codeql", label: "CodeQL 语义扫描" },
-  ];
+      { key: "opengrep", label: "规则扫描" },
+      { key: "codeql", label: "CodeQL 语义扫描" },
+    ];
 
   return (
     <div className="space-y-3">
@@ -217,7 +217,7 @@ export default function AgentModeSelector({
                   name="scanMode"
                   value="agent"
                   checked={false}
-                  onChange={() => {}}
+                  onChange={() => { }}
                   disabled={true}
                   className="sr-only"
                 />
@@ -287,7 +287,6 @@ export default function AgentModeSelector({
         <p className="font-bold mb-1 uppercase text-sky-700 dark:text-sky-400">静态分析模式说明：</p>
         <ul className="list-disc list-inside space-y-0.5 text-sky-600 dark:text-sky-300/80">
           <li>基于规则引擎快速扫描代码漏洞</li>
-              <li>Opengrep 与 CodeQL 互斥选择</li>
           <li>基于规则的源码静态审计</li>
           <li>结果稳定、反馈快，适合日常基线检查</li>
         </ul>

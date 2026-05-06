@@ -143,7 +143,6 @@ export default function TaskManagementStatic() {
 			<div className="relative z-10 flex flex-wrap items-center justify-between gap-3">
 				<div>
 					<h1 className="text-xl font-semibold tracking-[0.12em] text-foreground">静态审计任务</h1>
-					<p className="mt-1 text-xs text-muted-foreground">查看静态扫描队列，或直接创建新的静态扫描。</p>
 				</div>
 				<Button
 					className="cyber-btn-primary h-9 px-4"

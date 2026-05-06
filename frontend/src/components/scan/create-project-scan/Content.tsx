@@ -151,11 +151,10 @@ export default function CreateProjectScanDialogContent({
 						<button
 							type="button"
 							onClick={() => setActiveTab("static")}
-							className={`relative px-4 py-3 text-xs font-semibold uppercase tracking-wider transition-colors ${
-								activeTab === "static"
+							className={`relative px-4 py-3 text-xs font-semibold uppercase tracking-wider transition-colors ${activeTab === "static"
 									? "text-sky-300 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-sky-400"
 									: "text-muted-foreground hover:text-foreground"
-							}`}
+								}`}
 						>
 							<Shield className="inline-block w-3.5 h-3.5 mr-1.5 -mt-0.5" />
 							静态扫描
@@ -163,11 +162,10 @@ export default function CreateProjectScanDialogContent({
 						<button
 							type="button"
 							onClick={() => setActiveTab("intelligent")}
-							className={`relative px-4 py-3 text-xs font-semibold uppercase tracking-wider transition-colors ${
-								activeTab === "intelligent"
+							className={`relative px-4 py-3 text-xs font-semibold uppercase tracking-wider transition-colors ${activeTab === "intelligent"
 									? "text-violet-300 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-violet-400"
 									: "text-muted-foreground hover:text-foreground"
-							}`}
+								}`}
 						>
 							<Brain className="inline-block w-3.5 h-3.5 mr-1.5 -mt-0.5" />
 							智能扫描
@@ -236,7 +234,7 @@ export default function CreateProjectScanDialogContent({
 													<ProjectChoice
 														project={selectedProject}
 														selected
-														onSelect={() => {}}
+														onSelect={() => { }}
 														disabled
 													/>
 												) : (
@@ -335,9 +333,6 @@ export default function CreateProjectScanDialogContent({
 									<div className="flex items-center justify-between">
 										<p className="text-sm font-semibold text-foreground">
 											静态审计引擎
-										</p>
-										<p className="text-xs text-muted-foreground">
-											Opengrep 与 CodeQL 互斥
 										</p>
 									</div>
 									<div className="grid grid-cols-1 md:grid-cols-2 gap-2">
@@ -562,11 +557,10 @@ function ProjectChoice({
 		<button
 			type="button"
 			onClick={onSelect}
-			className={`w-full text-left p-3 rounded border transition-colors ${
-				selected
+			className={`w-full text-left p-3 rounded border transition-colors ${selected
 					? "border-sky-500/50 bg-sky-500/10"
 					: "border-border hover:border-sky-500/30 bg-background"
-			}`}
+				}`}
 			disabled={disabled}
 		>
 			<div className="flex items-start justify-between gap-3">
