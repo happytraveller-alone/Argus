@@ -97,6 +97,13 @@ services:
       - /dev/kvm:/dev/kvm
       - /dev/vhost-vsock:/dev/vhost-vsock
       - /dev/net/tun:/dev/net/tun
+    cap_add:
+      # a3s-box (krun-vm) needs SYS_ADMIN for the overlay/tmpfs mounts it
+      # performs while assembling the microVM rootfs ("mount: …/merged: must
+      # be superuser to use mount" otherwise). The backend container is
+      # already trusted root with /dev/kvm passed in, so adding the matching
+      # mount capability keeps the privilege envelope consistent.
+      - SYS_ADMIN
     group_add:
       - "${ARGUS_KVM_GROUP_ID:-109}"
     environment:

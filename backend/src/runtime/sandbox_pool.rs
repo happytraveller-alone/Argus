@@ -338,10 +338,16 @@ impl<T: Sandbox> SandboxPool<T> {
                     );
                 }
                 Err(e) => {
+                    // Use Debug (`?e`) so the full anyhow source-chain is
+                    // logged. The previous `%e` only emitted the outer
+                    // with_context layer (e.g. "create_sandbox for kind=…"),
+                    // hiding the underlying transport / API error that
+                    // operators actually need to debug standby refill
+                    // failures.
                     tracing::error!(
                         stage = "standby_refill_factory_error",
                         kind = ?kind,
-                        error = %e,
+                        error = ?e,
                         "factory returned error during refill; slot not replaced"
                     );
                 }

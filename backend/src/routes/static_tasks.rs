@@ -3459,7 +3459,7 @@ async fn run_opengrep_scan_inner(
     let source_dir_for_prune = source_dir.clone();
     let files_excluded = tokio::task::spawn_blocking(
         move || -> Result<usize, Box<dyn std::error::Error + Send + Sync>> {
-            prune_static_scan_test_and_fuzz_paths(&source_dir_for_prune)
+            prune_static_scan_non_source_paths(&source_dir_for_prune)
         },
     )
     .await??;
@@ -3471,7 +3471,7 @@ async fn run_opengrep_scan_inner(
             task_id,
             25.0,
             "filtering",
-            &format!("excluded {files_excluded} test/fuzz files from opengrep scan input"),
+            &format!("excluded {files_excluded} non-source files from opengrep scan input"),
         )
         .await;
     }
@@ -3859,11 +3859,10 @@ async fn read_opengrep_results_text(
         .read_to_end(&mut bytes)
         .await
         .map_err(|e| format!("read results.json: {e}"))?;
-    String::from_utf8(bytes)
-        .map_err(|e| format!("results.json is not valid UTF-8: {e}"))
+    String::from_utf8(bytes).map_err(|e| format!("results.json is not valid UTF-8: {e}"))
 }
 
-fn prune_static_scan_test_and_fuzz_paths(
+fn prune_static_scan_non_source_paths(
     source_dir: &Path,
 ) -> Result<usize, Box<dyn std::error::Error + Send + Sync>> {
     let mut stack = vec![source_dir.to_path_buf()];
@@ -3887,7 +3886,9 @@ fn prune_static_scan_test_and_fuzz_paths(
             .strip_prefix(source_dir)?
             .to_string_lossy()
             .replace('\\', "/");
-        if scope_filters::is_static_scan_test_or_fuzz_path(&relative) {
+        if scope_filters::is_static_scan_test_or_fuzz_path(&relative)
+            || scope_filters::is_core_ignored_path(&relative, None)
+        {
             std::fs::remove_file(&file_path)?;
             removed += 1;
         }
@@ -5956,12 +5957,12 @@ mod tests {
         choose_cubesandbox_cpp_build_plan, dependency_install_commands_from_plan_with_failures,
         extract_highest_rule_severity, extract_opengrep_task_options, format_opengrep_runner_error,
         normalize_codeql_task_languages, parse_codeql_llm_build_plan_response,
-        prepare_opengrep_runner_inputs, read_opengrep_results_text, static_task_value,
-        OpengrepResourceScheduler, OpengrepRunnerPaths, OpengrepRunnerResources,
-        OpengrepSandboxKind,
+        prepare_opengrep_runner_inputs, prune_static_scan_non_source_paths,
+        read_opengrep_results_text, static_task_value, OpengrepResourceScheduler,
+        OpengrepRunnerPaths, OpengrepRunnerResources, OpengrepSandboxKind,
     };
     use serde_json::json;
-    use std::{collections::BTreeSet, sync::mpsc, time::Duration};
+    use std::{collections::BTreeSet, fs, path::Path, sync::mpsc, time::Duration};
 
     fn static_task_record_with_findings(
         findings: Vec<task_state::StaticFindingRecord>,
@@ -5984,6 +5985,53 @@ mod tests {
             }),
             findings,
             ..Default::default()
+        }
+    }
+
+    fn write_fixture_file(root: &Path, relative: &str) {
+        let path = root.join(relative);
+        fs::create_dir_all(path.parent().expect("fixture parent")).expect("create parent");
+        fs::write(path, "fixture").expect("write fixture");
+    }
+
+    #[test]
+    fn opengrep_static_scan_source_prune_removes_non_source_inputs() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let root = temp_dir.path();
+
+        for path in [
+            "src/main.c",
+            "lib/service.py",
+            "tests/test_api.py",
+            "src/parser_fuzz.cc",
+            ".env",
+            ".github/workflows/ci.yml",
+            "config/app.yaml",
+            "settings.toml",
+            "package.json",
+        ] {
+            write_fixture_file(root, path);
+        }
+
+        let removed = prune_static_scan_non_source_paths(root).expect("prune OpenGrep scan source");
+
+        assert_eq!(removed, 7);
+        for kept in ["src/main.c", "lib/service.py"] {
+            assert!(root.join(kept).exists(), "expected {kept} to remain");
+        }
+        for pruned in [
+            "tests/test_api.py",
+            "src/parser_fuzz.cc",
+            ".env",
+            ".github/workflows/ci.yml",
+            "config/app.yaml",
+            "settings.toml",
+            "package.json",
+        ] {
+            assert!(
+                !root.join(pruned).exists(),
+                "expected {pruned} to be pruned"
+            );
         }
     }
 

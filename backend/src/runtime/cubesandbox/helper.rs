@@ -173,10 +173,14 @@ pub async fn run_helper_command(
 }
 
 fn is_lifecycle_eligible_host(host: &str) -> bool {
-    matches!(
-        host,
-        "127.0.0.1" | "localhost" | "::1" | "host.docker.internal"
-    )
+    // `host.docker.internal` was previously included for legacy bridge-network
+    // deployments, but on Linux + WSL2 with backend running in
+    // `network_mode: host` the kernel's resolver picks up the Windows-side
+    // hosts entry and routes the address into an unreachable Windows
+    // interface. Restrict lifecycle to genuine loopback identifiers; if
+    // future deployments need a different bridge name, point the URL at the
+    // bridge's literal IP.
+    matches!(host, "127.0.0.1" | "localhost" | "::1")
 }
 
 fn local_url_port(value: &str, require_https: bool) -> Result<Option<u16>> {

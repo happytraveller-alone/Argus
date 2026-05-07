@@ -113,13 +113,17 @@ impl OpengrepSandboxSession {
                     );
                 }
 
-                // Re-wrap handle into the session shape.
+                // Re-wrap handle into the session shape. `domain` MUST come
+                // from the original create_sandbox response — without it
+                // envd_host bails "missing sandbox domain" on the first
+                // write_file. The cubelet GET listing has no domain, so we
+                // rely on the value captured at pool factory time.
                 let sandbox = CubeSandboxSandbox {
                     sandbox_id: handle.sandbox_id.clone(),
                     template_id: handle.template_id.clone(),
                     client_id: String::new(),
                     envd_version: String::new(),
-                    domain: None,
+                    domain: handle.domain.clone(),
                 };
                 let client = (*handle.client).clone();
                 register_active_sandbox(
@@ -490,18 +494,25 @@ async fn prepare_client(
     config: &CubeSandboxConfig,
     template_id: &str,
 ) -> Result<CubeSandboxClient> {
-    if should_run_local_lifecycle(config)? && config.auto_install {
-        let output = run_helper_command(config, CubeSandboxHelperCommand::Install).await?;
-        ensure_helper_success(CubeSandboxHelperCommand::Install, &output)?;
-    }
+    // Status-first lifecycle gate (see runtime::cubesandbox::task.rs for the
+    // long-form rationale). Probe Status first — only fall through to
+    // Install / RunVmBackground when cubelet is genuinely down, instead of
+    // re-installing on every single scan.
     if should_run_local_lifecycle(config)? {
         let status_output = run_helper_command(config, CubeSandboxHelperCommand::Status).await?;
-        if !status_output.success && config.auto_start {
-            let start_output =
-                run_helper_command(config, CubeSandboxHelperCommand::RunVmBackground).await?;
-            ensure_helper_success(CubeSandboxHelperCommand::RunVmBackground, &start_output)?;
-        } else {
-            ensure_helper_success(CubeSandboxHelperCommand::Status, &status_output)?;
+        if !status_output.success {
+            if config.auto_install {
+                let install_output =
+                    run_helper_command(config, CubeSandboxHelperCommand::Install).await?;
+                ensure_helper_success(CubeSandboxHelperCommand::Install, &install_output)?;
+            }
+            if config.auto_start {
+                let start_output =
+                    run_helper_command(config, CubeSandboxHelperCommand::RunVmBackground).await?;
+                ensure_helper_success(CubeSandboxHelperCommand::RunVmBackground, &start_output)?;
+            } else {
+                ensure_helper_success(CubeSandboxHelperCommand::Status, &status_output)?;
+            }
         }
     }
     let client = CubeSandboxClient::new(CubeSandboxClientConfig {

@@ -154,26 +154,47 @@ impl CubeSandboxTaskManager {
             stderr_limit_bytes: config.stderr_limit_bytes,
         })?;
         let use_local_lifecycle = should_run_local_lifecycle(&config)?;
-        if use_local_lifecycle && config.auto_install {
-            let install_output =
-                run_helper_command(&config, CubeSandboxHelperCommand::Install).await?;
-            self.persist_helper_output(state, task_id, &install_output)
-                .await?;
-            ensure_helper_success(CubeSandboxHelperCommand::Install, &install_output)?;
-        }
         if use_local_lifecycle {
+            // Status-first lifecycle gate. The legacy ordering (Install
+            // unconditionally before Status when auto_install=true) re-ran
+            // the heavy `quickstart.sh install` action — including a 396 MiB
+            // tarball download and a service restart inside the cubelet VM —
+            // on every single scan. That pegged FFMPEG-scale runs on the
+            // 10-15 min Install path and tore down the standby pool mid-flight.
+            //
+            // New flow: probe Status first; if cubelet is healthy nothing
+            // else runs. Install / RunVmBackground are reserved for genuine
+            // recovery cases (auto_install / auto_start enabled and Status
+            // says cubelet is down). Argus host bootstrap (argus-bootstrap.sh)
+            // already performs the one-time install on the WSL2 host, so the
+            // backend should treat the cubelet as a long-lived dependency.
             let status_output =
                 run_helper_command(&config, CubeSandboxHelperCommand::Status).await?;
             self.persist_helper_output(state, task_id, &status_output)
                 .await?;
-            if !status_output.success && config.auto_start {
-                let start_output =
-                    run_helper_command(&config, CubeSandboxHelperCommand::RunVmBackground).await?;
-                self.persist_helper_output(state, task_id, &start_output)
-                    .await?;
-                ensure_helper_success(CubeSandboxHelperCommand::RunVmBackground, &start_output)?;
-            } else {
-                ensure_helper_success(CubeSandboxHelperCommand::Status, &status_output)?;
+            if !status_output.success {
+                if config.auto_install {
+                    let install_output =
+                        run_helper_command(&config, CubeSandboxHelperCommand::Install).await?;
+                    self.persist_helper_output(state, task_id, &install_output)
+                        .await?;
+                    ensure_helper_success(CubeSandboxHelperCommand::Install, &install_output)?;
+                }
+                if config.auto_start {
+                    let start_output =
+                        run_helper_command(&config, CubeSandboxHelperCommand::RunVmBackground)
+                            .await?;
+                    self.persist_helper_output(state, task_id, &start_output)
+                        .await?;
+                    ensure_helper_success(
+                        CubeSandboxHelperCommand::RunVmBackground,
+                        &start_output,
+                    )?;
+                } else {
+                    // No auto-recovery enabled — surface the original Status
+                    // failure rather than silently continuing to envd.
+                    ensure_helper_success(CubeSandboxHelperCommand::Status, &status_output)?;
+                }
             }
         }
         client.health().await?;

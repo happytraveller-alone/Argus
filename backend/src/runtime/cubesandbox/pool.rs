@@ -40,6 +40,12 @@ pub struct CubesandboxHandle {
     /// Shared client — the pool keeps one per factory, scan paths borrow it.
     pub client: Arc<CubeSandboxClient>,
     pub created_at: Instant,
+    /// Domain returned by `POST /sandboxes` (e.g. `cube.app`). The data-plane
+    /// envd routing depends on this — without it `envd_host` bails with
+    /// "missing sandbox domain". The cubelet `GET /sandboxes` listing does
+    /// NOT include `domain`, so it must be captured at create time and
+    /// preserved across the pool until the scan path consumes the handle.
+    pub domain: Option<String>,
 }
 
 impl Sandbox for CubesandboxHandle {
@@ -83,6 +89,7 @@ impl SandboxFactory<CubesandboxHandle> for CubesandboxFactory {
                 .with_context(|| format!("CubesandboxFactory: create_sandbox for kind={kind:?} template={template_id}"))?;
 
             let sandbox_id = sandbox.sandbox_id.clone();
+            let domain = sandbox.domain.clone();
 
             // Connect (waits for envd inside the VM to be ready).
             client
@@ -107,6 +114,7 @@ impl SandboxFactory<CubesandboxHandle> for CubesandboxFactory {
                 kind,
                 client,
                 created_at: Instant::now(),
+                domain,
             })
         })
     }
