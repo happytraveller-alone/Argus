@@ -251,6 +251,9 @@ codex/
 
 # rust
 /backend/target/
+
+# Local benchmark baseline projects (e.g. FFmpeg shallow clone)
+/projects/
 .omx/
 !.codex/agents/
 !.codex/agents/**
