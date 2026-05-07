@@ -127,6 +127,7 @@ RUN --mount=type=cache,id=argus-opengrep-runner-runtime-apt-lists,target=/var/li
   DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
   ca-certificates \
   bash \
+  procps \
   python3-minimal; \
   }; \
   write_sources "${BACKEND_APT_MIRROR_PRIMARY}" "${BACKEND_APT_SECURITY_PRIMARY}"; \
