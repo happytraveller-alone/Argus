@@ -90,9 +90,6 @@ pub struct AppConfig {
     /// Env: ARGUS_MAX_TOTAL_STANDBY, default 8.
     /// TODO(A.3): derive default from host RAM via sysinfo (backend/src/config.rs).
     pub max_total_standby: usize,
-    /// Ceiling for the creation_slots semaphore (concurrent sandbox creates).
-    /// Env: CUBEMASTER_CAPACITY, default 4.
-    pub cubemaster_capacity: usize,
 
     // ── a3s-box standby pool config (Phase C.3) ───────────────────────────────
 
@@ -229,7 +226,6 @@ impl AppConfig {
             codeql_standby_pool_size: parse_usize_env("CODEQL_STANDBY_POOL_SIZE", 2),
             codeql_standby_pool_disabled: parse_bool_env("CODEQL_STANDBY_POOL_DISABLED", false),
             max_total_standby: parse_usize_env("ARGUS_MAX_TOTAL_STANDBY", 8),
-            cubemaster_capacity: parse_usize_env("CUBEMASTER_CAPACITY", 4),
             a3s_box_standby_pool_size: parse_usize_env("A3S_BOX_STANDBY_POOL_SIZE", 2),
             a3s_box_standby_pool_disabled: parse_bool_env("A3S_BOX_STANDBY_POOL_DISABLED", false),
             a3s_box_stdout_limit_bytes: parse_usize_env(
@@ -316,7 +312,6 @@ impl AppConfig {
             codeql_standby_pool_size: 0,
             codeql_standby_pool_disabled: true,
             max_total_standby: 8,
-            cubemaster_capacity: 4,
             a3s_box_standby_pool_size: 0,
             a3s_box_standby_pool_disabled: true,
             a3s_box_stdout_limit_bytes: 1_048_576,
