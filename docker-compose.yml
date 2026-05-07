@@ -6,7 +6,6 @@
 # opengrep-runner service 只作为 profile=runner-build 的镜像构建目标存在；
 # 默认启动不创建 runner service 容器。真正执行 Opengrep 扫描时，backend
 # 按 SCANNER_OPENGREP_IMAGE 动态创建临时 runner 容器，并在任务结束后删除。
-# CodeQL 扫描主路径走 CubeSandbox，不走 Docker runner。
 
 services:
 
@@ -86,11 +85,9 @@ services:
     volumes:
       - backend_uploads:/app/uploads
       - backend_runtime_data:/app/data/runtime
-      - backend_cubesandbox_data:/app/.cubesandbox
       - ./oci:/app/oci:ro
       - ${ARGUS_ENV_FILE:-./.env}:/app/.env
       - ./docker/opengrep-scan.sh:/app/docker/opengrep-scan.sh:ro
-      - ./scripts/cubesandbox-quickstart.sh:/app/scripts/cubesandbox-quickstart.sh:ro
       - scan_workspace:/tmp/Argus/scans
       - ${DOCKER_SOCKET_PATH:-/var/run/docker.sock}:/var/run/docker.sock
     devices:
@@ -260,7 +257,6 @@ volumes:
   postgres_data:
   backend_uploads:
   backend_runtime_data:
-  backend_cubesandbox_data:
   scan_workspace:
     name: ${SCAN_WORKSPACE_VOLUME:-Argus_scan_workspace}
   redis_data:
