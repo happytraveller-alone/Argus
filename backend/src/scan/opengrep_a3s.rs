@@ -199,6 +199,10 @@ where
     use std::time::Instant;
 
     let start = Instant::now();
+    // Capture workspace_dir before spec is moved into executor — needed to
+    // recover meta JSON for fallback diagnostic before run_opengrep_scan_inner
+    // wipes the workspace at the happy-path cleanup.
+    let captured_workspace_dir = a3s_spec.workspace_dir.clone();
 
     // ── A3S attempt ───────────────────────────────────────────────────────
     let a3s_result = a3s_executor.execute(a3s_spec).await;
@@ -215,6 +219,8 @@ where
         None => String::new(),
     };
     let exit_code = a3s_runner_result.as_ref().map(|r| r.exit_code);
+    let runner_success = a3s_runner_result.as_ref().map(|r| r.success);
+    let runner_error = a3s_runner_result.as_ref().and_then(|r| r.error.clone());
 
     let reason =
         classify_a3s_error(exit_code, &stderr_tail, elapsed, image_cache_err.as_ref());
@@ -232,6 +238,56 @@ where
 
     // Fallback path: A3S returned non-success or executor failed.
     let fallback_reason = reason.unwrap_or(A3sFailureReason::SpawnFailed);
+
+    // ── Diagnostic side-channel ─────────────────────────────────────────
+    // Persist fallback context to /tmp/Argus/last-a3s-fallback.json so
+    // operators can root-cause silent A3S failures even when RUST_LOG /
+    // tracing-subscriber filtering swallows the warn! event below. Best-
+    // effort write — never blocks the fallback path.
+    let stderr_tail_last_2k: String = if stderr_tail.len() > 2048 {
+        stderr_tail[stderr_tail.len() - 2048..].to_string()
+    } else {
+        stderr_tail.clone()
+    };
+    let diag = serde_json::json!({
+        "stage": "a3s_to_docker_fallback",
+        "reason": format!("{:?}", fallback_reason),
+        "task_id": task_id,
+        "project_id": project_id.unwrap_or(""),
+        "elapsed_ms": elapsed.as_millis() as u64,
+        "exit_code": exit_code,
+        "a3s_success": runner_success,
+        "a3s_runner_error": runner_error,
+        "image_cache_err": image_cache_err.as_ref().map(|e| e.to_string()),
+        "stderr_tail_len": stderr_tail.len(),
+        "stderr_tail_last_2k": stderr_tail_last_2k,
+    });
+    // Snapshot the a3s-box-runner.json meta + stdout/stderr log files from
+    // the captured workspace BEFORE run_opengrep_scan_inner wipes it on
+    // success-via-fallback. The wrapped error from runner_result.error only
+    // carries the high-level "Exec socket did not appear" bail message; we
+    // need the raw a3s-box stdout/stderr to root-cause why.
+    let workspace_path = std::path::Path::new(&captured_workspace_dir);
+    let meta_snapshot = std::fs::read_to_string(workspace_path.join("meta/a3s-box-runner.json")).ok();
+    let stdout_log_snapshot =
+        std::fs::read_to_string(workspace_path.join("logs/a3s-box-stdout.log")).ok();
+    let stderr_log_snapshot =
+        std::fs::read_to_string(workspace_path.join("logs/a3s-box-stderr.log")).ok();
+    let mut diag = diag;
+    if let Some(obj) = diag.as_object_mut() {
+        if let Some(meta) = meta_snapshot {
+            obj.insert("meta_json".to_string(), serde_json::Value::String(meta));
+        }
+        if let Some(stdout_log) = stdout_log_snapshot {
+            obj.insert("a3s_box_stdout_log".to_string(), serde_json::Value::String(stdout_log));
+        }
+        if let Some(stderr_log) = stderr_log_snapshot {
+            obj.insert("a3s_box_stderr_log".to_string(), serde_json::Value::String(stderr_log));
+        }
+    }
+    let diag_path = std::env::var("ARGUS_A3S_FALLBACK_DIAG_PATH")
+        .unwrap_or_else(|_| "/tmp/Argus/scans/last-a3s-fallback.json".to_string());
+    let _ = std::fs::write(&diag_path, serde_json::to_vec_pretty(&diag).unwrap_or_default());
 
     tracing::warn!(
         stage = "a3s_to_docker_fallback",
