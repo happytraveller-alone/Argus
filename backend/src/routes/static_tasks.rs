@@ -1652,7 +1652,7 @@ async fn run_opengrep_scan_inner(
     let stdout_rel_path = format!("output/stdout-{}.txt", Uuid::new_v4());
     let stderr_rel_path = format!("output/stderr-{}.txt", Uuid::new_v4());
     let sandbox_label = options.sandbox.as_str();
-    let effective_executor_label = match sandbox_label {
+    let mut effective_executor_label = match sandbox_label {
         "a3s_box" => "a3s_box".to_string(),
         _ => "docker_runner".to_string(),
     };
@@ -1755,17 +1755,87 @@ async fn run_opengrep_scan_inner(
                 ..spec
             };
 
-            let runner_result =
-                tokio::task::spawn_blocking(move || a3s_box_runner::execute(spec)).await?;
-            drop(resource_permit);
-            if !runner_result.success {
-                let error_msg = format_a3s_box_opengrep_runner_error(
-                    &runner_result,
-                    Some(&workspace_dir.join(&log_rel_path)),
+            // Pre-compute docker fallback parameters (closure must own captured data
+            // because docker_spec_builder is FnOnce + Send + 'static — see
+            // opengrep_a3s::scan_with_fallback signature).
+            let docker_scanner_image = state.config.scanner_opengrep_image.clone();
+            let docker_config = state.config.clone();
+            let docker_workspace_dir = workspace_dir.clone();
+            let docker_runner_resources = runner_resources;
+            let docker_config_container_path = rule_inputs
+                .workspace_rules_dir
+                .as_ref()
+                .map(|path| workspace_container_path(&workspace_dir, path))
+                .transpose()?;
+            let docker_output_container_path = format!("/scan/{output_rel_path}");
+            let docker_summary_rel_path = summary_rel_path.clone();
+            let docker_summary_container_path = format!("/scan/{summary_rel_path}");
+            let docker_log_container_path = format!("/scan/{log_rel_path}");
+            let docker_stdout_rel_path = stdout_rel_path.clone();
+            let docker_stderr_rel_path = stderr_rel_path.clone();
+
+            let docker_spec_builder = move || -> crate::runtime::runner::RunnerSpec {
+                build_opengrep_runner_spec(
+                    docker_config.as_ref(),
+                    docker_scanner_image,
+                    &docker_workspace_dir,
+                    docker_runner_resources,
+                    OpengrepRunnerPaths {
+                        container_source_dir: "/scan/source",
+                        manifest_container_path: None,
+                        config_container_path: docker_config_container_path.as_deref(),
+                        output_container_path: &docker_output_container_path,
+                        summary_rel_path: &docker_summary_rel_path,
+                        summary_container_path: &docker_summary_container_path,
+                        log_container_path: &docker_log_container_path,
+                        stdout_rel_path: &docker_stdout_rel_path,
+                        stderr_rel_path: &docker_stderr_rel_path,
+                    },
                 )
-                .await;
-                let _ = tokio::fs::remove_dir_all(&workspace_dir).await;
-                return Err(format!("opengrep A3S Box scan failed: {error_msg}").into());
+            };
+
+            let a3s_executor = crate::scan::opengrep_a3s::DefaultA3sBoxExecutor;
+            let docker_executor = crate::scan::opengrep_a3s::DefaultDockerExecutor;
+            let outcome = crate::scan::opengrep_a3s::scan_with_fallback(
+                &a3s_executor,
+                &docker_executor,
+                spec,
+                docker_spec_builder,
+                task_id,
+                Some(project_id),
+            )
+            .await?;
+            drop(resource_permit);
+
+            match outcome.output {
+                crate::scan::opengrep_a3s::ScanOutput::A3s(runner_result) => {
+                    if !runner_result.success {
+                        let error_msg = format_a3s_box_opengrep_runner_error(
+                            &runner_result,
+                            Some(&workspace_dir.join(&log_rel_path)),
+                        )
+                        .await;
+                        let _ = tokio::fs::remove_dir_all(&workspace_dir).await;
+                        return Err(
+                            format!("opengrep A3S Box scan failed: {error_msg}").into()
+                        );
+                    }
+                }
+                crate::scan::opengrep_a3s::ScanOutput::Docker(runner_result) => {
+                    effective_executor_label = "a3s_box_fallback_docker".to_string();
+                    if !runner_result.success {
+                        let error_msg = format_opengrep_runner_error(
+                            &runner_result,
+                            Some(&workspace_dir.join(&log_rel_path)),
+                        )
+                        .await;
+                        let _ = tokio::fs::remove_dir_all(&workspace_dir).await;
+                        return Err(format!(
+                            "opengrep A3S→docker fallback scan failed: {error_msg}"
+                        )
+                        .into());
+                    }
+                }
             }
         }
     }
