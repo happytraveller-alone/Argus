@@ -18,7 +18,7 @@ This release branch keeps only the slim-source files required to run Argus. Reco
 
 `argus-bootstrap.sh` calls `scripts/validate-llm-config.sh --env-file ./.argus-llm.env` before any Docker cleanup or startup action. If LLM validation fails, bootstrap exits and asks you to reconfigure.
 
-On WSL2 hosts the script also runs the CubeSandbox host-side bootstrap (doctor → prepare-vm → run-vm-background → install → provision-codeql-cpp-template). On a fresh clone where the VM, CubeMaster API, or CodeQL C/C++ template is missing, each step builds itself; on subsequent runs each step is skipped via its readiness check (SSH port, HTTP `/health`, or `CUBESANDBOX_TEMPLATE_ID` in `.env`). The OpenGrep CubeSandbox template does not reuse the CodeQL/sandbox-code image; when a task selects `opengrep_sandbox=oci_cubesandbox`, `/api/v1/cubesandbox/templates/opengrep/*` builds an independent template through the internal `opengrep_dedicated` record kind. Skip host-side bootstrap with `--skip-cubesandbox` or set `CUBESANDBOX_BOOTSTRAP_AUTO=false` in `.env`; run only the cubesandbox stage with `--cubesandbox-only`; force a template rebuild with `--cubesandbox-reset`. Non-WSL2 hosts skip the stage with a notice.
+> The CubeSandbox path was archived on 2026-05-07 to `docs/archive/cubesandbox/`; scans now uniformly run on a3s sandbox.
 
 By default, Compose publishes the frontend on host port `13000` and the backend on `18000` to avoid collisions with common local development services on `3000` / `8000`. Set `Argus_FRONTEND_PORT=3000 Argus_BACKEND_PORT=8000` when starting the stack if you need the old host ports.
 
@@ -31,15 +31,13 @@ The backend reads the root `.env` and mounts `${DOCKER_SOCKET_PATH:-/var/run/doc
 - Project-level agent instructions are centralized in `AGENTS.md`; repo-local skills load from `.codex/skills/`. Use `neat-freak` at milestone end to reconcile project docs and agent knowledge.
 - `.gitignore` ignores `.codex/`; reinstall a local skill or change version-control policy deliberately if another environment must reuse it.
 
-## CubeSandbox Python / C++ / CodeQL / OpenGrep Smoke
-
-CubeSandbox needs WSL2-native KVM/QEMU and runs its E2B-compatible API inside a separate development VM; it is not part of the default Argus compose path and no longer runs QEMU through a Docker helper container. Use `scripts/cubesandbox-quickstart.sh` through [docs/cubesandbox-python-quickstart.md](docs/cubesandbox-python-quickstart.md) to configure CubeSandbox and run Python, C, C++, Make, CMake, and CodeQL smokes, and to build the independent Debian-slim-based `oci/cubesandbox/opengrep.Dockerfile` for the optional `OCI CubeSandbox` choice in the OpenGrep static-audit advanced config. The public API remains `/opengrep`, while the current internal template kind is `opengrep_dedicated`. The helper forwards the CubeSandbox API to `127.0.0.1:23000` by default so it does not collide with Argus frontend port `13000`; GitHub URLs default to the `https://v6.gh-proxy.org/https://github.com/...` mirror, and Docker Hub images can be explicitly replaced with `m.daocloud.io/docker.io/...`.
+> The CubeSandbox path was archived on 2026-05-07 to `docs/archive/cubesandbox/`; scans now uniformly run on a3s sandbox.
 
 ## GHCR Image Naming
 
 - GHCR image paths use `ghcr.io/<GitHub user or organization>/<image>:<tag>`.
 - `audittool` is the repository name, not the GHCR owner; the default image namespace is the current repo owner `happytraveller-alone`.
-- `.github/workflows/docker-publish.yml` now handles backend, frontend, and OpenGrep runner image builds and publishing in one workflow; the active CodeQL scan path uses the CubeSandbox template instead of a published CodeQL runner container.
+- `.github/workflows/docker-publish.yml` now handles backend, frontend, and OpenGrep runner image builds and publishing in one workflow; CodeQL scans run on a3s sandbox, no CodeQL runner container is published.
 - The OpenGrep runner publish path explicitly uses OCI image media types; local `runner-build` / `rebuild-opengrep-runner-verify.sh` still validate through Docker daemon-loaded images.
 - GitHub Actions defaults published GHCR packages to public and verifies anonymous pulls.
 - Human-triggered multi-image publishing also goes through `.github/workflows/docker-publish.yml`, where you select the images to build.
