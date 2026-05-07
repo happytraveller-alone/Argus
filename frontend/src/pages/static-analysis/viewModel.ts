@@ -12,7 +12,6 @@ import {
 export type Engine = "opengrep" | "codeql";
 export type OpengrepSandboxMode =
   | "dockerfile_container"
-  | "oci_cubesandbox"
   | "a3s_box";
 export type EngineFilter = "all" | Engine;
 export type FindingStatus = "open" | "verified" | "false_positive";
@@ -87,7 +86,7 @@ export interface StaticAnalysisHeaderSummary {
 export function getStaticAnalysisScanSchemeLabel(
   sandbox?: string | null,
 ): string {
-  if (sandbox === "oci_cubesandbox") return "已停用隔离方案";
+  if ((sandbox as string) === "oci_cubesandbox") return "已停用隔离方案"; // legacy: pre-2026-05-07 records may have this value
   if (sandbox === "a3s_box") return "A3S 沙箱方案";
   return "Docker 容器方案";
 }

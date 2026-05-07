@@ -96,6 +96,169 @@ pub fn classify_a3s_error(
     None
 }
 
+// ── scan_with_fallback ────────────────────────────────────────────────────────
+
+/// Pluggable docker runner for testability (mirrors `A3sBoxExecutor`).
+///
+/// Production path: `DefaultDockerExecutor` calls `tokio::task::spawn_blocking`
+/// to wrap the synchronous `runner::execute(spec)`.
+/// Test path: `FakeDockerExecutor` returns canned `RunnerResult`.
+#[async_trait]
+pub trait DockerExecutor: Send + Sync {
+    async fn execute(
+        &self,
+        spec: crate::runtime::runner::RunnerSpec,
+    ) -> Result<crate::runtime::runner::RunnerResult>;
+}
+
+pub struct DefaultDockerExecutor;
+
+#[async_trait]
+impl DockerExecutor for DefaultDockerExecutor {
+    async fn execute(
+        &self,
+        spec: crate::runtime::runner::RunnerSpec,
+    ) -> Result<crate::runtime::runner::RunnerResult> {
+        tokio::task::spawn_blocking(move || crate::runtime::runner::execute(spec))
+            .await
+            .map_err(anyhow::Error::from)
+    }
+}
+
+/// Runtime path actually used for a single scan attempt.
+///
+/// Reported via tracing + returned in `ScanOutcome` for caller to set
+/// `effective_executor_label` (see `static_tasks.rs` A3sBox dispatch).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum RuntimeUsed {
+    /// A3S path completed (success — no fallback needed).
+    A3s,
+    /// A3S failed and docker path completed.
+    DockerFallback,
+}
+
+/// Raw scan output — caller pattern-matches and post-processes per docker
+/// vs a3s SARIF/log conventions (already split in static_tasks.rs).
+pub enum ScanOutput {
+    A3s(A3sBoxRunnerResult),
+    Docker(crate::runtime::runner::RunnerResult),
+}
+
+/// Output of `scan_with_fallback`.
+///
+/// `a3s_failure_reason` is `Some` iff `runtime_used == DockerFallback` (i.e.
+/// docker took over because A3S classification returned a non-`None` reason).
+pub struct ScanOutcome {
+    pub runtime_used: RuntimeUsed,
+    pub a3s_failure_reason: Option<A3sFailureReason>,
+    /// Underlying scan output. Variant depends on which path produced it:
+    /// - `A3s` → `A3sBoxRunnerResult` from A3S executor
+    /// - `DockerFallback` → `RunnerResult` from docker executor
+    pub output: ScanOutput,
+}
+
+/// Read `stderr_tail` from `A3sBoxRunnerResult.stderr_path` (best-effort).
+///
+/// Returns empty string when path is absent or unreadable. Used only for
+/// classification — failure to read just degrades classification fidelity,
+/// never blocks the fallback decision.
+async fn read_a3s_stderr_tail(stderr_path: Option<&str>) -> String {
+    let Some(path) = stderr_path else {
+        return String::new();
+    };
+    tokio::fs::read_to_string(path).await.unwrap_or_default()
+}
+
+/// Run an opengrep scan via A3S, falling back to docker on classified failure.
+///
+/// Permit lifecycle (ADR-A.P, Option P1 reuse): the resource permit must be
+/// held in the caller's scope across this call so it covers both the A3S
+/// attempt and the docker fallback attempt. We do NOT take it as a parameter
+/// to stay decoupled from the caller's permit type (e.g.,
+/// `OpengrepResourcePermit` vs `tokio::sync::OwnedSemaphorePermit`); the
+/// caller is responsible for dropping it after `.await?` returns.
+///
+/// Docker spec construction is delegated to `docker_spec_builder` closure
+/// (Option α from ADR-A): static_tasks.rs invokes its private
+/// `build_opengrep_runner_spec` inside the closure, avoiding pub-ifying that
+/// helper. Closure runs only when fallback triggers (lazy).
+///
+/// Tracing: on fallback, emits `tracing::warn!(stage = "a3s_to_docker_fallback",
+/// reason, task_id, project_id, elapsed_ms, exit_code, ...)` per AC4.
+pub async fn scan_with_fallback<F>(
+    a3s_executor: &dyn A3sBoxExecutor,
+    docker_executor: &dyn DockerExecutor,
+    a3s_spec: A3sBoxRunnerSpec,
+    docker_spec_builder: F,
+    task_id: &str,
+    project_id: Option<&str>,
+) -> Result<ScanOutcome>
+where
+    F: FnOnce() -> crate::runtime::runner::RunnerSpec + Send + 'static,
+{
+    use std::time::Instant;
+
+    let start = Instant::now();
+
+    // ── A3S attempt ───────────────────────────────────────────────────────
+    let a3s_result = a3s_executor.execute(a3s_spec).await;
+    let elapsed = start.elapsed();
+
+    let (a3s_runner_result, image_cache_err): (Option<A3sBoxRunnerResult>, Option<anyhow::Error>) =
+        match a3s_result {
+            Ok(r) => (Some(r), None),
+            Err(e) => (None, Some(e)),
+        };
+
+    let stderr_tail = match a3s_runner_result.as_ref() {
+        Some(r) => read_a3s_stderr_tail(r.stderr_path.as_deref()).await,
+        None => String::new(),
+    };
+    let exit_code = a3s_runner_result.as_ref().map(|r| r.exit_code);
+
+    let reason =
+        classify_a3s_error(exit_code, &stderr_tail, elapsed, image_cache_err.as_ref());
+
+    // Success path: A3S returned a result and classifier says no fallback needed.
+    if let Some(r) = a3s_runner_result {
+        if reason.is_none() && r.success {
+            return Ok(ScanOutcome {
+                runtime_used: RuntimeUsed::A3s,
+                a3s_failure_reason: None,
+                output: ScanOutput::A3s(r),
+            });
+        }
+    }
+
+    // Fallback path: A3S returned non-success or executor failed.
+    let fallback_reason = reason.unwrap_or(A3sFailureReason::SpawnFailed);
+
+    tracing::warn!(
+        stage = "a3s_to_docker_fallback",
+        reason = ?fallback_reason,
+        task_id = %task_id,
+        project_id = project_id.unwrap_or(""),
+        elapsed_ms = elapsed.as_millis() as u64,
+        exit_code = ?exit_code,
+        stderr_tail_len = stderr_tail.len(),
+        "A3S opengrep failed; falling back to docker (permit reused)"
+    );
+
+    // Build docker spec via caller-injected closure (Option α from ADR-A).
+    let docker_spec = tokio::task::spawn_blocking(docker_spec_builder)
+        .await
+        .map_err(anyhow::Error::from)?;
+
+    // Permit reused across docker run (ADR-A.P P1) — caller's scope holds it.
+    let docker_result = docker_executor.execute(docker_spec).await?;
+
+    Ok(ScanOutcome {
+        runtime_used: RuntimeUsed::DockerFallback,
+        a3s_failure_reason: Some(fallback_reason),
+        output: ScanOutput::Docker(docker_result),
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

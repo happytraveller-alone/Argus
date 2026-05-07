@@ -25,7 +25,7 @@ test("StaticEngineConfigDialogContent renders placeholder text and footer action
   assert.match(markup, /前往扫描引擎配置页/);
 });
 
-test("StaticEngineConfigDialogContent shields deprecated CubeSandbox mode for opengrep", () => {
+test("StaticEngineConfigDialogContent renders opengrep options without legacy CubeSandbox surface", () => {
   const markup = renderToStaticMarkup(
     createElement(StaticEngineConfigDialogContent, {
       engine: "opengrep",
@@ -33,7 +33,7 @@ test("StaticEngineConfigDialogContent shields deprecated CubeSandbox mode for op
       enabled: false,
       creating: false,
       blockedReason: null,
-      opengrepSandbox: "oci_cubesandbox",
+      opengrepSandbox: "a3s_box",
       onOpengrepSandboxChange: () => {},
       onNavigateToEngineConfig: () => {},
       onRequestClose: () => {},
@@ -44,5 +44,5 @@ test("StaticEngineConfigDialogContent shields deprecated CubeSandbox mode for op
   assert.match(markup, /Dockerfile 容器/);
   assert.match(markup, /A3S Box MicroVM/);
   assert.doesNotMatch(markup, /CubeSandbox/);
-  assert.match(markup, /aria-pressed="true"[^>]*><span[^>]*><span[^>]*><\/span><span[^>]*>Dockerfile 容器/);
+  assert.match(markup, /aria-pressed="true"[^>]*><span[^>]*><span[^>]*><\/span><span[^>]*>A3S Box MicroVM/);
 });

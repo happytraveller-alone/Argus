@@ -135,7 +135,7 @@ test("createOpengrepScanTask sends the selected sandbox mode", async () => {
       name: "scan",
       rule_ids: ["rule-1"],
       target_path: ".",
-      opengrep_sandbox: "oci_cubesandbox",
+      opengrep_sandbox: "a3s_box",
     });
   } finally {
     apiClient.post = originalPost;
@@ -149,7 +149,7 @@ test("createOpengrepScanTask sends the selected sandbox mode", async () => {
         name: "scan",
         rule_ids: ["rule-1"],
         target_path: ".",
-        opengrep_sandbox: "oci_cubesandbox",
+        opengrep_sandbox: "a3s_box",
       },
     },
   ]);

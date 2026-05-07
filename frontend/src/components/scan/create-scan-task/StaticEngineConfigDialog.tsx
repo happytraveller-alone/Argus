@@ -101,9 +101,7 @@ export function StaticEngineConfigDialogContent({
                   description: "使用 a3s-box 运行 OpenGrep OCI 镜像，保留沙箱级隔离与结果回收。",
                 },
               ].map((item) => {
-                const selected =
-                  opengrepSandbox === item.value ||
-                  (opengrepSandbox === "oci_cubesandbox" && item.value === "dockerfile_container");
+                const selected = opengrepSandbox === item.value;
                 return (
                   <button
                     key={item.value}

@@ -456,7 +456,8 @@ test("buildStaticAnalysisHeaderSummary exposes Opengrep scan scheme label", () =
 	);
 	assert.equal(
 		viewModel.buildStaticAnalysisHeaderSummary({
-			opengrepTask: { ...baseTask, opengrep_sandbox: "oci_cubesandbox" },
+			// legacy: pre-2026-05-07 records may still carry oci_cubesandbox
+				opengrepTask: { ...baseTask, opengrep_sandbox: "oci_cubesandbox" as unknown as "a3s_box" },
 			codeqlTask: null,
 			enabledEngines: ["opengrep"],
 		}).scanSchemeLabel,

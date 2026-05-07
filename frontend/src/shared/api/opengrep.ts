@@ -342,7 +342,7 @@ export async function updateOpengrepRule(
 }
 
 export type StaticScanEngine = "opengrep" | "codeql";
-export type OpengrepSandboxMode = "dockerfile_container" | "oci_cubesandbox" | "a3s_box";
+export type OpengrepSandboxMode = "dockerfile_container" | "a3s_box";
 
 export interface OpengrepScanTask {
     id: string;
