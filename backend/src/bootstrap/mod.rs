@@ -104,9 +104,6 @@ async fn build_report(state: &AppState) -> BootstrapReport {
         report.overall = BootstrapStatus::Degraded.as_str().to_string();
     }
 
-    // CubeSandbox runtime removed — its orphan reconciliation and template
-    // reconcile no longer run during bootstrap.
-
     // One-time manifest cleanup migration — runs before preflight.
     migrate_remove_opengrep_pool_manifest().await;
 

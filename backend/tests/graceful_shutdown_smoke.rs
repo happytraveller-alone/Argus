@@ -6,9 +6,9 @@
 //!     no layer-ordering ambiguity.
 //!
 //! Degraded test (state-machine level only):
-//!   Full SIGTERM → drain → socket-close flow requires a live cubemaster and
-//!   a slow-path delete mock that is not available in unit-test infra.
-//!   TODO(AC5-full): add a slow-mock cubemaster delete path and verify
+//!   Full SIGTERM → drain → socket-close flow requires a live sandbox runtime
+//!   and a slow-path delete mock that is not available in unit-test infra.
+//!   TODO(AC5-full): add a slow-mock sandbox delete path and verify
 //!     (b) in-flight task completes with sandbox gone and
 //!     (c) bind socket closes within 30 s.
 //!   Until then this test validates the gate state-machine and the 503 response
@@ -169,7 +169,7 @@ fn shutdown_gate_state_machine() {
 // spawned scan futures finish their cleanup blocks.
 //
 // Requires feature = "test-helpers" so ActiveScanGuard is publicly accessible
-// outside the cubesandbox module in non-test builds.
+// outside the runtime::shutdown module in non-test builds.
 //
 // Refs:
 //   spec: .omc/specs/deep-dive-opengrep-sandbox-auto-destroy.md (AC3)

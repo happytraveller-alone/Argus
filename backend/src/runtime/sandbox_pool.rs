@@ -110,7 +110,7 @@ impl SlotPermit {
 pub struct SandboxRef {
     /// The template kind this sandbox was built from.
     pub kind_debug: String,
-    /// Opaque sandbox identifier (e.g. cubemaster sandbox ID).
+    /// Opaque sandbox identifier (factory-defined).
     pub id: SandboxId,
 }
 

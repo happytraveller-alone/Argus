@@ -16,42 +16,11 @@
 
 ### 静态审计
 
-- **是什么**：当前稳定主线由 Opengrep 承担的规则扫描体验，产品层显示为“静态审计”。Opengrep 默认使用 Dockerfile runner 容器，也可以在高级配置里把单次任务切到 `opengrep_sandbox=oci_cubesandbox` 的 OCI CubeSandbox 模板。CodeQL 隔离扫描已有基础骨架：C/C++ 使用 CubeSandbox CodeQL capture 闭环，Python/JavaScript-TypeScript/Java 可通过显式 `languages` payload 在 CubeSandbox 内进入 `build-mode=none`，Go 进入 `build-mode=autobuild`。
-- **不是什么**：历史多引擎静态审计集合；退役兼容、防回归测试或旧前端 API 残留不应重新成为当前入口。CodeQL 计划也不是把旧多引擎路由复活。
+- **是什么**：当前稳定主线由 Opengrep 承担的规则扫描体验，产品层显示为“静态审计”。Opengrep 默认使用 Dockerfile runner 容器，也可以在高级配置里把单次任务切到 `opengrep_sandbox=a3s_box` 的 a3s MicroVM。CodeQL 隔离扫描路径目前因 cubesandbox 退役处于不可用状态（详见 follow-up F1）。
+- **不是什么**：历史多引擎静态审计集合；退役兼容、防回归测试或旧前端 API 残留不应重新成为当前入口。CodeQL 路径未恢复前不应作为可用引擎暴露。
 - **主要入口**：`backend/src/routes/static_tasks.rs`、`frontend/src/shared/api/opengrep.ts`、`frontend/src/pages/StaticAnalysis.tsx`。
 
-
-### CodeQL 隔离扫描计划
-
-- **是什么**：`plan/codeql_security/codeql_opengrep_isolated_scan_plan.md` 中规划并已开始落地的静态审计扩展：在静态审计/Opengrep 产品入口下增加 `engine="codeql"`，但使用 CubeSandbox CodeQL 模板、`rules_codeql` 查询资产、SARIF 解析和项目级 build plan 固化机制。C/C++ 走 CubeSandbox capture + DB-backed build plan；Python/JavaScript-TypeScript/Java 走 `build-mode=none`；Go 走 `build-mode=autobuild`。
-- **不是什么**：Opengrep runner 的增强阶段，也不是旧多引擎静态审计路由复活。当前语言分流和 C/C++ CubeSandbox 切片不等于完整五语言首版。
-- **主要计划入口**：`plan/codeql_security/codeql_opengrep_isolated_scan_plan.md`、`.omx/specs/deep-interview-codeql-opengrep-isolated-scan-plan.md`、`.omx/specs/deep-interview-codeql-compile-sandbox.md`。
-- **strict-zero 决策**：完整 CodeQL 首版仍以五语言全绿为总计划口径；当前 CubeSandbox 切片只以 C/C++ 闭环为完成。LLM/自动候选命令必须 validator-gated 且只能在沙箱内执行；build plan、指纹和证据索引以 DB/task-state 为运行时真源；artifacts/evidence/cache 只作诊断与缓存信号，不替代 CodeQL `database create` 捕获。
-- **查询资产来源**：`backend/assets/scan_rule_assets/rules_codeql/{c,cpp,python}` 已包含真实 `.ql` / `.qll` 查询文件，不再是占位目录。三类资产均来自官方 `github/codeql` 仓库，并在各语言 README 中记录 `https://v6.gh-proxy.org/https://github.com/github/codeql` 镜像 URL、source commit、MIT license 和上游路径；请求 CodeQL `cpp` 语言时后端会同时物化 `c` 与 `cpp` 查询包以覆盖 C/C++ 统一 extractor。
-
-### CodeQL CubeSandbox
-
-- **是什么**：CodeQL 扫描的当前主执行沙箱。后端通过 `backend/src/scan/codeql_cubesandbox.rs` 把源码、查询资产和 build plan 打包送入 CubeSandbox CodeQL 模板，在 envd Connect-RPC `/process.Process/Start`（Basic auth `root`、framed `application/connect+json`）中执行 `codeql database create` / `database analyze`；workspace archive 等大 payload 先通过 envd `/files` multipart 写入 `/tmp/argus-payload-<uuid>.b64` 再被 Python 读取，绕过 `/bin/sh -c` 的 argv 上限。只有该捕获验证完成后，后端才把 accepted build plan 持久化为 `rust_codeql_build_plans` 表 active accepted 真源。项目已有 `autogen.sh`、`configure`、CMake 或 Makefile 时优先生成项目级 build plan；配置位于子目录时 build plan 的 `working_directory` 固定到该项目根，LLM 不能用逐文件编译替换已发现的项目配置，manual capture 以全局源码目录作为 CodeQL source root、以项目配置目录作为 `trace-command --working-dir`。Makefile 自动路径固定为 `make -B -j2`。源码归档会在 tar header 中恢复常见构建脚本执行位，避免沙箱解包后 `autogen.sh` / `git-version-gen` 权限丢失。缺依赖时，后端只在 `CODEQL_ALLOW_NETWORK_DURING_BUILD=true` 且安装命令通过 allowlist validator 后，在当前 CubeSandbox 中执行安装并把 `dependency_install_commands` 固化到 sticky plan evidence。apt/apt-get 安装会先按 `oci/cubesandbox/codeql-cpp.Dockerfile` 的运行时镜像策略直接重建 `/etc/apt/sources.list` 到 HTTP Debian/security 源，`apt-get update` 会按 Aliyun、TUNA、USTC、官方源顺序短超时探测，并禁代理、设置 apt 重试/30 秒超时/ForceIPv4，且用 `timeout 300s` 包住单条安装命令，避免官方源不可达或过慢导致依赖安装卡住；envd process 请求至少允许 900 秒，避免长安装被客户端提前断开。
-- **不是什么**：通用 CI/CD 构建平台，也不是把完整 build artifacts 直接喂给 CodeQL 的捷径；artifacts/evidence/cache 只能用于诊断和缓存信号。
-- **数据流**：源码/查询/build plan 打包 → CubeSandbox CodeQL 模板 → `database_create` 捕获验证 → `database_analyze` → SARIF → DB sticky plan 持久化/复用 → findings。
-- **前端证据**：CodeQL 进度接口返回 typed exploration events，仅 CodeQL-only 静态审计详情页的 `CodeQL 编译探索` 模块展示复用检查、LLM reasoning summary、沙箱命令、stdout/stderr、exit code、dependency signal、dependency install、捕获验证、reset/cancel 和脱敏状态；OpenGrep-only 详情页不展示 `CodeQL 编译探索` 模块。CodeQL 专用详情页不再额外渲染独立的 `执行进度` 或 `LLM 推理过程` SSE 面板，漏洞列表表格在自身模块内提供横向滚动来查看右侧列。后端会在 saved system-config LLM 可用时请求结构化 build plan JSON，并在 validator 通过后交给 CubeSandbox；候选命令失败时，CubeSandbox 输出会脱敏后作为 `previous_failures` 输入下一轮 LLM prompt。无配置、请求失败或解析失败会记录原因并使用 deterministic fallback 候选继续捕获验证。多命令 manual plan 通过 `database init` + shell-wrapped `trace-command` + `finalize` 捕获完整 build script。
-- **主要入口**：`backend/src/scan/codeql_cubesandbox.rs`、`backend/src/scan/codeql.rs`、`backend/src/routes/static_tasks.rs`、`backend/src/db/codeql_build_plans.rs`、`oci/cubesandbox/codeql-cpp.Dockerfile`、`scripts/cubesandbox-quickstart.sh`。
-
-### CubeSandbox 模板自动构建（template provisioner）
-
-- **是什么**：2026-05-03 引入的后端状态机，最初为 CodeQL C/C++ 扫描自动构建可复用的 CubeSandbox 模板，2026-05-04 扩展到 Opengrep 模板。`CUBESANDBOX_TEMPLATE_ID` 仍是 CodeQL 可选覆写；Opengrep 使用独立的 `CUBESANDBOX_OPENGREP_TEMPLATE_ID` 可选覆写。未设置时后端分别调用 `scripts/cubesandbox-quickstart.sh provision-codeql-cpp-template` 或 `provision-opengrep-template`，串接 `configure-docker-mirror → start-local-registry → build-*image → create-*template → watch-template`，watch 终态后将 `template_id`、`artifact_id`、`status`、`build_log_tail` 写入 `rust_cubesandbox_templates` 表；后续扫描按 template kind 取 DB active ready 记录。当前 Opengrep 路径使用内部 kind `opengrep_dedicated`，公共 `/opengrep` JSON 仍保留 `kind: "opengrep"` 并用 `recordKind` 暴露存储 kind；历史 `kind='opengrep'` 行保留但不作为当前模板来源。状态机生命周期：`pending → building → ready / failed / invalidated`，同 kind 同时只允许一条 active（部分唯一索引保证）。
-- **不是什么**：CubeSandbox 控制面 / VM 自身的安装器（VM/QEMU 仍由 host 的 `cube-sandbox-oneclick` systemd unit 拉起），也不是替代 `oci/cubesandbox/codeql-cpp.Dockerfile` 或 `oci/cubesandbox/opengrep.Dockerfile`：provisioner 只是把镜像构建 + 模板注册的串行 helper 调用纳入后端编排和状态反馈。
-- **HTTP API**：`GET /api/v1/cubesandbox/templates/codeql-cpp` 与 `GET /api/v1/cubesandbox/templates/opengrep`（状态）、`POST .../provision`（触发）、`POST .../invalidate`（标记失效以便重建）、`GET .../stream`（SSE 推送状态变更和 build log）。`/opengrep` 是兼容路由族，不代表当前 DB kind 仍是历史 `opengrep`。
-- **前端入口**：CodeQL 模板有 `frontend/src/pages/static-analysis/CodeqlExplorationPanel.tsx` 顶部状态卡（就绪 / 构建中 / 失败 / 未构建）+ 立即构建 / 重建模板（带二次确认）/ 查看日志按钮；模板未就绪时禁用「重置并重新探索」。Opengrep 模板由后端在用户选择 `OCI CubeSandbox 沙箱` 时按需确保，目前前端只在 `StaticEngineConfigDialog` 暴露执行方式选择，不展示独立模板状态卡。Hook 与 API 客户端：`frontend/src/hooks/useCodeqlTemplateStatus.ts`、`frontend/src/shared/api/cubesandboxTemplates.ts`。
-- **运维约束**：自动构建仅在 `CUBESANDBOX_API_BASE_URL` / `CUBESANDBOX_DATA_PLANE_BASE_URL` 指向 `localhost`/`127.0.0.1`/`::1`/`host.docker.internal` 之一时启用（其它远端 URL 由 `should_run_local_lifecycle` 拒绝）；helper SSH 用 `CUBE_SSH_HOST=host.docker.internal` 当 URL 走 docker host gateway。
-- **主要入口**：`backend/src/runtime/cubesandbox/template_provisioner.rs`、`backend/src/db/cubesandbox_templates.rs`、`backend/src/routes/cubesandbox_templates.rs`、`backend/src/runtime/cubesandbox/client.rs`、`backend/src/runtime/cubesandbox/helper.rs`、`oci/cubesandbox/{codeql-cpp,opengrep}.Dockerfile`、`scripts/cubesandbox-quickstart.sh`。
-
-### 沙箱管理页
-
-- **是什么**：开发测试导航组里的 `/sandbox-management` 页面，用项目管理页的共享 `DataTable` 视觉查看 CubeSandbox 模板记录和 `cubesandbox-tasks` 状态。模板数据来自 `GET /api/v1/cubesandbox/templates`，沙箱状态来自只读的 `/api/v1/cubesandbox-tasks?limit=50`。
-- **不是什么**：通用沙箱实例控制台、项目/扫描清理页或 containerd 垃圾回收入口。它不删除运行中 sandbox 实例、不删除 task 记录、不删除项目/扫描结果，也不对泛 containerd 内容做清理。
-- **操作边界**：删除与清空只作用于 `status='failed'` 的模板记录及其 CubeMaster template_id；直接删除非 FAILED 记录应返回 HTTP 409。页面上的“重置 CodeQL / 重置 OpenGrep”只调用既有 `/invalidate` 路由标记 active 模板记录失效，以便后续重建，不是 READY 模板删除。
-- **主要入口**：`frontend/src/pages/SandboxManagement.tsx`、`frontend/src/pages/sandbox-management/SandboxTemplatesTable.tsx`、`frontend/src/shared/api/cubesandboxTemplates.ts`、`frontend/src/shared/api/cubesandboxTasks.ts`、`backend/src/routes/cubesandbox_templates.rs`、`backend/src/db/cubesandbox_templates.rs`。
+> CubeSandbox 路径已于 2026-05-07 归档至 `docs/archive/cubesandbox/`，扫描统一走 a3s sandbox 或 Dockerfile runner。CodeQL 在 a3s 适配落地之前保持禁用占位（HTTP 路由保留，inner 返回 `codeql_unavailable`）。
 
 ### 智能审计
 
@@ -74,16 +43,16 @@
 
 ### Opengrep runner
 
-- **是什么**：执行静态审计规则扫描的隔离 runner。默认路径是 `docker/opengrep-runner.Dockerfile` 构建的临时 Docker 容器；静态审计 Opengrep 高级配置也可选择 `OCI CubeSandbox 沙箱`，由独立 Debian slim base 的 `oci/cubesandbox/opengrep.Dockerfile` 构建专属模板并通过 `backend/src/scan/opengrep_cubesandbox.rs` 执行同一 `opengrep-scan` 包装器。当前 CubeSandbox 模板记录 kind 为 `opengrep_dedicated`，不复用 CodeQL/sandbox-code 镜像或历史 `opengrep` 行。
-- **不是什么**：旧多引擎静态审计调度器，也不是 CodeQL 扫描主路径；CubeSandbox 选项不是默认值，未传或未知 `opengrep_sandbox` 仍回落到 Dockerfile 容器。
-- **主要入口**：`docker/opengrep-runner.Dockerfile`、`docker/opengrep-scan.sh`、`backend/src/scan/opengrep.rs`、`backend/src/scan/opengrep_cubesandbox.rs`、`oci/cubesandbox/opengrep.Dockerfile`、`frontend/src/components/scan/create-scan-task/StaticEngineConfigDialog.tsx`；backend 按任务动态创建临时 runner 容器或 CubeSandbox sandbox，任务结束后清理。
+- **是什么**：执行静态审计规则扫描的隔离 runner。默认路径是 `docker/opengrep-runner.Dockerfile` 构建的临时 Docker 容器；静态审计 Opengrep 高级配置也可选择 `a3s-box 沙箱`，通过 `backend/src/runtime/a3s_box_runner.rs` 启动 krun-vm MicroVM 执行同一 `opengrep-scan` 包装器。
+- **不是什么**：旧多引擎静态审计调度器，也不是 CodeQL 扫描主路径；a3s-box 选项不是默认值，未传或未知 `opengrep_sandbox` 仍回落到 Dockerfile 容器。
+- **主要入口**：`docker/opengrep-runner.Dockerfile`、`docker/opengrep-scan.sh`、`backend/src/scan/opengrep.rs`、`backend/src/runtime/a3s_box_runner.rs`、`frontend/src/components/scan/create-scan-task/StaticEngineConfigDialog.tsx`；backend 按任务动态创建临时 runner 容器或 a3s-box MicroVM，任务结束后清理。
 
 ### 沙箱预热池 / Standby pool of one-shot sandboxes
 
-- **是什么**：2026-05-06 引入的单次性沙箱预热层，把 microVM 生命周期（创建+连接 ~60s）移出扫描关键路径。后端在启动时按 `OPENGREP_STANDBY_POOL_SIZE` / `CODEQL_STANDBY_POOL_SIZE` / `A3S_BOX_STANDBY_POOL_SIZE`（默认各 2）预热若干就绪沙箱；扫描分发时 `pool.take()` 拿一个 ready 沙箱直接用，扫完销毁；后台 `refill_in_background` 立即补一个进池。每个沙箱**仍然只服务一次扫描**（cold-start isolation 保留），不存在状态污染。
+- **是什么**：单次性沙箱预热层，把 microVM 生命周期（创建+连接 ~60s）移出扫描关键路径。后端在启动时按 `OPENGREP_STANDBY_POOL_SIZE` / `A3S_BOX_STANDBY_POOL_SIZE`（默认各 2）预热若干就绪沙箱；扫描分发时 `pool.take()` 拿一个 ready 沙箱直接用，扫完销毁；后台 `refill_in_background` 立即补一个进池。每个沙箱**仍然只服务一次扫描**（cold-start isolation 保留），不存在状态污染。当前活跃池只剩 a3s-box（cubesandbox 路径已于 2026-05-07 退役）。
 - **不是什么**：**不是**旧 multi-use warm pool（已在 2026-05-05 commit `63af399f` 删除）。"warm pool" 复用同一沙箱跑多次扫描，状态污染风险大；"standby pool" 每次取出即用即销，纯粹是**latency 优化**，不是 state-sharing。PR 标题 / 注释 / 识别符使用 "standby pool" / "pre-warm"，不要再用 "warm pool"。
-- **主要入口**：`backend/src/runtime/sandbox_pool.rs`（generic `SandboxPool<T: Sandbox>` + `Priority::OnDemand|Refill` semaphore + `OnShutdownDestroy` 回调）、`backend/src/runtime/cubesandbox/pool.rs`（`CubesandboxHandle` + `CubesandboxFactory`）、`backend/src/runtime/a3s_box/pool.rs`（`A3sBoxHandle` + `A3sBoxFactory`，Option C.β image-cache-only）、`backend/src/main.rs` 启动 + shutdown 串接、`backend/src/runtime/cubesandbox/reconcile.rs` orphan 联合。
-- **维护提示**：cubemaster `host_path` (proto field 8 of `VolumeMounts`) 在当前部署被 ADR-Variant-B 否决（Phase A.0 探针 FAIL），所以 cubesandbox 源码上传仍是 gzip+`write_file`，**不是** zero-copy bind mount；如果 cubemaster 端后来 honor 了 `metadata["host-mount"]` 注解，重跑 `backend/tests/cubesandbox_hostpath_probe.rs` PASS 后即可切 Variant-A 路径。a3s-box 同理受 single-shot CLI 限制走 Option C.β。三个 `*_STANDBY_POOL_DISABLED` env 变量是 kill switch（回滚到 2026-05-06 之前的纯冷启动行为，无 503，只是慢）。
+- **主要入口**：`backend/src/runtime/sandbox_pool.rs`（generic `SandboxPool<T: Sandbox>` + `Priority::OnDemand|Refill` semaphore + `OnShutdownDestroy` 回调）、`backend/src/runtime/a3s_box/pool.rs`（`A3sBoxHandle` + `A3sBoxFactory`，Option C.β image-cache-only）、`backend/src/main.rs` 启动 + shutdown 串接。
+- **维护提示**：a3s-box 受 single-shot CLI 限制走 Option C.β（image-cache-only pre-warm）；完整 ~70s 收益要 upstream a3s-box CLI 加 pause/resume 后才能切 Option C.α。`OPENGREP_STANDBY_POOL_DISABLED` / `A3S_BOX_STANDBY_POOL_DISABLED` env 变量是 kill switch（回滚到纯冷启动，无 503，只是慢）。
 
 ### agent preflight
 

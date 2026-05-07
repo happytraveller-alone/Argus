@@ -1,6 +1,6 @@
 //! Phase D.4 / D.5 — Unit tests for sandbox pool metrics and isolation invariants.
 //!
-//! NOT live-gated.  Uses FakeSandbox + FakeFactory — no cubemaster required.
+//! NOT live-gated.  Uses FakeSandbox + FakeFactory — no live runtime required.
 //!
 //! AC9: pool size is observable via metric=standby_pool_size_current structured logs.
 //! AC3: no sandbox-id appears in two distinct take() dispatches over a test run.

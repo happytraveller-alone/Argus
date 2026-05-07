@@ -51,7 +51,7 @@ async fn main() -> Result<()> {
         let mut a3s_caps: HashMap<A3sBoxTemplateKind, usize> = HashMap::new();
         a3s_caps.insert(A3sBoxTemplateKind::OpengrepDedicated, a3s_target);
 
-        // a3s-box does not talk to cubemaster; cap is max_total_standby only.
+        // a3s-box has its own per-VM lifecycle; cap is max_total_standby only.
         let effective_max_a3s = config.max_total_standby;
         let a3s_pool = Arc::new(SandboxPool::new(
             a3s_caps,
