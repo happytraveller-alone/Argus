@@ -92,7 +92,6 @@ COPY --from=docker-cli-src /usr/local/bin/docker /usr/local/bin/docker
 COPY --from=a3s-box-binary-src /opt/a3s-box/bin/ /usr/local/bin/
 COPY --from=a3s-box-binary-src /opt/a3s-box/lib/ /usr/local/lib/
 COPY --from=backend-assets-archive /opt/backend-assets/scan_rule_assets.tar.gz /app/assets/scan_rule_assets.tar.gz
-COPY --chmod=755 scripts/cubesandbox-quickstart.sh /app/scripts/cubesandbox-quickstart.sh
 COPY --chmod=755 docker/opengrep-scan.sh /app/docker/opengrep-scan.sh
 
 RUN chown -R appuser:appgroup /app
