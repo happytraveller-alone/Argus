@@ -11,8 +11,8 @@
 //! any await).  Using `std::sync::Mutex` would require restructuring; the tokio
 //! variant is the safe, explicit choice here.
 //!
-//! ## Constraint compliance (memory: opengrep-cubesandbox-cold-start-2026-05-05)
-//! (a) `shutdown()` wires into graceful-shutdown via caller (`main.rs` Phase A.3).
+//! ## Constraint compliance
+//! (a) `shutdown()` wires into graceful-shutdown via caller (`main.rs`).
 //! (b) Error paths do not rely on sync `Drop` — refill tasks are tracked in
 //!     `JoinSet` and awaited explicitly in `shutdown()`.
 //! (c) Destruction is delegated to the `OnShutdownDestroy` callback (supplied by

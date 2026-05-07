@@ -25,7 +25,7 @@ use axum::{
 use backend_rust::{
     app::build_router,
     config::AppConfig,
-    runtime::cubesandbox::{wait_for_active_scans_drain, ActiveScanGuard, ShutdownGate},
+    runtime::shutdown::{wait_for_active_scans_drain, ActiveScanGuard, ShutdownGate},
     state::AppState,
 };
 use tower::ServiceExt;

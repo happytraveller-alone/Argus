@@ -3,7 +3,7 @@ use axum::{
     http::{Method, Request, StatusCode},
 };
 use backend_rust::{
-    app::build_router, config::AppConfig, runtime::cubesandbox::ShutdownGate, state::AppState,
+    app::build_router, config::AppConfig, runtime::shutdown::ShutdownGate, state::AppState,
 };
 use serde_json::{json, Value};
 use std::{env, fs, sync::LazyLock};

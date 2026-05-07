@@ -9,13 +9,13 @@ use backend_rust::{
     config::AppConfig,
     db::intelligent_task_state,
     runtime::{
-        cubesandbox::ShutdownGate,
         intelligent::{
             config::IntelligentLlmConfig,
             llm::{IntelligentLlmInvocation, IntelligentLlmInvocationError, IntelligentLlmInvoker},
             task::IntelligentTaskManager,
             types::{IntelligentTaskEvent, IntelligentTaskRecord, IntelligentTaskStatus},
         },
+        shutdown::ShutdownGate,
     },
     state::{AppState, StoredProject, StoredProjectArchive},
 };

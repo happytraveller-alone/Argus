@@ -34,8 +34,7 @@ use crate::runtime::{
 
 /// Discriminant for a3s-box pool slots.
 ///
-/// Kept separate from `cubesandbox_templates::TemplateKind` — a3s-box is a
-/// distinct runtime with its own image namespace.
+/// a3s-box is a distinct runtime with its own image namespace.
 #[derive(Clone, Copy, Eq, PartialEq, Hash, Debug)]
 pub enum A3sBoxTemplateKind {
     /// opengrep scanner running on a3s-box (the only variant today).

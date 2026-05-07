@@ -9,9 +9,7 @@ use anyhow::{anyhow, Result};
 use sqlx::PgPool;
 use tokio::time::timeout;
 
-use crate::state::{
-    AppState, BootstrapReport, BootstrapStatus, DatabaseBootstrapStatus, RecoveryTaskStatus,
-};
+use crate::state::{AppState, BootstrapReport, BootstrapStatus, DatabaseBootstrapStatus};
 
 const REQUIRED_RUST_TABLES: &[&str] = &[
     "system_configs",
@@ -105,49 +103,11 @@ async fn build_report(state: &AppState) -> BootstrapReport {
     if report.recovery.status == BootstrapStatus::Error.as_str() {
         report.overall = BootstrapStatus::Degraded.as_str().to_string();
     }
-    match state
-        .cube_sandbox_task_manager
-        .reconcile_orphans(state)
-        .await
-    {
-        Ok(()) => report.recovery.tasks.push(RecoveryTaskStatus {
-            name: "cubesandbox_tasks".to_string(),
-            table_present: true,
-            recovered: 0,
-        }),
-        Err(error) => {
-            report.overall = BootstrapStatus::Degraded.as_str().to_string();
-            report.recovery.status = BootstrapStatus::Degraded.as_str().to_string();
-            report.recovery.error =
-                Some(format!("CubeSandbox orphan reconciliation failed: {error}"));
-        }
-    }
 
-    // ORDER INVARIANT (Fix 6):
-    //   reconcile_stale_templates MUST complete and emit its info! event
-    //   BEFORE bootstrap_provision_template runs. No tokio::spawn, no select!,
-    //   no parallel join between them. If bootstrap_provision_template was
-    //   previously inside a separate tokio::spawn, fold it into the same
-    //   spawn (or the current sequential function) — do NOT split into two.
-    let reconcile_summary =
-        crate::runtime::cubesandbox::reconcile::reconcile_stale_templates(state).await;
-    tracing::info!(
-        target: "argus::cubesandbox::reconcile",
-        deleted_failed_n             = reconcile_summary.deleted_failed_n,
-        deleted_running_zombie_n     = reconcile_summary.deleted_running_zombie_n,
-        reverse_orphan_n             = reconcile_summary.reverse_orphan_n,
-        forward_orphan_n             = reconcile_summary.forward_orphan_n,
-        scan_failed_invalidated_n    = reconcile_summary.scan_failed_invalidated_n,
-        fingerprint_mismatch_n       = reconcile_summary.fingerprint_mismatch_n,
-        env_rewrote_bool             = reconcile_summary.env_rewrote_bool,
-        cubemaster_list_failed        = reconcile_summary.cubemaster_list_failed,
-        orphan_sandbox_check_skipped = reconcile_summary.orphan_sandbox_check_skipped,
-        orphan_sandbox_n             = reconcile_summary.orphan_sandbox_n,
-        errors                       = ?reconcile_summary.errors,
-        "cubesandbox startup reconcile complete"
-    );
+    // CubeSandbox runtime removed — its orphan reconciliation and template
+    // reconcile no longer run during bootstrap.
 
-    // One-time manifest cleanup migration — runs after reconcile, before preflight.
+    // One-time manifest cleanup migration — runs before preflight.
     migrate_remove_opengrep_pool_manifest().await;
 
     report.preflight = match preflight::run(state).await {
@@ -458,73 +418,9 @@ async fn ensure_rust_schema(pool: &PgPool) -> Result<()> {
     .execute(pool)
     .await?;
 
-    sqlx::query(
-        r#"
-        create table if not exists rust_cubesandbox_templates (
-            id uuid primary key,
-            kind text not null,
-            status text not null,
-            template_id text,
-            artifact_id text,
-            job_id text,
-            image_ref text not null,
-            error_message text,
-            build_log_tail text not null default '',
-            created_at timestamptz not null default now(),
-            updated_at timestamptz not null default now(),
-            ready_at timestamptz
-        )
-        "#,
-    )
-    .execute(pool)
-    .await?;
-
-    sqlx::query(
-        r#"
-        create unique index if not exists ux_rust_cubesandbox_templates_active_kind
-            on rust_cubesandbox_templates (kind)
-            where status in ('pending', 'building', 'ready')
-        "#,
-    )
-    .execute(pool)
-    .await?;
-
-    sqlx::query(
-        r#"
-        create index if not exists ix_rust_cubesandbox_templates_kind_updated
-            on rust_cubesandbox_templates (kind, updated_at desc)
-        "#,
-    )
-    .execute(pool)
-    .await?;
-
-    sqlx::query(
-        r#"
-        alter table rust_cubesandbox_templates
-            add column if not exists image_fingerprint text
-        "#,
-    )
-    .execute(pool)
-    .await?;
-
-    sqlx::query(
-        r#"
-        alter table rust_cubesandbox_templates
-            add column if not exists consecutive_scan_failures smallint not null default 0
-        "#,
-    )
-    .execute(pool)
-    .await?;
-
-    sqlx::query(
-        r#"
-        create index if not exists ix_rust_cubesandbox_templates_template_id
-            on rust_cubesandbox_templates (template_id)
-            where template_id is not null
-        "#,
-    )
-    .execute(pool)
-    .await?;
+    // CubeSandbox runtime removed — `rust_cubesandbox_templates` is no longer
+    // created or migrated by Rust bootstrap. Existing tables (if any) are left
+    // in place; operators may drop them manually.
 
     Ok(())
 }

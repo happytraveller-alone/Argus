@@ -3,7 +3,7 @@ use axum::{
     http::{Request, StatusCode},
 };
 use backend_rust::{
-    app::build_router, config::AppConfig, runtime::cubesandbox::ShutdownGate, state::AppState,
+    app::build_router, config::AppConfig, runtime::shutdown::ShutdownGate, state::AppState,
 };
 use tower::util::ServiceExt;
 

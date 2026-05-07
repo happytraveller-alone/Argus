@@ -9,7 +9,6 @@ use tokio::sync::{Mutex, RwLock};
 use crate::{
     config::AppConfig, project_file_cache::ProjectFileCache,
     runtime::a3s_box::pool::A3sBoxHandle,
-    runtime::cubesandbox::{pool::CubesandboxHandle, task::CubeSandboxTaskManager},
     runtime::intelligent::task::IntelligentTaskManager,
     runtime::sandbox_pool::SandboxPool,
 };
@@ -246,13 +245,7 @@ pub struct AppState {
     pub file_store_lock: Arc<Mutex<()>>,
     pub project_file_cache: Arc<Mutex<ProjectFileCache>>,
     pub bootstrap: Arc<RwLock<BootstrapReport>>,
-    pub cube_sandbox_task_manager: Arc<CubeSandboxTaskManager>,
     pub intelligent_task_manager: Arc<IntelligentTaskManager>,
-    /// Standby pool for cubesandbox VMs (Phase A.3).
-    /// Populated at startup; `None` when `cubesandbox_enabled = false`.
-    /// Scan paths call `pool.take(TemplateKind::OpengrepDedicated)` to acquire
-    /// a pre-warmed sandbox, falling back to cold-start on `None`.
-    pub cubesandbox_pool: Option<Arc<SandboxPool<CubesandboxHandle>>>,
     /// Standby pool for a3s-box image-cache entries (Phase C.3, Option C.β).
     /// Each slot represents a pre-warmed OCI image cache entry so that scans
     /// skip the Docker→OCI conversion step on first use.
@@ -279,9 +272,7 @@ impl AppState {
             db_pool,
             file_store_lock: Arc::new(Mutex::new(())),
             project_file_cache: Arc::new(Mutex::new(ProjectFileCache::new())),
-            cube_sandbox_task_manager: Arc::new(CubeSandboxTaskManager::new()),
             intelligent_task_manager: Arc::new(IntelligentTaskManager::new()),
-            cubesandbox_pool: None,
             a3s_box_pool: None,
             bootstrap: Arc::new(RwLock::new(BootstrapReport {
                 overall: BootstrapStatus::NotRun.as_str().to_string(),

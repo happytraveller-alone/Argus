@@ -1,12 +1,4 @@
-pub mod client;
-pub mod config;
-pub mod cubemaster_client;
-pub mod helper;
-pub mod pool;
-pub mod reconcile;
-pub mod task;
-pub mod template_provisioner;
-pub mod types;
+//! Sandbox shutdown primitives shared between cubesandbox (legacy, removed) and a3s lanes.
 
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -41,7 +33,7 @@ impl ShutdownGate {
 // opengrep/codeql scans. The scans are dispatched directly via tokio::spawn in
 // routes/static_tasks.rs; there is no existing map to reuse.
 
-static ACTIVE_SCAN_COUNT: AtomicUsize = AtomicUsize::new(0);
+pub static ACTIVE_SCAN_COUNT: AtomicUsize = AtomicUsize::new(0);
 
 /// RAII guard: increments ACTIVE_SCAN_COUNT on creation, decrements on drop.
 /// Drop runs even on panic, keeping the counter accurate.
@@ -86,27 +78,4 @@ pub async fn wait_for_active_scans_drain(timeout: tokio::time::Duration) {
         tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
     }
     tracing::info!("all in-flight scans drained cleanly");
-}
-
-/// Best-effort sandbox deletion: log structured error on failure, never propagate.
-///
-/// Used by both opengrep and codeql scan paths to satisfy spec constraint 5
-/// ("delete_sandbox failure must never poison the business result, but must
-/// never be silent"). Log shape is fixed — sandbox_id / task_id / stage / error —
-/// so CI grep + dashboards remain stable.
-pub async fn best_effort_delete_sandbox(
-    client: &client::CubeSandboxClient,
-    sandbox_id: &str,
-    task_id: &str,
-    stage: &'static str,
-) {
-    if let Err(error) = client.delete_sandbox(sandbox_id).await {
-        tracing::error!(
-            sandbox_id = %sandbox_id,
-            task_id = %task_id,
-            stage = %stage,
-            %error,
-            "delete_sandbox failed; best-effort cleanup"
-        );
-    }
 }

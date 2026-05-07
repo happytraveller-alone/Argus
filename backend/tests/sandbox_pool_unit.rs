@@ -252,21 +252,3 @@ async fn ac3_no_pool_residue_n_plus_one_sequential() {
     let unique: HashSet<_> = ids_vec.iter().cloned().collect();
     assert_eq!(ids_vec.len(), unique.len(), "all sandbox IDs across dispatches must be unique");
 }
-
-// ── M5: TemplateKind Debug string contract guard ──────────────────────────────
-
-/// Locks the Debug string contract used by reconcile.rs read_active_*sandboxes.
-///
-/// reconcile.rs builds kind_debug via `format!("{kind:?}")` and matches
-/// against literal strings "OpengrepDedicated", "CodeqlCpp", "Opengrep".
-/// Renaming a variant without updating reconcile would silently break orphan
-/// protection.  This test catches that regression at compile+run time.
-#[test]
-fn templatekind_debug_strings_match_reconcile_contract() {
-    use backend_rust::db::cubesandbox_templates::TemplateKind;
-    // These exact strings are matched in reconcile.rs read_active_*sandboxes.
-    // Renaming variants without updating reconcile silently breaks orphan protection.
-    assert_eq!(format!("{:?}", TemplateKind::OpengrepDedicated), "OpengrepDedicated");
-    assert_eq!(format!("{:?}", TemplateKind::CodeqlCpp), "CodeqlCpp");
-    assert_eq!(format!("{:?}", TemplateKind::Opengrep), "Opengrep");
-}

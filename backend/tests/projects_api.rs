@@ -7,8 +7,8 @@ use backend_rust::{
     config::AppConfig,
     db::{intelligent_task_state, task_state},
     runtime::{
-        cubesandbox::ShutdownGate,
         intelligent::types::{IntelligentTaskRecord, IntelligentTaskStatus},
+        shutdown::ShutdownGate,
     },
     state::AppState,
 };

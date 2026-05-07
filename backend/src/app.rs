@@ -1,6 +1,6 @@
 use axum::{routing::any, Router};
 
-use crate::{routes, runtime::cubesandbox::ShutdownGate, state::AppState};
+use crate::{routes, runtime::shutdown::ShutdownGate, state::AppState};
 
 /// Build the application router.
 ///

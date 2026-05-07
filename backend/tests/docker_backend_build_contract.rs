@@ -2,9 +2,6 @@ const ROOT_COMPOSE: &str = include_str!("../../docker-compose.yml");
 const BACKEND_DOCKERFILE: &str = include_str!("../../docker/backend.Dockerfile");
 const DOCKER_PUBLISH_WORKFLOW: &str = include_str!("../../.github/workflows/docker-publish.yml");
 const OPENGREP_RUNNER_DOCKERFILE: &str = include_str!("../../docker/opengrep-runner.Dockerfile");
-const CUBESANDBOX_OPENGREP_DOCKERFILE: &str =
-    include_str!("../../oci/cubesandbox/opengrep.Dockerfile");
-const CUBESANDBOX_QUICKSTART_SCRIPT: &str = include_str!("../../scripts/cubesandbox-quickstart.sh");
 const OPENGREP_REBUILD_VERIFY_SCRIPT: &str =
     include_str!("../../scripts/rebuild-opengrep-runner-verify.sh");
 const RELEASE_BACKEND_DOCKERFILE: &str =
@@ -30,50 +27,6 @@ fn compose_passes_backend_cargo_network_build_args() {
         ROOT_COMPOSE.contains("BACKEND_CARGO_NET_RETRY: ${BACKEND_CARGO_NET_RETRY:-10}"),
         "root compose must pass a bounded Cargo retry count into the backend build"
     );
-}
-
-#[test]
-fn compose_and_backend_image_support_host_cubesandbox_runtime() {
-    assert!(
-        ROOT_COMPOSE.contains("\"host.docker.internal:host-gateway\""),
-        "backend container must be able to reach a host-managed CubeSandbox service"
-    );
-    assert!(
-        BACKEND_DOCKERFILE
-            .contains("COPY --chmod=755 scripts/cubesandbox-quickstart.sh /app/scripts/cubesandbox-quickstart.sh"),
-        "backend image should include the CubeSandbox helper for local lifecycle diagnostics"
-    );
-    assert!(
-        ROOT_COMPOSE.contains("./docker/opengrep-scan.sh:/app/docker/opengrep-scan.sh:ro"),
-        "backend container must mount opengrep-scan.sh because provision-opengrep-template packages it into the CubeSandbox image"
-    );
-    assert!(
-        RELEASE_BACKEND_DOCKERFILE.contains("COPY --chmod=755 docker/opengrep-scan.sh /app/docker/opengrep-scan.sh"),
-        "release backend image must include opengrep-scan.sh because provision-opengrep-template packages it into the CubeSandbox image"
-    );
-    assert!(
-        CUBESANDBOX_QUICKSTART_SCRIPT.contains("CUBE_OPENGREP_RULES_ARCHIVE"),
-        "CubeSandbox helper must support packaged backend rule archives when backend source assets are not mounted"
-    );
-    assert!(
-        CUBESANDBOX_QUICKSTART_SCRIPT.contains("normalize_opengrep_rules_archive")
-            && CUBESANDBOX_QUICKSTART_SCRIPT.contains("scan_rule_assets/rules_opengrep"),
-        "CubeSandbox helper must normalize backend scan_rule_assets archives to the rules_opengrep root expected by opengrep-scan"
-    );
-    assert!(
-        ROOT_COMPOSE.contains("CUBE_OPENGREP_RULES_ARCHIVE: /app/assets/scan_rule_assets.tar.gz"),
-        "backend container must point provision-opengrep-template at the packaged scan_rule_assets archive"
-    );
-    assert!(
-        RELEASE_BACKEND_DOCKERFILE.contains("COPY --from=backend-assets-archive /opt/backend-assets/scan_rule_assets.tar.gz /app/assets/scan_rule_assets.tar.gz"),
-        "release backend image must include packaged scan rule assets for Opengrep CubeSandbox provisioning"
-    );
-    for package in ["git", "iproute2", "openssh-client", "python3"] {
-        assert!(
-            BACKEND_DOCKERFILE.contains(package) && RELEASE_BACKEND_DOCKERFILE.contains(package),
-            "backend runtime images must include {package} for CubeSandbox helper diagnostics"
-        );
-    }
 }
 
 #[test]
@@ -199,41 +152,6 @@ fn opengrep_runner_packages_only_unified_rule_root() {
     assert!(
         !OPENGREP_RUNNER_DOCKERFILE.contains("rules_from_patches"),
         "opengrep runner image must not reference the retired rules_from_patches root"
-    );
-}
-
-#[test]
-fn opengrep_cubesandbox_image_exposes_envd_health_probe() {
-    assert!(
-        CUBESANDBOX_OPENGREP_DOCKERFILE.contains("ENVD_PORT=49983"),
-        "Opengrep CubeSandbox image must expose envd on 49983 for CubeMaster readiness and envd execution"
-    );
-    assert!(
-        CUBESANDBOX_OPENGREP_DOCKERFILE.contains("ENTRYPOINT")
-            && CUBESANDBOX_OPENGREP_DOCKERFILE.contains("opengrep-cube-entrypoint"),
-        "Opengrep CubeSandbox image must start envd through an entrypoint instead of exiting after self-test"
-    );
-    assert!(
-        CUBESANDBOX_OPENGREP_DOCKERFILE.contains("CMD []"),
-        "default CubeSandbox template command should keep envd in the foreground"
-    );
-    assert!(
-        CUBESANDBOX_QUICKSTART_SCRIPT.contains("--probe 49983"),
-        "create-opengrep-template must probe envd /health on 49983, not the absent code-interpreter port"
-    );
-    assert!(
-        CUBESANDBOX_QUICKSTART_SCRIPT.contains("CUBE_ENVD_BASE_IMAGE")
-            && CUBESANDBOX_QUICKSTART_SCRIPT.contains("--build-arg CUBE_ENVD_BASE_IMAGE="),
-        "Opengrep CubeSandbox builds must pass the envd source image explicitly for reproducible local/VM builds"
-    );
-    assert!(
-        CUBESANDBOX_OPENGREP_DOCKERFILE.contains(" python3 ")
-            && !CUBESANDBOX_OPENGREP_DOCKERFILE.contains("python3-minimal"),
-        "Opengrep CubeSandbox runtime must install full python3 because the envd runner imports standard-library modules like tarfile"
-    );
-    assert!(
-        CUBESANDBOX_OPENGREP_DOCKERFILE.contains("touch /opt/opengrep/rules/.baked"),
-        "Opengrep CubeSandbox image must mark baked rules so OCI scans can skip per-task image-rule uploads"
     );
 }
 

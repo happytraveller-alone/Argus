@@ -31,7 +31,7 @@ use crate::{
     error::ApiError,
     llm_rule,
     runtime::runner::{self, RunnerSpec},
-    runtime::{a3s_box_runner, cubesandbox::ShutdownGate},
+    runtime::{a3s_box_runner, shutdown::ShutdownGate},
     scan::{codeql, opengrep, scope_filters},
     state::AppState,
 };
@@ -908,7 +908,7 @@ async fn create_static_task_for_engine(
         // Hold an ActiveScanGuard for the lifetime of this scan task.
         // shutdown_signal waits for ACTIVE_SCAN_COUNT to reach zero before
         // letting axum exit, ensuring best_effort_delete_sandbox always runs.
-        let _scan_guard = crate::runtime::cubesandbox::ActiveScanGuard::enter();
+        let _scan_guard = crate::runtime::shutdown::ActiveScanGuard::enter();
         if engine_for_task == "codeql" {
             run_codeql_scan(
                 bg_state,
@@ -3940,10 +3940,9 @@ mod tests {
     use super::{
         build_opengrep_a3s_box_runner_spec, build_opengrep_runner_spec,
         extract_highest_rule_severity, extract_opengrep_task_options, format_opengrep_runner_error,
-        normalize_codeql_task_languages, prepare_opengrep_runner_inputs,
-        prune_static_scan_non_source_paths, read_opengrep_results_text, static_task_value,
-        OpengrepResourceScheduler, OpengrepRunnerPaths, OpengrepRunnerResources,
-        OpengrepSandboxKind,
+        prepare_opengrep_runner_inputs, prune_static_scan_non_source_paths,
+        read_opengrep_results_text, static_task_value, OpengrepResourceScheduler,
+        OpengrepRunnerPaths, OpengrepRunnerResources, OpengrepSandboxKind,
     };
     use serde_json::json;
     use std::{collections::BTreeSet, fs, path::Path, sync::mpsc, time::Duration};
@@ -4163,26 +4162,6 @@ rules:
 
         assert_eq!(value["total_findings"], 1);
         assert_eq!(value["error_count"], 9);
-    }
-
-    #[test]
-    fn codeql_language_scope_uses_task_payload_or_cpp_default() {
-        assert_eq!(normalize_codeql_task_languages(&[], &[]), vec!["cpp"]);
-        assert_eq!(
-            normalize_codeql_task_languages(
-                &["python".to_string(), "typescript".to_string()],
-                &["go".to_string()]
-            ),
-            vec!["javascript-typescript", "python"]
-        );
-        assert_eq!(
-            normalize_codeql_task_languages(&[], &["go".to_string()]),
-            vec!["cpp"]
-        );
-        assert_eq!(
-            normalize_codeql_task_languages(&["C++".to_string()], &[]),
-            vec!["cpp"]
-        );
     }
 
     #[test]
