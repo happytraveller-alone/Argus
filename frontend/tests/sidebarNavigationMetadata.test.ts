@@ -101,11 +101,8 @@ test("project code browser route stays hidden under the projects section", () =>
 });
 
 
-test("sandbox management route is grouped under devTest navigation", () => {
+test("sandbox management route is removed from frontend navigation", () => {
 	const sandboxRoute = routes.find((route) => route.path === "/sandbox-management");
 
-	assert.ok(sandboxRoute);
-	assert.equal(sandboxRoute.name, "沙箱管理");
-	assert.equal(sandboxRoute.navGroup, "devTest");
-	assert.equal(sandboxRoute.navVisible, true);
+	assert.equal(sandboxRoute, undefined);
 });

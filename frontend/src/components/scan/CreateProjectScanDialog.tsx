@@ -60,6 +60,12 @@ interface StaticTaskCreateResult {
 	params: URLSearchParams;
 }
 
+function normalizeCreateScanOpengrepSandbox(
+	mode: OpengrepSandboxMode,
+): OpengrepSandboxMode {
+	return mode === "oci_cubesandbox" ? "dockerfile_container" : mode;
+}
+
 export default function CreateProjectScanDialog({
 	open,
 	onOpenChange,
@@ -270,7 +276,9 @@ export default function CreateProjectScanDialog({
 					),
 					rule_ids: ruleIds,
 					target_path: ".",
-					opengrep_sandbox: opengrepSandbox,
+					opengrep_sandbox: normalizeCreateScanOpengrepSandbox(
+						opengrepSandbox,
+					),
 				});
 		}
 		if (codeqlEnabled) {

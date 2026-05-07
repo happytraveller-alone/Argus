@@ -40,6 +40,8 @@ test("TopNavigation renders the main routes and grouped dropdown triggers", asyn
 	assert.match(markup, /扫描配置/);
 	assert.match(markup, /开发测试/);
 	assert.doesNotMatch(markup, /Agent 测试/);
+	assert.doesNotMatch(markup, /沙箱管理/);
+	assert.doesNotMatch(markup, /href="\/sandbox-management"/);
 	assert.doesNotMatch(markup, />\s*EN\s*</);
 });
 
@@ -239,7 +241,7 @@ test("navigation model returns grouped routes in configured order", async () => 
 			},
 			{
 				id: "devTest",
-				paths: ["/data-management", "/sandbox-management"],
+				paths: ["/data-management"],
 				active: false,
 			},
 		],

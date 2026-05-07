@@ -89,6 +89,12 @@ interface CreateScanTaskDialogProps {
 const isSevereRule = (rule: OpengrepRule) =>
 	String(rule.severity || "").toUpperCase() === "ERROR";
 
+function normalizeCreateScanOpengrepSandbox(
+	mode: OpengrepSandboxMode,
+): OpengrepSandboxMode {
+	return mode === "oci_cubesandbox" ? "dockerfile_container" : mode;
+}
+
 export default function CreateScanTaskDialog({
 	open,
 	onOpenChange,
@@ -302,7 +308,9 @@ export default function CreateScanTaskDialog({
 					),
 					rule_ids: activeRuleIds,
 					target_path: ".",
-					opengrep_sandbox: opengrepSandbox,
+					opengrep_sandbox: normalizeCreateScanOpengrepSandbox(
+						opengrepSandbox,
+					),
 				});
 			} catch (error) {
 				const apiMsg = extractCreateScanTaskApiErrorMessage(error);
@@ -332,7 +340,9 @@ export default function CreateScanTaskDialog({
 					),
 					rule_ids: retryRuleIds,
 					target_path: ".",
-					opengrep_sandbox: opengrepSandbox,
+					opengrep_sandbox: normalizeCreateScanOpengrepSandbox(
+						opengrepSandbox,
+					),
 				});
 			}
 		}

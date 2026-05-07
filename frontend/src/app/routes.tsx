@@ -29,7 +29,6 @@ const TaskManagementIntelligent = lazy(
 	() => import("@/pages/TaskManagementIntelligent"),
 );
 const DataManagementPage = lazy(() => import("@/pages/DataManagement"));
-const SandboxManagementPage = lazy(() => import("@/pages/SandboxManagement"));
 const AgentAuditDetail = lazy(() => import("@/pages/AgentAuditDetail"));
 const CodeqlScanDetail = lazy(() => import("@/pages/CodeqlScanDetail"));
 
@@ -249,16 +248,6 @@ const routes: RouteConfig[] = [
 		navVisible: true,
 		navGroup: "devTest",
 		navOrder: 35,
-	},
-	{
-		name: "沙箱管理",
-		nameKey: "route.sandboxManagement",
-		path: "/sandbox-management",
-		element: <SandboxManagementPage />,
-		visible: true,
-		navVisible: true,
-		navGroup: "devTest",
-		navOrder: 40,
 	},
 ];
 

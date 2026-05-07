@@ -460,7 +460,7 @@ test("buildStaticAnalysisHeaderSummary exposes Opengrep scan scheme label", () =
 			codeqlTask: null,
 			enabledEngines: ["opengrep"],
 		}).scanSchemeLabel,
-		"CubeSandbox 沙箱方案",
+		"已停用隔离方案",
 	);
 	assert.equal(
 		viewModel.buildStaticAnalysisHeaderSummary({

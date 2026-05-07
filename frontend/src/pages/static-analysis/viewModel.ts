@@ -87,7 +87,7 @@ export interface StaticAnalysisHeaderSummary {
 export function getStaticAnalysisScanSchemeLabel(
   sandbox?: string | null,
 ): string {
-  if (sandbox === "oci_cubesandbox") return "CubeSandbox 沙箱方案";
+  if (sandbox === "oci_cubesandbox") return "已停用隔离方案";
   if (sandbox === "a3s_box") return "A3S 沙箱方案";
   return "Docker 容器方案";
 }

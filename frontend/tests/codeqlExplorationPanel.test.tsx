@@ -45,4 +45,5 @@ test("CodeqlExplorationPanel renders as a scrollable auto-follow timeline module
   assert.match(markup, /min-h-0 flex-1/);
   assert.match(markup, /识别 C\/C\+\+ 编译入口/);
   assert.match(markup, /重置并重新探索/);
+  assert.doesNotMatch(markup, /立即构建|重建模板|模板就绪/);
 });
