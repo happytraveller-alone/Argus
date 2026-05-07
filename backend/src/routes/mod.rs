@@ -1,5 +1,3 @@
-pub mod cubesandbox_tasks;
-pub mod cubesandbox_templates;
 pub mod intelligent_tasks;
 pub mod llm_config_set;
 pub mod projects;
@@ -17,11 +15,6 @@ use crate::state::AppState;
 pub fn owned_routes() -> Router<AppState> {
     Router::new()
         .route("/health", get(health))
-        .nest("/api/v1/cubesandbox-tasks", cubesandbox_tasks::router())
-        .nest(
-            "/api/v1/cubesandbox/templates",
-            cubesandbox_templates::router(),
-        )
         .nest("/api/v1/intelligent-tasks", intelligent_tasks::router())
         .nest("/api/v1/system-config", system_config::router())
         .nest("/api/v1/projects", projects::router())
