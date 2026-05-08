@@ -8,7 +8,10 @@ use anyhow::{anyhow, Context, Result};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
-use crate::state::{AppState, ScanRuleAsset};
+use crate::{
+    core::hex,
+    state::{AppState, ScanRuleAsset},
+};
 
 #[derive(Clone, Debug, Default)]
 pub struct ScanRuleAssetImportSummary {
@@ -317,7 +320,7 @@ fn classify_rule_asset(relative: &Path) -> Result<(&'static str, &'static str)> 
 fn sha256_hex(bytes: &[u8]) -> String {
     let mut hasher = Sha256::new();
     hasher.update(bytes);
-    format!("{:x}", hasher.finalize())
+    hex::encode_lower(hasher.finalize())
 }
 
 #[cfg(test)]

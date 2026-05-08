@@ -25,6 +25,7 @@ use crate::{
         archive_content_type, list_archive_files_from_bytes, list_archive_files_from_path,
         read_archive_file_from_path, supported_archive_suffixes,
     },
+    core::hex,
     db::{intelligent_task_state, projects, task_state},
     error::ApiError,
     project_file_cache::{ProjectFileCacheEntry, ProjectFileCacheSet},
@@ -2243,7 +2244,7 @@ fn now_rfc3339() -> String {
 fn hex_digest(bytes: &[u8]) -> String {
     let mut hasher = Sha256::new();
     hasher.update(bytes);
-    format!("{:x}", hasher.finalize())
+    hex::encode_lower(hasher.finalize())
 }
 
 async fn sync_python_project_mirror(

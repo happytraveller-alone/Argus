@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { type ReactNode, useMemo, useState } from "react";
 import {
 	Activity,
 	BarChart3,
@@ -20,6 +20,11 @@ import {
 	XAxis,
 	YAxis,
 } from "recharts";
+import type {
+	NameType,
+	Payload,
+	ValueType,
+} from "recharts/types/component/DefaultTooltipContent";
 import {
 	Tooltip as UiTooltip,
 	TooltipContent,
@@ -447,14 +452,14 @@ export function buildTrendRows(
 	});
 }
 
-function renderTrendLabel(value: number | string) {
+function renderTrendLabel(value: ReactNode) {
 	return Number(value || 0) > 0 ? formatNumber(Number(value || 0)) : "";
 }
 
 function renderTrendTooltip(payload: {
 	active?: boolean;
-	label?: string;
-	payload?: Array<{ payload?: TrendRow }>;
+	label?: string | number;
+	payload?: ReadonlyArray<{ payload?: TrendRow }>;
 }) {
 	if (
 		!payload.active ||
@@ -1254,14 +1259,14 @@ function HorizontalStatsChart({
 							<Tooltip
 								cursor={{ fill: "rgba(148, 163, 184, 0.12)" }}
 								contentStyle={DASHBOARD_TOOLTIP_STYLE}
-								formatter={(value: number, name: string) =>
-									formatHorizontalStatsTooltipValue(viewId, value, name)
+								formatter={(value: ValueType | undefined, name: NameType | undefined) =>
+									formatHorizontalStatsTooltipValue(viewId, Number(value || 0), String(name || ""))
 								}
 								labelFormatter={(
-									label: string,
-									payload: Array<{ payload?: HorizontalRow }>,
+									label: ReactNode,
+									payload: ReadonlyArray<Payload<ValueType, NameType>>,
 								) =>
-									`${label}${payload[0]?.payload?.meta ? ` · ${payload[0].payload.meta}` : ""}`
+									`${String(label ?? "")}${payload[0]?.payload?.meta ? ` · ${payload[0].payload.meta}` : ""}`
 								}
 							/>
 							{stacked ? (
@@ -1300,7 +1305,7 @@ function HorizontalStatsChart({
 											position="right"
 											fill="hsl(var(--foreground))"
 											fontSize={HORIZONTAL_STATS_LABEL_FONT_SIZE}
-											formatter={(value: number) => formatNumber(Number(value))}
+											formatter={(value: ReactNode) => formatNumber(Number(value || 0))}
 										/>
 									</Bar>
 								</>
@@ -1317,10 +1322,10 @@ function HorizontalStatsChart({
 										position="right"
 										fill="hsl(var(--foreground))"
 										fontSize={HORIZONTAL_STATS_LABEL_FONT_SIZE}
-										formatter={(value: number) =>
+										formatter={(value: ReactNode) =>
 											viewId === "language-lines"
-												? `${formatNumber(Number(value))}%`
-												: formatNumber(Number(value))
+												? `${formatNumber(Number(value || 0))}%`
+												: formatNumber(Number(value || 0))
 										}
 									/>
 								</Bar>

@@ -1453,78 +1453,6 @@ fn extract_opengrep_task_options(payload: &Value) -> OpengrepTaskOptions {
     }
 }
 
-fn resolve_codeql_direct_build_mode(language: &str, requested: Option<&str>) -> String {
-    if let Some(build_mode) = requested.filter(|mode| matches!(*mode, "none" | "autobuild")) {
-        return build_mode.to_string();
-    }
-    match language {
-        "python" | "javascript-typescript" | "java" => "none".to_string(),
-        "go" => "autobuild".to_string(),
-        _ => "none".to_string(),
-    }
-}
-
-
-async fn record_codeql_events(
-    state: &AppState,
-    task_id: &str,
-    events_path: &std::path::Path,
-    progress: f64,
-) {
-    let Ok(events_text) = tokio::fs::read_to_string(events_path).await else {
-        return;
-    };
-    for line in events_text
-        .lines()
-        .filter(|line| !line.trim().is_empty())
-        .take(200)
-    {
-        let raw_event =
-            serde_json::from_str::<Value>(line).unwrap_or_else(|_| json!({ "message": line }));
-        let event = codeql::redact_sensitive_value(&raw_event);
-        let stage = event
-            .get("stage")
-            .and_then(Value::as_str)
-            .unwrap_or("codeql_event")
-            .to_string();
-        let message = event
-            .get("message")
-            .and_then(Value::as_str)
-            .or_else(|| event.get("event").and_then(Value::as_str))
-            .unwrap_or("CodeQL runner event")
-            .to_string();
-        update_scan_progress(state, task_id, progress, &stage, &message).await;
-        append_codeql_exploration_event(
-            state,
-            task_id,
-            progress,
-            map_codeql_runner_event_type(&event),
-            &stage,
-            event.get("round").and_then(Value::as_i64),
-            event,
-        )
-        .await;
-    }
-}
-
-fn map_codeql_runner_event_type(event: &Value) -> &'static str {
-    let stage = event
-        .get("stage")
-        .and_then(Value::as_str)
-        .unwrap_or_default();
-    let event_name = event
-        .get("event")
-        .and_then(Value::as_str)
-        .unwrap_or_default();
-    if stage.contains("compile") || event_name.contains("command") {
-        "sandbox_command"
-    } else if stage.contains("database") || event_name.contains("database") {
-        "capture_validation"
-    } else {
-        "sandbox_command"
-    }
-}
-
 async fn run_opengrep_scan_inner(
     state: &AppState,
     task_id: &str,
@@ -1816,9 +1744,7 @@ async fn run_opengrep_scan_inner(
                         )
                         .await;
                         let _ = tokio::fs::remove_dir_all(&workspace_dir).await;
-                        return Err(
-                            format!("opengrep A3S Box scan failed: {error_msg}").into()
-                        );
+                        return Err(format!("opengrep A3S Box scan failed: {error_msg}").into());
                     }
                 }
                 crate::scan::opengrep_a3s::ScanOutput::Docker(runner_result) => {
@@ -2040,14 +1966,6 @@ struct OpengrepRunnerPaths<'a> {
     summary_rel_path: &'a str,
     summary_container_path: &'a str,
     log_container_path: &'a str,
-    stdout_rel_path: &'a str,
-    stderr_rel_path: &'a str,
-}
-
-struct OpengrepWorkspaceOutputPaths<'a> {
-    output_rel_path: &'a str,
-    summary_rel_path: &'a str,
-    log_rel_path: &'a str,
     stdout_rel_path: &'a str,
     stderr_rel_path: &'a str,
 }
@@ -2287,29 +2205,6 @@ async fn read_text_excerpt(path: Option<&std::path::Path>) -> Option<String> {
     Some(excerpt.replace('\n', "\\n"))
 }
 
-fn first_non_empty_excerpt(values: &[&str]) -> Option<String> {
-    const MAX_EXCERPT_CHARS: usize = 400;
-    values.iter().find_map(|value| {
-        let trimmed = value.trim();
-        if trimmed.is_empty() {
-            return None;
-        }
-        if trimmed.chars().count() > MAX_EXCERPT_CHARS {
-            let suffix: String = trimmed
-                .chars()
-                .rev()
-                .take(MAX_EXCERPT_CHARS)
-                .collect::<Vec<_>>()
-                .into_iter()
-                .rev()
-                .collect();
-            Some(format!("...{suffix}"))
-        } else {
-            Some(trimmed.to_string())
-        }
-    })
-}
-
 fn workspace_container_path(
     workspace_dir: &std::path::Path,
     target_path: &std::path::Path,
@@ -2349,76 +2244,6 @@ async fn update_scan_progress(
                 progress,
                 level: "info".to_string(),
             });
-    }
-    let _ = task_state::save_snapshot(state, &snapshot).await;
-}
-
-async fn append_codeql_exploration_event(
-    state: &AppState,
-    task_id: &str,
-    progress: f64,
-    event_type: &str,
-    stage: &str,
-    round: Option<i64>,
-    payload: Value,
-) {
-    let redacted_payload = codeql::redact_sensitive_value(&payload);
-    let redaction = codeql::redaction_metadata(&payload, &redacted_payload);
-    let message = redacted_payload
-        .get("message")
-        .and_then(Value::as_str)
-        .or_else(|| {
-            redacted_payload
-                .get("reasoning_summary")
-                .and_then(Value::as_str)
-        })
-        .or_else(|| redacted_payload.get("reuse_reason").and_then(Value::as_str))
-        .unwrap_or(stage)
-        .to_string();
-    let now = now_rfc3339();
-    let Ok(mut snapshot) = task_state::load_snapshot(state).await else {
-        return;
-    };
-    if let Some(record) = snapshot.static_tasks.get_mut(task_id) {
-        if record.status == "interrupted" {
-            return;
-        }
-        record.progress.progress = progress;
-        record.progress.current_stage = Some(stage.to_string());
-        record.progress.message = Some(message.clone());
-        record.progress.updated_at = Some(now.clone());
-        record.updated_at = Some(now.clone());
-        record
-            .progress
-            .logs
-            .push(task_state::StaticTaskProgressLogRecord {
-                timestamp: now.clone(),
-                stage: stage.to_string(),
-                message,
-                progress,
-                level: if event_type == "failure" {
-                    "error"
-                } else {
-                    "info"
-                }
-                .to_string(),
-            });
-        record
-            .progress
-            .events
-            .push(task_state::StaticTaskProgressEventRecord {
-                timestamp: now,
-                event_type: event_type.to_string(),
-                stage: stage.to_string(),
-                progress,
-                round,
-                redaction,
-                payload: redacted_payload,
-            });
-        if record.progress.events.len() > 500 {
-            let overflow = record.progress.events.len() - 500;
-            record.progress.events.drain(0..overflow);
-        }
     }
     let _ = task_state::save_snapshot(state, &snapshot).await;
 }
@@ -4015,7 +3840,7 @@ mod tests {
         OpengrepRunnerPaths, OpengrepRunnerResources, OpengrepSandboxKind,
     };
     use serde_json::json;
-    use std::{collections::BTreeSet, fs, path::Path, sync::mpsc, time::Duration};
+    use std::{fs, path::Path, sync::mpsc, time::Duration};
 
     fn static_task_record_with_findings(
         findings: Vec<task_state::StaticFindingRecord>,

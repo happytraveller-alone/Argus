@@ -22,11 +22,10 @@ use axum::{
     body::{to_bytes, Body},
     http::{Request, StatusCode},
 };
+#[cfg(feature = "test-helpers")]
+use backend_rust::runtime::shutdown::{wait_for_active_scans_drain, ActiveScanGuard};
 use backend_rust::{
-    app::build_router,
-    config::AppConfig,
-    runtime::shutdown::{wait_for_active_scans_drain, ActiveScanGuard, ShutdownGate},
-    state::AppState,
+    app::build_router, config::AppConfig, runtime::shutdown::ShutdownGate, state::AppState,
 };
 use tower::ServiceExt;
 

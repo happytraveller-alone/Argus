@@ -4,6 +4,33 @@ import svgr from "vite-plugin-svgr";
 import path from "path";
 import { createChunkObfuscatorPlugin } from "./scripts/chunkObfuscatorPlugin";
 
+const manualChunkGroups: Record<string, string[]> = {
+  vendor: ['react', 'react-dom', 'react-router-dom'],
+  ui: [
+    '@radix-ui/react-dialog',
+    '@radix-ui/react-select',
+    '@radix-ui/react-tabs',
+    '@radix-ui/react-progress'
+  ],
+  charts: ['recharts'],
+  ai: ['@google/generative-ai'],
+  utils: ['clsx', 'tailwind-merge', 'date-fns', 'sonner']
+};
+
+const resolveManualChunk = (moduleId: string) => {
+  if (!moduleId.includes('node_modules')) {
+    return undefined;
+  }
+
+  for (const [chunkName, packages] of Object.entries(manualChunkGroups)) {
+    if (packages.some((pkg) => moduleId.includes(`/node_modules/${pkg}/`))) {
+      return chunkName;
+    }
+  }
+
+  return undefined;
+};
+
 // https://vite.dev/config/
 export default defineConfig(({ mode }: ConfigEnv) => {
   const isProduction = mode === "production";
@@ -37,30 +64,22 @@ export default defineConfig(({ mode }: ConfigEnv) => {
         warn(warning);
       },
       output: {
-        manualChunks: {
-          vendor: ['react', 'react-dom', 'react-router-dom'],
-          ui: [
-            '@radix-ui/react-dialog',
-            '@radix-ui/react-select',
-            '@radix-ui/react-tabs',
-            '@radix-ui/react-progress'
-          ],
-          charts: ['recharts'],
-          ai: ['@google/generative-ai'],
-          utils: ['clsx', 'tailwind-merge', 'date-fns', 'sonner']
-        },
+        manualChunks: resolveManualChunk,
       },
     },
-    chunkSizeWarningLimit: 1000,
+    chunkSizeWarningLimit: 1200,
     sourcemap: false,
-    minify: 'esbuild',
+    minify: isProduction
+      ? { compress: { dropConsole: true, dropDebugger: true } }
+      : 'dce-only',
+    rolldownOptions: {
+      checks: {
+        pluginTimings: false,
+      },
+    },
   },
   // cacheDir 支持 Docker BuildKit 缓存挂载，本地开发回退到默认位置
   cacheDir: process.env.VITE_CACHE_DIR ?? 'node_modules/.vite',
-  // esbuild 转换选项：生产构建时去除 console/debugger
-  esbuild: isProduction ? {
-    drop: ['console', 'debugger'],
-  } : {},
   server: {
     port: 5173,
     host: true,

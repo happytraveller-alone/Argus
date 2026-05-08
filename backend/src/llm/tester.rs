@@ -9,6 +9,8 @@ use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use time::{format_description::well_known::Rfc3339, OffsetDateTime};
 
+use crate::core::hex;
+
 use super::{is_supported_protocol_provider, normalize_base_url, parse_custom_headers};
 
 pub const LLM_CONFIG_VERSION: &str = "intelligent-engine-v1";
@@ -485,7 +487,7 @@ fn read_f64(value: &Value, key: &str, default: f64) -> f64 {
 }
 
 fn sha256_hex(bytes: &[u8]) -> String {
-    format!("{:x}", Sha256::digest(bytes))
+    hex::encode_lower(Sha256::digest(bytes))
 }
 
 #[derive(Deserialize)]

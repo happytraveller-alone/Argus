@@ -14,6 +14,8 @@ use std::{
 };
 use uuid::Uuid;
 
+use crate::core::hex;
+
 const MAX_RETAINED_LOG_CHARS: usize = 12_000;
 /// Byte cap for stdout/stderr of management commands (image-inspect, rm, save, load, info).
 /// These produce small outputs; 1 MiB is generous while still bounding heap.
@@ -200,7 +202,10 @@ fn unregister_active_task_box(task_id: Option<&str>, box_name: &str) {
         return;
     };
     let mut active = ACTIVE_A3S_BOXES.lock().expect("active a3s-box registry");
-    if active.get(task_id).is_some_and(|current| current == box_name) {
+    if active
+        .get(task_id)
+        .is_some_and(|current| current == box_name)
+    {
         active.remove(task_id);
     }
 }
@@ -556,7 +561,7 @@ fn digest_sha256_hex(digest: &str) -> Option<&str> {
 
 fn sha256_hex(bytes: &[u8]) -> String {
     let digest = Sha256::digest(bytes);
-    format!("{digest:x}")
+    hex::encode_lower(digest)
 }
 
 fn gzip_bytes_for_oci_layer(bytes: &[u8]) -> Result<Vec<u8>> {
@@ -845,7 +850,9 @@ fn a3s_box_argus_marker_dir() -> Option<PathBuf> {
 }
 
 fn read_trimmed_file(path: &Path) -> Option<String> {
-    fs::read_to_string(path).ok().map(|value| value.trim().to_string())
+    fs::read_to_string(path)
+        .ok()
+        .map(|value| value.trim().to_string())
 }
 
 fn write_marker_file(path: &Path, value: &str) -> Result<()> {
@@ -886,7 +893,10 @@ fn remove_a3s_box_rootfs_cache_for_image(image: &str) -> Result<usize> {
         }
         let meta_json: serde_json::Value =
             match serde_json::from_slice(&fs::read(&meta_path).with_context(|| {
-                format!("read a3s-box rootfs cache metadata: {}", meta_path.display())
+                format!(
+                    "read a3s-box rootfs cache metadata: {}",
+                    meta_path.display()
+                )
             })?) {
                 Ok(value) => value,
                 Err(_) => continue,
@@ -2164,7 +2174,11 @@ esac
         fs::create_dir_all(workspace_dir.join("opengrep-rules")).unwrap();
         fs::create_dir_all(workspace_dir.join("output")).unwrap();
         fs::write(workspace_dir.join("source/Main.java"), "class Main {}\n").unwrap();
-        fs::write(workspace_dir.join("opengrep-rules/demo.yaml"), "rules: []\n").unwrap();
+        fs::write(
+            workspace_dir.join("opengrep-rules/demo.yaml"),
+            "rules: []\n",
+        )
+        .unwrap();
         let fake_opengrep_scan = temp_dir.path().join("opengrep-scan");
         fs::write(
             &fake_opengrep_scan,
@@ -2218,11 +2232,20 @@ printf 'localized scan ok\n' > "$log"
                 "--config".to_string(),
                 workspace_dir.join("opengrep-rules").display().to_string(),
                 "--output".to_string(),
-                workspace_dir.join("output/results.json").display().to_string(),
+                workspace_dir
+                    .join("output/results.json")
+                    .display()
+                    .to_string(),
                 "--summary".to_string(),
-                workspace_dir.join("output/summary.json").display().to_string(),
+                workspace_dir
+                    .join("output/summary.json")
+                    .display()
+                    .to_string(),
                 "--log".to_string(),
-                workspace_dir.join("output/opengrep.log").display().to_string(),
+                workspace_dir
+                    .join("output/opengrep.log")
+                    .display()
+                    .to_string(),
             ],
             timeout_seconds: 60,
             env: BTreeMap::new(),
@@ -2246,11 +2269,9 @@ printf 'localized scan ok\n' > "$log"
             logged.contains("/tmp/argus-a3s-opengrep-"),
             "localized scan should use guest-local /tmp paths: {logged}"
         );
-        assert!(
-            fs::read_to_string(workspace_dir.join("output/stderr.txt"))
-                .unwrap()
-                .contains("ARGUS_A3S_LOCALIZE scan_start")
-        );
+        assert!(fs::read_to_string(workspace_dir.join("output/stderr.txt"))
+            .unwrap()
+            .contains("ARGUS_A3S_LOCALIZE scan_start"));
         assert_eq!(
             fs::read_to_string(workspace_dir.join("output/results.json")).unwrap(),
             "{\"results\":[]}\n"
@@ -2502,8 +2523,8 @@ esac
             "-c".to_string(),
             "for i in $(seq 1 1000); do printf 'aaaaaaaaaa'; done".to_string(),
         ];
-        let result = run_command_capture("sh", &args, None, limit, 1_048_576)
-            .expect("sh should run");
+        let result =
+            run_command_capture("sh", &args, None, limit, 1_048_576).expect("sh should run");
         // Output must not exceed limit + sentinel length.
         assert!(
             result.stdout.len() <= limit + sentinel.len(),
@@ -2528,8 +2549,8 @@ esac
             "-c".to_string(),
             "for i in $(seq 1 1000); do printf 'bbbbbbbbbb' >&2; done".to_string(),
         ];
-        let result = run_command_capture("sh", &args, None, 1_048_576, limit)
-            .expect("sh should run");
+        let result =
+            run_command_capture("sh", &args, None, 1_048_576, limit).expect("sh should run");
         assert!(
             result.stderr.len() <= limit + sentinel.len(),
             "stderr len {} exceeds limit + sentinel {}",
@@ -2586,7 +2607,10 @@ esac
             Some("task-large"),
         );
 
-        assert_eq!(out, cmd, "command must be unchanged when source exceeds limit");
+        assert_eq!(
+            out, cmd,
+            "command must be unchanged when source exceeds limit"
+        );
     }
 
     #[test]
@@ -2605,7 +2629,11 @@ esac
         );
 
         // Localization wraps the command in a bash -lc script with copy_path/copy_back_file.
-        assert_eq!(out.len(), 3, "localized command should be ['bash', '-lc', SCRIPT]");
+        assert_eq!(
+            out.len(),
+            3,
+            "localized command should be ['bash', '-lc', SCRIPT]"
+        );
         assert_eq!(out[0], "bash");
         assert_eq!(out[1], "-lc");
         assert!(out[2].contains("copy_path"));
@@ -2638,13 +2666,8 @@ esac
         let cmd = opengrep_command(&workspace);
 
         // localize_max_source_bytes = None: no size measurement, always localize.
-        let out = build_localized_opengrep_command_with_limit(
-            &cmd,
-            &workspace,
-            "test-box",
-            None,
-            None,
-        );
+        let out =
+            build_localized_opengrep_command_with_limit(&cmd, &workspace, "test-box", None, None);
 
         assert_eq!(out.len(), 3);
         assert_eq!(out[0], "bash");
@@ -2666,7 +2689,11 @@ esac
 
     #[test]
     fn extract_opengrep_target_returns_none_when_missing() {
-        let cmd = vec!["opengrep-scan".to_string(), "--jobs".to_string(), "4".to_string()];
+        let cmd = vec![
+            "opengrep-scan".to_string(),
+            "--jobs".to_string(),
+            "4".to_string(),
+        ];
         assert_eq!(extract_opengrep_target(&cmd), None);
     }
 

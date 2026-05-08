@@ -11,6 +11,7 @@ use tokio::fs;
 use uuid::Uuid;
 
 use crate::{
+    core::hex,
     db::{scan_rule_assets, task_state},
     scan::path_utils,
     state::{AppState, ScanRuleAsset},
@@ -793,7 +794,7 @@ fn sha256_json(value: &Value) -> String {
     let bytes = serde_json::to_vec(value).unwrap_or_default();
     let mut hasher = Sha256::new();
     hasher.update(bytes);
-    format!("sha256:{:x}", hasher.finalize())
+    format!("sha256:{}", hex::encode_lower(hasher.finalize()))
 }
 
 fn decode_sarif_uri(uri: &str) -> String {

@@ -12,6 +12,8 @@ use std::{
     time::Duration,
 };
 
+use crate::core::hex;
+
 const DEFAULT_VENV_PATH: &str = "/opt/backend-venv";
 const DEFAULT_APP_ROOT: &str = "/app";
 const DEFAULT_BACKEND_SERVER_BIN: &str = "/usr/local/bin/backend";
@@ -169,7 +171,7 @@ fn compute_lock_hash(app_root: &Path) -> Result<String> {
     hasher.update(fs::read(&pyproject).context("read pyproject.toml for hash")?);
     hasher.update(fs::read(&lock_file).context("read uv.lock for hash")?);
 
-    Ok(format!("{:x}", hasher.finalize()))
+    Ok(hex::encode_lower(hasher.finalize()))
 }
 
 fn normalize_candidates(raw_candidates: &str) -> Vec<String> {

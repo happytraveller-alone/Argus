@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { type ReactNode, useMemo, useState } from "react";
 import {
 	Activity,
 	BarChart3,
@@ -19,6 +19,11 @@ import {
 	XAxis,
 	YAxis,
 } from "recharts";
+import type {
+	NameType,
+	Payload,
+	ValueType,
+} from "recharts/types/component/DefaultTooltipContent";
 import {
 	DASHBOARD_PREVIEW_TASK_STATUS,
 	DASHBOARD_PREVIEW_TREND,
@@ -361,8 +366,8 @@ function TrendPanel() {
 								<LabelList
 									dataKey="staticFindings"
 									position="insideTop"
-									formatter={(value: number) =>
-										value > 0 ? formatNumber(value) : ""
+									formatter={(value: ReactNode) =>
+										Number(value || 0) > 0 ? formatNumber(Number(value || 0)) : ""
 									}
 								/>
 							</Bar>
@@ -375,8 +380,8 @@ function TrendPanel() {
 								<LabelList
 									dataKey="intelligentVerifiedFindings"
 									position="insideTop"
-									formatter={(value: number) =>
-										value > 0 ? formatNumber(value) : ""
+									formatter={(value: ReactNode) =>
+										Number(value || 0) > 0 ? formatNumber(Number(value || 0)) : ""
 									}
 								/>
 							</Bar>
@@ -569,15 +574,15 @@ function HorizontalStatsChart({
 									borderRadius: "16px",
 									color: "#e2e8f0",
 								}}
-								formatter={(value: number, name: string) => [
-									formatNumber(Number(value)),
-									name,
+								formatter={(value: ValueType | undefined, name: NameType | undefined) => [
+									formatNumber(Number(value || 0)),
+									String(name || ""),
 								]}
 								labelFormatter={(
-									label: string,
-									payload: Array<{ payload?: { meta?: string } }>,
+									label: ReactNode,
+									payload: ReadonlyArray<Payload<ValueType, NameType>>,
 								) =>
-									`${label}${payload[0]?.payload?.meta ? ` · ${payload[0].payload.meta}` : ""}`
+									`${String(label ?? "")}${payload[0]?.payload?.meta ? ` · ${payload[0].payload.meta}` : ""}`
 								}
 							/>
 							{stacked ? (
@@ -619,7 +624,7 @@ function HorizontalStatsChart({
 											position="right"
 											fill="#f8fafc"
 											fontSize={HORIZONTAL_STATS_LABEL_FONT_SIZE}
-											formatter={(value: number) => formatNumber(Number(value))}
+											formatter={(value: ReactNode) => formatNumber(Number(value || 0))}
 										/>
 									</Bar>
 								</>
@@ -636,7 +641,7 @@ function HorizontalStatsChart({
 										position="right"
 										fill="#f8fafc"
 										fontSize={HORIZONTAL_STATS_LABEL_FONT_SIZE}
-										formatter={(value: number) => formatNumber(Number(value))}
+										formatter={(value: ReactNode) => formatNumber(Number(value || 0))}
 									/>
 								</Bar>
 							)}

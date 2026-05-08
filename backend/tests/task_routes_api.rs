@@ -3,17 +3,11 @@ use axum::{
     http::{Method, Request, StatusCode},
 };
 use backend_rust::{
-    app::build_router,
-    config::AppConfig,
-    db::task_state,
-    runtime::shutdown::ShutdownGate,
+    app::build_router, config::AppConfig, db::task_state, runtime::shutdown::ShutdownGate,
     state::AppState,
 };
 use serde_json::{json, Value};
-use std::{
-    env, fs, io::Write, os::unix::fs::PermissionsExt, path::PathBuf,
-    sync::LazyLock,
-};
+use std::{env, fs, io::Write, os::unix::fs::PermissionsExt, path::PathBuf, sync::LazyLock};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::TcpListener,
@@ -221,7 +215,21 @@ cmd="${1:-}"
 shift || true
 printf '%s|%s\n' "$cmd" "$*" >> "$log_file"
 case "$cmd" in
+  info)
+    printf 'Virtualization: available\n'
+    ;;
+  image-inspect)
+    exit 0
+    ;;
   run)
+    if [ "${FAKE_A3S_BOX_EXEC_RUN:-0}" = "1" ]; then
+      while [ "$#" -gt 0 ] && [ "$1" != "--" ]; do
+        shift
+      done
+      [ "$#" -gt 0 ] || exit 69
+      shift
+      exec "$@"
+    fi
     output=""
     summary=""
     scan_log=""
@@ -259,6 +267,137 @@ case "$cmd" in
 esac
 "#;
     fs::write(&script_path, script).expect("write fake a3s-box script");
+    let mut permissions = fs::metadata(&script_path).unwrap().permissions();
+    permissions.set_mode(0o755);
+    fs::set_permissions(&script_path, permissions).unwrap();
+    script_path
+}
+
+fn fake_docker_script(temp_dir: &tempfile::TempDir) -> PathBuf {
+    let script_path = temp_dir.path().join("fake-docker.sh");
+    let script = r#"#!/bin/sh
+set -eu
+log_file="${FAKE_DOCKER_LOG:?}"
+cmd="${1:-}"
+shift || true
+printf '%s|%s\n' "$cmd" "$*" >> "$log_file"
+case "$cmd" in
+  create)
+    printf 'fake-container\n'
+    ;;
+  start)
+    if [ "${1:-}" = "-a" ]; then
+      shift || true
+    fi
+    output="${FAKE_DOCKER_OUTPUT_PATH:-}"
+    summary="${FAKE_DOCKER_SUMMARY_PATH:-}"
+    scan_log="${FAKE_DOCKER_SCAN_LOG_PATH:-}"
+    if [ -z "$summary" ] && [ -n "${FAKE_DOCKER_LOG:-}" ]; then
+      create_args="$(grep '^create|' "$log_file" | tail -n 1 | cut -d'|' -f2-)"
+      while [ $# -gt 0 ]; do shift || true; done
+      set -- $create_args
+      host_root=""
+      container_root=""
+      while [ "$#" -gt 0 ]; do
+        case "$1" in
+          -v)
+            shift
+            volume="${1:-}"
+            host_root="${volume%%:*}"
+            rest="${volume#*:}"
+            container_root="${rest%%:*}"
+            ;;
+          --summary)
+            shift
+            summary="${1:-}"
+            ;;
+          --output)
+            shift
+            output="${1:-}"
+            ;;
+          --log)
+            shift
+            scan_log="${1:-}"
+            ;;
+        esac
+        shift || true
+      done
+      if [ -n "$host_root" ] && [ -n "$container_root" ]; then
+        case "$output" in
+          "$container_root"/*) output="$host_root/${output#"$container_root"/}" ;;
+        esac
+        case "$summary" in
+          "$container_root"/*) summary="$host_root/${summary#"$container_root"/}" ;;
+        esac
+        case "$scan_log" in
+          "$container_root"/*) scan_log="$host_root/${scan_log#"$container_root"/}" ;;
+        esac
+      fi
+    fi
+    if [ -n "$output" ]; then
+      mkdir -p "$(dirname "$output")"
+      printf '{"results":[]}\n' > "$output"
+    fi
+    if [ -n "$summary" ]; then
+      mkdir -p "$(dirname "$summary")"
+      printf '{"status":"scan_completed"}\n' > "$summary"
+    fi
+    if [ -n "$scan_log" ]; then
+      mkdir -p "$(dirname "$scan_log")"
+      printf 'fake docker opengrep scan\n' > "$scan_log"
+    fi
+    printf 'fake docker stdout\n'
+    ;;
+  wait)
+    printf '0\n'
+    ;;
+  logs)
+    if [ "${1:-}" = "--stdout" ]; then
+      printf 'fake docker stdout\n'
+      exit 0
+    fi
+    if [ "${1:-}" = "--stderr" ]; then
+      printf 'fake docker stderr\n'
+      exit 0
+    fi
+    ;;
+  rm)
+    printf 'removed\n'
+    ;;
+esac
+"#;
+    fs::write(&script_path, script).expect("write fake docker script");
+    let mut permissions = fs::metadata(&script_path).unwrap().permissions();
+    permissions.set_mode(0o755);
+    fs::set_permissions(&script_path, permissions).unwrap();
+    script_path
+}
+
+fn fake_opengrep_scan_script(temp_dir: &tempfile::TempDir) -> PathBuf {
+    let script_path = temp_dir.path().join("opengrep-scan");
+    let script = r#"#!/bin/sh
+set -eu
+output=""
+summary=""
+scan_log=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --output) shift; output="${1:-}" ;;
+    --summary) shift; summary="${1:-}" ;;
+    --log) shift; scan_log="${1:-}" ;;
+  esac
+  shift || true
+done
+[ -n "$output" ] || exit 64
+[ -n "$summary" ] || exit 65
+[ -n "$scan_log" ] || exit 66
+mkdir -p "$(dirname "$output")" "$(dirname "$summary")" "$(dirname "$scan_log")"
+printf '{"results":[]}\n' > "$output"
+printf '{"status":"scan_completed","files_scanned":1}\n' > "$summary"
+printf 'fake opengrep scan\n' > "$scan_log"
+printf 'fake opengrep stdout\n'
+"#;
+    fs::write(&script_path, script).expect("write fake opengrep-scan script");
     let mut permissions = fs::metadata(&script_path).unwrap().permissions();
     permissions.set_mode(0o755);
     fs::set_permissions(&script_path, permissions).unwrap();
@@ -389,13 +528,20 @@ async fn opengrep_a3s_box_task_runs_through_static_task_api_with_fake_cli() {
     let _env_lock = ENV_LOCK.lock().await;
     let temp_dir = tempfile::tempdir().expect("temp dir");
     let fake_a3s_box = fake_a3s_box_opengrep_script(&temp_dir);
+    let _fake_opengrep_scan = fake_opengrep_scan_script(&temp_dir);
     let fake_log = temp_dir.path().join("fake-a3s-box.log");
     let scan_root = temp_dir.path().join("scan-root");
     fs::create_dir_all(&scan_root).expect("mkdir scan root");
 
     let _bin = EnvVarGuard::set("A3S_BOX_BIN", fake_a3s_box.to_str().unwrap());
     let _log = EnvVarGuard::set("FAKE_A3S_BOX_LOG", fake_log.to_str().unwrap());
+    let _exec = EnvVarGuard::set("FAKE_A3S_BOX_EXEC_RUN", "1");
     let _workspace_root = EnvVarGuard::set("SCAN_WORKSPACE_ROOT", scan_root.to_str().unwrap());
+    let original_path = env::var("PATH").unwrap_or_default();
+    let _path = EnvVarGuard::set(
+        "PATH",
+        &format!("{}:{original_path}", temp_dir.path().display()),
+    );
 
     let mut config = isolated_test_config("opengrep-a3s-box-fake-cli");
     config.scanner_opengrep_a3s_box_image = "argus/opengrep-runner:test".to_string();
@@ -452,7 +598,83 @@ async fn opengrep_a3s_box_task_runs_through_static_task_api_with_fake_cli() {
     assert!(logged.contains("--rm"));
     assert!(logged.contains("--name argus-opengrep-"));
     assert!(logged.contains("--volume "));
-    assert!(logged.contains("argus/opengrep-runner:test -- opengrep-scan"));
-    assert!(logged.contains("--target "));
-    assert!(logged.contains("--output "));
+    assert!(logged.contains("argus/opengrep-runner:test -- bash -lc"));
+    assert!(logged.contains("opengrep-scan"));
+}
+
+#[tokio::test]
+async fn opengrep_a3s_box_task_falls_back_to_fake_docker_without_network() {
+    let _env_lock = ENV_LOCK.lock().await;
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let fake_a3s_box = fake_a3s_box_opengrep_script(&temp_dir);
+    let fake_docker = fake_docker_script(&temp_dir);
+    let fake_a3s_log = temp_dir.path().join("fake-a3s-box.log");
+    let fake_docker_log = temp_dir.path().join("fake-docker.log");
+    let scan_root = temp_dir.path().join("scan-root");
+    fs::create_dir_all(&scan_root).expect("mkdir scan root");
+
+    let _bin = EnvVarGuard::set("A3S_BOX_BIN", fake_a3s_box.to_str().unwrap());
+    let _docker_bin = EnvVarGuard::set("Argus_DOCKER_BIN", fake_docker.to_str().unwrap());
+    let _a3s_log = EnvVarGuard::set("FAKE_A3S_BOX_LOG", fake_a3s_log.to_str().unwrap());
+    let _docker_log = EnvVarGuard::set("FAKE_DOCKER_LOG", fake_docker_log.to_str().unwrap());
+    let _workspace_root = EnvVarGuard::set("SCAN_WORKSPACE_ROOT", scan_root.to_str().unwrap());
+    let _workspace_volume = EnvVarGuard::set("SCAN_WORKSPACE_VOLUME", scan_root.to_str().unwrap());
+
+    let mut config = isolated_test_config("opengrep-a3s-box-fake-docker-fallback");
+    config.scanner_opengrep_a3s_box_image = "argus/opengrep-runner:test".to_string();
+    config.scanner_opengrep_image = "argus/opengrep-runner:test".to_string();
+    let state = AppState::from_config(config)
+        .await
+        .expect("state should build");
+    let app = build_router(state.clone(), ShutdownGate::default());
+    let project_id = create_project_with_name(&app, "opengrep fallback fake project").await;
+
+    fs::create_dir_all(&*state.config.zip_storage_path).expect("mkdir zip root");
+    fs::write(
+        state
+            .config
+            .zip_storage_path
+            .join(format!("{project_id}.zip")),
+        language_test_zip_bytes("python"),
+    )
+    .expect("write python project zip");
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/static-tasks/tasks")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "engine": "opengrep",
+                        "project_id": project_id,
+                        "target_path": ".",
+                        "opengrep_sandbox": "a3s_box"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let payload: Value =
+        serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
+    let task_id = payload["id"].as_str().expect("task id").to_string();
+
+    let record = wait_static_task(&state, &task_id).await;
+    assert_eq!(record.status, "completed", "{:?}", record.error_message);
+    assert_eq!(record.extra["opengrep_sandbox"], "a3s_box");
+    assert_eq!(record.extra["executor"], "a3s_box_fallback_docker");
+    assert_eq!(record.total_findings, 0);
+    assert!(record.files_scanned >= 1);
+
+    let a3s_logged = fs::read_to_string(fake_a3s_log).expect("fake a3s log");
+    assert!(a3s_logged.contains("run|"));
+    let docker_logged = fs::read_to_string(fake_docker_log).expect("fake docker log");
+    assert!(docker_logged.contains("create|"));
+    assert!(docker_logged.contains("argus/opengrep-runner:test opengrep-scan"));
+    assert!(docker_logged.contains(scan_root.to_str().unwrap()));
 }
