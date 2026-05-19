@@ -1,5 +1,4 @@
 ARG DOCKERHUB_LIBRARY_MIRROR=m.daocloud.io/docker.io/library
-ARG DOCKER_CLI_IMAGE=${DOCKERHUB_LIBRARY_MIRROR}/docker:cli
 ARG BACKEND_CARGO_REGISTRY=sparse+https://rsproxy.cn/index/
 ARG BACKEND_CARGO_HTTP_TIMEOUT_SECONDS=30
 ARG BACKEND_CARGO_NET_RETRY=10
@@ -65,8 +64,6 @@ RUN set -eux; \
   LD_LIBRARY_PATH=/opt/a3s-box/lib /opt/a3s-box/bin/a3s-box --version | grep -F "a3s-box ${A3S_BOX_VERSION#v}"; \
   rm -rf /tmp/a3s-box /tmp/a3s-box.tar.gz
 
-FROM ${DOCKER_CLI_IMAGE} AS docker-cli-src
-
 FROM builder AS backend-assets-archive
 
 COPY backend/assets/scan_rule_assets /tmp/scan_rule_assets
@@ -88,7 +85,6 @@ RUN groupadd --gid 1001 appgroup \
 WORKDIR /app
 
 COPY --from=builder /app/target/release/backend-rust /usr/local/bin/backend
-COPY --from=docker-cli-src /usr/local/bin/docker /usr/local/bin/docker
 COPY --from=a3s-box-binary-src /opt/a3s-box/bin/ /usr/local/bin/
 COPY --from=a3s-box-binary-src /opt/a3s-box/lib/ /usr/local/lib/
 COPY --from=backend-assets-archive /opt/backend-assets/scan_rule_assets.tar.gz /app/assets/scan_rule_assets.tar.gz

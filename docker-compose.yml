@@ -67,7 +67,6 @@ services:
       args:
         DOCKERHUB_LIBRARY_MIRROR: ${DOCKERHUB_LIBRARY_MIRROR:-m.daocloud.io/docker.io/library}
         UV_IMAGE: ${UV_IMAGE:-m.daocloud.io/docker.io/library/ghcr.io/astral-sh/uv:0.7}
-        DOCKER_CLI_IMAGE: ${DOCKER_CLI_IMAGE:-m.daocloud.io/docker.io/library/docker:27-cli}
         BACKEND_APT_MIRROR_PRIMARY: ${BACKEND_APT_MIRROR_PRIMARY:-mirrors.aliyun.com}
         BACKEND_APT_SECURITY_PRIMARY: ${BACKEND_APT_SECURITY_PRIMARY:-mirrors.aliyun.com}
         BACKEND_APT_MIRROR_FALLBACK: ${BACKEND_APT_MIRROR_FALLBACK:-deb.debian.org}
@@ -120,10 +119,9 @@ services:
       OPENGREP_SCAN_MAX_MEMORY_MB: "${OPENGREP_SCAN_MAX_MEMORY_MB:-2048}"
       OPENGREP_RUNNER_MEMORY_LIMIT_MB: "${OPENGREP_RUNNER_MEMORY_LIMIT_MB:-2048}"
       OPENGREP_RUNNER_CPU_LIMIT: "${OPENGREP_RUNNER_CPU_LIMIT:-0}"
-      # Compose remains the Docker fallback path because it mounts the host
-      # Docker socket. `argus-bootstrap.sh --runtime podman` is the recommended
-      # no-Docker-socket path for the default Opengrep runner.
-      OPENGREP_RUNNER_RUNTIME: "docker"
+      # Default container runtime for the Opengrep scanner runner.
+      # Override with OPENGREP_RUNNER_RUNTIME=docker for the Docker socket path.
+      OPENGREP_RUNNER_RUNTIME: "${OPENGREP_RUNNER_RUNTIME:-podman}"
       OPENGREP_AVAILABLE_CORES: "${OPENGREP_AVAILABLE_CORES:-}"
       CUBE_OPENGREP_RULES_ARCHIVE: /app/assets/scan_rule_assets.tar.gz
       CUBE_OPENGREP_CPU_MILLI: "${CUBE_OPENGREP_CPU_MILLI:-4000}"

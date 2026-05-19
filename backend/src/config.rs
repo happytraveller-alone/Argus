@@ -225,7 +225,7 @@ impl AppConfig {
             ),
             opengrep_runner_rootless_socket_required: parse_bool_env(
                 "OPENGREP_RUNNER_ROOTLESS_SOCKET_REQUIRED",
-                true,
+                false,
             ),
             argus_a3s_localize_limit_mb: parse_u64_env("ARGUS_A3S_LOCALIZE_LIMIT_MB", 50),
             opengrep_standby_pool_size: parse_usize_env("OPENGREP_STANDBY_POOL_SIZE", 2),
@@ -308,7 +308,7 @@ impl AppConfig {
             opengrep_runner_cpu_limit_explicit: true,
             opengrep_runner_pids_limit: 512,
             opengrep_runner_runtime: "docker".to_string(),
-            opengrep_runner_rootless_socket_required: true,
+            opengrep_runner_rootless_socket_required: false,
             argus_a3s_localize_limit_mb: 50,
             opengrep_standby_pool_size: 0,
             opengrep_standby_pool_disabled: true,

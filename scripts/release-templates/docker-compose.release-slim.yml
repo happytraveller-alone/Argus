@@ -54,9 +54,9 @@ services:
       OPENGREP_SCAN_MAX_MEMORY_MB: "${OPENGREP_SCAN_MAX_MEMORY_MB:-2048}"
       OPENGREP_RUNNER_MEMORY_LIMIT_MB: "${OPENGREP_RUNNER_MEMORY_LIMIT_MB:-2048}"
       OPENGREP_RUNNER_CPU_LIMIT: "${OPENGREP_RUNNER_CPU_LIMIT:-0}"
-      # Release compose remains the Docker fallback path because it mounts the
-      # host Docker socket. Rootless Podman is the recommended bootstrap path.
-      OPENGREP_RUNNER_RUNTIME: "docker"
+      # Default container runtime for the Opengrep scanner runner.
+      # Override with OPENGREP_RUNNER_RUNTIME=docker for the Docker socket path.
+      OPENGREP_RUNNER_RUNTIME: "${OPENGREP_RUNNER_RUNTIME:-podman}"
       OPENGREP_RUNNER_ROOTLESS_SOCKET_REQUIRED: "${OPENGREP_RUNNER_ROOTLESS_SOCKET_REQUIRED:-true}"
       OPENGREP_AVAILABLE_CORES: "${OPENGREP_AVAILABLE_CORES:-}"
       SCAN_WORKSPACE_ROOT: ${SCAN_WORKSPACE_ROOT:-/tmp/Argus/scans}

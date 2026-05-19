@@ -1,5 +1,4 @@
 ARG DOCKERHUB_LIBRARY_MIRROR=m.daocloud.io/docker.io/library
-ARG DOCKER_CLI_IMAGE=${DOCKERHUB_LIBRARY_MIRROR}/docker:cli
 ARG BACKEND_APT_MIRROR_PRIMARY=mirrors.aliyun.com
 ARG BACKEND_APT_SECURITY_PRIMARY=mirrors.aliyun.com
 ARG BACKEND_APT_MIRROR_FALLBACK=deb.debian.org
@@ -151,14 +150,6 @@ RUN --mount=type=cache,id=argus-a3s-box-binary-apt-lists,target=/var/lib/apt/lis
   LD_LIBRARY_PATH=/opt/a3s-box/lib /opt/a3s-box/bin/a3s-box --version | grep -F "a3s-box ${A3S_BOX_VERSION#v}"; \
   rm -rf /tmp/a3s-box /tmp/a3s-box.tar.gz
 
-FROM ${DOCKER_CLI_IMAGE} AS docker-cli-src
-
-FROM builder AS stripped-runtime-artifacts
-
-COPY --from=docker-cli-src /usr/local/bin/docker /usr/local/bin/docker
-
-RUN strip /usr/local/bin/docker
-
 FROM builder AS backend-assets-archive
 
 COPY backend/assets/scan_rule_assets /tmp/scan_rule_assets
@@ -238,7 +229,6 @@ WORKDIR /app
 
 COPY --chmod=755 docker/backend-entrypoint.sh /usr/local/bin/backend-entrypoint.sh
 COPY --from=builder /usr/local/bin/backend-rust /usr/local/bin/backend
-COPY --from=stripped-runtime-artifacts /usr/local/bin/docker /usr/local/bin/docker
 COPY --from=a3s-box-binary-src /opt/a3s-box/bin/ /usr/local/bin/
 COPY --from=a3s-box-binary-src /opt/a3s-box/lib/ /usr/local/lib/
 COPY --from=backend-assets-archive /opt/backend-assets/scan_rule_assets.tar.gz /app/assets/scan_rule_assets.tar.gz
