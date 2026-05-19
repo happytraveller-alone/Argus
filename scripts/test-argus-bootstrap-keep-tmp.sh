@@ -4,7 +4,6 @@ set -Eeuo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SCRIPT_SRC="$ROOT_DIR/argus-bootstrap.sh"
 VALIDATOR_SRC="$ROOT_DIR/scripts/validate-llm-config.sh"
-CUBE_QUICKSTART_SRC="$ROOT_DIR/scripts/cubesandbox-quickstart.sh"
 TMP_ROOT="$(mktemp -d)"
 echo TMP_ROOT=$TMP_ROOT >&2
 
@@ -54,13 +53,10 @@ new_fixture() {
   mkdir -p "$dir/scripts"
   cp "$SCRIPT_SRC" "$dir/argus-bootstrap.sh"
   cp "$VALIDATOR_SRC" "$dir/scripts/validate-llm-config.sh"
-  cp "$ROOT_DIR/scripts/cubesandbox-lib.sh" "$dir/scripts/cubesandbox-lib.sh"
-  cp "$CUBE_QUICKSTART_SRC" "$dir/scripts/cubesandbox-quickstart.sh"
   cp "$ROOT_DIR/env.example" "$dir/env.example"
   cp "$ROOT_DIR/llm.env.example" "$dir/llm.env.example"
   chmod +x "$dir/argus-bootstrap.sh"
   chmod +x "$dir/scripts/validate-llm-config.sh"
-  chmod +x "$dir/scripts/cubesandbox-quickstart.sh"
   cat > "$dir/docker-compose.yml" <<'COMPOSE'
 services:
   opengrep-runner:
@@ -137,7 +133,7 @@ help_dir="$(new_fixture help)"
 help_out="$help_dir/help.out"
 ( cd "$help_dir" && ./argus-bootstrap.sh --help ) >"$help_out" 2>&1
 assert_banner_contact "$help_out"
-assert_contains "$help_out" "./argus-bootstrap.sh [--dry-run] [--wait-exit] [--help] -- <mode>"
+assert_contains "$help_out" "./argus-bootstrap.sh [--runtime docker|podman] [--dry-run] [--wait-exit] [--help] -- <mode>"
 assert_contains "$help_out" "Run modes:"
 assert_contains "$help_out" "default"
 assert_contains "$help_out" "keep-cache"
@@ -487,13 +483,11 @@ assert_not_contains "$ROOT_DIR/env.example" "VITE_API_TARGET=http://backend:8000
 assert_contains "$ROOT_DIR/frontend/vite.config.ts" "http://127.0.0.1:18000"
 assert_contains "$compose_render_out" "VITE_API_TARGET: http://host.docker.internal:18000"
 assert_not_contains "$compose_render_out" "VITE_API_TARGET: http://backend:8000"
-assert_contains "$ROOT_DIR/env.example" "CUBESANDBOX_API_BASE_URL=http://host.docker.internal:23000"
-assert_contains "$ROOT_DIR/env.example" "CUBESANDBOX_DATA_PLANE_BASE_URL=https://host.docker.internal:21443"
-assert_contains "$ROOT_DIR/env.example" "CUBESANDBOX_HELPER_PATH=/app/scripts/cubesandbox-quickstart.sh"
-assert_contains "$ROOT_DIR/env.example" "CUBESANDBOX_AUTO_START=true"
-assert_contains "$ROOT_DIR/docker/backend.Dockerfile" "COPY --chmod=755 scripts/cubesandbox-quickstart.sh /app/scripts/cubesandbox-quickstart.sh"
+assert_contains "$ROOT_DIR/docs/archive/cubesandbox/INDEX.md" "CubeSandbox"
+assert_not_contains "$ROOT_DIR/env.example" "CUBESANDBOX_HELPER_PATH=/app/scripts/cubesandbox-quickstart.sh"
+assert_not_contains "$ROOT_DIR/docker/backend.Dockerfile" "COPY --chmod=755 scripts/cubesandbox-quickstart.sh /app/scripts/cubesandbox-quickstart.sh"
 assert_contains "$ROOT_DIR/docker/backend.Dockerfile" "openssh-client"
-assert_contains "$ROOT_DIR/scripts/release-templates/backend.Dockerfile" "COPY --chmod=755 scripts/cubesandbox-quickstart.sh /app/scripts/cubesandbox-quickstart.sh"
+assert_not_contains "$ROOT_DIR/scripts/release-templates/backend.Dockerfile" "COPY --chmod=755 scripts/cubesandbox-quickstart.sh /app/scripts/cubesandbox-quickstart.sh"
 assert_contains "$ROOT_DIR/scripts/release-templates/backend.Dockerfile" "openssh-client"
 if awk '
   /^  backend:/ { in_backend = 1; in_depends = 0; next }
@@ -535,8 +529,7 @@ do
     fail "$retired_codeql_docker_path should not exist in the Docker tree"
   fi
 done
-assert_contains "$ROOT_DIR/scripts/cubesandbox-quickstart.sh" "build-codeql-cpp-image"
-assert_contains "$ROOT_DIR/oci/cubesandbox/README.md" "codeql-cpp.Dockerfile"
+assert_not_contains "$ROOT_DIR/docker-compose.yml" "cubesandbox"
 
 # Aggressive dry-run exposes the destructive plan without executing it.
 dry_aggressive_dir="$(new_fixture dry-aggressive)"

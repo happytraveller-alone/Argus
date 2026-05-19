@@ -3,8 +3,8 @@ set -Eeuo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SCRIPT_SRC="$ROOT_DIR/argus-bootstrap.sh"
+SHUTDOWN_SRC="$ROOT_DIR/argus-shutdown.sh"
 VALIDATOR_SRC="$ROOT_DIR/scripts/validate-llm-config.sh"
-CUBE_QUICKSTART_SRC="$ROOT_DIR/scripts/cubesandbox-quickstart.sh"
 TMP_ROOT="$(mktemp -d)"
 trap 'rm -rf "$TMP_ROOT"' EXIT
 
@@ -53,14 +53,13 @@ new_fixture() {
   local dir="$TMP_ROOT/$name"
   mkdir -p "$dir/scripts"
   cp "$SCRIPT_SRC" "$dir/argus-bootstrap.sh"
+  cp "$SHUTDOWN_SRC" "$dir/argus-shutdown.sh"
   cp "$VALIDATOR_SRC" "$dir/scripts/validate-llm-config.sh"
-  cp "$ROOT_DIR/scripts/cubesandbox-lib.sh" "$dir/scripts/cubesandbox-lib.sh"
-  cp "$CUBE_QUICKSTART_SRC" "$dir/scripts/cubesandbox-quickstart.sh"
   cp "$ROOT_DIR/env.example" "$dir/env.example"
   cp "$ROOT_DIR/llm.env.example" "$dir/llm.env.example"
   chmod +x "$dir/argus-bootstrap.sh"
+  chmod +x "$dir/argus-shutdown.sh"
   chmod +x "$dir/scripts/validate-llm-config.sh"
-  chmod +x "$dir/scripts/cubesandbox-quickstart.sh"
   cat > "$dir/docker-compose.yml" <<'COMPOSE'
 services:
   opengrep-runner:
@@ -143,7 +142,7 @@ help_dir="$(new_fixture help)"
 help_out="$help_dir/help.out"
 ( cd "$help_dir" && ./argus-bootstrap.sh --help ) >"$help_out" 2>&1
 assert_banner_contact "$help_out"
-assert_contains "$help_out" "./argus-bootstrap.sh [--dry-run] [--wait-exit] [--help] -- <mode>"
+assert_contains "$help_out" "./argus-bootstrap.sh [--runtime docker|podman] [--dry-run] [--wait-exit] [--help] -- <mode>"
 assert_contains "$help_out" "Run modes:"
 assert_contains "$help_out" "default"
 assert_contains "$help_out" "keep-cache"
@@ -155,8 +154,13 @@ assert_contains "$help_out" ".env"
 assert_contains "$help_out" "docker system prune -af --volumes"
 assert_contains "$help_out" "docker compose up -d --build"
 assert_contains "$help_out" "--wait-exit"
+assert_contains "$help_out" "--runtime docker|podman"
 assert_contains "$help_out" "ARGUS_STUB_DOCKER=true"
 assert_contains "$help_out" "scripts/validate-llm-config.sh --env-file"
+
+shutdown_help_out="$help_dir/shutdown-help.out"
+( cd "$help_dir" && ./argus-shutdown.sh --help ) >"$shutdown_help_out" 2>&1
+assert_contains "$shutdown_help_out" "--runtime docker|podman"
 
 # Standalone validator accepts valid LLM env and rejects missing/placeholder values.
 validator_dir="$(new_fixture validator)"
@@ -196,6 +200,18 @@ set -e
 [[ "$flag_after_rc" -ne 0 ]] || fail "Flag after separator should be treated as invalid mode"
 assert_contains "$flag_after_out" "Unknown run mode: --wait-exit"
 assert_not_contains "$flag_after_out" "docker compose"
+
+invalid_runtime_dir="$(new_fixture invalid-runtime)"
+write_valid_config "$invalid_runtime_dir"
+invalid_runtime_out="$invalid_runtime_dir/invalid-runtime.out"
+set +e
+( cd "$invalid_runtime_dir" && ARGUS_STUB_DOCKER=true ./argus-bootstrap.sh --runtime banana -- default ) >"$invalid_runtime_out" 2>&1
+invalid_runtime_rc=$?
+set -e
+[[ "$invalid_runtime_rc" -ne 0 ]] || fail "Unknown runtime should fail"
+assert_contains "$invalid_runtime_out" "Unknown container runtime: banana"
+assert_not_contains "$invalid_runtime_out" "docker compose"
+assert_not_contains "$invalid_runtime_out" "podman build"
 
 # Missing env exits before Docker cleanup after creating runtime and LLM templates.
 missing_dir="$(new_fixture missing)"
@@ -351,6 +367,82 @@ a3s_cache_line="$(line_no "$valid_out" "a3s-box load -i")"
 logs_line="$(line_no "$valid_out" "logs -f")"
 [[ "$banner_line" -lt "$validation_line" && "$validation_line" -lt "$down_line" && "$down_line" -lt "$runner_build_line" && "$runner_build_line" -lt "$up_line" && "$up_line" -lt "$backend_wait_line" && "$backend_wait_line" -lt "$a3s_cache_line" && "$a3s_cache_line" -lt "$import_line" && "$import_line" -lt "$logs_line" ]] || fail "Expected banner -> validation -> down -> runner image build -> detached up -> backend readiness -> A3S image cache -> import -> logs order"
 
+podman_word="podman"
+podman_compose_cmd="${podman_word} compose"
+podman_volume_rm_cmd="${podman_word} volume rm"
+podman_image_rm_cmd="${podman_word} image rm"
+podman_rmi_cmd="${podman_word} rmi"
+podman_prune_cmd="${podman_word} system prune"
+podman_rm_volume_flag_cmd="${podman_word} rm -v"
+
+# Podman runtime is explicit, builds local images, runs exact Argus containers, and does not use Compose/destructive cleanup.
+podman_dir="$(new_fixture podman)"
+write_valid_config "$podman_dir"
+podman_out="$podman_dir/podman.out"
+( cd "$podman_dir" && ./argus-bootstrap.sh --runtime podman --dry-run --wait-exit -- default ) >"$podman_out" 2>&1
+assert_contains "$podman_out" "Container runtime: podman"
+assert_contains "$podman_out" "podman build --file $podman_dir/docker/backend.Dockerfile --target runtime-plain"
+assert_contains "$podman_out" "--build-arg TARGETARCH=amd64"
+assert_contains "$podman_out" "--tag argus/backend-local:latest"
+assert_contains "$podman_out" "podman build --file $podman_dir/docker/frontend.Dockerfile --target dev"
+assert_contains "$podman_out" "--build-arg PNPM_VERSION=10.11.0"
+assert_contains "$podman_out" "--tag argus/frontend-local:latest"
+assert_contains "$podman_out" "podman run -d --name argus-db"
+assert_contains "$podman_out" "podman run -d --name argus-redis"
+assert_contains "$podman_out" "podman run -d --name argus-backend"
+assert_contains "$podman_out" "podman run -d --name argus-frontend"
+assert_contains "$podman_out" "--label io.argus.project=argus"
+assert_contains "$podman_out" "--label io.argus.runtime=podman"
+assert_contains "$podman_out" "--env-file $podman_dir/.argus-llm.env"
+assert_contains "$podman_out" "BIND_ADDR=0.0.0.0:18000"
+assert_contains "$podman_out" "VITE_API_TARGET=http://127.0.0.1:18000"
+assert_contains "$podman_out" "FRONTEND_DEV_PORT=13000"
+assert_contains "$podman_out" "curl -fsS http://127.0.0.1:18000/health"
+assert_contains "$podman_out" "curl -fsS http://127.0.0.1:13000"
+assert_not_contains "$podman_out" "docker compose"
+assert_not_contains "$podman_out" "$podman_compose_cmd"
+assert_not_contains "$podman_out" "$podman_volume_rm_cmd"
+assert_not_contains "$podman_out" "$podman_image_rm_cmd"
+assert_not_contains "$podman_out" "$podman_rmi_cmd"
+assert_not_contains "$podman_out" "$podman_prune_cmd"
+assert_not_contains "$podman_out" "$podman_rm_volume_flag_cmd"
+
+podman_prepare_dir="$(mktemp -d "$TMP_ROOT/podman-dockerfile.XXXXXX")"
+(
+  cd "$ROOT_DIR"
+  repo_root="$ROOT_DIR"
+  # Load helper definitions without executing main so the Podman compatibility
+  # rewrite is covered even when dry-run keeps the original Dockerfile path.
+  # shellcheck disable=SC1090
+  source <(sed '$d' "$ROOT_DIR/argus-bootstrap.sh")
+  prepare_podman_dockerfile "$repo_root/docker/backend.Dockerfile" "$podman_prepare_dir/backend.Dockerfile"
+  prepare_podman_dockerfile "$repo_root/docker/frontend.Dockerfile" "$podman_prepare_dir/frontend.Dockerfile"
+)
+assert_not_contains "$podman_prepare_dir/backend.Dockerfile" "--mount=type=cache"
+assert_not_contains "$podman_prepare_dir/frontend.Dockerfile" "--mount=type=cache"
+assert_contains "$podman_prepare_dir/backend.Dockerfile" "RUN set -eux;"
+assert_contains "$podman_prepare_dir/backend.Dockerfile" "RUN CARGO_HTTP_TIMEOUT="
+assert_contains "$podman_prepare_dir/backend.Dockerfile" "tar --no-same-owner --no-same-permissions -xzf /tmp/a3s-box.tar.gz"
+assert_contains "$podman_prepare_dir/frontend.Dockerfile" "RUN set -eux;"
+assert_contains "$podman_prepare_dir/frontend.Dockerfile" "RUN VITE_CACHE_DIR=/tmp/vite-build-cache"
+
+podman_shutdown_out="$podman_dir/podman-shutdown.out"
+( cd "$podman_dir" && ./argus-shutdown.sh --runtime podman --dry-run --full ) >"$podman_shutdown_out" 2>&1
+assert_contains "$podman_shutdown_out" "runtime=podman"
+assert_contains "$podman_shutdown_out" "Mode=full under Podman: preserving Podman volumes and images"
+for podman_container in argus-frontend argus-backend argus-redis argus-db; do
+  assert_contains "$podman_shutdown_out" "podman inspect --format {{ index .Config.Labels \"io.argus.project\" }} {{ index .Config.Labels \"io.argus.runtime\" }} $podman_container"
+  assert_contains "$podman_shutdown_out" "podman stop $podman_container"
+  assert_contains "$podman_shutdown_out" "podman rm $podman_container"
+done
+assert_not_contains "$podman_shutdown_out" "argus-*"
+assert_not_contains "$podman_shutdown_out" "$podman_compose_cmd"
+assert_not_contains "$podman_shutdown_out" "$podman_volume_rm_cmd"
+assert_not_contains "$podman_shutdown_out" "$podman_image_rm_cmd"
+assert_not_contains "$podman_shutdown_out" "$podman_rmi_cmd"
+assert_not_contains "$podman_shutdown_out" "$podman_prune_cmd"
+assert_not_contains "$podman_shutdown_out" "$podman_rm_volume_flag_cmd"
+
 # Explicit default matches no-mode safety, even when legacy prune env is true.
 default_dir="$(new_fixture explicit-default)"
 write_valid_config "$default_dir"
@@ -493,13 +585,11 @@ assert_not_contains "$ROOT_DIR/env.example" "VITE_API_TARGET=http://backend:8000
 assert_contains "$ROOT_DIR/frontend/vite.config.ts" "http://127.0.0.1:18000"
 assert_contains "$compose_render_out" "VITE_API_TARGET: http://host.docker.internal:18000"
 assert_not_contains "$compose_render_out" "VITE_API_TARGET: http://backend:8000"
-assert_contains "$ROOT_DIR/env.example" "CUBESANDBOX_API_BASE_URL=http://host.docker.internal:23000"
-assert_contains "$ROOT_DIR/env.example" "CUBESANDBOX_DATA_PLANE_BASE_URL=https://host.docker.internal:21443"
-assert_contains "$ROOT_DIR/env.example" "CUBESANDBOX_HELPER_PATH=/app/scripts/cubesandbox-quickstart.sh"
-assert_contains "$ROOT_DIR/env.example" "CUBESANDBOX_AUTO_START=true"
-assert_contains "$ROOT_DIR/docker/backend.Dockerfile" "COPY --chmod=755 scripts/cubesandbox-quickstart.sh /app/scripts/cubesandbox-quickstart.sh"
+assert_contains "$ROOT_DIR/docs/archive/cubesandbox/INDEX.md" "CubeSandbox"
+assert_not_contains "$ROOT_DIR/env.example" "CUBESANDBOX_HELPER_PATH=/app/scripts/cubesandbox-quickstart.sh"
+assert_not_contains "$ROOT_DIR/docker/backend.Dockerfile" "COPY --chmod=755 scripts/cubesandbox-quickstart.sh /app/scripts/cubesandbox-quickstart.sh"
 assert_contains "$ROOT_DIR/docker/backend.Dockerfile" "openssh-client"
-assert_contains "$ROOT_DIR/scripts/release-templates/backend.Dockerfile" "COPY --chmod=755 scripts/cubesandbox-quickstart.sh /app/scripts/cubesandbox-quickstart.sh"
+assert_not_contains "$ROOT_DIR/scripts/release-templates/backend.Dockerfile" "COPY --chmod=755 scripts/cubesandbox-quickstart.sh /app/scripts/cubesandbox-quickstart.sh"
 assert_contains "$ROOT_DIR/scripts/release-templates/backend.Dockerfile" "openssh-client"
 assert_contains "$compose_render_out" "source: /dev/kvm"
 assert_contains "$compose_render_out" "target: /dev/kvm"
@@ -555,8 +645,7 @@ do
     fail "$retired_codeql_docker_path should not exist in the Docker tree"
   fi
 done
-assert_contains "$ROOT_DIR/scripts/cubesandbox-quickstart.sh" "build-codeql-cpp-image"
-assert_contains "$ROOT_DIR/oci/cubesandbox/README.md" "codeql-cpp.Dockerfile"
+assert_not_contains "$ROOT_DIR/docker-compose.yml" "cubesandbox"
 
 # Aggressive dry-run exposes the destructive plan without executing it.
 dry_aggressive_dir="$(new_fixture dry-aggressive)"

@@ -143,7 +143,7 @@ RUN --mount=type=cache,id=argus-a3s-box-binary-apt-lists,target=/var/lib/apt/lis
   package="a3s-box-${A3S_BOX_VERSION}-${package_arch}"; \
   curl -fsSL --retry 5 "${A3S_BOX_DOWNLOAD_BASE_URL}/${A3S_BOX_VERSION}/${package}.tar.gz" -o /tmp/a3s-box.tar.gz; \
   mkdir -p /tmp/a3s-box /opt/a3s-box/bin /opt/a3s-box/lib; \
-  tar -xzf /tmp/a3s-box.tar.gz -C /tmp/a3s-box --strip-components=1; \
+  tar --no-same-owner --no-same-permissions -xzf /tmp/a3s-box.tar.gz -C /tmp/a3s-box --strip-components=1; \
   install -m 0755 /tmp/a3s-box/a3s-box /opt/a3s-box/bin/a3s-box; \
   install -m 0755 /tmp/a3s-box/a3s-box-shim /opt/a3s-box/bin/a3s-box-shim; \
   install -m 0755 /tmp/a3s-box/a3s-box-guest-init /opt/a3s-box/bin/a3s-box-guest-init; \

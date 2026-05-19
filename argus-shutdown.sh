@@ -2,7 +2,7 @@
 # argus-shutdown.sh — Graceful Argus shutdown script.
 #
 # Usage:
-#   ./argus-shutdown.sh [--soft|--hard|--full] [--dry-run] [--help]
+#   ./argus-shutdown.sh [--runtime docker|podman] [--soft|--hard|--full] [--dry-run] [--help]
 #
 # Modes:
 #   --soft   Step 1 (interrupt scans) + Step 2 (compose down, preserve volumes)
@@ -10,6 +10,8 @@
 #   --full   hard + compose down --volumes (destroys postgres_data et al.)
 #
 # --dry-run  Print all planned ops without executing any destructive command.
+# --runtime  Explicit container runtime. Default: docker. Podman mode stops/removes
+#            exact Argus-owned containers only and preserves Podman images/volumes.
 # --help     Print this usage and exit 0.
 
 set -euo pipefail
@@ -26,11 +28,15 @@ ENV_FILE="$ROOT/.env"
 # ---------------------------------------------------------------------------
 MODE="hard"
 DRY_RUN=false
+CONTAINER_RUNTIME="docker"
 
 # ---------------------------------------------------------------------------
 # Counters (for summary)
 # ---------------------------------------------------------------------------
 ORPHAN_WARNINGS=0
+PODMAN_PROJECT_LABEL="io.argus.project=argus"
+PODMAN_RUNTIME_LABEL="io.argus.runtime=podman"
+PODMAN_CONTAINER_NAMES=(argus-frontend argus-backend argus-redis argus-db)
 
 # ---------------------------------------------------------------------------
 # Arg parsing
@@ -40,20 +46,35 @@ usage() {
   exit 0
 }
 
-for arg in "$@"; do
-  case "$arg" in
-    --soft)    MODE="soft" ;;
-    --hard)    MODE="hard" ;;
-    --full)    MODE="full" ;;
-    --dry-run) DRY_RUN=true ;;
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --soft)    MODE="soft"; shift ;;
+    --hard)    MODE="hard"; shift ;;
+    --full)    MODE="full"; shift ;;
+    --dry-run) DRY_RUN=true; shift ;;
+    --runtime=*) CONTAINER_RUNTIME="${1#--runtime=}"; shift ;;
+    --runtime)
+      [[ $# -ge 2 ]] || { printf 'argus-shutdown: --runtime requires a value (docker|podman)\n' >&2; exit 1; }
+      CONTAINER_RUNTIME="$2"
+      shift 2
+      ;;
     --help|-h) usage ;;
     *)
-      printf 'argus-shutdown: unknown argument: %s\n' "$arg" >&2
+      printf 'argus-shutdown: unknown argument: %s\n' "$1" >&2
       printf 'Run with --help for usage.\n' >&2
       exit 1
       ;;
   esac
 done
+
+case "$CONTAINER_RUNTIME" in
+  docker|podman) ;;
+  *)
+    printf 'argus-shutdown: unknown runtime: %s\n' "$CONTAINER_RUNTIME" >&2
+    printf 'Supported runtimes: docker podman\n' >&2
+    exit 1
+    ;;
+esac
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -78,6 +99,41 @@ run_cmd() {
   else
     "$@"
   fi
+}
+
+podman_container_has_required_labels() {
+  local name="$1"
+  local project_label runtime_label
+  project_label="$(podman inspect --format '{{ index .Config.Labels "io.argus.project" }}' "$name" 2>/dev/null || true)"
+  runtime_label="$(podman inspect --format '{{ index .Config.Labels "io.argus.runtime" }}' "$name" 2>/dev/null || true)"
+  [[ "$project_label" == "argus" && "$runtime_label" == "podman" ]]
+}
+
+step2_podman_down() {
+  log "Step 2: Podman targeted stop/remove (preserve images and volumes)"
+  if [[ "$MODE" == "full" ]]; then
+    log "  Mode=full under Podman: preserving Podman volumes and images by plan."
+  fi
+  local name
+  for name in "${PODMAN_CONTAINER_NAMES[@]}"; do
+    if [[ "$DRY_RUN" == true ]]; then
+      run_cmd "verify Podman labels for ${name}" \
+        podman inspect --format '{{ index .Config.Labels "io.argus.project" }} {{ index .Config.Labels "io.argus.runtime" }}' "$name"
+      run_cmd "podman stop ${name}" podman stop "$name"
+      run_cmd "podman rm ${name}" podman rm "$name"
+      continue
+    fi
+    if ! podman container exists "$name"; then
+      log "  ${name}: not present; skipping."
+      continue
+    fi
+    if ! podman_container_has_required_labels "$name"; then
+      warn "skipping ${name}: missing required ${PODMAN_PROJECT_LABEL} and ${PODMAN_RUNTIME_LABEL} labels"
+      continue
+    fi
+    run_cmd "podman stop ${name}" podman stop "$name" || true
+    run_cmd "podman rm ${name}" podman rm "$name" || true
+  done
 }
 
 # ---------------------------------------------------------------------------
@@ -192,15 +248,22 @@ step5_report() {
 # Main
 # ---------------------------------------------------------------------------
 main() {
-  log "Starting argus shutdown (mode=$MODE, dry-run=$DRY_RUN)"
+  log "Starting argus shutdown (mode=$MODE, runtime=$CONTAINER_RUNTIME, dry-run=$DRY_RUN)"
 
   load_env
 
   # Step 1: interrupt running scans (best-effort, never aborts)
   step1_interrupt_scans
 
-  # Step 2: compose down (always; --full adds --volumes)
-  step2_compose_down
+  # Step 2: runtime shutdown
+  if [[ "$CONTAINER_RUNTIME" == "podman" ]]; then
+    if [[ "$DRY_RUN" != true ]]; then
+      command -v podman >/dev/null 2>&1 || die "podman CLI not found"
+    fi
+    step2_podman_down
+  else
+    step2_compose_down
+  fi
 
   step5_report
   log "Shutdown complete."

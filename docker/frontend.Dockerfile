@@ -3,6 +3,33 @@
 # =============================================
 
 ARG DOCKERHUB_LIBRARY_MIRROR=m.daocloud.io/docker.io/library
+
+# Keep the dev target before builder-only stages so Podman/Buildah can stop at
+# --target dev without pulling the larger production builder base image.
+FROM ${DOCKERHUB_LIBRARY_MIRROR}/node:22-alpine AS dev
+
+WORKDIR /app
+
+ENV http_proxy=""
+ENV https_proxy=""
+ENV HTTP_PROXY=""
+ENV HTTPS_PROXY=""
+ENV all_proxy=""
+ENV ALL_PROXY=""
+ENV no_proxy="*"
+ENV NO_PROXY="*"
+ENV PNPM_HOME=/pnpm
+ENV PATH=/pnpm:${PATH}
+
+COPY scripts/dev-launcher.mjs /usr/local/bin/frontend-dev-launcher.mjs
+
+RUN corepack enable
+
+EXPOSE 5173
+
+ENTRYPOINT ["node"]
+CMD ["/usr/local/bin/frontend-dev-launcher.mjs"]
+
 FROM ${DOCKERHUB_LIBRARY_MIRROR}/node:22-slim AS pnpm-base
 
 WORKDIR /app
@@ -49,30 +76,6 @@ RUN --mount=type=cache,id=argus-frontend-npm,target=/root/.npm \
   npm config set registry "${FRONTEND_NPM_REGISTRY}" && \
   pnpm config set registry "${FRONTEND_NPM_REGISTRY}" && \
   pnpm config set store-dir /pnpm/store
-
-FROM ${DOCKERHUB_LIBRARY_MIRROR}/node:22-alpine AS dev
-
-WORKDIR /app
-
-ENV http_proxy=""
-ENV https_proxy=""
-ENV HTTP_PROXY=""
-ENV HTTPS_PROXY=""
-ENV all_proxy=""
-ENV ALL_PROXY=""
-ENV no_proxy="*"
-ENV NO_PROXY="*"
-ENV PNPM_HOME=/pnpm
-ENV PATH=/pnpm:${PATH}
-
-COPY scripts/dev-launcher.mjs /usr/local/bin/frontend-dev-launcher.mjs
-
-RUN corepack enable
-
-EXPOSE 5173
-
-ENTRYPOINT ["node"]
-CMD ["/usr/local/bin/frontend-dev-launcher.mjs"]
 
 FROM pnpm-base AS builder
 

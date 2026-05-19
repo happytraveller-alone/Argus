@@ -12,7 +12,9 @@ PROJECT_NAME="${COMPOSE_PROJECT_NAME:-argus}"
 DRY_RUN=false
 WAIT_EXIT=false
 RUN_MODE=default
+CONTAINER_RUNTIME=docker
 SUPPORTED_RUN_MODES="default keep-cache aggressive"
+SUPPORTED_CONTAINER_RUNTIMES="docker podman"
 STUB_DOCKER="${ARGUS_STUB_DOCKER:-false}"
 DOCKER_SYSTEM_PRUNE="${ARGUS_DOCKER_SYSTEM_PRUNE:-true}"
 WAIT_TIMEOUT="${ARGUS_WAIT_TIMEOUT:-120}"
@@ -26,6 +28,17 @@ CUBE_DISABLE_WEBUI="${CUBE_DISABLE_WEBUI:-true}"
 BACKEND_HEALTH_URL="${ARGUS_BACKEND_HEALTH_URL:-http://127.0.0.1:${BACKEND_PORT}/health}"
 BACKEND_IMPORT_URL="${ARGUS_BACKEND_IMPORT_URL:-http://127.0.0.1:${BACKEND_PORT}/api/v1/system-config/import-env}"
 ARGUS_RESET_IMPORT_TOKEN=""
+PODMAN_PROJECT_LABEL="io.argus.project=argus"
+PODMAN_RUNTIME_LABEL="io.argus.runtime=podman"
+PODMAN_DB_CONTAINER="argus-db"
+PODMAN_REDIS_CONTAINER="argus-redis"
+PODMAN_BACKEND_CONTAINER="argus-backend"
+PODMAN_FRONTEND_CONTAINER="argus-frontend"
+PODMAN_BACKEND_IMAGE="${ARGUS_PODMAN_BACKEND_IMAGE:-argus/backend-local:latest}"
+PODMAN_FRONTEND_IMAGE="${ARGUS_PODMAN_FRONTEND_IMAGE:-argus/frontend-local:latest}"
+PODMAN_POSTGRES_IMAGE="${ARGUS_PODMAN_POSTGRES_IMAGE:-${DOCKERHUB_LIBRARY_MIRROR:-m.daocloud.io/docker.io/library}/postgres:18.3-alpine3.23}"
+PODMAN_REDIS_IMAGE="${ARGUS_PODMAN_REDIS_IMAGE:-${DOCKERHUB_LIBRARY_MIRROR:-m.daocloud.io/docker.io/library}/redis:8.6.2-alpine3.23}"
+PODMAN_TARGETARCH="${ARGUS_PODMAN_TARGETARCH:-amd64}"
 
 print_banner() {
   cat <<'BANNER'
@@ -46,12 +59,12 @@ usage() {
 $SCRIPT_NAME - Argus bootstrap helper
 
 Usage:
-  ./$SCRIPT_NAME [--dry-run] [--wait-exit] [--help] -- <mode>
+  ./$SCRIPT_NAME [--runtime docker|podman] [--dry-run] [--wait-exit] [--help] -- <mode>
   ./$SCRIPT_NAME
   ./$SCRIPT_NAME -- default
   ./$SCRIPT_NAME -- keep-cache
   ./$SCRIPT_NAME -- aggressive
-  ./$SCRIPT_NAME --wait-exit -- default
+  ./$SCRIPT_NAME --runtime podman --wait-exit -- default
 
 Shell support:
   Compatible with both bash and zsh. Run as ./$SCRIPT_NAME or via
@@ -105,6 +118,10 @@ Ports:
 Test / verification:
   --dry-run                     Preview commands and skip Docker/curl execution.
   ARGUS_STUB_DOCKER=true        Print Docker/curl/env commands instead of running them.
+  --runtime docker|podman       Explicit container runtime. Default: docker.
+                                podman mode uses local image/container startup;
+                                it does not use a Podman Compose path and never removes
+                                Podman images or volumes.
   scripts/validate-llm-config.sh --env-file <path>
                                 Validate the root env file without starting Docker.
 USAGE
@@ -218,7 +235,7 @@ run_cmd() {
     printf '[dry-run] %s\n' "$(quote_cmd "$@")"
     return 0
   fi
-  if is_truthy "$STUB_DOCKER" && [[ "${1:-}" =~ ^(docker|curl|env)$ ]]; then
+  if is_truthy "$STUB_DOCKER" && [[ "${1:-}" =~ ^(docker|podman|curl|env)$ ]]; then
     printf '[stub] %s\n' "$(quote_cmd "$@")"
     return 0
   fi
@@ -371,12 +388,24 @@ generate_import_token() {
 require_real_tools() {
   [[ -f "$COMPOSE_FILE" ]] || fail "docker-compose.yml not found at repo root: $COMPOSE_FILE"
   if "$DRY_RUN" || is_truthy "$STUB_DOCKER"; then
-    log "Dry-run/stub mode: skipping Docker daemon/tool preflight."
+    log "Dry-run/stub mode: skipping ${CONTAINER_RUNTIME} daemon/tool preflight."
     return 0
   fi
-  command -v docker >/dev/null 2>&1 || fail "docker CLI not found"
-  docker compose version >/dev/null || fail "docker compose plugin is not available"
-  docker info >/dev/null || fail "Docker daemon is not reachable"
+  case "$CONTAINER_RUNTIME" in
+    docker)
+      command -v docker >/dev/null 2>&1 || fail "docker CLI not found"
+      docker compose version >/dev/null || fail "docker compose plugin is not available"
+      docker info >/dev/null || fail "Docker daemon is not reachable"
+      ;;
+    podman)
+      command -v podman >/dev/null 2>&1 || fail "podman CLI not found"
+      command -v python3 >/dev/null 2>&1 || fail "python3 is required to prepare Podman-compatible Dockerfiles"
+      podman info >/dev/null || fail "Podman daemon/runtime is not reachable"
+      ;;
+    *)
+      fail "Unsupported container runtime reached preflight: $CONTAINER_RUNTIME"
+      ;;
+  esac
   command -v curl >/dev/null 2>&1 || fail "curl not found"
 }
 
@@ -595,7 +624,51 @@ prune_docker_system() {
   run_cmd docker system prune -af --volumes
 }
 
+podman_container_names() {
+  printf '%s\n' "$PODMAN_FRONTEND_CONTAINER" "$PODMAN_BACKEND_CONTAINER" "$PODMAN_REDIS_CONTAINER" "$PODMAN_DB_CONTAINER"
+}
+
+podman_rm_container_if_exists() {
+  local name="$1"
+  if "$DRY_RUN" || is_truthy "$STUB_DOCKER"; then
+    run_cmd podman inspect --format '{{ index .Config.Labels "io.argus.project" }} {{ index .Config.Labels "io.argus.runtime" }}' "$name"
+    run_cmd podman rm -f "$name"
+    return 0
+  fi
+  if ! podman container exists "$name"; then
+    return 0
+  fi
+  local project_label runtime_label
+  project_label="$(podman inspect --format '{{ index .Config.Labels "io.argus.project" }}' "$name" 2>/dev/null || true)"
+  runtime_label="$(podman inspect --format '{{ index .Config.Labels "io.argus.runtime" }}' "$name" 2>/dev/null || true)"
+  if [[ "$project_label" != "argus" || "$runtime_label" != "podman" ]]; then
+    fail "Refusing to remove existing Podman container ${name}: required labels ${PODMAN_PROJECT_LABEL} and ${PODMAN_RUNTIME_LABEL} are not both present"
+  fi
+  run_cmd podman rm -f "$name"
+}
+
+podman_cleanup_runtime_containers() {
+  log "Stopping/removing Argus Podman containers only; preserving Podman images and volumes."
+  local name
+  while IFS= read -r name; do
+    [[ -n "$name" ]] || continue
+    podman_rm_container_if_exists "$name"
+  done < <(podman_container_names)
+}
+
 cleanup_for_run_mode() {
+  if [[ "$CONTAINER_RUNTIME" == "podman" ]]; then
+    case "$RUN_MODE" in
+      default|keep-cache|aggressive)
+        log "${RUN_MODE} mode under Podman runtime: preserving Podman images and volumes."
+        podman_cleanup_runtime_containers
+        ;;
+      *)
+        fail "Unsupported run mode reached Podman cleanup dispatcher: $RUN_MODE"
+        ;;
+    esac
+    return 0
+  fi
   case "$RUN_MODE" in
     default)
       log "Default mode: preserving data volumes and Docker image/build cache; global Docker prune skipped."
@@ -643,6 +716,199 @@ compose_up_frontend_detached() {
     "ARGUS_LLM_ENV_FILE=$ARGUS_LLM_ENV_FILE" \
     "ARGUS_RESET_IMPORT_TOKEN=$ARGUS_RESET_IMPORT_TOKEN" \
     docker compose --project-directory "$ROOT_DIR" --file "$COMPOSE_FILE" --project-name "$PROJECT_NAME" up -d --build frontend
+}
+
+prepare_podman_dockerfile() {
+  local source_file="$1"
+  local target_file="$2"
+  python3 - "$source_file" "$target_file" <<'PYEOF'
+import re
+import sys
+from pathlib import Path
+
+source = Path(sys.argv[1])
+target = Path(sys.argv[2])
+lines = source.read_text().splitlines()
+out = []
+idx = 0
+
+mount_prefix = re.compile(r'^(?P<indent>\s*)RUN\s+--mount=')
+continued_mount = re.compile(r'^\s*--mount=')
+
+while idx < len(lines):
+    line = lines[idx]
+    match = mount_prefix.match(line)
+    if not match:
+        out.append(line)
+        idx += 1
+        continue
+
+    indent = match.group('indent')
+    remainder = line.split('\\', 1)[1] if '\\' in line else ''
+    idx += 1
+    while idx < len(lines) and continued_mount.match(lines[idx]):
+        if '\\' not in lines[idx]:
+            remainder = ''
+            idx += 1
+            break
+        idx += 1
+    if idx < len(lines):
+        command = lines[idx].lstrip()
+        out.append(f'{indent}RUN {remainder.strip() or command}')
+        if remainder.strip():
+            out.append(command)
+        idx += 1
+    else:
+        out.append(f'{indent}RUN')
+
+target.write_text('\n'.join(out) + '\n')
+PYEOF
+}
+
+podman_build_file_arg() {
+  local source_file="$1"
+  local prepared_file="$2"
+  if "$DRY_RUN" || is_truthy "$STUB_DOCKER"; then
+    printf '%s' "$source_file"
+    return 0
+  fi
+  prepare_podman_dockerfile "$source_file" "$prepared_file"
+  printf '%s' "$prepared_file"
+}
+
+cleanup_podman_dockerfile() {
+  local prepared_file="$1"
+  local source_file="$2"
+  [[ "$prepared_file" == "$source_file" ]] && return 0
+  rm -f "$prepared_file"
+}
+
+podman_build_backend_image() {
+  log "Building Argus backend Podman image: $PODMAN_BACKEND_IMAGE"
+  local podman_backend_dockerfile
+  podman_backend_dockerfile="$(podman_build_file_arg "$ROOT_DIR/docker/backend.Dockerfile" "${TMPDIR:-/tmp}/argus-backend-podman.Dockerfile.$$")"
+  local build_rc=0
+  run_cmd podman build \
+    --file "$podman_backend_dockerfile" \
+    --target runtime-plain \
+    --build-arg "TARGETARCH=$PODMAN_TARGETARCH" \
+    --build-arg "DOCKERHUB_LIBRARY_MIRROR=${DOCKERHUB_LIBRARY_MIRROR:-m.daocloud.io/docker.io/library}" \
+    --build-arg "UV_IMAGE=${UV_IMAGE:-m.daocloud.io/docker.io/library/ghcr.io/astral-sh/uv:0.7}" \
+    --build-arg "DOCKER_CLI_IMAGE=${DOCKER_CLI_IMAGE:-m.daocloud.io/docker.io/library/docker:27-cli}" \
+    --build-arg "BACKEND_APT_MIRROR_PRIMARY=${BACKEND_APT_MIRROR_PRIMARY:-mirrors.aliyun.com}" \
+    --build-arg "BACKEND_APT_SECURITY_PRIMARY=${BACKEND_APT_SECURITY_PRIMARY:-mirrors.aliyun.com}" \
+    --build-arg "BACKEND_APT_MIRROR_FALLBACK=${BACKEND_APT_MIRROR_FALLBACK:-deb.debian.org}" \
+    --build-arg "BACKEND_APT_SECURITY_FALLBACK=${BACKEND_APT_SECURITY_FALLBACK:-security.debian.org}" \
+    --tag "$PODMAN_BACKEND_IMAGE" \
+    "$ROOT_DIR" || build_rc=$?
+  cleanup_podman_dockerfile "$podman_backend_dockerfile" "$ROOT_DIR/docker/backend.Dockerfile"
+  return "$build_rc"
+}
+
+podman_build_frontend_image() {
+  log "Building Argus frontend Podman image: $PODMAN_FRONTEND_IMAGE"
+  local podman_frontend_dockerfile
+  podman_frontend_dockerfile="$(podman_build_file_arg "$ROOT_DIR/docker/frontend.Dockerfile" "${TMPDIR:-/tmp}/argus-frontend-podman.Dockerfile.$$")"
+  local build_rc=0
+  run_cmd podman build \
+    --file "$podman_frontend_dockerfile" \
+    --target dev \
+    --build-arg "DOCKERHUB_LIBRARY_MIRROR=${DOCKERHUB_LIBRARY_MIRROR:-m.daocloud.io/docker.io/library}" \
+    --build-arg "NPM_REGISTRY=${NPM_REGISTRY:-https://registry.npmmirror.com}" \
+    --build-arg "PNPM_VERSION=${PNPM_VERSION:-10.11.0}" \
+    --build-arg "WEAK_NETWORK=${WEAK_NETWORK:-false}" \
+    --tag "$PODMAN_FRONTEND_IMAGE" \
+    "$ROOT_DIR/frontend" || build_rc=$?
+  cleanup_podman_dockerfile "$podman_frontend_dockerfile" "$ROOT_DIR/docker/frontend.Dockerfile"
+  return "$build_rc"
+}
+
+podman_build_local_images() {
+  podman_build_backend_image
+  podman_build_frontend_image
+}
+
+podman_run_db() {
+  log "Starting Podman Postgres container: $PODMAN_DB_CONTAINER"
+  run_cmd podman run -d \
+    --name "$PODMAN_DB_CONTAINER" \
+    --label "$PODMAN_PROJECT_LABEL" \
+    --label "$PODMAN_RUNTIME_LABEL" \
+    --network host \
+    -e POSTGRES_USER=postgres \
+    -e POSTGRES_PASSWORD=postgres \
+    -e "POSTGRES_DB=${POSTGRES_DB:-Argus}" \
+    -v argus_postgres_data:/var/lib/postgresql \
+    "$PODMAN_POSTGRES_IMAGE"
+}
+
+podman_run_redis() {
+  log "Starting Podman Redis container: $PODMAN_REDIS_CONTAINER"
+  run_cmd podman run -d \
+    --name "$PODMAN_REDIS_CONTAINER" \
+    --label "$PODMAN_PROJECT_LABEL" \
+    --label "$PODMAN_RUNTIME_LABEL" \
+    --network host \
+    -v argus_redis_data:/data \
+    "$PODMAN_REDIS_IMAGE"
+}
+
+podman_run_backend() {
+  log "Starting Podman backend container: $PODMAN_BACKEND_CONTAINER"
+  run_cmd podman run -d \
+    --name "$PODMAN_BACKEND_CONTAINER" \
+    --label "$PODMAN_PROJECT_LABEL" \
+    --label "$PODMAN_RUNTIME_LABEL" \
+    --network host \
+    --env-file "$ARGUS_ENV_FILE" \
+    --env-file "$ARGUS_LLM_ENV_FILE" \
+    -e "BIND_ADDR=0.0.0.0:${BACKEND_PORT}" \
+    -e "DATABASE_URL=postgresql+asyncpg://postgres:postgres@127.0.0.1:5432/${POSTGRES_DB:-Argus}" \
+    -e "ASYNCPG_DSN=postgresql://postgres:postgres@127.0.0.1:5432/${POSTGRES_DB:-Argus}" \
+    -e REDIS_URL=redis://127.0.0.1:6379/0 \
+    -e "ARGUS_RESET_IMPORT_TOKEN=$ARGUS_RESET_IMPORT_TOKEN" \
+    -v argus_backend_uploads:/app/uploads \
+    -v argus_backend_runtime_data:/app/data/runtime \
+    -v "$ROOT_DIR/oci:/app/oci:ro" \
+    -v "$ARGUS_ENV_FILE:/app/.env:ro" \
+    -v "$ROOT_DIR/docker/opengrep-scan.sh:/app/docker/opengrep-scan.sh:ro" \
+    -v argus_scan_workspace:/tmp/Argus/scans \
+    "$PODMAN_BACKEND_IMAGE"
+}
+
+podman_run_frontend() {
+  log "Starting Podman frontend container: $PODMAN_FRONTEND_CONTAINER"
+  run_cmd podman run -d \
+    --name "$PODMAN_FRONTEND_CONTAINER" \
+    --label "$PODMAN_PROJECT_LABEL" \
+    --label "$PODMAN_RUNTIME_LABEL" \
+    --network host \
+    -e HTTP_PROXY= \
+    -e HTTPS_PROXY= \
+    -e http_proxy= \
+    -e https_proxy= \
+    -e NO_PROXY='*' \
+    -e FRONTEND_PUBLIC_URL="http://localhost:${FRONTEND_PORT}" \
+    -e VITE_API_BASE_URL=/api/v1 \
+    -e "VITE_API_TARGET=${VITE_API_TARGET:-http://127.0.0.1:${BACKEND_PORT}}" \
+    -e BACKEND_PUBLIC_URL="http://localhost:${BACKEND_PORT}" \
+    -e VITE_HMR_HOST=localhost \
+    -e "VITE_HMR_PORT=${FRONTEND_PORT}" \
+    -e "FRONTEND_DEV_PORT=${FRONTEND_PORT}" \
+    -v "$ROOT_DIR/frontend:/app" \
+    -v argus_frontend_node_modules:/app/node_modules \
+    -v argus_frontend_pnpm_store:/pnpm/store \
+    "$PODMAN_FRONTEND_IMAGE"
+}
+
+podman_start_backend_stack() {
+  podman_run_db
+  podman_run_redis
+  podman_run_backend
+}
+
+podman_start_frontend_stack() {
+  podman_run_frontend
 }
 
 build_runner_images() {
@@ -966,6 +1232,24 @@ follow_foreground_logs() {
   return "$logs_rc"
 }
 
+follow_podman_logs() {
+  log "Following Podman logs in foreground. Ctrl-C/SIGTERM stops Argus Podman containers before exiting."
+  _argus_podman_stop_on_signal() {
+    log "Signal received; stopping Argus Podman containers before exit."
+    podman_cleanup_runtime_containers
+    exit 130
+  }
+  trap _argus_podman_stop_on_signal INT TERM
+  local logs_rc=0
+  if run_cmd podman logs -f "$PODMAN_BACKEND_CONTAINER" "$PODMAN_FRONTEND_CONTAINER"; then
+    logs_rc=0
+  else
+    logs_rc=$?
+  fi
+  trap - INT TERM
+  return "$logs_rc"
+}
+
 wait_for_frontend() {
   local url="http://127.0.0.1:${FRONTEND_PORT}"
   if "$DRY_RUN" || is_truthy "$STUB_DOCKER"; then
@@ -992,6 +1276,10 @@ wait_for_frontend() {
 }
 
 start_stack() {
+  if [[ "$CONTAINER_RUNTIME" == "podman" ]]; then
+    podman_start_stack
+    return 0
+  fi
   build_runner_images
   compose_up_backend_detached
   wait_for_backend
@@ -1004,6 +1292,23 @@ start_stack() {
   else
     follow_foreground_logs
     log "Compose foreground log-follow exited. Frontend port: $FRONTEND_PORT"
+  fi
+}
+
+podman_start_stack() {
+  log "Starting Argus via Podman image/container mode."
+  podman_build_local_images
+  podman_start_backend_stack
+  wait_for_backend
+  log "Podman runtime: skipping Docker Compose A3S image cache load; scan-runner parity depends on Podman socket support."
+  import_backend_env
+  podman_start_frontend_stack
+  if "$WAIT_EXIT"; then
+    wait_for_frontend
+    log "Complete. Frontend: http://127.0.0.1:$FRONTEND_PORT"
+  else
+    follow_podman_logs
+    log "Podman foreground log-follow exited. Frontend port: $FRONTEND_PORT"
   fi
 }
 
@@ -1026,6 +1331,25 @@ set_run_mode() {
   RUN_MODE="$mode"
 }
 
+supported_container_runtimes() {
+  printf '%s' "$SUPPORTED_CONTAINER_RUNTIMES"
+}
+
+is_supported_container_runtime() {
+  case " $SUPPORTED_CONTAINER_RUNTIMES " in
+    *" $1 "*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+set_container_runtime() {
+  local runtime="$1"
+  if ! is_supported_container_runtime "$runtime"; then
+    fail "Unknown container runtime: $runtime. Supported container runtimes: $(supported_container_runtimes)"
+  fi
+  CONTAINER_RUNTIME="$runtime"
+}
+
 parse_args() {
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -1039,6 +1363,15 @@ parse_args() {
         ;;
       --wait-exit|--detach-wait)
         WAIT_EXIT=true
+        shift
+        ;;
+      --runtime)
+        [[ $# -ge 2 ]] || fail "--runtime requires one of: $(supported_container_runtimes)"
+        set_container_runtime "$2"
+        shift 2
+        ;;
+      --runtime=*)
+        set_container_runtime "${1#--runtime=}"
         shift
         ;;
       --)
@@ -1066,6 +1399,7 @@ main() {
   print_banner
   log "Argus bootstrap beginning. Project: $PROJECT_NAME"
   log "Run mode: $RUN_MODE"
+  log "Container runtime: $CONTAINER_RUNTIME"
   validate_llm_config
   ensure_root_env_keys
   require_real_tools

@@ -46,7 +46,7 @@ done
 
 if [ ! -d "$assets_dir" ] && [ -f "$assets_archive" ]; then
   mkdir -p "$assets_root"
-  tar -xzf "$assets_archive" -C "$assets_root"
+  tar --no-same-owner --no-same-permissions -xzf "$assets_archive" -C "$assets_root"
 fi
 
 if [ "$#" -eq 0 ]; then
