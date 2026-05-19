@@ -16,7 +16,7 @@
 
 ### 静态审计
 
-- **是什么**：当前稳定主线由 Opengrep 承担的规则扫描体验，产品层显示为“静态审计”。Opengrep 默认使用 Dockerfile runner 容器，也可以在高级配置里把单次任务切到 `opengrep_sandbox=a3s_box` 的 a3s MicroVM。Dockerfile runner 内部可在 no-socket 部署/override 中实验性设置 `OPENGREP_RUNNER_RUNTIME=podman`，但在 benchmark/rootless/mount validation 全部通过前不能称为默认或推荐。CodeQL 隔离扫描路径目前因 cubesandbox 退役处于不可用状态（详见 follow-up F1）。
+- **是什么**：当前稳定主线由 Opengrep 承担的规则扫描体验，产品层显示为“静态审计”。Opengrep 默认产品路径使用 Dockerfile runner 容器；默认/推荐部署用 rootless Podman 执行该 runner，也可以在高级配置里把单次任务切到 `opengrep_sandbox=a3s_box` 的 a3s MicroVM。Docker Compose/Docker runner 保留为显式本地/dev fallback。CodeQL 隔离扫描路径目前因 cubesandbox 退役处于不可用状态（详见 follow-up F1）。
 - **不是什么**：历史多引擎静态审计集合；退役兼容、防回归测试或旧前端 API 残留不应重新成为当前入口。CodeQL 路径未恢复前不应作为可用引擎暴露。
 - **主要入口**：`backend/src/routes/static_tasks.rs`、`frontend/src/shared/api/opengrep.ts`、`frontend/src/pages/StaticAnalysis.tsx`。
 
@@ -43,7 +43,7 @@
 
 ### Opengrep runner
 
-- **是什么**：执行静态审计规则扫描的隔离 runner。默认路径是 `docker/opengrep-runner.Dockerfile` 构建的临时 Docker-compatible 容器；后端 runner 支持实验性 `OPENGREP_RUNNER_RUNTIME=docker|podman`，但默认 Compose 挂载宿主 Docker socket 时固定为 `docker`，Podman 只能在 no-socket 部署/override 中启用。Podman 路径必须记录 rootless proof、no host network、source `ro` / output `rw` mount metadata。静态审计 Opengrep 高级配置也可选择 `a3s-box 沙箱`，通过 `backend/src/runtime/a3s_box_runner.rs` 启动 krun-vm MicroVM 执行同一 `opengrep-scan` 包装器。
+- **是什么**：执行静态审计规则扫描的隔离 runner。默认产品路径是 `docker/opengrep-runner.Dockerfile` 构建的临时容器；默认/推荐部署用 `OPENGREP_RUNNER_RUNTIME=podman` 走 rootless Podman，不挂宿主 Docker socket。Podman 路径必须记录 rootless proof、no host network、source/rules `ro` / output `rw` mount metadata；Docker Compose/Docker runner 保留为显式本地/dev fallback。静态审计 Opengrep 高级配置也可选择 `a3s-box 沙箱`，通过 `backend/src/runtime/a3s_box_runner.rs` 启动 krun-vm MicroVM 执行同一 `opengrep-scan` 包装器。
 - **不是什么**：旧多引擎静态审计调度器，也不是 CodeQL 扫描主路径；a3s-box 选项不是默认值，未传或未知 `opengrep_sandbox` 仍回落到 Dockerfile 容器。
 - **主要入口**：`docker/opengrep-runner.Dockerfile`、`docker/opengrep-scan.sh`、`backend/src/scan/opengrep.rs`、`backend/src/runtime/a3s_box_runner.rs`、`frontend/src/components/scan/create-scan-task/StaticEngineConfigDialog.tsx`；backend 按任务动态创建临时 runner 容器或 a3s-box MicroVM，任务结束后清理。
 

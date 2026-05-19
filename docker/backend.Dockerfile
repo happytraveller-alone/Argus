@@ -213,6 +213,7 @@ RUN --mount=type=cache,id=argus-backend-runtime-apt-lists,target=/var/lib/apt/li
   git \
   iproute2 \
   openssh-client \
+  podman \
   python3; \
   }; \
   main_host="${BACKEND_APT_MIRROR_PRIMARY}"; \

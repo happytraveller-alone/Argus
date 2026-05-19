@@ -78,7 +78,7 @@ RUN mkdir -p /opt/backend-assets \
 FROM ${DOCKERHUB_LIBRARY_MIRROR}/debian:trixie-slim AS runtime-base
 
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends ca-certificates curl git iproute2 openssh-client python3 \
+  && apt-get install -y --no-install-recommends ca-certificates curl git iproute2 openssh-client podman python3 \
   && rm -rf /var/lib/apt/lists/*
 
 RUN groupadd --gid 1001 appgroup \

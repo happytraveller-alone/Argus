@@ -60,6 +60,7 @@ pub struct AppConfig {
     pub opengrep_runner_cpu_limit_explicit: bool,
     pub opengrep_runner_pids_limit: u64,
     pub opengrep_runner_runtime: String,
+    pub opengrep_runner_rootless_socket_required: bool,
     /// Source-directory size limit (MiB) above which the a3s-box opengrep
     /// runner skips localization (the copy of workspace source into the
     /// box-local tmpfs `/tmp/argus-a3s-opengrep-{box_name}`) and runs
@@ -222,6 +223,10 @@ impl AppConfig {
             opengrep_runner_runtime: normalize_opengrep_runner_runtime(
                 optional_env("OPENGREP_RUNNER_RUNTIME").as_deref(),
             ),
+            opengrep_runner_rootless_socket_required: parse_bool_env(
+                "OPENGREP_RUNNER_ROOTLESS_SOCKET_REQUIRED",
+                true,
+            ),
             argus_a3s_localize_limit_mb: parse_u64_env("ARGUS_A3S_LOCALIZE_LIMIT_MB", 50),
             opengrep_standby_pool_size: parse_usize_env("OPENGREP_STANDBY_POOL_SIZE", 2),
             opengrep_standby_pool_disabled: parse_bool_env("OPENGREP_STANDBY_POOL_DISABLED", false),
@@ -303,6 +308,7 @@ impl AppConfig {
             opengrep_runner_cpu_limit_explicit: true,
             opengrep_runner_pids_limit: 512,
             opengrep_runner_runtime: "docker".to_string(),
+            opengrep_runner_rootless_socket_required: true,
             argus_a3s_localize_limit_mb: 50,
             opengrep_standby_pool_size: 0,
             opengrep_standby_pool_disabled: true,
@@ -340,6 +346,7 @@ fn normalize_opengrep_runner_runtime(value: Option<&str>) -> String {
         .map(|value| value.trim().to_ascii_lowercase())
         .as_deref()
     {
+        None | Some("") => "podman".to_string(),
         Some("podman") => "podman".to_string(),
         _ => "docker".to_string(),
     }
@@ -406,6 +413,6 @@ mod tests {
             normalize_opengrep_runner_runtime(Some("surprise")),
             "docker"
         );
-        assert_eq!(normalize_opengrep_runner_runtime(None), "docker");
+        assert_eq!(normalize_opengrep_runner_runtime(None), "podman");
     }
 }

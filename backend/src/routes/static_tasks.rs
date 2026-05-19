@@ -1591,6 +1591,7 @@ async fn run_opengrep_scan_inner(
     };
     match options.sandbox {
         OpengrepSandboxKind::DockerfileContainer => {
+            validate_opengrep_runner_deployment_config(&state.config)?;
             let scanner_image = state.config.scanner_opengrep_image.clone();
             let container_source_dir = "/scan/source";
             let config_container_path = rule_inputs
@@ -1994,7 +1995,7 @@ fn build_opengrep_mount_plan(
             output_host_dir.display().to_string(),
             format!("{SCANNER_MOUNT_PATH}/output"),
         ),
-        RunnerMount::read_write(
+        RunnerMount::read_only(
             workspace_dir.join("opengrep-rules").display().to_string(),
             format!("{SCANNER_MOUNT_PATH}/opengrep-rules"),
         ),
@@ -2008,10 +2009,23 @@ fn build_opengrep_runner_spec(
     resources: OpengrepRunnerResources,
     paths: OpengrepRunnerPaths<'_>,
 ) -> RunnerSpec {
+    let container_runtime = opengrep_container_runtime(config);
+    let cpu_limit = match container_runtime {
+        ContainerRuntime::Docker => Some(resources.cpu_limit),
+        // Rootless Podman deployments may not expose the `cpu` cgroup
+        // controller. Keep default Podman portable by relying on scheduler
+        // permits plus opengrep --jobs; honor an explicit CPU hard-limit opt-in.
+        ContainerRuntime::Podman
+            if config.opengrep_runner_cpu_limit_explicit && config.opengrep_runner_cpu_limit > 0.0 =>
+        {
+            Some(resources.cpu_limit)
+        }
+        ContainerRuntime::Podman => None,
+    };
     RunnerSpec {
         scanner_type: "opengrep".to_string(),
         image,
-        container_runtime: opengrep_container_runtime(config),
+        container_runtime,
         workspace_dir: workspace_dir.display().to_string(),
         command: opengrep::build_scan_command(&opengrep::ScanCommandArgs {
             manifest_path: paths.manifest_container_path,
@@ -2033,10 +2047,10 @@ fn build_opengrep_runner_spec(
         workspace_root_override: None,
         memory_limit_mb: Some(config.opengrep_runner_memory_limit_mb),
         memory_swap_limit_mb: Some(config.opengrep_runner_memory_limit_mb),
-        cpu_limit: Some(resources.cpu_limit),
+        cpu_limit,
         pids_limit: Some(config.opengrep_runner_pids_limit),
         network_disabled: true,
-        mount_plan: match opengrep_container_runtime(config) {
+        mount_plan: match container_runtime {
             ContainerRuntime::Podman => Some(build_opengrep_mount_plan(
                 workspace_dir,
                 &workspace_dir.join("source"),
@@ -2044,6 +2058,26 @@ fn build_opengrep_runner_spec(
             )),
             ContainerRuntime::Docker => None,
         },
+    }
+}
+
+fn validate_opengrep_runner_deployment_config(
+    config: &crate::config::AppConfig,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    match opengrep_container_runtime(config) {
+        ContainerRuntime::Docker => Ok(()),
+        ContainerRuntime::Podman => {
+            if !config.opengrep_runner_rootless_socket_required {
+                return Err(
+                    "podman runner requires OPENGREP_RUNNER_ROOTLESS_SOCKET_REQUIRED=true".into(),
+                );
+            }
+            let container_host = env::var("CONTAINER_HOST").unwrap_or_default();
+            if container_host.contains("docker.sock") {
+                return Err("podman runner must not use a Docker socket as CONTAINER_HOST".into());
+            }
+            Ok(())
+        }
     }
 }
 
@@ -3877,8 +3911,9 @@ mod tests {
         build_opengrep_a3s_box_runner_spec, build_opengrep_mount_plan, build_opengrep_runner_spec,
         extract_highest_rule_severity, extract_opengrep_task_options, format_opengrep_runner_error,
         prepare_opengrep_runner_inputs, prune_static_scan_non_source_paths,
-        read_opengrep_results_text, static_task_value, OpengrepResourceScheduler,
-        OpengrepRunnerPaths, OpengrepRunnerResources, OpengrepSandboxKind,
+        read_opengrep_results_text, static_task_value, validate_opengrep_runner_deployment_config,
+        OpengrepResourceScheduler, OpengrepRunnerPaths, OpengrepRunnerResources,
+        OpengrepSandboxKind,
     };
     use serde_json::json;
     use std::{fs, path::Path, sync::mpsc, time::Duration};
@@ -4170,6 +4205,8 @@ rules:
     fn opengrep_runner_runtime_can_select_podman() {
         let mut config = AppConfig::for_tests();
         config.opengrep_runner_runtime = "podman".to_string();
+        config.opengrep_runner_cpu_limit_explicit = false;
+        config.opengrep_runner_cpu_limit = 0.0;
 
         let spec = build_opengrep_runner_spec(
             &config,
@@ -4196,6 +4233,10 @@ rules:
 
         assert_eq!(spec.container_runtime, ContainerRuntime::Podman);
         assert!(spec.network_disabled);
+        assert!(
+            spec.cpu_limit.is_none(),
+            "default rootless Podman path must not require the cpu cgroup controller"
+        );
         let mount_plan = spec.mount_plan.expect("mount plan");
         assert!(mount_plan
             .mounts
@@ -4205,6 +4246,44 @@ rules:
             .mounts
             .iter()
             .any(|mount| { mount.container_path == "/scan/output" && !mount.read_only }));
+        assert!(mount_plan
+            .mounts
+            .iter()
+            .any(|mount| { mount.container_path == "/scan/opengrep-rules" && mount.read_only }));
+    }
+
+    #[test]
+    fn opengrep_runner_podman_honors_explicit_cpu_limit_opt_in() {
+        let mut config = AppConfig::for_tests();
+        config.opengrep_runner_runtime = "podman".to_string();
+        config.opengrep_runner_cpu_limit_explicit = true;
+        config.opengrep_runner_cpu_limit = 2.5;
+
+        let spec = build_opengrep_runner_spec(
+            &config,
+            config.scanner_opengrep_image.clone(),
+            std::path::Path::new("/tmp/opengrep-runtime"),
+            OpengrepRunnerResources {
+                jobs: 2,
+                cpu_limit: 2.5,
+                allocated_cores: 3,
+                total_cores: 8,
+            },
+            OpengrepRunnerPaths {
+                container_source_dir: "/scan/source",
+                manifest_container_path: None,
+                config_container_path: Some("/scan/opengrep-rules"),
+                output_container_path: "/scan/output/results.json",
+                summary_rel_path: "output/summary.json",
+                summary_container_path: "/scan/output/summary.json",
+                log_container_path: "/scan/output/log.txt",
+                stdout_rel_path: "output/stdout.txt",
+                stderr_rel_path: "output/stderr.txt",
+            },
+        );
+
+        assert_eq!(spec.container_runtime, ContainerRuntime::Podman);
+        assert_eq!(spec.cpu_limit, Some(2.5));
     }
 
     #[test]
@@ -4245,6 +4324,25 @@ rules:
     }
 
     #[test]
+    fn opengrep_runner_podman_deployment_rejects_docker_socket_host() {
+        let mut config = AppConfig::for_tests();
+        config.opengrep_runner_runtime = "podman".to_string();
+        let previous = std::env::var("CONTAINER_HOST").ok();
+        std::env::set_var("CONTAINER_HOST", "unix:///var/run/docker.sock");
+
+        let result = validate_opengrep_runner_deployment_config(&config);
+
+        if let Some(previous) = previous {
+            std::env::set_var("CONTAINER_HOST", previous);
+        } else {
+            std::env::remove_var("CONTAINER_HOST");
+        }
+        assert!(result
+            .err()
+            .is_some_and(|error| error.to_string().contains("must not use a Docker socket")));
+    }
+
+    #[test]
     fn build_opengrep_mount_plan_splits_readonly_source_and_writable_output() {
         let plan = build_opengrep_mount_plan(
             Path::new("/tmp/workspace"),
@@ -4261,6 +4359,11 @@ rules:
             mount.host_path == "/tmp/workspace/output"
                 && mount.container_path == "/scan/output"
                 && !mount.read_only
+        }));
+        assert!(plan.mounts.iter().any(|mount| {
+            mount.host_path == "/tmp/workspace/opengrep-rules"
+                && mount.container_path == "/scan/opengrep-rules"
+                && mount.read_only
         }));
     }
 

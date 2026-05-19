@@ -10,8 +10,9 @@
 #   --full   hard + compose down --volumes (destroys postgres_data et al.)
 #
 # --dry-run  Print all planned ops without executing any destructive command.
-# --runtime  Explicit container runtime. Default: docker. Podman mode stops/removes
+# --runtime  Explicit container runtime. Default: podman. Podman mode stops/removes
 #            exact Argus-owned containers only and preserves Podman images/volumes.
+#            Docker remains available as a local/dev fallback.
 # --help     Print this usage and exit 0.
 
 set -euo pipefail
@@ -28,7 +29,7 @@ ENV_FILE="$ROOT/.env"
 # ---------------------------------------------------------------------------
 MODE="hard"
 DRY_RUN=false
-CONTAINER_RUNTIME="docker"
+CONTAINER_RUNTIME="${ARGUS_CONTAINER_RUNTIME:-podman}"
 
 # ---------------------------------------------------------------------------
 # Counters (for summary)

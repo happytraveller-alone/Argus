@@ -170,7 +170,7 @@ assert_not_contains "$invalid_out" "docker compose"
 extra_dir="$(new_fixture extra-mode)"
 extra_out="$extra_dir/extra-mode.out"
 set +e
-( cd "$extra_dir" && ./argus-bootstrap.sh -- default extra ) >"$extra_out" 2>&1
+( cd "$extra_dir" && ./argus-bootstrap.sh --runtime docker -- default extra ) >"$extra_out" 2>&1
 extra_rc=$?
 set -e
 [[ "$extra_rc" -ne 0 ]] || fail "Multiple post-separator tokens should fail"
@@ -186,6 +186,18 @@ set -e
 [[ "$flag_after_rc" -ne 0 ]] || fail "Flag after separator should be treated as invalid mode"
 assert_contains "$flag_after_out" "Unknown run mode: --wait-exit"
 assert_not_contains "$flag_after_out" "docker compose"
+
+# No runtime flag is now the recommended Podman path; Docker fallback must be
+# explicit via `--runtime docker`.
+default_podman_dir="$(new_fixture default-podman)"
+write_valid_config "$default_podman_dir"
+default_podman_out="$default_podman_dir/default-podman.out"
+( cd "$default_podman_dir" && ./argus-bootstrap.sh --dry-run --wait-exit -- default ) >"$default_podman_out" 2>&1
+assert_contains "$default_podman_out" "Container runtime: podman"
+assert_contains "$default_podman_out" "podman build --file $default_podman_dir/docker/opengrep-runner.Dockerfile --target opengrep-runner"
+assert_contains "$default_podman_out" "OPENGREP_RUNNER_RUNTIME=podman"
+assert_not_contains "$default_podman_out" "docker compose"
+assert_not_contains "$default_podman_out" "/var/run/docker.sock"
 
 # Missing root .env exits before Docker cleanup after copying env.example.
 missing_dir="$(new_fixture missing)"
@@ -261,7 +273,7 @@ preserve_secret_dir="$(new_fixture preserve-secret)"
 write_valid_config "$preserve_secret_dir"
 before_secret="$(grep '^SECRET_KEY=' "$preserve_secret_dir/.env" | cut -d= -f2-)"
 preserve_secret_out="$preserve_secret_dir/preserve-secret.out"
-( cd "$preserve_secret_dir" && ARGUS_STUB_DOCKER=true ARGUS_TEST_IMPORT_TOKEN=IMPORT_TOKEN_SHOULD_NOT_PRINT ./argus-bootstrap.sh --wait-exit -- default ) >"$preserve_secret_out" 2>&1
+( cd "$preserve_secret_dir" && ARGUS_STUB_DOCKER=true ARGUS_TEST_IMPORT_TOKEN=IMPORT_TOKEN_SHOULD_NOT_PRINT ./argus-bootstrap.sh --runtime docker --wait-exit -- default ) >"$preserve_secret_out" 2>&1
 after_secret="$(grep '^SECRET_KEY=' "$preserve_secret_dir/.env" | cut -d= -f2-)"
 [[ "$before_secret" == "$after_secret" ]] || fail "Existing real SECRET_KEY should not be regenerated on every bootstrap"
 assert_not_contains "$preserve_secret_out" "Generated SECRET_KEY in root .env"
@@ -307,7 +319,7 @@ assert_not_contains "$missing_key_out" "docker system prune"
 valid_dir="$(new_fixture valid)"
 write_valid_config "$valid_dir"
 valid_out="$valid_dir/valid.out"
-( cd "$valid_dir" && ARGUS_STUB_DOCKER=true ARGUS_TEST_IMPORT_TOKEN=IMPORT_TOKEN_SHOULD_NOT_PRINT ./argus-bootstrap.sh ) >"$valid_out" 2>&1
+( cd "$valid_dir" && ARGUS_STUB_DOCKER=true ARGUS_TEST_IMPORT_TOKEN=IMPORT_TOKEN_SHOULD_NOT_PRINT ./argus-bootstrap.sh --runtime docker ) >"$valid_out" 2>&1
 assert_not_contains "$valid_out" "SECRET_SENTINEL_SHOULD_NOT_PRINT"
 assert_banner_contact "$valid_out"
 assert_contains "$valid_out" "Run mode: default"
@@ -345,7 +357,7 @@ logs_line="$(line_no "$valid_out" "logs -f")"
 default_dir="$(new_fixture explicit-default)"
 write_valid_config "$default_dir"
 default_out="$default_dir/default.out"
-( cd "$default_dir" && ARGUS_STUB_DOCKER=true ARGUS_DOCKER_SYSTEM_PRUNE=true ./argus-bootstrap.sh -- default ) >"$default_out" 2>&1
+( cd "$default_dir" && ARGUS_STUB_DOCKER=true ARGUS_DOCKER_SYSTEM_PRUNE=true ./argus-bootstrap.sh --runtime docker -- default ) >"$default_out" 2>&1
 assert_contains "$default_out" "Run mode: default"
 assert_contains "$default_out" "down --remove-orphans"
 assert_not_contains "$default_out" "down --volumes --remove-orphans"
@@ -355,7 +367,7 @@ assert_no_global_prune_execution "$default_out"
 keep_cache_dir="$(new_fixture keep-cache)"
 write_valid_config "$keep_cache_dir"
 keep_cache_out="$keep_cache_dir/keep-cache.out"
-( cd "$keep_cache_dir" && ARGUS_STUB_DOCKER=true ARGUS_DOCKER_SYSTEM_PRUNE=true ./argus-bootstrap.sh -- keep-cache ) >"$keep_cache_out" 2>&1
+( cd "$keep_cache_dir" && ARGUS_STUB_DOCKER=true ARGUS_DOCKER_SYSTEM_PRUNE=true ./argus-bootstrap.sh --runtime docker -- keep-cache ) >"$keep_cache_out" 2>&1
 assert_contains "$keep_cache_out" "Run mode: keep-cache"
 assert_contains "$keep_cache_out" "removing this Compose project's managed volumes"
 assert_contains "$keep_cache_out" "preserving Docker image/build cache"
@@ -366,7 +378,7 @@ assert_no_global_prune_execution "$keep_cache_out"
 aggressive_dir="$(new_fixture aggressive)"
 write_valid_config "$aggressive_dir"
 aggressive_out="$aggressive_dir/aggressive.out"
-( cd "$aggressive_dir" && ARGUS_STUB_DOCKER=true ./argus-bootstrap.sh -- aggressive ) >"$aggressive_out" 2>&1
+( cd "$aggressive_dir" && ARGUS_STUB_DOCKER=true ./argus-bootstrap.sh --runtime docker -- aggressive ) >"$aggressive_out" 2>&1
 assert_contains "$aggressive_out" "Run mode: aggressive"
 assert_contains "$aggressive_out" "WARNING: aggressive mode enabled"
 assert_contains "$aggressive_out" "down --volumes --remove-orphans"
@@ -379,7 +391,7 @@ aggressive_prune_line="$(line_no "$aggressive_out" "[stub] docker system prune -
 aggressive_skip_dir="$(new_fixture aggressive-skip)"
 write_valid_config "$aggressive_skip_dir"
 aggressive_skip_out="$aggressive_skip_dir/aggressive-skip.out"
-( cd "$aggressive_skip_dir" && ARGUS_STUB_DOCKER=true ARGUS_DOCKER_SYSTEM_PRUNE=false ./argus-bootstrap.sh -- aggressive ) >"$aggressive_skip_out" 2>&1
+( cd "$aggressive_skip_dir" && ARGUS_STUB_DOCKER=true ARGUS_DOCKER_SYSTEM_PRUNE=false ./argus-bootstrap.sh --runtime docker -- aggressive ) >"$aggressive_skip_out" 2>&1
 assert_contains "$aggressive_skip_out" "Run mode: aggressive"
 assert_contains "$aggressive_skip_out" "down --volumes --remove-orphans"
 assert_contains "$aggressive_skip_out" "Skipping global Docker prune because ARGUS_DOCKER_SYSTEM_PRUNE=false"
@@ -389,7 +401,7 @@ assert_no_global_prune_execution "$aggressive_skip_out"
 wait_dir="$(new_fixture wait)"
 write_valid_config "$wait_dir"
 wait_out="$wait_dir/wait.out"
-( cd "$wait_dir" && ARGUS_STUB_DOCKER=true Argus_FRONTEND_PORT=13099 ./argus-bootstrap.sh --wait-exit -- default ) >"$wait_out" 2>&1
+( cd "$wait_dir" && ARGUS_STUB_DOCKER=true Argus_FRONTEND_PORT=13099 ./argus-bootstrap.sh --runtime docker --wait-exit -- default ) >"$wait_out" 2>&1
 assert_contains "$wait_out" "build opengrep-runner"
 assert_not_contains "$wait_out" "build opengrep-runner codeql-runner"
 assert_contains "$wait_out" "up -d --build"
@@ -405,7 +417,7 @@ import_failure_dir="$(new_fixture import-failure)"
 write_valid_config "$import_failure_dir"
 import_failure_out="$import_failure_dir/import-failure.out"
 set +e
-( cd "$import_failure_dir" && ARGUS_STUB_DOCKER=true ARGUS_TEST_IMPORT_RESPONSE='{"success":false,"message":"mock failure","reasonCode":"llm_test_failed"}' ./argus-bootstrap.sh --wait-exit -- default ) >"$import_failure_out" 2>&1
+( cd "$import_failure_dir" && ARGUS_STUB_DOCKER=true ARGUS_TEST_IMPORT_RESPONSE='{"success":false,"message":"mock failure","reasonCode":"llm_test_failed"}' ./argus-bootstrap.sh --runtime docker --wait-exit -- default ) >"$import_failure_out" 2>&1
 import_failure_rc=$?
 set -e
 [[ "$import_failure_rc" -ne 0 ]] || fail "Import/test failure should stop bootstrap"
@@ -416,7 +428,7 @@ assert_not_contains "$import_failure_out" "Complete. Frontend: http://127.0.0.1:
 wait_aggressive_dir="$(new_fixture wait-aggressive)"
 write_valid_config "$wait_aggressive_dir"
 wait_aggressive_out="$wait_aggressive_dir/wait-aggressive.out"
-( cd "$wait_aggressive_dir" && ARGUS_STUB_DOCKER=true Argus_FRONTEND_PORT=13100 ./argus-bootstrap.sh --wait-exit -- aggressive ) >"$wait_aggressive_out" 2>&1
+( cd "$wait_aggressive_dir" && ARGUS_STUB_DOCKER=true Argus_FRONTEND_PORT=13100 ./argus-bootstrap.sh --runtime docker --wait-exit -- aggressive ) >"$wait_aggressive_out" 2>&1
 assert_contains "$wait_aggressive_out" "Run mode: aggressive"
 assert_contains "$wait_aggressive_out" "down --volumes --remove-orphans"
 assert_contains "$wait_aggressive_out" "[stub] docker system prune -af --volumes"
@@ -433,7 +445,7 @@ assert_contains "$wait_aggressive_out" "Complete. Frontend: http://127.0.0.1:131
 dry_dir="$(new_fixture dry)"
 write_valid_config "$dry_dir"
 dry_out="$dry_dir/dry.out"
-( cd "$dry_dir" && ./argus-bootstrap.sh --dry-run -- default ) >"$dry_out" 2>&1
+( cd "$dry_dir" && ./argus-bootstrap.sh --runtime docker --dry-run -- default ) >"$dry_out" 2>&1
 assert_not_contains "$dry_out" "[dry-run] cp"
 assert_contains "$dry_out" "[dry-run] docker compose"
 assert_contains "$dry_out" "[dry-run] curl -fsS -X POST"
@@ -535,7 +547,7 @@ assert_not_contains "$ROOT_DIR/docker-compose.yml" "cubesandbox"
 dry_aggressive_dir="$(new_fixture dry-aggressive)"
 write_valid_config "$dry_aggressive_dir"
 dry_aggressive_out="$dry_aggressive_dir/dry-aggressive.out"
-( cd "$dry_aggressive_dir" && ./argus-bootstrap.sh --dry-run -- aggressive ) >"$dry_aggressive_out" 2>&1
+( cd "$dry_aggressive_dir" && ./argus-bootstrap.sh --runtime docker --dry-run -- aggressive ) >"$dry_aggressive_out" 2>&1
 assert_contains "$dry_aggressive_out" "[dry-run] docker compose"
 assert_contains "$dry_aggressive_out" "[dry-run] docker system prune -af --volumes"
 
@@ -543,7 +555,7 @@ assert_contains "$dry_aggressive_out" "[dry-run] docker system prune -af --volum
 bare_dir="$(new_fixture bare-separator)"
 write_valid_config "$bare_dir"
 bare_out="$bare_dir/bare.out"
-( cd "$bare_dir" && ARGUS_STUB_DOCKER=true ./argus-bootstrap.sh -- ) >"$bare_out" 2>&1
+( cd "$bare_dir" && ARGUS_STUB_DOCKER=true ./argus-bootstrap.sh --runtime docker -- ) >"$bare_out" 2>&1
 assert_contains "$bare_out" "Run mode: default"
 assert_no_global_prune_execution "$bare_out"
 

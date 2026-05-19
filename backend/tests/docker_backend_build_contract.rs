@@ -78,6 +78,10 @@ fn backend_images_download_a3s_box_v203_binary_package_for_target_arch() {
             "{name} must copy only release binaries/libs into runtime and expose libkrun to the loader"
         );
         assert!(
+            dockerfile.contains("podman"),
+            "{name} must include the Podman CLI so no-socket Podman deployments can run the default Opengrep runner through a rootless Podman API"
+        );
+        assert!(
             dockerfile.contains("/app/data/runtime/home")
                 && dockerfile.contains("ENV HOME=/app/data/runtime/home"),
             "{name} must give appuser a writable HOME for the A3S Box image store"

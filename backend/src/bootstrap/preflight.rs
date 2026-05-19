@@ -1,4 +1,4 @@
-use std::{path::PathBuf, process::Command, sync::Arc};
+use std::{env, path::PathBuf, process::Command, sync::Arc};
 
 use anyhow::{anyhow, Result};
 use tokio::{
@@ -15,6 +15,7 @@ struct RunnerPreflightSpec {
     image: String,
     command: Vec<String>,
     mounts: Vec<(PathBuf, String)>,
+    runtime: String,
 }
 
 pub async fn run(state: &AppState) -> Result<RunnerPreflightStatus> {
@@ -120,7 +121,7 @@ async fn run_single_preflight(
 }
 
 fn run_single_preflight_sync(spec: RunnerPreflightSpec) -> RunnerPreflightCheckStatus {
-    if let Err(error) = ensure_runner_image(&spec.image) {
+    if let Err(error) = ensure_runner_image(&spec.runtime, &spec.image) {
         return RunnerPreflightCheckStatus {
             name: spec.name.to_string(),
             success: false,
@@ -129,7 +130,9 @@ fn run_single_preflight_sync(spec: RunnerPreflightSpec) -> RunnerPreflightCheckS
         };
     }
 
-    let output = Command::new("docker").args(docker_run_args(&spec)).output();
+    let output = Command::new(&spec.runtime)
+        .args(container_run_args(&spec))
+        .output();
 
     match output {
         Ok(output) => RunnerPreflightCheckStatus {
@@ -151,7 +154,7 @@ fn run_single_preflight_sync(spec: RunnerPreflightSpec) -> RunnerPreflightCheckS
     }
 }
 
-fn docker_run_args(spec: &RunnerPreflightSpec) -> Vec<String> {
+fn container_run_args(spec: &RunnerPreflightSpec) -> Vec<String> {
     let mut args = vec!["run".to_string(), "--rm".to_string()];
     for (host_path, container_path) in &spec.mounts {
         args.push("-v".to_string());
@@ -162,8 +165,8 @@ fn docker_run_args(spec: &RunnerPreflightSpec) -> Vec<String> {
     args
 }
 
-fn ensure_runner_image(image: &str) -> Result<()> {
-    let inspect = Command::new("docker")
+fn ensure_runner_image(runtime: &str, image: &str) -> Result<()> {
+    let inspect = Command::new(runtime)
         .arg("image")
         .arg("inspect")
         .arg(image)
@@ -172,7 +175,7 @@ fn ensure_runner_image(image: &str) -> Result<()> {
         return Ok(());
     }
 
-    let pull = Command::new("docker").arg("pull").arg(image).output()?;
+    let pull = Command::new(runtime).arg("pull").arg(image).output()?;
     if pull.status.success() {
         Ok(())
     } else {
@@ -183,14 +186,46 @@ fn ensure_runner_image(image: &str) -> Result<()> {
     }
 }
 
+fn configured_container_runtime(runtime: &str) -> String {
+    match runtime.trim().to_ascii_lowercase().as_str() {
+        "podman" => env::var("Argus_PODMAN_BIN")
+            .or_else(|_| env::var("BACKEND_PODMAN_BIN"))
+            .unwrap_or_else(|_| "podman".to_string()),
+        _ => env::var("Argus_DOCKER_BIN")
+            .or_else(|_| env::var("BACKEND_DOCKER_BIN"))
+            .unwrap_or_else(|_| "docker".to_string()),
+    }
+}
+
 async fn configured_specs(state: &AppState) -> Result<(Vec<RunnerPreflightSpec>, Vec<PathBuf>)> {
     let config = &state.config;
+    let runtime = configured_container_runtime(&config.opengrep_runner_runtime);
+    if config.opengrep_runner_runtime == "podman" && config.opengrep_runner_rootless_socket_required
+    {
+        let output = Command::new(&runtime)
+            .arg("info")
+            .arg("--format")
+            .arg("{{.Host.Security.Rootless}}")
+            .output()?;
+        let rootless = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        if !output.status.success() || !rootless.eq_ignore_ascii_case("true") {
+            return Err(anyhow!(
+                "podman rootless proof failed during preflight: {}",
+                if output.status.success() {
+                    format!("rootless marker was `{rootless}`")
+                } else {
+                    String::from_utf8_lossy(&output.stderr).trim().to_string()
+                }
+            ));
+        }
+    }
     let mut cleanup_dirs = Vec::new();
     let mut specs = vec![RunnerPreflightSpec {
         name: "opengrep",
         image: config.scanner_opengrep_image.clone(),
         command: vec!["opengrep-scan".to_string(), "--self-test".to_string()],
         mounts: Vec::new(),
+        runtime,
     }];
 
     if let Some(opengrep_spec) = specs.iter_mut().find(|spec| spec.name == "opengrep") {
@@ -218,11 +253,36 @@ async fn build_opengrep_preflight_inputs(
 
 #[cfg(test)]
 mod tests {
-    use std::path::PathBuf;
+    use std::{env, path::PathBuf};
 
     use crate::{config::AppConfig, state::AppState};
 
-    use super::{configured_specs, docker_run_args, RunnerPreflightSpec};
+    use super::{
+        configured_container_runtime, configured_specs, container_run_args, RunnerPreflightSpec,
+    };
+
+    struct EnvGuard {
+        key: &'static str,
+        previous: Option<String>,
+    }
+
+    impl EnvGuard {
+        fn set(key: &'static str, value: &str) -> Self {
+            let previous = env::var(key).ok();
+            env::set_var(key, value);
+            Self { key, previous }
+        }
+    }
+
+    impl Drop for EnvGuard {
+        fn drop(&mut self) {
+            if let Some(previous) = &self.previous {
+                env::set_var(self.key, previous);
+            } else {
+                env::remove_var(self.key);
+            }
+        }
+    }
 
     #[tokio::test]
     async fn configured_specs_include_static_runner_preflights() {
@@ -241,10 +301,21 @@ mod tests {
             .expect("opengrep spec should exist");
         assert_eq!(opengrep.command, vec!["opengrep-scan", "--self-test"]);
         assert!(opengrep.mounts.is_empty());
+        assert_eq!(opengrep.runtime, "docker");
 
         for cleanup_dir in cleanup_dirs {
             let _ = tokio::fs::remove_dir_all(cleanup_dir).await;
         }
+    }
+
+    #[test]
+    fn configured_container_runtime_selects_podman_bin_for_podman_runner() {
+        let _guard = EnvGuard::set("Argus_PODMAN_BIN", "/usr/local/bin/podman");
+        assert_eq!(
+            configured_container_runtime("podman"),
+            "/usr/local/bin/podman"
+        );
+        assert_eq!(configured_container_runtime("docker"), "docker");
     }
 
     #[test]
@@ -253,6 +324,7 @@ mod tests {
             name: "opengrep",
             image: "opengrep-runner:test".to_string(),
             command: vec!["opengrep-scan".to_string(), "--self-test".to_string()],
+            runtime: "docker".to_string(),
             mounts: vec![(
                 PathBuf::from("/tmp/argus-preflight"),
                 "/workspace".to_string(),
@@ -260,7 +332,7 @@ mod tests {
         }];
 
         for spec in cases {
-            let args = docker_run_args(&spec);
+            let args = container_run_args(&spec);
 
             assert_eq!(args.first().map(String::as_str), Some("run"));
             assert!(

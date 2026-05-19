@@ -4,7 +4,7 @@
   <strong>简体中文</strong> | <a href="README_EN.md">English</a>
 </p>
 
-该发布分支只保留 slim-source 运行所需文件。推荐启动方式：
+该发布分支只保留 slim-source 运行所需文件。默认/推荐启动方式（rootless Podman，无宿主 Docker socket）：
 
 ```bash
 ./argus-bootstrap.sh --wait-exit -- default
@@ -14,7 +14,7 @@
 
 ## 启动前准备
 
-1. 确保本机已安装 Docker Compose，并且 Docker daemon 可访问。
+1. 推荐安装 rootless Podman 并启用用户级 Podman socket（`podman info --format '{{.Host.Security.Rootless}}'` 应为 `true`）。Docker Compose 仍可作为本地/dev fallback。
 2. 保留根目录 `env.example` 和 `llm.env.example`。首次运行 `./argus-bootstrap.sh` 时，脚本会生成 `.env`（SECRET_KEY/高级覆盖）并复制 `llm.env.example` 为 `.argus-llm.env`，提示你填写 LLM 配置后退出。
 3. 填写 `.argus-llm.env` 中的 LLM 配置后，再次运行 `./argus-bootstrap.sh`；也可以先运行 `./scripts/validate-llm-config.sh --env-file ./.argus-llm.env` 确认 LLM 配置无误。普通用户通常只需要改 `.argus-llm.env`，其它配置走默认。
 
@@ -24,7 +24,7 @@
 
 默认情况下，Compose 会把前端发布到宿主机 `13000` 端口、后端发布到 `18000` 端口，以避免和常见本地开发服务的 `3000` / `8000` 端口冲突。如需恢复旧端口，启动时设置 `Argus_FRONTEND_PORT=3000 Argus_BACKEND_PORT=8000`。
 
-后端会读取根目录 `.env`。默认 Compose 路径仍通过 Docker-compatible CLI 执行 Opengrep runner，因此继续挂载 `${DOCKER_SOCKET_PATH:-/var/run/docker.sock}`，并把 `OPENGREP_RUNNER_RUNTIME` 固定为 `docker`。实验性 `OPENGREP_RUNNER_RUNTIME=podman` 只能在不挂载宿主 Docker/Podman socket 的专用部署/override 中启用；该路径会先做 rootless proof，并要求只读源码挂载、独立可写输出、无 host network。Podman 在 benchmark/rootless/mount 验证全部通过前只应描述为 selectable/experimental，不能写成 default/recommended。
+后端会读取根目录 `.env`。默认推荐部署路径是 rootless Podman：bootstrap 会构建 OpenGrep runner 镜像，挂载用户级 rootless Podman API socket（不是宿主 Docker socket），并把 `OPENGREP_RUNNER_RUNTIME=podman` 注入 backend；runner 执行前会做 rootless proof，任务容器使用 `--network none`、source `ro`、rules `ro`、output `rw`，仍是一任务一容器、结束即删除。该推荐是安全/可靠性取向，不是速度承诺；本机 Docker/Podman benchmark 见 `.omx/research/podman-opengrep-runner-benchmark-20260519.md`。Docker Compose 路径保留为显式本地/dev fallback：`./argus-bootstrap.sh --runtime docker --wait-exit -- default`，继续挂载 `${DOCKER_SOCKET_PATH:-/var/run/docker.sock}` 并固定 `OPENGREP_RUNNER_RUNTIME=docker`。
 
 ## Repo-local Codex / OMX
 
@@ -46,14 +46,23 @@
 
 ## 三个受支持的命令
 
-### 1. 默认镜像启动
+### 1. 默认/推荐启动（Podman）
 
 ```bash
 ./argus-bootstrap.sh --wait-exit -- default
 ```
 
 用途：
-校验 LLM env、构建并启动所有服务，等待前后端就绪后退出。
+校验 LLM env、用 rootless Podman 构建并启动服务，默认 Opengrep `dockerfile_container` runner 也走 rootless Podman。
+
+### 2. Docker fallback 启动
+
+```bash
+./argus-bootstrap.sh --runtime docker --wait-exit -- default
+```
+
+用途：
+校验 LLM env、通过 Docker Compose 构建并启动所有服务，等待前后端就绪后退出。该路径是 dev fallback；推荐优先使用 `./argus-bootstrap.sh --runtime podman --wait-exit -- default`。
 
 ## 访问地址
 
