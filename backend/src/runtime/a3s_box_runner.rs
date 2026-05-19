@@ -1115,12 +1115,16 @@ fn ensure_a3s_box_image_cached(binary: &str, image: &str, meta_dir: &Path) -> Re
 
     let docker_tar_path = meta_dir.join(format!("a3s-box-image-docker-{}.tar", Uuid::new_v4()));
     let oci_tar_path = meta_dir.join(format!("a3s-box-image-oci-{}.tar", Uuid::new_v4()));
-    let save_args = vec![
+    let mut save_args = vec![
         "save".to_string(),
         source_image,
         "-o".to_string(),
         docker_tar_path.display().to_string(),
     ];
+    if container_cli.contains("podman") {
+        save_args.insert(1, "--format".to_string());
+        save_args.insert(2, "oci-archive".to_string());
+    }
     let save = run_command_capture(
         &container_cli,
         &save_args,

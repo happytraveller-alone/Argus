@@ -707,12 +707,54 @@ podman_cleanup_runtime_containers() {
   done < <(podman_container_names)
 }
 
+podman_prune_dangling() {
+  if "$DRY_RUN" || is_truthy "$STUB_DOCKER"; then
+    log "Dry-run/stub: skipping Podman dangling cleanup."
+    return 0
+  fi
+  local removed=0
+  local exited_ids
+  exited_ids="$(podman ps -a --filter 'status=exited' --filter 'status=created' --format '{{.ID}} {{.Names}}' 2>/dev/null || true)"
+  if [[ -n "$exited_ids" ]]; then
+    local cid cname
+    while IFS=' ' read -r cid cname; do
+      [[ -n "$cid" ]] || continue
+      case "$cname" in
+        argus-db|argus-redis|argus-backend|argus-frontend) continue ;;
+      esac
+      podman rm -f "$cid" >/dev/null 2>&1 && removed=$((removed + 1)) || true
+    done <<< "$exited_ids"
+  fi
+  local dangling_images
+  dangling_images="$(podman images --filter 'dangling=true' -q 2>/dev/null || true)"
+  if [[ -n "$dangling_images" ]]; then
+    local img_count
+    img_count="$(printf '%s\n' $dangling_images | wc -l)"
+    # shellcheck disable=SC2086
+    podman rmi -f $dangling_images >/dev/null 2>&1 || true
+    removed=$((removed + img_count))
+  fi
+  local unnamed_images
+  unnamed_images="$(podman images --format '{{.ID}} {{.Repository}}' 2>/dev/null | awk '$2 == "<none>" {print $1}' || true)"
+  if [[ -n "$unnamed_images" ]]; then
+    local uimg_count
+    uimg_count="$(printf '%s\n' $unnamed_images | wc -l)"
+    # shellcheck disable=SC2086
+    podman rmi -f $unnamed_images >/dev/null 2>&1 || true
+    removed=$((removed + uimg_count))
+  fi
+  if (( removed > 0 )); then
+    log "Podman cleanup: removed ${removed} dangling/exited resources."
+  fi
+}
+
 cleanup_for_run_mode() {
   if [[ "$CONTAINER_RUNTIME" == "podman" ]]; then
     case "$RUN_MODE" in
       default|keep-cache|aggressive)
         log "${RUN_MODE} mode under Podman runtime: preserving Podman images and volumes."
         podman_cleanup_runtime_containers
+        podman_prune_dangling
         ;;
       *)
         fail "Unsupported run mode reached Podman cleanup dispatcher: $RUN_MODE"
@@ -897,6 +939,24 @@ podman_build_opengrep_runner_image() {
 }
 
 podman_build_local_images() {
+  local skip_build="${ARGUS_SKIP_BUILD:-false}"
+  if [[ "$skip_build" == "true" ]]; then
+    log "ARGUS_SKIP_BUILD=true; skipping image builds."
+    return 0
+  fi
+  local all_exist=true
+  for img in "argus/opengrep-runner-local:latest" "$PODMAN_BACKEND_IMAGE" "$PODMAN_FRONTEND_IMAGE"; do
+    if ! podman image exists "$img" 2>/dev/null; then
+      all_exist=false
+      break
+    fi
+  done
+  if [[ "$all_exist" == "true" ]]; then
+    log "All Podman images already exist; skipping rebuild. Set ARGUS_FORCE_BUILD=true to force."
+    if [[ "${ARGUS_FORCE_BUILD:-false}" != "true" ]]; then
+      return 0
+    fi
+  fi
   podman_build_opengrep_runner_image
   podman_build_backend_image
   podman_build_frontend_image
@@ -931,9 +991,9 @@ podman_run_backend() {
   log "Starting Podman backend container: $PODMAN_BACKEND_CONTAINER"
   local scan_workspace_host
   if "$DRY_RUN" || is_truthy "$STUB_DOCKER"; then
-    run_cmd podman volume create argus_scan_workspace
+    run_cmd podman volume create argus_scan_workspace || true
   else
-    podman volume create argus_scan_workspace >/dev/null
+    podman volume create argus_scan_workspace >/dev/null 2>&1 || true
   fi
   scan_workspace_host="${ARGUS_PODMAN_SCAN_WORKSPACE:-$(podman_volume_mountpoint argus_scan_workspace)}"
   run_cmd podman run -d \
@@ -961,7 +1021,9 @@ podman_run_backend() {
     -v "$ROOT_DIR/docker/opengrep-scan.sh:/app/docker/opengrep-scan.sh:ro" \
     -v "$scan_workspace_host:$scan_workspace_host" \
     -v "$ARGUS_PODMAN_SOCKET_PATH:$PODMAN_CONTAINER_SOCKET" \
-    "$PODMAN_BACKEND_IMAGE"
+    --entrypoint sh \
+    "$PODMAN_BACKEND_IMAGE" \
+    -c 'ln -sf /usr/bin/podman /usr/local/bin/docker && exec /usr/local/bin/backend-entrypoint.sh'
 }
 
 podman_run_frontend() {
@@ -976,6 +1038,7 @@ podman_run_frontend() {
     -e http_proxy= \
     -e https_proxy= \
     -e NO_PROXY='*' \
+    -e "COREPACK_NPM_REGISTRY=${NPM_REGISTRY:-https://registry.npmmirror.com}" \
     -e FRONTEND_PUBLIC_URL="http://localhost:${FRONTEND_PORT}" \
     -e VITE_API_BASE_URL=/api/v1 \
     -e "VITE_API_TARGET=${VITE_API_TARGET:-http://127.0.0.1:${BACKEND_PORT}}" \
@@ -997,6 +1060,30 @@ podman_start_backend_stack() {
 
 podman_start_frontend_stack() {
   podman_run_frontend
+}
+
+podman_load_a3s_box_opengrep_image() {
+  local image
+  image="$(opengrep_runner_image_ref)"
+  log "Loading OpenGrep image into A3S Box cache (Podman mode): $image"
+  if "$DRY_RUN" || is_truthy "$STUB_DOCKER"; then
+    run_cmd podman exec "$PODMAN_BACKEND_CONTAINER" a3s-box image-inspect "$image"
+    return 0
+  fi
+  run_cmd podman exec -u appuser "$PODMAN_BACKEND_CONTAINER" sh -c '
+    set -eu
+    image="$1"
+    if a3s-box image-inspect "$image" >/dev/null 2>&1; then
+      echo "A3S Box image already cached: $image"
+      exit 0
+    fi
+    tmp="/tmp/argus-opengrep-oci-$$.tar"
+    trap "rm -f \"\$tmp\"" EXIT
+    docker save "localhost/$image" -o "$tmp"
+    a3s-box load -i "$tmp" -t "$image"
+    a3s-box image-inspect "$image" >/dev/null
+    echo "A3S Box image cached: $image"
+  ' sh "$image"
 }
 
 build_runner_images() {
@@ -1335,20 +1422,21 @@ follow_foreground_logs() {
 
 follow_podman_logs() {
   log "Following Podman logs in foreground. Ctrl-C/SIGTERM stops Argus Podman containers before exiting."
+  local _pids=()
   _argus_podman_stop_on_signal() {
-    log "Signal received; stopping Argus Podman containers before exit."
+    log "Signal received; stopping log followers and Argus Podman containers before exit."
+    for _p in "${_pids[@]}"; do kill "$_p" 2>/dev/null || true; done
+    wait "${_pids[@]}" 2>/dev/null || true
     podman_cleanup_runtime_containers
     exit 130
   }
   trap _argus_podman_stop_on_signal INT TERM
-  local logs_rc=0
-  if run_cmd podman logs -f "$PODMAN_BACKEND_CONTAINER" "$PODMAN_FRONTEND_CONTAINER"; then
-    logs_rc=0
-  else
-    logs_rc=$?
-  fi
+  podman logs -f "$PODMAN_BACKEND_CONTAINER" 2>&1 | sed "s/^/[backend] /" &
+  _pids+=($!)
+  podman logs -f "$PODMAN_FRONTEND_CONTAINER" 2>&1 | sed "s/^/[frontend] /" &
+  _pids+=($!)
+  wait "${_pids[@]}" 2>/dev/null || true
   trap - INT TERM
-  return "$logs_rc"
 }
 
 wait_for_frontend() {
@@ -1402,6 +1490,7 @@ podman_start_stack() {
   podman_build_local_images
   podman_start_backend_stack
   wait_for_backend
+  podman_load_a3s_box_opengrep_image
   log "Podman runtime: default Opengrep dockerfile_container runner uses rootless Podman; Docker fallback remains Compose/dev-only."
   import_backend_env
   podman_start_frontend_stack
