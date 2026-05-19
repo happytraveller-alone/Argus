@@ -1014,6 +1014,7 @@ podman_run_backend() {
     -e "SCAN_WORKSPACE_ROOT=$scan_workspace_host" \
     -e "RUNNER_PREFLIGHT_STRICT=${RUNNER_PREFLIGHT_STRICT:-false}" \
     -e "CONTAINER_CLI=podman" \
+    -e "SCANNER_CODEQL_IMAGE=${SCANNER_CODEQL_IMAGE:-argus/codeql-runner:latest}" \
     -v argus_backend_uploads:/app/uploads \
     -v argus_backend_runtime_data:/app/data/runtime \
     -v "$ROOT_DIR/oci:/app/oci:ro" \

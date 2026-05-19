@@ -1,6 +1,8 @@
 pub mod a3s_box;
 pub mod a3s_box_runner;
 pub mod bootstrap;
+pub mod codeql_container;
+pub mod container_util;
 pub mod finding_payload;
 pub mod intelligent;
 pub mod queue;

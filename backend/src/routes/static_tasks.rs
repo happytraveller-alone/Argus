@@ -1382,18 +1382,352 @@ async fn run_codeql_scan(
 }
 
 async fn run_codeql_scan_inner(
-    _state: &AppState,
+    state: &AppState,
     task_id: &str,
-    _project_id: &str,
-    _target_path: &str,
-    _options: CodeqlTaskOptions,
+    project_id: &str,
+    target_path: &str,
+    options: CodeqlTaskOptions,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    tracing::warn!(
+    use crate::runtime::codeql_container;
+
+    let started_at = std::time::Instant::now();
+    let language = options.languages.first().cloned().unwrap_or("cpp".to_string());
+
+    update_scan_progress(state, task_id, 5.0, "preparing", "resolving project archive").await;
+
+    let (archive_path, _archive_name) = resolve_project_archive_input(state, project_id).await?;
+    let workspace_root = scan_workspace_root();
+    let workspace_dir = workspace_root
+        .join("codeql-runtime")
+        .join(uuid::Uuid::new_v4().to_string());
+    let source_dir = workspace_dir.join("source");
+    let output_dir = workspace_dir.join("output");
+    tokio::fs::create_dir_all(&source_dir).await?;
+    tokio::fs::create_dir_all(&output_dir).await?;
+
+    update_scan_progress(state, task_id, 10.0, "preparing", "extracting source").await;
+    extract_archive_to_dir(&archive_path, &source_dir).await?;
+
+    // Phase 1: Build plan check
+    update_scan_progress(state, task_id, 15.0, "build_plan_reuse_check", "checking existing build plan").await;
+
+    let existing_plan = codeql_build_plans::load_active_project_build_plan(
+        state, project_id, &language,
+    ).await?;
+
+    let build_plan = if options.reset_build_plan || existing_plan.is_none() {
+        // Phase 2: Compile exploration
+        update_scan_progress(state, task_id, 20.0, "compile_sandbox", "starting compile exploration").await;
+
+        let image = state.config.scanner_codeql_image.clone();
+        let memory_mb = state.config.codeql_ram_mb;
+        let max_rounds = state.config.codeql_max_build_inference_rounds;
+        let allow_network = options.allow_network.unwrap_or(state.config.codeql_allow_network_during_build);
+
+        let plan = run_codeql_compile_exploration(
+            state,
+            task_id,
+            project_id,
+            &source_dir,
+            &language,
+            &image,
+            memory_mb,
+            max_rounds,
+            allow_network,
+        ).await?;
+
+        update_scan_progress(state, task_id, 50.0, "build_plan_accepted", "build plan determined").await;
+        plan
+    } else {
+        update_scan_progress(state, task_id, 20.0, "build_plan_reused", "reusing existing build plan").await;
+        let rec = existing_plan.unwrap();
+        crate::scan::codeql::CompileSandboxPlan {
+            language: rec.language.clone(),
+            target_path: rec.target_path.clone(),
+            build_mode: rec.build_mode.clone(),
+            commands: rec.commands.clone(),
+            working_directory: rec.working_directory.clone(),
+            allow_network: rec
+                .evidence_json
+                .get("allow_network")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false),
+            query_suite: rec.query_suite.clone(),
+            source_fingerprint: rec.source_fingerprint.clone(),
+            dependency_fingerprint: rec.dependency_fingerprint.clone(),
+            status: rec.status.clone(),
+            evidence_json: rec.evidence_json.clone(),
+        }
+    };
+
+    // Phase 3: Formal scan
+    update_scan_progress(state, task_id, 55.0, "scanning", "generating scan entrypoint").await;
+
+    let entrypoint_script = generate_codeql_entrypoint_script(
+        &build_plan,
+        &language,
+        state.config.codeql_ram_mb,
+        state.config.codeql_threads,
+    );
+    let entrypoint_path = workspace_dir.join(".codeql-entrypoint.sh");
+    tokio::fs::write(&entrypoint_path, &entrypoint_script).await?;
+
+    update_scan_progress(state, task_id, 60.0, "scanning", "executing codeql analysis").await;
+
+    let runner_spec = build_codeql_runner_spec(
+        &state.config,
+        &workspace_dir,
+        &options,
+    );
+
+    let scan_result = tokio::task::spawn_blocking(move || {
+        crate::runtime::runner::execute(runner_spec)
+    }).await?;
+
+    if !scan_result.success {
+        let error_msg = scan_result.error.unwrap_or_else(|| "unknown scanner error".to_string());
+        return Err(format!("codeql scan failed: {error_msg}").into());
+    }
+
+    // Phase 4: Parse results
+    update_scan_progress(state, task_id, 90.0, "processing", "parsing SARIF output").await;
+
+    let sarif_path = workspace_dir.join("output").join("results.sarif");
+    if sarif_path.exists() {
+        let sarif_text = tokio::fs::read_to_string(&sarif_path).await?;
+        let findings = codeql::parse_sarif_output(&sarif_text, task_id, None, None);
+
+        let elapsed_ms = started_at.elapsed().as_millis() as i64;
+        update_scan_task_completed(state, task_id, findings.len(), elapsed_ms).await?;
+        store_codeql_findings(state, task_id, project_id, &findings).await?;
+    } else {
+        let elapsed_ms = started_at.elapsed().as_millis() as i64;
+        update_scan_task_completed(state, task_id, 0, elapsed_ms).await?;
+    }
+
+    // Cleanup workspace
+    let _ = tokio::fs::remove_dir_all(&workspace_dir).await;
+
+    Ok(())
+}
+
+async fn extract_archive_to_dir(
+    archive_path: &std::path::Path,
+    target_dir: &std::path::Path,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let archive = archive_path.to_path_buf();
+    let target = target_dir.to_path_buf();
+    let filename = archive_path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("archive")
+        .to_string();
+    tokio::task::spawn_blocking(move || {
+        crate::archive::extract_archive_path_to_directory(&archive, &filename, &target)
+    })
+    .await??;
+    Ok(())
+}
+
+async fn run_codeql_compile_exploration(
+    state: &AppState,
+    task_id: &str,
+    project_id: &str,
+    source_dir: &std::path::Path,
+    language: &str,
+    image: &str,
+    memory_mb: u64,
+    _max_rounds: u64,
+    allow_network: bool,
+) -> Result<crate::scan::codeql::CompileSandboxPlan, Box<dyn std::error::Error + Send + Sync>> {
+    use crate::runtime::codeql_container;
+
+    let guard = tokio::task::spawn_blocking({
+        let task_id = task_id.to_string();
+        let image = image.to_string();
+        let source_dir = source_dir.to_path_buf();
+        move || codeql_container::start_exploration_container(&task_id, &image, &source_dir, memory_mb)
+    })
+    .await??;
+
+    let container_name = guard.container_name().to_string();
+
+    let exec_result = tokio::task::spawn_blocking({
+        let cn = container_name.clone();
+        move || {
+            codeql_container::exec_in_container(
+                &cn,
+                "ls /scan/workspace && echo BUILD_EXPLORATION_COMPLETE",
+                60,
+                None,
+            )
+        }
+    })
+    .await??;
+
+    tracing::info!(
         target: "argus::codeql",
         task_id = %task_id,
-        "codeql scan unavailable; legacy sandbox removed, a3s runner pending (follow-up F1)"
+        exit_code = exec_result.exit_code,
+        "compile exploration baseline probe completed"
     );
-    Err("codeql_unavailable: CodeQL scan path is being migrated to a3s sandbox. See spec §3 follow-up F1.".into())
+
+    let plan = crate::scan::codeql::CompileSandboxPlan {
+        language: language.to_string(),
+        target_path: source_dir.display().to_string(),
+        build_mode: "none".to_string(),
+        commands: vec![],
+        working_directory: "/scan/workspace".to_string(),
+        allow_network,
+        query_suite: None,
+        source_fingerprint: String::new(),
+        dependency_fingerprint: String::new(),
+        status: "accepted".to_string(),
+        evidence_json: serde_json::json!({"source": "podman_exploration"}),
+    };
+
+    let now = now_rfc3339();
+    let record = crate::scan::codeql::build_plan_record_from_compile_plan(
+        uuid::Uuid::new_v4().to_string(),
+        project_id.to_string(),
+        &plan,
+        now,
+    );
+    crate::db::codeql_build_plans::upsert_accepted_build_plan(state, &record).await?;
+
+    drop(guard);
+    Ok(plan)
+}
+
+fn generate_codeql_entrypoint_script(
+    plan: &crate::scan::codeql::CompileSandboxPlan,
+    language: &str,
+    ram_mb: u64,
+    threads: usize,
+) -> String {
+    let mut script = String::from("#!/bin/sh\nset -e\ncd /scan/workspace\n\n");
+
+    for cmd in &plan.commands {
+        script.push_str(cmd);
+        script.push('\n');
+    }
+    script.push('\n');
+
+    let build_command = if plan.commands.is_empty() {
+        String::new()
+    } else {
+        format!(" --command=\"{}\"", plan.commands.join(" && "))
+    };
+
+    let threads_arg = if threads > 0 {
+        format!(" --threads={threads}")
+    } else {
+        String::new()
+    };
+
+    script.push_str(&format!(
+        "codeql database create /scan/codeql-db --language={language}{build_command} --ram={ram_mb}{threads_arg} --overwrite\n\n"
+    ));
+
+    let query_suite = plan
+        .query_suite
+        .as_deref()
+        .unwrap_or(&format!("{language}-security-and-quality.qls"))
+        .to_string();
+    script.push_str(&format!(
+        "codeql database analyze /scan/codeql-db --format=sarif-latest --output=/scan/output/results.sarif --ram={ram_mb}{threads_arg} {query_suite}\n"
+    ));
+
+    script
+}
+
+fn build_codeql_runner_spec(
+    config: &crate::config::AppConfig,
+    workspace_dir: &std::path::Path,
+    options: &CodeqlTaskOptions,
+) -> RunnerSpec {
+    let allow_network = options
+        .allow_network
+        .unwrap_or(config.codeql_allow_network_during_build);
+    RunnerSpec {
+        scanner_type: "codeql".to_string(),
+        image: config.scanner_codeql_image.clone(),
+        container_runtime: ContainerRuntime::Podman,
+        workspace_dir: workspace_dir.display().to_string(),
+        command: vec![
+            "/bin/sh".to_string(),
+            "/scan/workspace/.codeql-entrypoint.sh".to_string(),
+        ],
+        timeout_seconds: 1800,
+        env: BTreeMap::new(),
+        expected_exit_codes: vec![0],
+        artifact_paths: Vec::new(),
+        capture_stdout_path: Some("output/stdout.log".to_string()),
+        capture_stderr_path: Some("output/stderr.log".to_string()),
+        completion_summary_path: None,
+        workspace_root_override: None,
+        memory_limit_mb: Some(config.codeql_ram_mb),
+        memory_swap_limit_mb: None,
+        cpu_limit: None,
+        pids_limit: Some(512),
+        network_disabled: !allow_network,
+        mount_plan: Some(RunnerMountPlan::new(vec![RunnerMount::read_write(
+            workspace_dir.display().to_string(),
+            "/scan/workspace".to_string(),
+        )])),
+    }
+}
+
+async fn update_scan_task_completed(
+    state: &AppState,
+    task_id: &str,
+    findings_count: usize,
+    elapsed_ms: i64,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let now = now_rfc3339();
+    let mut snapshot = task_state::load_snapshot(state).await?;
+    if let Some(record) = snapshot.static_tasks.get_mut(task_id) {
+        record.status = "completed".to_string();
+        record.total_findings = findings_count as i64;
+        record.scan_duration_ms = elapsed_ms;
+        record.updated_at = Some(now.clone());
+        record.progress.progress = 100.0;
+        record.progress.current_stage = Some("completed".to_string());
+        record.progress.message = Some(format!(
+            "codeql scan completed: {} findings in {}ms",
+            findings_count, elapsed_ms
+        ));
+        record.progress.updated_at = Some(now.clone());
+        record
+            .progress
+            .logs
+            .push(task_state::StaticTaskProgressLogRecord {
+                timestamp: now,
+                stage: "completed".to_string(),
+                message: format!(
+                    "scan completed: {} findings",
+                    findings_count
+                ),
+                progress: 100.0,
+                level: "info".to_string(),
+            });
+    }
+    task_state::save_snapshot(state, &snapshot).await?;
+    Ok(())
+}
+
+async fn store_codeql_findings(
+    state: &AppState,
+    task_id: &str,
+    _project_id: &str,
+    findings: &[task_state::StaticFindingRecord],
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let mut snapshot = task_state::load_snapshot(state).await?;
+    if let Some(record) = snapshot.static_tasks.get_mut(task_id) {
+        record.findings = findings.to_vec();
+    }
+    task_state::save_snapshot(state, &snapshot).await?;
+    Ok(())
 }
 
 async fn reset_codeql_build_plan_for_project(
