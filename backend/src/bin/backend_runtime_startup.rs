@@ -76,14 +76,23 @@ fn handle_runner(mut args: impl Iterator<Item = String>) -> Result<()> {
             println!("{}", serde_json::to_string(&result)?);
         }
         "stop" => {
-            let flag = args.next().unwrap_or_default();
+            let mut runtime = runner::ContainerRuntime::Docker;
+            let mut flag = args.next().unwrap_or_default();
+            if flag == "--runtime" {
+                let runtime_value = args.next().unwrap_or_default();
+                runtime = runner::ContainerRuntime::from_config_value(&runtime_value);
+                flag = args.next().unwrap_or_default();
+            }
             let container_id = args.next().unwrap_or_default();
             if flag != "--container-id" || container_id.is_empty() {
-                eprintln!("Usage: backend-runtime-startup runner stop --container-id <id>");
+                eprintln!(
+                    "Usage: backend-runtime-startup runner stop [--runtime docker|podman] --container-id <id>"
+                );
                 process::exit(1);
             }
             let payload = serde_json::json!({
-                "stopped": runner::stop_container_sync(&container_id)
+                "runtime": runtime.as_str(),
+                "stopped": runner::stop_container_sync_with_runtime(&container_id, runtime)
             });
             println!("{}", serde_json::to_string(&payload)?);
         }

@@ -120,6 +120,11 @@ services:
       OPENGREP_SCAN_MAX_MEMORY_MB: "${OPENGREP_SCAN_MAX_MEMORY_MB:-2048}"
       OPENGREP_RUNNER_MEMORY_LIMIT_MB: "${OPENGREP_RUNNER_MEMORY_LIMIT_MB:-2048}"
       OPENGREP_RUNNER_CPU_LIMIT: "${OPENGREP_RUNNER_CPU_LIMIT:-0}"
+      # This compose profile mounts the host Docker socket for the default
+      # Docker-compatible runner. Keep the runtime fixed to Docker here; use a
+      # separate no-socket deployment/override before enabling experimental
+      # rootless Podman.
+      OPENGREP_RUNNER_RUNTIME: "docker"
       OPENGREP_AVAILABLE_CORES: "${OPENGREP_AVAILABLE_CORES:-}"
       CUBE_OPENGREP_RULES_ARCHIVE: /app/assets/scan_rule_assets.tar.gz
       CUBE_OPENGREP_CPU_MILLI: "${CUBE_OPENGREP_CPU_MILLI:-4000}"

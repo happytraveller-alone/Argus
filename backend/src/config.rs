@@ -59,6 +59,7 @@ pub struct AppConfig {
     pub opengrep_runner_cpu_limit: f64,
     pub opengrep_runner_cpu_limit_explicit: bool,
     pub opengrep_runner_pids_limit: u64,
+    pub opengrep_runner_runtime: String,
     /// Source-directory size limit (MiB) above which the a3s-box opengrep
     /// runner skips localization (the copy of workspace source into the
     /// box-local tmpfs `/tmp/argus-a3s-opengrep-{box_name}`) and runs
@@ -71,7 +72,6 @@ pub struct AppConfig {
     pub argus_a3s_localize_limit_mb: u64,
 
     // ── Standby pool config (Phase A.3) ──────────────────────────────────────
-
     /// Target standby count for OpengrepDedicated pool slots.
     /// Env: OPENGREP_STANDBY_POOL_SIZE, default 2.
     pub opengrep_standby_pool_size: usize,
@@ -92,7 +92,6 @@ pub struct AppConfig {
     pub max_total_standby: usize,
 
     // ── a3s-box standby pool config (Phase C.3) ───────────────────────────────
-
     /// Target standby count for a3s-box OpengrepDedicated pool slots.
     /// Env: A3S_BOX_STANDBY_POOL_SIZE, default 2.
     /// Each slot is an image-cache warmup entry (Option C.β — no running VM).
@@ -220,6 +219,9 @@ impl AppConfig {
                 .unwrap_or(0.0),
             opengrep_runner_cpu_limit_explicit: opengrep_runner_cpu_limit_env.is_some(),
             opengrep_runner_pids_limit: parse_u64_env("OPENGREP_RUNNER_PIDS_LIMIT", 512),
+            opengrep_runner_runtime: normalize_opengrep_runner_runtime(
+                optional_env("OPENGREP_RUNNER_RUNTIME").as_deref(),
+            ),
             argus_a3s_localize_limit_mb: parse_u64_env("ARGUS_A3S_LOCALIZE_LIMIT_MB", 50),
             opengrep_standby_pool_size: parse_usize_env("OPENGREP_STANDBY_POOL_SIZE", 2),
             opengrep_standby_pool_disabled: parse_bool_env("OPENGREP_STANDBY_POOL_DISABLED", false),
@@ -228,14 +230,8 @@ impl AppConfig {
             max_total_standby: parse_usize_env("ARGUS_MAX_TOTAL_STANDBY", 8),
             a3s_box_standby_pool_size: parse_usize_env("A3S_BOX_STANDBY_POOL_SIZE", 2),
             a3s_box_standby_pool_disabled: parse_bool_env("A3S_BOX_STANDBY_POOL_DISABLED", false),
-            a3s_box_stdout_limit_bytes: parse_usize_env(
-                "A3S_BOX_STDOUT_LIMIT_BYTES",
-                1_048_576,
-            ),
-            a3s_box_stderr_limit_bytes: parse_usize_env(
-                "A3S_BOX_STDERR_LIMIT_BYTES",
-                1_048_576,
-            ),
+            a3s_box_stdout_limit_bytes: parse_usize_env("A3S_BOX_STDOUT_LIMIT_BYTES", 1_048_576),
+            a3s_box_stderr_limit_bytes: parse_usize_env("A3S_BOX_STDERR_LIMIT_BYTES", 1_048_576),
             opengrep_results_json_limit_bytes: parse_usize_env(
                 "OPENGREP_RESULTS_JSON_LIMIT_BYTES",
                 268_435_456,
@@ -306,6 +302,7 @@ impl AppConfig {
             opengrep_runner_cpu_limit: 8.0,
             opengrep_runner_cpu_limit_explicit: true,
             opengrep_runner_pids_limit: 512,
+            opengrep_runner_runtime: "docker".to_string(),
             argus_a3s_localize_limit_mb: 50,
             opengrep_standby_pool_size: 0,
             opengrep_standby_pool_disabled: true,
@@ -336,6 +333,16 @@ fn env_path(key: &str, default: &str) -> PathBuf {
     env::var(key)
         .map(PathBuf::from)
         .unwrap_or_else(|_| PathBuf::from(default))
+}
+
+fn normalize_opengrep_runner_runtime(value: Option<&str>) -> String {
+    match value
+        .map(|value| value.trim().to_ascii_lowercase())
+        .as_deref()
+    {
+        Some("podman") => "podman".to_string(),
+        _ => "docker".to_string(),
+    }
 }
 
 fn normalize_legacy_opengrep_runner_image(value: String) -> String {
@@ -384,4 +391,21 @@ fn parse_f64_env(key: &str, default: f64) -> f64 {
         .ok()
         .and_then(|value| value.trim().parse().ok())
         .unwrap_or(default)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::normalize_opengrep_runner_runtime;
+
+    #[test]
+    fn opengrep_runner_runtime_accepts_only_podman_override() {
+        assert_eq!(normalize_opengrep_runner_runtime(Some("podman")), "podman");
+        assert_eq!(normalize_opengrep_runner_runtime(Some("PODMAN")), "podman");
+        assert_eq!(normalize_opengrep_runner_runtime(Some("docker")), "docker");
+        assert_eq!(
+            normalize_opengrep_runner_runtime(Some("surprise")),
+            "docker"
+        );
+        assert_eq!(normalize_opengrep_runner_runtime(None), "docker");
+    }
 }

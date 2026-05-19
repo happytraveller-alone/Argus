@@ -24,7 +24,7 @@
 
 默认情况下，Compose 会把前端发布到宿主机 `13000` 端口、后端发布到 `18000` 端口，以避免和常见本地开发服务的 `3000` / `8000` 端口冲突。如需恢复旧端口，启动时设置 `Argus_FRONTEND_PORT=3000 Argus_BACKEND_PORT=8000`。
 
-后端会读取根目录 `.env`，并把 `${DOCKER_SOCKET_PATH:-/var/run/docker.sock}` 挂载给扫描 runner。本工作区的本地 `.env` 可将它覆盖为 `/run/docker-local.sock`；其他环境按需设置 `DOCKER_SOCKET_PATH`。
+后端会读取根目录 `.env`。默认 Compose 路径仍通过 Docker-compatible CLI 执行 Opengrep runner，因此继续挂载 `${DOCKER_SOCKET_PATH:-/var/run/docker.sock}`，并把 `OPENGREP_RUNNER_RUNTIME` 固定为 `docker`。实验性 `OPENGREP_RUNNER_RUNTIME=podman` 只能在不挂载宿主 Docker/Podman socket 的专用部署/override 中启用；该路径会先做 rootless proof，并要求只读源码挂载、独立可写输出、无 host network。Podman 在 benchmark/rootless/mount 验证全部通过前只应描述为 selectable/experimental，不能写成 default/recommended。
 
 ## Repo-local Codex / OMX
 

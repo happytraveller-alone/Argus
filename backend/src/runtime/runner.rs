@@ -15,10 +15,94 @@ const MAX_RETAINED_LOG_CHARS: usize = 12_000;
 const DEFAULT_SCAN_WORKSPACE_ROOT: &str = "/tmp/Argus/scans";
 const DEFAULT_SCAN_WORKSPACE_VOLUME: &str = "Argus_scan_workspace";
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ContainerRuntime {
+    Docker,
+    Podman,
+}
+
+impl ContainerRuntime {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Docker => "docker",
+            Self::Podman => "podman",
+        }
+    }
+
+    pub fn from_config_value(value: &str) -> Self {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "podman" => Self::Podman,
+            _ => Self::Docker,
+        }
+    }
+}
+
+fn default_container_runtime() -> ContainerRuntime {
+    ContainerRuntime::Docker
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct RunnerMount {
+    pub host_path: String,
+    pub container_path: String,
+    #[serde(default)]
+    pub read_only: bool,
+}
+
+impl RunnerMount {
+    pub fn read_only(host_path: impl Into<String>, container_path: impl Into<String>) -> Self {
+        Self {
+            host_path: host_path.into(),
+            container_path: container_path.into(),
+            read_only: true,
+        }
+    }
+
+    pub fn read_write(host_path: impl Into<String>, container_path: impl Into<String>) -> Self {
+        Self {
+            host_path: host_path.into(),
+            container_path: container_path.into(),
+            read_only: false,
+        }
+    }
+
+    fn mode_label(&self) -> &'static str {
+        if self.read_only {
+            "ro"
+        } else {
+            "rw"
+        }
+    }
+
+    fn to_volume_arg(&self) -> String {
+        format!(
+            "{}:{}:{}",
+            self.host_path,
+            self.container_path,
+            self.mode_label()
+        )
+    }
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct RunnerMountPlan {
+    #[serde(default)]
+    pub mounts: Vec<RunnerMount>,
+}
+
+impl RunnerMountPlan {
+    pub fn new(mounts: Vec<RunnerMount>) -> Self {
+        Self { mounts }
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct RunnerSpec {
     pub scanner_type: String,
     pub image: String,
+    #[serde(default = "default_container_runtime")]
+    pub container_runtime: ContainerRuntime,
     pub workspace_dir: String,
     pub command: Vec<String>,
     pub timeout_seconds: u64,
@@ -46,6 +130,8 @@ pub struct RunnerSpec {
     pub pids_limit: Option<u64>,
     #[serde(default)]
     pub network_disabled: bool,
+    #[serde(default)]
+    pub mount_plan: Option<RunnerMountPlan>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -89,8 +175,34 @@ fn docker_bin_with_priority(keys: &[&str]) -> String {
         .unwrap_or_else(|| "docker".to_string())
 }
 
+fn container_bin_with_default(keys: &[&str], default: &str) -> String {
+    keys.iter()
+        .find_map(|key| {
+            env::var(key)
+                .ok()
+                .map(|value| value.trim().to_string())
+                .filter(|value| !value.is_empty())
+        })
+        .unwrap_or_else(|| default.to_string())
+}
+
 fn docker_bin(_scanner_type: Option<&str>) -> String {
     docker_bin_with_priority(&["Argus_DOCKER_BIN", "BACKEND_DOCKER_BIN"])
+}
+
+fn container_runtime_bin(runtime: ContainerRuntime, _scanner_type: Option<&str>) -> String {
+    match runtime {
+        ContainerRuntime::Docker => docker_bin(_scanner_type),
+        ContainerRuntime::Podman => container_bin_with_default(
+            &[
+                "Argus_PODMAN_BIN",
+                "BACKEND_PODMAN_BIN",
+                "Argus_CONTAINER_BIN",
+                "BACKEND_CONTAINER_BIN",
+            ],
+            "podman",
+        ),
+    }
 }
 
 fn ensure_workspace_artifacts(workspace_dir: &str) -> Result<(PathBuf, PathBuf, PathBuf)> {
@@ -152,6 +264,68 @@ fn rewrite_runner_env(
         .iter()
         .map(|(key, value)| (key.clone(), rewrite_mount_path(value, workspace)))
         .collect()
+}
+
+fn contains_runtime_socket_path(value: &str) -> bool {
+    let value = value.to_ascii_lowercase();
+    value.contains("docker.sock") || value.contains("podman.sock")
+}
+
+fn resolve_runner_mounts(
+    spec: &RunnerSpec,
+    resolved_root: &Path,
+    workspace_volume: &str,
+) -> Result<Vec<RunnerMount>> {
+    if let Some(mount_plan) = spec.mount_plan.as_ref() {
+        if mount_plan.mounts.is_empty() {
+            bail!("runner mount plan must contain at least one mount");
+        }
+
+        return mount_plan
+            .mounts
+            .iter()
+            .map(|mount| {
+                if !Path::new(&mount.container_path).is_absolute() {
+                    bail!(
+                        "runner mount container path must be absolute: {}",
+                        mount.container_path
+                    );
+                }
+                if contains_runtime_socket_path(&mount.host_path)
+                    || contains_runtime_socket_path(&mount.container_path)
+                {
+                    bail!(
+                        "runner mount plan must not expose host container runtime sockets: {} -> {}",
+                        mount.host_path,
+                        mount.container_path
+                    );
+                }
+
+                let resolved_host = PathBuf::from(&mount.host_path)
+                    .canonicalize()
+                    .with_context(|| format!("canonicalize runner mount: {}", mount.host_path))?;
+                if !resolved_host.starts_with(resolved_root) {
+                    bail!(
+                        "runner mount host path must stay inside shared workspace root: mount={} root={}",
+                        resolved_host.display(),
+                        resolved_root.display()
+                    );
+                }
+
+                Ok(RunnerMount {
+                    host_path: resolved_host.display().to_string(),
+                    container_path: mount.container_path.clone(),
+                    read_only: mount.read_only,
+                })
+            })
+            .collect();
+    }
+
+    Ok(vec![RunnerMount {
+        host_path: workspace_volume.to_string(),
+        container_path: resolved_root.display().to_string(),
+        read_only: false,
+    }])
 }
 
 fn truncate_log_text(text: &str) -> String {
@@ -303,6 +477,24 @@ fn docker_logs(binary: &str, container_id: &str, stdout: bool) -> Result<String>
     Ok(String::from_utf8_lossy(&output.stdout).into_owned())
 }
 
+fn probe_podman_rootless(binary: &str) -> Result<String> {
+    let args = vec![
+        "info".to_string(),
+        "--format".to_string(),
+        "{{.Host.Security.Rootless}}".to_string(),
+    ];
+    let output = run_command_capture(binary, &args)?;
+    if !output.status.success() {
+        bail!("{}", output_error_text(&output));
+    }
+    let text = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if text.eq_ignore_ascii_case("true") {
+        Ok("podman info --format {{.Host.Security.Rootless}} => true".to_string())
+    } else {
+        bail!("rootless marker was `{text}`");
+    }
+}
+
 fn output_error_text(output: &Output) -> String {
     let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
     if !stderr.is_empty() {
@@ -446,6 +638,12 @@ fn poll_summary_gate(
 }
 
 struct RunnerMetaContext<'a> {
+    container_runtime: ContainerRuntime,
+    runtime_binary: &'a str,
+    rootless_status: &'a str,
+    rootless_proof_source: &'a str,
+    network_mode: &'a str,
+    mounts: &'a [RunnerMount],
     runner_command: &'a [String],
     runner_environment: &'a BTreeMap<String, String>,
     workspace_volume: &'a str,
@@ -461,6 +659,16 @@ fn write_runner_meta(
 ) -> Result<()> {
     let payload = serde_json::json!({
         "spec": spec,
+        "container_runtime": context.container_runtime.as_str(),
+        "runtime_binary": context.runtime_binary,
+        "rootless_status": context.rootless_status,
+        "rootless_proof_source": context.rootless_proof_source,
+        "network_mode": context.network_mode,
+        "mounts": context.mounts.iter().map(|mount| serde_json::json!({
+            "host_path": mount.host_path,
+            "container_path": mount.container_path,
+            "mode": mount.mode_label(),
+        })).collect::<Vec<_>>(),
         "runner_command": context.runner_command,
         "runner_environment": context.runner_environment,
         "workspace_volume": context.workspace_volume,
@@ -508,7 +716,8 @@ pub fn execute(spec: RunnerSpec) -> RunnerResult {
     let stderr_log_path = logs_dir.join("stderr.log");
     let runner_meta_path = meta_dir.join("runner.json");
     let workspace_volume = scan_workspace_volume();
-    let docker_binary = docker_bin(Some(&spec.scanner_type));
+    let container_runtime = spec.container_runtime;
+    let runtime_binary = container_runtime_bin(container_runtime, Some(&spec.scanner_type));
     let expected_exit_codes = spec
         .expected_exit_codes
         .iter()
@@ -519,21 +728,57 @@ pub fn execute(spec: RunnerSpec) -> RunnerResult {
     let mut workspace_root: Option<PathBuf> = None;
     let mut runner_command = spec.command.clone();
     let mut runner_environment = spec.env.clone();
+    let mut effective_mounts: Vec<RunnerMount> = Vec::new();
+    let mut rootless_status = "not_checked".to_string();
+    let mut rootless_proof_source = match container_runtime {
+        ContainerRuntime::Docker => "not_applicable".to_string(),
+        ContainerRuntime::Podman => "not_checked".to_string(),
+    };
 
     let execution = (|| -> Result<RunnerResult> {
         let (resolved_root, resolved_workspace) =
             resolve_shared_workspace(&workspace, spec.workspace_root_override.as_deref())?;
         workspace_root = Some(resolved_root.clone());
-        runner_command = rewrite_runner_command(&spec.command, &resolved_workspace);
-        runner_environment = rewrite_runner_env(&spec.env, &resolved_workspace);
+        if spec.mount_plan.is_some() {
+            runner_command = spec.command.clone();
+            runner_environment = spec.env.clone();
+        } else {
+            runner_command = rewrite_runner_command(&spec.command, &resolved_workspace);
+            runner_environment = rewrite_runner_env(&spec.env, &resolved_workspace);
+        }
+
+        if container_runtime == ContainerRuntime::Podman && spec.mount_plan.is_none() {
+            bail!("podman runner requires an explicit mount plan");
+        }
+        effective_mounts = resolve_runner_mounts(&spec, &resolved_root, &workspace_volume)?;
+        if container_runtime == ContainerRuntime::Podman {
+            match probe_podman_rootless(&runtime_binary) {
+                Ok(proof) => {
+                    rootless_status = "rootless".to_string();
+                    rootless_proof_source = proof;
+                }
+                Err(error) => {
+                    rootless_status = "failed".to_string();
+                    rootless_proof_source =
+                        format!("podman info --format {{{{.Host.Security.Rootless}}}}: {error}");
+                    bail!("podman rootless proof failed: {error}");
+                }
+            }
+        }
 
         let mut create_args = vec![
             "create".to_string(),
             "-w".to_string(),
-            resolved_workspace.display().to_string(),
-            "-v".to_string(),
-            format!("{}:{}:rw", workspace_volume, resolved_root.display()),
+            if spec.mount_plan.is_some() {
+                SCANNER_MOUNT_PATH.to_string()
+            } else {
+                resolved_workspace.display().to_string()
+            },
         ];
+        for mount in &effective_mounts {
+            create_args.push("-v".to_string());
+            create_args.push(mount.to_volume_arg());
+        }
         if let Some(limit_mb) = spec.memory_limit_mb {
             create_args.push("--memory".to_string());
             create_args.push(format_memory_limit_mb(limit_mb));
@@ -561,10 +806,11 @@ pub fn execute(spec: RunnerSpec) -> RunnerResult {
         create_args.push(spec.image.clone());
         create_args.extend(runner_command.clone());
 
-        let create_output = run_command_capture(&docker_binary, &create_args)?;
+        let create_output = run_command_capture(&runtime_binary, &create_args)?;
         if !create_output.status.success() {
             bail!(
-                "docker create failed: {}",
+                "{} create failed: {}",
+                container_runtime.as_str(),
                 output_error_text(&create_output)
             );
         }
@@ -572,7 +818,10 @@ pub fn execute(spec: RunnerSpec) -> RunnerResult {
             .trim()
             .to_string();
         if created_id.is_empty() {
-            bail!("docker create returned empty container id");
+            bail!(
+                "{} create returned empty container id",
+                container_runtime.as_str()
+            );
         }
         container_id = Some(created_id.clone());
 
@@ -585,19 +834,24 @@ pub fn execute(spec: RunnerSpec) -> RunnerResult {
         let mut summary_observed = false;
         let start_output = if let Some(summary_path) = &spec.completion_summary_path {
             let start_output =
-                run_command_capture(&docker_binary, &["start".to_string(), created_id.clone()])?;
+                run_command_capture(&runtime_binary, &["start".to_string(), created_id.clone()])?;
             if !start_output.status.success() {
-                bail!("docker start failed: {}", output_error_text(&start_output));
+                bail!(
+                    "{} start failed: {}",
+                    container_runtime.as_str(),
+                    output_error_text(&start_output)
+                );
             }
             let gate = poll_summary_gate(
-                &docker_binary,
+                &runtime_binary,
                 &created_id,
                 &workspace.join(summary_path),
                 start_timeout,
             )?;
             if gate.timed_out {
                 bail!(
-                    "docker summary gate timed out after {}s",
+                    "{} summary gate timed out after {}s",
+                    container_runtime.as_str(),
                     spec.timeout_seconds
                 );
             }
@@ -611,10 +865,10 @@ pub fn execute(spec: RunnerSpec) -> RunnerResult {
         } else {
             let start_args = vec!["start".to_string(), "-a".to_string(), created_id.clone()];
             let start_output =
-                run_command_capture_with_timeout(&docker_binary, &start_args, start_timeout)?;
+                run_command_capture_with_timeout(&runtime_binary, &start_args, start_timeout)?;
             if start_output.timed_out {
                 let _ = run_command_capture(
-                    &docker_binary,
+                    &runtime_binary,
                     &[
                         "stop".to_string(),
                         "-t".to_string(),
@@ -622,21 +876,26 @@ pub fn execute(spec: RunnerSpec) -> RunnerResult {
                         created_id.clone(),
                     ],
                 );
-                bail!("docker start timed out after {}s", spec.timeout_seconds);
+                bail!(
+                    "{} start timed out after {}s",
+                    container_runtime.as_str(),
+                    spec.timeout_seconds
+                );
             }
             start_output
         };
 
         let exit_code = if summary_observed {
             let wait_output = run_command_capture_with_timeout(
-                &docker_binary,
+                &runtime_binary,
                 &["wait".to_string(), created_id.clone()],
                 Some(summary_gate_exit_timeout()),
             )?;
             if wait_output.timed_out {
-                cleanup_container(&docker_binary, Some(&created_id));
+                cleanup_container(&runtime_binary, Some(&created_id));
                 bail!(
-                    "docker wait timed out after summary gate after {}s",
+                    "{} wait timed out after summary gate after {}s",
+                    container_runtime.as_str(),
                     summary_gate_exit_timeout().as_secs()
                 );
             }
@@ -646,14 +905,18 @@ pub fn execute(spec: RunnerSpec) -> RunnerResult {
                 } else {
                     wait_output.stdout.trim().to_string()
                 };
-                bail!("docker wait failed: {error_text}");
+                bail!("{} wait failed: {error_text}", container_runtime.as_str());
             }
             parse_wait_exit_code_text(&wait_output.stdout)?
         } else {
             let wait_output =
-                run_command_capture(&docker_binary, &["wait".to_string(), created_id.clone()])?;
+                run_command_capture(&runtime_binary, &["wait".to_string(), created_id.clone()])?;
             if !wait_output.status.success() {
-                bail!("docker wait failed: {}", output_error_text(&wait_output));
+                bail!(
+                    "{} wait failed: {}",
+                    container_runtime.as_str(),
+                    output_error_text(&wait_output)
+                );
             }
             parse_exit_code(&wait_output)?
         };
@@ -674,10 +937,10 @@ pub fn execute(spec: RunnerSpec) -> RunnerResult {
             String::new()
         };
         if stdout_text.is_empty() && should_capture_stdout {
-            stdout_text = docker_logs(&docker_binary, &created_id, true)?;
+            stdout_text = docker_logs(&runtime_binary, &created_id, true)?;
         }
         if stderr_text.is_empty() && should_capture_stderr {
-            stderr_text = docker_logs(&docker_binary, &created_id, false)?;
+            stderr_text = docker_logs(&runtime_binary, &created_id, false)?;
         }
 
         let captured_stdout_path = spec
@@ -752,6 +1015,16 @@ pub fn execute(spec: RunnerSpec) -> RunnerResult {
     };
 
     let meta_context = RunnerMetaContext {
+        container_runtime,
+        runtime_binary: &runtime_binary,
+        rootless_status: &rootless_status,
+        rootless_proof_source: &rootless_proof_source,
+        network_mode: if spec.network_disabled {
+            "none"
+        } else {
+            "default"
+        },
+        mounts: &effective_mounts,
         runner_command: &runner_command,
         runner_environment: &runner_environment,
         workspace_volume: &workspace_volume,
@@ -760,7 +1033,7 @@ pub fn execute(spec: RunnerSpec) -> RunnerResult {
         log_retention: &log_retention,
     };
     let _ = write_runner_meta(&runner_meta_path, &spec, &meta_context);
-    cleanup_container(&docker_binary, container_id.as_deref());
+    cleanup_container(&runtime_binary, container_id.as_deref());
     result
 }
 
@@ -783,10 +1056,10 @@ pub fn execute_from_spec_path(spec_path: &Path) -> RunnerResult {
     })
 }
 
-pub fn stop_container_sync(container_id: &str) -> bool {
-    let docker_binary = docker_bin(None);
+pub fn stop_container_sync_with_runtime(container_id: &str, runtime: ContainerRuntime) -> bool {
+    let runtime_binary = container_runtime_bin(runtime, None);
     let inspect = run_command_capture(
-        &docker_binary,
+        &runtime_binary,
         &["inspect".to_string(), container_id.to_string()],
     );
     let Ok(inspect) = inspect else {
@@ -797,7 +1070,7 @@ pub fn stop_container_sync(container_id: &str) -> bool {
     }
 
     let _ = run_command_capture(
-        &docker_binary,
+        &runtime_binary,
         &[
             "stop".to_string(),
             "-t".to_string(),
@@ -806,10 +1079,14 @@ pub fn stop_container_sync(container_id: &str) -> bool {
         ],
     );
     let remove = run_command_capture(
-        &docker_binary,
+        &runtime_binary,
         &["rm".to_string(), "-f".to_string(), container_id.to_string()],
     );
     matches!(remove, Ok(output) if output.status.success())
+}
+
+pub fn stop_container_sync(container_id: &str) -> bool {
+    stop_container_sync_with_runtime(container_id, ContainerRuntime::Docker)
 }
 
 pub fn stop_container(container_id: &str) -> bool {
@@ -859,6 +1136,9 @@ cmd="${1:-}"
 shift || true
 printf '%s|%s\n' "$cmd" "$*" >> "$log_file"
 case "$cmd" in
+  info)
+    printf '%s\n' "${FAKE_PODMAN_ROOTLESS:-true}"
+    ;;
   create)
     printf '%s\n' "${FAKE_CONTAINER_ID:-container-xyz}"
     ;;
@@ -936,6 +1216,7 @@ esac
         let result = execute(RunnerSpec {
             scanner_type: "generic".to_string(),
             image: "Argus/generic-runner:latest".to_string(),
+            container_runtime: ContainerRuntime::Docker,
             workspace_dir: workspace_dir.display().to_string(),
             command: vec![
                 "/opt/scanner/bin/scanner".to_string(),
@@ -959,6 +1240,7 @@ esac
             cpu_limit: None,
             pids_limit: None,
             network_disabled: false,
+            mount_plan: None,
         });
 
         assert!(result.success);
@@ -986,6 +1268,245 @@ esac
         assert!(runner_meta.contains("\"exit_code\": 0"));
         assert!(runner_meta.contains("\"stdout_path\": null"));
         assert!(runner_meta.contains("\"stderr_path\": null"));
+        assert!(runner_meta.contains("\"container_runtime\": \"docker\""));
+        assert!(runner_meta.contains("\"mode\": \"rw\""));
+    }
+
+    #[test]
+    fn execute_podman_records_rootless_and_mount_metadata() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        let temp_dir = TempDir::new().unwrap();
+        let fake_log = temp_dir.path().join("podman.log");
+        let fake_podman = fake_docker_script(&temp_dir);
+        let workspace_root = temp_dir.path().join("scan-root");
+        let workspace_dir = workspace_root.join("opengrep/task-podman");
+        let source_dir = workspace_dir.join("source");
+        let output_dir = workspace_dir.join("output");
+        fs::create_dir_all(&source_dir).unwrap();
+        fs::create_dir_all(&output_dir).unwrap();
+
+        let _podman_bin = EnvVarGuard::set("Argus_PODMAN_BIN", fake_podman.to_str().unwrap());
+        let _docker_log = EnvVarGuard::set("FAKE_DOCKER_LOG", fake_log.to_str().unwrap());
+        let _workspace_root =
+            EnvVarGuard::set("SCAN_WORKSPACE_ROOT", workspace_root.to_str().unwrap());
+
+        let result = execute(RunnerSpec {
+            scanner_type: "opengrep".to_string(),
+            image: "argus/opengrep-runner:latest".to_string(),
+            container_runtime: ContainerRuntime::Podman,
+            workspace_dir: workspace_dir.display().to_string(),
+            command: vec![
+                "opengrep-scan".to_string(),
+                "--target".to_string(),
+                "/scan/source".to_string(),
+                "--output".to_string(),
+                "/scan/output/results.json".to_string(),
+            ],
+            timeout_seconds: 30,
+            env: BTreeMap::new(),
+            expected_exit_codes: vec![0],
+            artifact_paths: vec![],
+            capture_stdout_path: None,
+            capture_stderr_path: None,
+            completion_summary_path: None,
+            workspace_root_override: None,
+            memory_limit_mb: None,
+            memory_swap_limit_mb: None,
+            cpu_limit: None,
+            pids_limit: None,
+            network_disabled: true,
+            mount_plan: Some(RunnerMountPlan::new(vec![
+                RunnerMount::read_only(source_dir.display().to_string(), "/scan/source"),
+                RunnerMount::read_write(output_dir.display().to_string(), "/scan/output"),
+            ])),
+        });
+
+        assert!(result.success, "{:?}", result.error);
+        let logged = fs::read_to_string(&fake_log).unwrap();
+        assert!(
+            logged.contains("info|--format {{.Host.Security.Rootless}}"),
+            "{logged}"
+        );
+        assert!(
+            logged.contains(&format!("-v {}:/scan/source:ro", source_dir.display())),
+            "{logged}"
+        );
+        assert!(
+            logged.contains(&format!("-v {}:/scan/output:rw", output_dir.display())),
+            "{logged}"
+        );
+        assert!(logged.contains("create|-w /scan "), "{logged}");
+        assert!(
+            logged
+                .contains("opengrep-scan --target /scan/source --output /scan/output/results.json"),
+            "{logged}"
+        );
+        assert!(
+            !logged.contains(&format!("--target {}", workspace_dir.join("source").display())),
+            "explicit mount plans must keep container-visible /scan paths instead of host rewrites\n{logged}"
+        );
+        assert!(logged.contains("--network none"), "{logged}");
+        let runner_meta = fs::read_to_string(workspace_dir.join("meta/runner.json")).unwrap();
+        assert!(runner_meta.contains("\"container_runtime\": \"podman\""));
+        assert!(runner_meta.contains("\"rootless_status\": \"rootless\""));
+        assert!(runner_meta.contains("\"network_mode\": \"none\""));
+        assert!(runner_meta.contains("\"mode\": \"ro\""));
+        assert!(runner_meta.contains("\"mode\": \"rw\""));
+    }
+
+    #[test]
+    fn execute_rejects_mount_plans_that_escape_workspace_root() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        let temp_dir = TempDir::new().unwrap();
+        let fake_log = temp_dir.path().join("podman.log");
+        let fake_podman = fake_docker_script(&temp_dir);
+        let workspace_root = temp_dir.path().join("scan-root");
+        let workspace_dir = workspace_root.join("opengrep/task-escape");
+        let escaped_dir = temp_dir.path().join("outside-source");
+        fs::create_dir_all(&workspace_dir).unwrap();
+        fs::create_dir_all(&escaped_dir).unwrap();
+
+        let _podman_bin = EnvVarGuard::set("Argus_PODMAN_BIN", fake_podman.to_str().unwrap());
+        let _docker_log = EnvVarGuard::set("FAKE_DOCKER_LOG", fake_log.to_str().unwrap());
+        let _workspace_root =
+            EnvVarGuard::set("SCAN_WORKSPACE_ROOT", workspace_root.to_str().unwrap());
+
+        let result = execute(RunnerSpec {
+            scanner_type: "opengrep".to_string(),
+            image: "argus/opengrep-runner:latest".to_string(),
+            container_runtime: ContainerRuntime::Podman,
+            workspace_dir: workspace_dir.display().to_string(),
+            command: vec!["opengrep-scan".to_string(), "--self-test".to_string()],
+            timeout_seconds: 30,
+            env: BTreeMap::new(),
+            expected_exit_codes: vec![0],
+            artifact_paths: vec![],
+            capture_stdout_path: None,
+            capture_stderr_path: None,
+            completion_summary_path: None,
+            workspace_root_override: None,
+            memory_limit_mb: None,
+            memory_swap_limit_mb: None,
+            cpu_limit: None,
+            pids_limit: None,
+            network_disabled: true,
+            mount_plan: Some(RunnerMountPlan::new(vec![RunnerMount::read_only(
+                escaped_dir.display().to_string(),
+                "/scan/source",
+            )])),
+        });
+
+        assert!(!result.success);
+        assert!(
+            result.error.as_deref().is_some_and(|error| error
+                .contains("runner mount host path must stay inside shared workspace root")),
+            "{:?}",
+            result.error
+        );
+    }
+
+    #[test]
+    fn execute_podman_requires_explicit_mount_plan() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        let temp_dir = TempDir::new().unwrap();
+        let fake_log = temp_dir.path().join("podman.log");
+        let fake_podman = fake_docker_script(&temp_dir);
+        let workspace_root = temp_dir.path().join("scan-root");
+        let workspace_dir = workspace_root.join("opengrep/task-missing-mount-plan");
+        fs::create_dir_all(&workspace_dir).unwrap();
+
+        let _podman_bin = EnvVarGuard::set("Argus_PODMAN_BIN", fake_podman.to_str().unwrap());
+        let _docker_log = EnvVarGuard::set("FAKE_DOCKER_LOG", fake_log.to_str().unwrap());
+        let _workspace_root =
+            EnvVarGuard::set("SCAN_WORKSPACE_ROOT", workspace_root.to_str().unwrap());
+
+        let result = execute(RunnerSpec {
+            scanner_type: "opengrep".to_string(),
+            image: "argus/opengrep-runner:latest".to_string(),
+            container_runtime: ContainerRuntime::Podman,
+            workspace_dir: workspace_dir.display().to_string(),
+            command: vec!["opengrep-scan".to_string(), "--self-test".to_string()],
+            timeout_seconds: 30,
+            env: BTreeMap::new(),
+            expected_exit_codes: vec![0],
+            artifact_paths: vec![],
+            capture_stdout_path: None,
+            capture_stderr_path: None,
+            completion_summary_path: None,
+            workspace_root_override: None,
+            memory_limit_mb: None,
+            memory_swap_limit_mb: None,
+            cpu_limit: None,
+            pids_limit: None,
+            network_disabled: true,
+            mount_plan: None,
+        });
+
+        assert!(!result.success);
+        assert!(
+            result.error.as_deref().is_some_and(
+                |error| error.contains("podman runner requires an explicit mount plan")
+            ),
+            "{:?}",
+            result.error
+        );
+    }
+
+    #[test]
+    fn execute_podman_blocks_when_rootless_probe_fails() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        let temp_dir = TempDir::new().unwrap();
+        let fake_log = temp_dir.path().join("podman.log");
+        let fake_podman = fake_docker_script(&temp_dir);
+        let workspace_root = temp_dir.path().join("scan-root");
+        let workspace_dir = workspace_root.join("opengrep/task-rootful");
+        let source_dir = workspace_dir.join("source");
+        let output_dir = workspace_dir.join("output");
+        fs::create_dir_all(&source_dir).unwrap();
+        fs::create_dir_all(&output_dir).unwrap();
+
+        let _podman_bin = EnvVarGuard::set("Argus_PODMAN_BIN", fake_podman.to_str().unwrap());
+        let _docker_log = EnvVarGuard::set("FAKE_DOCKER_LOG", fake_log.to_str().unwrap());
+        let _workspace_root =
+            EnvVarGuard::set("SCAN_WORKSPACE_ROOT", workspace_root.to_str().unwrap());
+        let _rootless = EnvVarGuard::set("FAKE_PODMAN_ROOTLESS", "false");
+
+        let result = execute(RunnerSpec {
+            scanner_type: "opengrep".to_string(),
+            image: "argus/opengrep-runner:latest".to_string(),
+            container_runtime: ContainerRuntime::Podman,
+            workspace_dir: workspace_dir.display().to_string(),
+            command: vec!["opengrep-scan".to_string(), "--self-test".to_string()],
+            timeout_seconds: 30,
+            env: BTreeMap::new(),
+            expected_exit_codes: vec![0],
+            artifact_paths: vec![],
+            capture_stdout_path: None,
+            capture_stderr_path: None,
+            completion_summary_path: None,
+            workspace_root_override: None,
+            memory_limit_mb: None,
+            memory_swap_limit_mb: None,
+            cpu_limit: None,
+            pids_limit: None,
+            network_disabled: true,
+            mount_plan: Some(RunnerMountPlan::new(vec![
+                RunnerMount::read_only(source_dir.display().to_string(), "/scan/source"),
+                RunnerMount::read_write(output_dir.display().to_string(), "/scan/output"),
+            ])),
+        });
+
+        assert!(!result.success);
+        assert!(
+            result
+                .error
+                .as_deref()
+                .is_some_and(|error| error.contains("podman rootless proof failed")),
+            "{:?}",
+            result.error
+        );
+        let runner_meta = fs::read_to_string(workspace_dir.join("meta/runner.json")).unwrap();
+        assert!(runner_meta.contains("\"rootless_status\": \"failed\""));
     }
 
     #[test]
@@ -1007,6 +1528,7 @@ esac
         let result = execute(RunnerSpec {
             scanner_type: "opengrep".to_string(),
             image: "argus/opengrep-runner:latest".to_string(),
+            container_runtime: ContainerRuntime::Docker,
             workspace_dir: workspace_dir.display().to_string(),
             command: vec!["opengrep-scan".to_string(), "--self-test".to_string()],
             timeout_seconds: 30,
@@ -1022,6 +1544,7 @@ esac
             cpu_limit: None,
             pids_limit: None,
             network_disabled: false,
+            mount_plan: None,
         });
 
         assert!(result.success);
@@ -1055,6 +1578,7 @@ esac
         let result = execute(RunnerSpec {
             scanner_type: "opengrep".to_string(),
             image: "argus/opengrep-runner:latest".to_string(),
+            container_runtime: ContainerRuntime::Docker,
             workspace_dir: workspace_dir.display().to_string(),
             command: vec!["opengrep-scan".to_string(), "--self-test".to_string()],
             timeout_seconds: 30,
@@ -1070,6 +1594,7 @@ esac
             cpu_limit: None,
             pids_limit: None,
             network_disabled: false,
+            mount_plan: None,
         });
 
         assert!(!result.success);
@@ -1099,6 +1624,7 @@ esac
         let result = execute(RunnerSpec {
             scanner_type: "opengrep".to_string(),
             image: "argus/opengrep-runner-local:latest".to_string(),
+            container_runtime: ContainerRuntime::Docker,
             workspace_dir: workspace_dir.display().to_string(),
             command: vec!["opengrep-scan".to_string(), "--self-test".to_string()],
             timeout_seconds: 0,
@@ -1114,6 +1640,7 @@ esac
             cpu_limit: None,
             pids_limit: None,
             network_disabled: true,
+            mount_plan: None,
         });
 
         assert!(result.success);
@@ -1143,6 +1670,7 @@ esac
         let result = execute(RunnerSpec {
             scanner_type: "opengrep".to_string(),
             image: "argus/opengrep-runner:latest".to_string(),
+            container_runtime: ContainerRuntime::Docker,
             workspace_dir: workspace_dir.display().to_string(),
             command: vec![
                 "opengrep".to_string(),
@@ -1162,6 +1690,7 @@ esac
             cpu_limit: None,
             pids_limit: None,
             network_disabled: false,
+            mount_plan: None,
         });
 
         assert!(!result.success);
@@ -1198,6 +1727,7 @@ esac
         let result = execute(RunnerSpec {
             scanner_type: "opengrep".to_string(),
             image: "argus/opengrep-runner:latest".to_string(),
+            container_runtime: ContainerRuntime::Docker,
             workspace_dir: workspace_dir.display().to_string(),
             command: vec![
                 "opengrep".to_string(),
@@ -1217,6 +1747,7 @@ esac
             cpu_limit: None,
             pids_limit: None,
             network_disabled: false,
+            mount_plan: None,
         });
 
         assert!(result.success);
@@ -1252,6 +1783,7 @@ esac
         let result = execute(RunnerSpec {
             scanner_type: "opengrep".to_string(),
             image: "argus/opengrep-runner:latest".to_string(),
+            container_runtime: ContainerRuntime::Docker,
             workspace_dir: temp_dir
                 .path()
                 .join("elsewhere/task-1")
@@ -1275,6 +1807,7 @@ esac
             cpu_limit: None,
             pids_limit: None,
             network_disabled: false,
+            mount_plan: None,
         });
 
         assert!(!result.success);
@@ -1304,6 +1837,7 @@ esac
         let result = execute(RunnerSpec {
             scanner_type: "opengrep".to_string(),
             image: "argus/opengrep-runner-local:latest".to_string(),
+            container_runtime: ContainerRuntime::Docker,
             workspace_dir: workspace_dir.display().to_string(),
             command: vec!["opengrep".to_string(), "--version".to_string()],
             timeout_seconds: 0,
@@ -1319,6 +1853,7 @@ esac
             cpu_limit: None,
             pids_limit: None,
             network_disabled: false,
+            mount_plan: None,
         });
 
         assert!(result.success);
@@ -1344,6 +1879,7 @@ esac
         let result = execute(RunnerSpec {
             scanner_type: "opengrep".to_string(),
             image: "argus/opengrep-runner-local:latest".to_string(),
+            container_runtime: ContainerRuntime::Docker,
             workspace_dir: workspace_dir.display().to_string(),
             command: vec![
                 "opengrep".to_string(),
@@ -1366,6 +1902,7 @@ esac
             cpu_limit: Some(1.5),
             pids_limit: Some(256),
             network_disabled: false,
+            mount_plan: None,
         });
 
         assert!(result.success);
@@ -1400,6 +1937,7 @@ esac
         let result = execute(RunnerSpec {
             scanner_type: "opengrep".to_string(),
             image: "argus/opengrep-runner-local:latest".to_string(),
+            container_runtime: ContainerRuntime::Docker,
             workspace_dir: workspace_dir.display().to_string(),
             command: vec!["opengrep".to_string(), "scan".to_string()],
             timeout_seconds: 0,
@@ -1415,6 +1953,7 @@ esac
             cpu_limit: None,
             pids_limit: None,
             network_disabled: false,
+            mount_plan: None,
         });
 
         assert!(result.success);
@@ -1457,6 +1996,7 @@ esac
         let result = execute(RunnerSpec {
             scanner_type: "opengrep".to_string(),
             image: "argus/opengrep-runner-local:latest".to_string(),
+            container_runtime: ContainerRuntime::Docker,
             workspace_dir: workspace_dir.display().to_string(),
             command: vec!["opengrep-scan".to_string(), "--self-test".to_string()],
             timeout_seconds: 30,
@@ -1472,6 +2012,7 @@ esac
             cpu_limit: None,
             pids_limit: None,
             network_disabled: false,
+            mount_plan: None,
         });
 
         assert!(result.success);
@@ -1552,6 +2093,7 @@ esac
         let result = execute(RunnerSpec {
             scanner_type: "opengrep".to_string(),
             image: "argus/opengrep-runner-local:latest".to_string(),
+            container_runtime: ContainerRuntime::Docker,
             workspace_dir: workspace_dir.display().to_string(),
             command: vec!["opengrep-scan".to_string(), "--self-test".to_string()],
             timeout_seconds: 30,
@@ -1567,6 +2109,7 @@ esac
             cpu_limit: None,
             pids_limit: None,
             network_disabled: false,
+            mount_plan: None,
         });
 
         assert!(!result.success);
@@ -1620,6 +2163,7 @@ esac
         let result = execute(RunnerSpec {
             scanner_type: "opengrep".to_string(),
             image: "argus/opengrep-runner-local:latest".to_string(),
+            container_runtime: ContainerRuntime::Docker,
             workspace_dir: workspace_dir.display().to_string(),
             command: vec!["opengrep-scan".to_string(), "--self-test".to_string()],
             timeout_seconds: 0,
@@ -1635,6 +2179,7 @@ esac
             cpu_limit: None,
             pids_limit: None,
             network_disabled: false,
+            mount_plan: None,
         });
 
         assert!(!result.success);
@@ -1672,6 +2217,7 @@ esac
         let result = execute(RunnerSpec {
             scanner_type: "opengrep".to_string(),
             image: "argus/opengrep-runner-local:latest".to_string(),
+            container_runtime: ContainerRuntime::Docker,
             workspace_dir: workspace_dir.display().to_string(),
             command: vec!["opengrep-scan".to_string(), "--self-test".to_string()],
             timeout_seconds: 30,
@@ -1687,6 +2233,7 @@ esac
             cpu_limit: None,
             pids_limit: None,
             network_disabled: false,
+            mount_plan: None,
         });
 
         assert!(!result.success);
@@ -1721,5 +2268,26 @@ esac
         let _inspect_missing = EnvVarGuard::set("FAKE_INSPECT_MISSING", "1");
 
         assert!(!stop_container_sync("missing-container"));
+    }
+
+    #[test]
+    fn stop_container_can_use_selected_podman_runtime() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        let temp_dir = TempDir::new().unwrap();
+        let fake_log = temp_dir.path().join("podman.log");
+        let fake_podman = fake_docker_script(&temp_dir);
+
+        let _podman_bin = EnvVarGuard::set("Argus_PODMAN_BIN", fake_podman.to_str().unwrap());
+        let _docker_log = EnvVarGuard::set("FAKE_DOCKER_LOG", fake_log.to_str().unwrap());
+
+        assert!(stop_container_sync_with_runtime(
+            "podman-container",
+            ContainerRuntime::Podman
+        ));
+
+        let logged = fs::read_to_string(&fake_log).unwrap();
+        assert!(logged.contains("inspect|podman-container"), "{logged}");
+        assert!(logged.contains("stop|-t 2 podman-container"), "{logged}");
+        assert!(logged.contains("rm|-f podman-container"), "{logged}");
     }
 }
