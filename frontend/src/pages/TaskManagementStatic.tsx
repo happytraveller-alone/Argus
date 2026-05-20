@@ -146,7 +146,7 @@ export default function TaskManagementStatic() {
 				</div>
 			</div>
 
-			<div className="flex flex-wrap items-center justify-end gap-3">
+			<div className="relative z-10 flex flex-wrap items-center justify-end gap-3">
 				<div className="flex min-w-0 flex-1 items-center gap-3">
 					<div className="relative w-full max-w-sm">
 						<Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -181,7 +181,7 @@ export default function TaskManagementStatic() {
 				</div>
 			</div>
 
-			<DeferredSection className="-mt-3 min-h-0 flex-1" minHeight={0} priority>
+			<DeferredSection className="relative z-10 -mt-3 min-h-0 flex-1" minHeight={0} priority>
 				<TaskActivitiesListTable
 					activities={filteredStaticActivities}
 					loading={loading}

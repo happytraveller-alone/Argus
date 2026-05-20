@@ -1031,6 +1031,40 @@ podman_build_opengrep_runner_image() {
   return "$build_rc"
 }
 
+podman_build_codeql_runner_image() {
+  local image
+  image="$(codeql_runner_image_ref)"
+  log "Building Argus CodeQL runner Podman image: $image"
+
+  # Pre-download cache artifacts if missing
+  local cache_dir="$ROOT_DIR/docker/cache"
+  local codeql_version="${CODEQL_VERSION:-2.16.1}"
+  local gradle_version="${GRADLE_VERSION:-8.7}"
+  if [[ ! -f "$cache_dir/codeql-bundle-linux64.tar.gz" ]] || [[ ! -f "$cache_dir/gradle-${gradle_version}-bin.zip" ]]; then
+    log "Downloading CodeQL build cache artifacts..."
+    bash "$ROOT_DIR/docker/codeql-cache-download.sh"
+  fi
+
+  local build_rc=0 dangling_before
+  dangling_before="$(podman_capture_dangling_before)"
+  run_cmd podman build \
+    --file "$ROOT_DIR/docker/codeql.Dockerfile" \
+    --platform "linux/$PODMAN_TARGETARCH" \
+    --network host \
+    --build-arg "DOCKERHUB_LIBRARY_MIRROR=${DOCKERHUB_LIBRARY_MIRROR:-m.daocloud.io/docker.io/library}" \
+    --build-arg "APT_MIRROR=${BACKEND_APT_MIRROR_PRIMARY:-mirrors.aliyun.com}" \
+    --build-arg "CODEQL_VERSION=${codeql_version}" \
+    --build-arg "GRADLE_VERSION=${gradle_version}" \
+    --tag "$image" \
+    "$ROOT_DIR" || build_rc=$?
+  if [[ "$build_rc" -eq 0 ]]; then
+    podman_cleanup_after_successful_build "$image" "$dangling_before"
+  else
+    [[ -z "$dangling_before" ]] || rm -f "$dangling_before"
+  fi
+  return "$build_rc"
+}
+
 podman_prepull_base_images() {
   if "$DRY_RUN" || is_truthy "$STUB_DOCKER"; then
     log "Dry-run/stub: skipping base image pre-pull."
@@ -1043,6 +1077,7 @@ podman_prepull_base_images() {
     "${mirror}/debian:trixie-slim"
     "${mirror}/node:22-alpine"
     "${mirror}/node:22-slim"
+    "${mirror}/ubuntu:22.04"
   )
   local -a pull_pids=()
   for img in "${images[@]}"; do
@@ -1105,6 +1140,7 @@ podman_build_local_images() {
   if "$DRY_RUN" || is_truthy "$STUB_DOCKER" || is_truthy "$PODMAN_SEQUENTIAL_BUILD"; then
     log "Building Podman images sequentially (visible logs for dry-run/stub or --sequential-build)."
     podman_build_opengrep_runner_image
+    podman_build_codeql_runner_image
     podman_build_backend_image
     podman_build_frontend_image
     return 0
@@ -1118,8 +1154,8 @@ podman_build_local_images() {
   dangling_before_all="$(podman_capture_dangling_before)"
 
   local -a build_pids=() build_names=() build_logs=()
-  local build_funcs=("podman_build_opengrep_runner_image" "podman_build_backend_image" "podman_build_frontend_image")
-  local image_names=("opengrep-runner" "backend" "frontend")
+  local build_funcs=("podman_build_opengrep_runner_image" "podman_build_codeql_runner_image" "podman_build_backend_image" "podman_build_frontend_image")
+  local image_names=("opengrep-runner" "codeql-runner" "backend" "frontend")
   local total=${#build_funcs[@]}
 
   for i in "${!build_funcs[@]}"; do
@@ -1330,6 +1366,14 @@ opengrep_runner_image_ref() {
   [[ -z "$image" ]] && image="$(read_env_value SCANNER_OPENGREP_IMAGE)"
   [[ -z "$image" ]] && image="argus/opengrep-runner-local:latest"
   normalize_opengrep_image_ref_value "$image"
+}
+
+codeql_runner_image_ref() {
+  local image
+  image="${SCANNER_CODEQL_IMAGE:-}"
+  [[ -z "$image" ]] && image="$(read_env_value SCANNER_CODEQL_IMAGE)"
+  [[ -z "$image" ]] && image="localhost/argus/codeql-runner:latest"
+  printf '%s' "$image"
 }
 
 a3s_box_opengrep_image_ref() {
