@@ -38,8 +38,8 @@ git log --oneline --grep="cubesandbox"
 ## Follow-ups (out of scope for this mission)
 
 - F1: 为 a3s 实现 codeql 适配层 (`a3s_codeql_runner.rs`),恢复 codeql 功能
-- F2: drop `rust_cubesandbox_*` 表(或运行 `scripts/purge-cubesandbox.sh --drop-tables`)
-- F3: docker volume `backend_cubesandbox_data` 清理 RUNBOOK
+- F2: drop legacy retired-sandbox tables manually if an old deployment still has them
+- F3: legacy docker volume cleanup RUNBOOK for old deployments
 - F4: AGENTS.md cubesandbox 知识压缩为 1 行 archive 链接
 
 ## 参考

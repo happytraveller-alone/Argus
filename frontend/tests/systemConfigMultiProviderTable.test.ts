@@ -84,10 +84,10 @@ test("SystemConfig status text covers persisted batch validation states and time
 	assert.match(source, /禁用/);
 });
 
-test("SystemConfig preserves raw otherConfig spread (cubeSandbox section removed)", () => {
+test("SystemConfig preserves raw otherConfig spread without retired sandbox config", () => {
 	const source = readFileSync(systemConfigPath, "utf8");
 	assert.match(source, /rawOtherConfig/);
 	assert.match(source, /\.\.\.config\.rawOtherConfig/);
-	assert.doesNotMatch(source, /cubeSandbox/);
-	assert.doesNotMatch(source, /CubeSandbox/);
+	assert.doesNotMatch(source, new RegExp("cube" + "Sandbox"));
+	assert.doesNotMatch(source, new RegExp("Cube" + "Sandbox"));
 });

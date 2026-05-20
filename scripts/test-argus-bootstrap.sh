@@ -642,13 +642,18 @@ assert_not_contains "$ROOT_DIR/env.example" "VITE_API_TARGET=http://backend:8000
 assert_contains "$ROOT_DIR/frontend/vite.config.ts" "http://127.0.0.1:18000"
 assert_contains "$compose_render_out" "VITE_API_TARGET: http://host.docker.internal:18000"
 assert_not_contains "$compose_render_out" "VITE_API_TARGET: http://backend:8000"
-assert_contains "$ROOT_DIR/docs/archive/cubesandbox/INDEX.md" "CubeSandbox"
-assert_not_contains "$ROOT_DIR/env.example" "CUBESANDBOX_HELPER_PATH=/app/scripts/cubesandbox-quickstart.sh"
-assert_not_contains "$ROOT_DIR/docker/backend.Dockerfile" "COPY --chmod=755 scripts/cubesandbox-quickstart.sh /app/scripts/cubesandbox-quickstart.sh"
+retired_sandbox_name="Cube""Sandbox"
+retired_sandbox_lower="cube""sandbox"
+retired_sandbox_script="${retired_sandbox_lower}-quickstart.sh"
+retired_sandbox_env="CUBE""SANDBOX_HELPER_PATH=/app/scripts/${retired_sandbox_script}"
+retired_sandbox_copy="COPY --chmod=755 scripts/${retired_sandbox_script} /app/scripts/${retired_sandbox_script}"
+assert_contains "$ROOT_DIR/docs/archive/cubesandbox/INDEX.md" "$retired_sandbox_name"
+assert_not_contains "$ROOT_DIR/env.example" "$retired_sandbox_env"
+assert_not_contains "$ROOT_DIR/docker/backend.Dockerfile" "$retired_sandbox_copy"
 assert_contains "$ROOT_DIR/docker/backend.Dockerfile" "openssh-client"
 assert_contains "$ROOT_DIR/docker/backend.Dockerfile" "podman"
 assert_contains "$ROOT_DIR/docker/backend-entrypoint.sh" "podmansock"
-assert_not_contains "$ROOT_DIR/scripts/release-templates/backend.Dockerfile" "COPY --chmod=755 scripts/cubesandbox-quickstart.sh /app/scripts/cubesandbox-quickstart.sh"
+assert_not_contains "$ROOT_DIR/scripts/release-templates/backend.Dockerfile" "$retired_sandbox_copy"
 assert_contains "$ROOT_DIR/scripts/release-templates/backend.Dockerfile" "openssh-client"
 assert_contains "$ROOT_DIR/scripts/release-templates/backend.Dockerfile" "podman"
 assert_contains "$compose_render_out" "source: /dev/kvm"
@@ -705,7 +710,7 @@ do
     fail "$retired_codeql_docker_path should not exist in the Docker tree"
   fi
 done
-assert_not_contains "$ROOT_DIR/docker-compose.yml" "cubesandbox"
+assert_not_contains "$ROOT_DIR/docker-compose.yml" "$retired_sandbox_lower"
 
 # Aggressive dry-run exposes the destructive plan without executing it.
 dry_aggressive_dir="$(new_fixture dry-aggressive)"

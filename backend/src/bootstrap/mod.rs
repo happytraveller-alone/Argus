@@ -412,9 +412,9 @@ async fn ensure_rust_schema(pool: &PgPool) -> Result<()> {
     .execute(pool)
     .await?;
 
-    // CubeSandbox runtime removed — `rust_cubesandbox_templates` is no longer
-    // created or migrated by Rust bootstrap. Existing tables (if any) are left
-    // in place; operators may drop them manually.
+    // Retired sandbox runtime tables are no longer created or migrated by
+    // Rust bootstrap. Existing legacy tables (if any) are left in place for
+    // operators to handle outside the current product path.
 
     Ok(())
 }
