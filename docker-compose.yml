@@ -144,7 +144,7 @@ services:
       BACKEND_PYPI_INDEX_FALLBACK: ${BACKEND_PYPI_INDEX_FALLBACK:-}
       BACKEND_PYPI_INDEX_CANDIDATES: ${BACKEND_PYPI_INDEX_CANDIDATES:-https://mirrors.aliyun.com/pypi/simple/,https://pypi.tuna.tsinghua.edu.cn/simple,https://pypi.mirrors.ustc.edu.cn/simple/,https://mirrors.cloud.tencent.com/pypi/simple/,https://mirrors.huaweicloud.com/repository/pypi/simple/,https://mirrors.bfsu.edu.cn/pypi/web/simple/,https://pypi.org/simple}
       SCANNER_OPENGREP_IMAGE: ${SCANNER_OPENGREP_IMAGE:-argus/opengrep-runner-local:latest}
-      SCANNER_CODEQL_IMAGE: ${SCANNER_CODEQL_IMAGE:-argus/codeql-runner:latest}
+      SCANNER_CODEQL_IMAGE: ${SCANNER_CODEQL_IMAGE:-localhost/argus/codeql-runner:latest}
       SCANNER_OPENGREP_A3S_BOX_IMAGE: ${SCANNER_OPENGREP_A3S_BOX_IMAGE:-${SCANNER_OPENGREP_IMAGE:-argus/opengrep-runner-local:latest}}
       CODEQL_LLM_ALLOW_SOURCE_SNIPPETS: "${CODEQL_LLM_ALLOW_SOURCE_SNIPPETS:-true}"
       CODEQL_ALLOW_NETWORK_DURING_BUILD: "${CODEQL_ALLOW_NETWORK_DURING_BUILD:-true}"

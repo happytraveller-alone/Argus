@@ -194,7 +194,7 @@ impl AppConfig {
                 .map(normalize_legacy_opengrep_runner_image)
                 .unwrap_or_else(|| "argus/opengrep-runner:latest".to_string()),
             scanner_codeql_image: env::var("SCANNER_CODEQL_IMAGE")
-                .unwrap_or_else(|_| "argus/codeql-runner:latest".to_string()),
+                .unwrap_or_else(|_| "localhost/argus/codeql-runner:latest".to_string()),
             codeql_threads: parse_usize_env("CODEQL_THREADS", 0),
             codeql_ram_mb: parse_u64_env("CODEQL_RAM_MB", 6144),
             codeql_max_build_inference_rounds: parse_u64_env(

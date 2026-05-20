@@ -1069,7 +1069,13 @@ podman_predownload_a3s_box() {
   local a3s_base_url="${A3S_BOX_BUILD_DOWNLOAD_URL:-https://v6.gh-proxy.org/https://github.com/AI45Lab/Box/releases/download}"
   local cache_dir="${ROOT_DIR}/.cache/a3s-box"
   local arch="${PODMAN_TARGETARCH:-amd64}"
-  local package="a3s-box-${a3s_version}-${arch}"
+  local package_arch
+  case "$arch" in
+    amd64) package_arch="linux-x86_64" ;;
+    arm64) package_arch="linux-arm64" ;;
+    *) log "Warning: unsupported A3S Box arch=$arch; skipping pre-download."; return 0 ;;
+  esac
+  local package="a3s-box-${a3s_version}-${package_arch}"
   local target_file="${cache_dir}/${package}.tar.gz"
 
   if [[ -f "$target_file" ]]; then
@@ -1080,12 +1086,12 @@ podman_predownload_a3s_box() {
   log "Pre-downloading A3S Box ${a3s_version} (cache warming for build)..."
   mkdir -p "$cache_dir"
   local url="${a3s_base_url}/${a3s_version}/${package}.tar.gz"
-  if curl -fsSL --retry 3 --connect-timeout 15 --max-time 300 "$url" -o "$target_file.tmp" 2>/dev/null; then
+  if curl -fsSL --retry 3 --connect-timeout 15 --max-time 300 "$url" -o "$target_file.tmp"; then
     mv "$target_file.tmp" "$target_file"
     log "A3S Box pre-downloaded to $target_file"
   else
     rm -f "$target_file.tmp"
-    log "Warning: A3S Box pre-download failed (build will download on demand)."
+    log "Warning: A3S Box pre-download failed (url=$url). Build will download on demand."
   fi
 }
 
@@ -1214,7 +1220,7 @@ podman_run_backend() {
     -e "SCAN_WORKSPACE_ROOT=$scan_workspace_host" \
     -e "RUNNER_PREFLIGHT_STRICT=${RUNNER_PREFLIGHT_STRICT:-false}" \
     -e "CONTAINER_CLI=podman" \
-    -e "SCANNER_CODEQL_IMAGE=${SCANNER_CODEQL_IMAGE:-argus/codeql-runner:latest}" \
+    -e "SCANNER_CODEQL_IMAGE=${SCANNER_CODEQL_IMAGE:-localhost/argus/codeql-runner:latest}" \
     -v argus_backend_uploads:/app/uploads \
     -v argus_backend_runtime_data:/app/data/runtime \
     -v "$ARGUS_ENV_FILE:/app/.env:ro" \

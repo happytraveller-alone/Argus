@@ -1992,8 +1992,9 @@ fn generate_codeql_entrypoint_script(
         .as_deref()
         .unwrap_or(&format!("{language}-security-and-quality.qls"))
         .to_string();
+    script.push_str("mkdir -p /scan/workspace/output\n\n");
     script.push_str(&format!(
-        "codeql database analyze /scan/codeql-db --format=sarif-latest --output=/scan/output/results.sarif --ram={ram_mb}{threads_arg} {query_suite}\n"
+        "codeql database analyze /scan/codeql-db --format=sarif-latest --output=/scan/workspace/output/results.sarif --ram={ram_mb}{threads_arg} {query_suite}\n"
     ));
 
     script
