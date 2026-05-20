@@ -1004,7 +1004,6 @@ podman_run_backend() {
     -v argus_backend_uploads:/app/uploads \
     -v argus_backend_runtime_data:/app/data/runtime \
     -v "$ARGUS_ENV_FILE:/app/.env:ro" \
-    -v "$ROOT_DIR/docker/opengrep-scan.sh:/app/docker/opengrep-scan.sh:ro" \
     -v "$scan_workspace_host:$scan_workspace_host" \
     -v "$ARGUS_PODMAN_SOCKET_PATH:$PODMAN_CONTAINER_SOCKET" \
     --entrypoint sh \
