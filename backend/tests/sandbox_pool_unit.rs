@@ -47,7 +47,9 @@ struct FakeFactory {
 
 impl FakeFactory {
     fn new() -> Self {
-        Self { counter: Arc::new(AtomicUsize::new(0)) }
+        Self {
+            counter: Arc::new(AtomicUsize::new(0)),
+        }
     }
 }
 
@@ -60,7 +62,11 @@ impl SandboxFactory<FakeSandbox> for FakeFactory {
         let n = self.counter.fetch_add(1, AOrdering::SeqCst);
         // Drop permit immediately — signals creation slot is free.
         drop(permit);
-        Box::pin(async move { Ok(FakeSandbox { id: format!("fake-sandbox-{n}") }) })
+        Box::pin(async move {
+            Ok(FakeSandbox {
+                id: format!("fake-sandbox-{n}"),
+            })
+        })
     }
 }
 
@@ -71,12 +77,21 @@ fn noop_destroy() -> OnShutdownDestroy<FakeSandbox> {
 fn make_pool(capacity: usize, factory: Arc<FakeFactory>) -> Arc<SandboxPool<FakeSandbox>> {
     let mut caps = HashMap::new();
     caps.insert(FakeKind::Alpha, capacity);
-    Arc::new(SandboxPool::new(caps, capacity + 4, factory, noop_destroy()))
+    Arc::new(SandboxPool::new(
+        caps,
+        capacity + 4,
+        factory,
+        noop_destroy(),
+    ))
 }
 
 /// Poll `read_active()` until it reaches `expected_len` or `timeout_ms` elapses.
 /// Needed because `warmup()` spawns background refill tasks that complete asynchronously.
-async fn wait_for_pool_size(pool: &Arc<SandboxPool<FakeSandbox>>, expected_len: usize, timeout_ms: u64) {
+async fn wait_for_pool_size(
+    pool: &Arc<SandboxPool<FakeSandbox>>,
+    expected_len: usize,
+    timeout_ms: u64,
+) {
     let deadline = tokio::time::Instant::now() + tokio::time::Duration::from_millis(timeout_ms);
     loop {
         if pool.read_active().await.len() >= expected_len {
@@ -114,7 +129,11 @@ async fn ac9_metrics_emitted() {
     wait_for_pool_size(&pool, 2, 2000).await;
 
     // No starvation during warmup.
-    assert_eq!(pool.starvation_count(), 0, "no starvation expected after warmup");
+    assert_eq!(
+        pool.starvation_count(),
+        0,
+        "no starvation expected after warmup"
+    );
 
     // read_active() shows 2 entries (AC6 invariant — also checked here).
     let active = pool.read_active().await;
@@ -123,21 +142,37 @@ async fn ac9_metrics_emitted() {
     // Take both sandboxes — starvation_count stays 0 (successful takes).
     let s1 = pool.take(&FakeKind::Alpha).await;
     assert!(s1.is_some(), "first take must succeed");
-    assert_eq!(pool.starvation_count(), 0, "successful take: starvation_count unchanged");
+    assert_eq!(
+        pool.starvation_count(),
+        0,
+        "successful take: starvation_count unchanged"
+    );
 
     let s2 = pool.take(&FakeKind::Alpha).await;
     assert!(s2.is_some(), "second take must succeed");
-    assert_eq!(pool.starvation_count(), 0, "second successful take: starvation_count unchanged");
+    assert_eq!(
+        pool.starvation_count(),
+        0,
+        "second successful take: starvation_count unchanged"
+    );
 
     // Pool is now empty.  Next take() triggers starvation.
     let s3 = pool.take(&FakeKind::Alpha).await;
     assert!(s3.is_none(), "take on empty pool must return None");
-    assert_eq!(pool.starvation_count(), 1, "starvation_count must be 1 after first empty take");
+    assert_eq!(
+        pool.starvation_count(),
+        1,
+        "starvation_count must be 1 after first empty take"
+    );
 
     // Second starvation event.
     let s4 = pool.take(&FakeKind::Alpha).await;
     assert!(s4.is_none());
-    assert_eq!(pool.starvation_count(), 2, "starvation_count must be 2 after second empty take");
+    assert_eq!(
+        pool.starvation_count(),
+        2,
+        "starvation_count must be 2 after second empty take"
+    );
 
     // Trigger a refill and wait for it — then take should succeed without starvation increment.
     pool.refill_in_background(FakeKind::Alpha).await;
@@ -147,7 +182,11 @@ async fn ac9_metrics_emitted() {
     let s5 = pool.take(&FakeKind::Alpha).await;
     assert!(s5.is_some(), "take after refill must succeed");
     // starvation_count must still be 2 — successful take does not increment.
-    assert_eq!(pool.starvation_count(), 2, "starvation_count must not change on successful take after refill");
+    assert_eq!(
+        pool.starvation_count(),
+        2,
+        "starvation_count must not change on successful take after refill"
+    );
 }
 
 // ── AC9: kill-switch does not increment starvation counter ───────────────────
@@ -211,9 +250,16 @@ async fn ac3_no_pool_residue_across_dispatches() {
         }
     }
 
-    assert!(taken_count >= 3, "at least 3 sandboxes must have been taken across 6 attempts");
+    assert!(
+        taken_count >= 3,
+        "at least 3 sandboxes must have been taken across 6 attempts"
+    );
     // All collected IDs are unique (invariant already checked above per-insertion).
-    assert_eq!(seen_ids.len(), taken_count, "all dispatched sandbox IDs must be unique");
+    assert_eq!(
+        seen_ids.len(),
+        taken_count,
+        "all dispatched sandbox IDs must be unique"
+    );
 }
 
 // ── AC3: uniqueness enforced across pool warmup + N+1 sequential takes ────────
@@ -250,5 +296,9 @@ async fn ac3_no_pool_residue_n_plus_one_sequential() {
     // All seen IDs are unique.
     let ids_vec: Vec<_> = seen_ids.iter().cloned().collect();
     let unique: HashSet<_> = ids_vec.iter().cloned().collect();
-    assert_eq!(ids_vec.len(), unique.len(), "all sandbox IDs across dispatches must be unique");
+    assert_eq!(
+        ids_vec.len(),
+        unique.len(),
+        "all sandbox IDs across dispatches must be unique"
+    );
 }

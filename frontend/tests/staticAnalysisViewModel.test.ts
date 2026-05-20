@@ -456,12 +456,11 @@ test("buildStaticAnalysisHeaderSummary exposes Opengrep scan scheme label", () =
 	);
 	assert.equal(
 		viewModel.buildStaticAnalysisHeaderSummary({
-			// legacy: pre-2026-05-07 records may still carry oci_cubesandbox
-				opengrepTask: { ...baseTask, opengrep_sandbox: "oci_cubesandbox" as unknown as "a3s_box" },
+			opengrepTask: { ...baseTask, opengrep_sandbox: "unknown" as unknown as "a3s_box" },
 			codeqlTask: null,
 			enabledEngines: ["opengrep"],
 		}).scanSchemeLabel,
-		"已停用隔离方案",
+		"Docker 容器方案",
 	);
 	assert.equal(
 		viewModel.buildStaticAnalysisHeaderSummary({

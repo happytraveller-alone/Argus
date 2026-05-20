@@ -15,12 +15,7 @@
 //! See `.omc/reports/autopilot-phase-c0-probe.md` for the full C.0 probe
 //! outcome and AC1 impact analysis.
 
-use std::{
-    path::PathBuf,
-    pin::Pin,
-    sync::Arc,
-    time::Instant,
-};
+use std::{path::PathBuf, pin::Pin, sync::Arc, time::Instant};
 
 use anyhow::{Context, Result};
 use tokio::sync::OwnedSemaphorePermit;
@@ -97,10 +92,9 @@ impl SandboxFactory<A3sBoxHandle> for A3sBoxFactory {
             // this async block, releasing the creation slot.
             let image_clone = image.clone();
             let cache_marker_path = tokio::task::spawn_blocking(move || -> Result<PathBuf> {
-                a3s_box_runner::ensure_image_cached_for_pool(&image_clone)
-                    .with_context(|| {
-                        format!("A3sBoxFactory: ensure image cached for {image_clone}")
-                    })
+                a3s_box_runner::ensure_image_cached_for_pool(&image_clone).with_context(|| {
+                    format!("A3sBoxFactory: ensure image cached for {image_clone}")
+                })
             })
             .await
             .context("A3sBoxFactory: spawn_blocking panicked")?

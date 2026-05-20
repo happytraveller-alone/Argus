@@ -222,8 +222,7 @@ where
     let runner_success = a3s_runner_result.as_ref().map(|r| r.success);
     let runner_error = a3s_runner_result.as_ref().and_then(|r| r.error.clone());
 
-    let reason =
-        classify_a3s_error(exit_code, &stderr_tail, elapsed, image_cache_err.as_ref());
+    let reason = classify_a3s_error(exit_code, &stderr_tail, elapsed, image_cache_err.as_ref());
 
     // Success path: A3S returned a result and classifier says no fallback needed.
     if let Some(r) = a3s_runner_result {
@@ -268,7 +267,8 @@ where
     // carries the high-level "Exec socket did not appear" bail message; we
     // need the raw a3s-box stdout/stderr to root-cause why.
     let workspace_path = std::path::Path::new(&captured_workspace_dir);
-    let meta_snapshot = std::fs::read_to_string(workspace_path.join("meta/a3s-box-runner.json")).ok();
+    let meta_snapshot =
+        std::fs::read_to_string(workspace_path.join("meta/a3s-box-runner.json")).ok();
     let stdout_log_snapshot =
         std::fs::read_to_string(workspace_path.join("logs/a3s-box-stdout.log")).ok();
     let stderr_log_snapshot =
@@ -279,15 +279,24 @@ where
             obj.insert("meta_json".to_string(), serde_json::Value::String(meta));
         }
         if let Some(stdout_log) = stdout_log_snapshot {
-            obj.insert("a3s_box_stdout_log".to_string(), serde_json::Value::String(stdout_log));
+            obj.insert(
+                "a3s_box_stdout_log".to_string(),
+                serde_json::Value::String(stdout_log),
+            );
         }
         if let Some(stderr_log) = stderr_log_snapshot {
-            obj.insert("a3s_box_stderr_log".to_string(), serde_json::Value::String(stderr_log));
+            obj.insert(
+                "a3s_box_stderr_log".to_string(),
+                serde_json::Value::String(stderr_log),
+            );
         }
     }
     let diag_path = std::env::var("ARGUS_A3S_FALLBACK_DIAG_PATH")
         .unwrap_or_else(|_| "/tmp/Argus/scans/last-a3s-fallback.json".to_string());
-    let _ = std::fs::write(&diag_path, serde_json::to_vec_pretty(&diag).unwrap_or_default());
+    let _ = std::fs::write(
+        &diag_path,
+        serde_json::to_vec_pretty(&diag).unwrap_or_default(),
+    );
 
     tracing::warn!(
         stage = "a3s_to_docker_fallback",
@@ -328,13 +337,23 @@ mod tests {
 
     #[test]
     fn classify_oom_via_stderr_oomkilled() {
-        let r = classify_a3s_error(Some(1), "container OOMKilled", Duration::from_secs(10), None);
+        let r = classify_a3s_error(
+            Some(1),
+            "container OOMKilled",
+            Duration::from_secs(10),
+            None,
+        );
         assert_eq!(r, Some(A3sFailureReason::OomKilled));
     }
 
     #[test]
     fn classify_oom_via_stderr_oom_text() {
-        let r = classify_a3s_error(Some(1), "fatal: out of memory", Duration::from_secs(10), None);
+        let r = classify_a3s_error(
+            Some(1),
+            "fatal: out of memory",
+            Duration::from_secs(10),
+            None,
+        );
         assert_eq!(r, Some(A3sFailureReason::OomKilled));
     }
 

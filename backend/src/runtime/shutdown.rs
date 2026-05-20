@@ -1,4 +1,4 @@
-//! Sandbox shutdown primitives shared between cubesandbox (legacy, removed) and a3s lanes.
+//! Sandbox shutdown primitives shared by static scan lanes.
 
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -29,8 +29,8 @@ impl ShutdownGate {
 // in-flight scans complete or the hard timeout is reached.
 //
 // Option A (global AtomicUsize) was chosen over Option B (live_tasks map) because
-// the cubesandbox task.rs live_tasks tracks arbitrary code-execution tasks, not
-// opengrep/codeql scans. The scans are dispatched directly via tokio::spawn in
+// there is no active task map for static opengrep/codeql scans. The scans are
+// dispatched directly via tokio::spawn in
 // routes/static_tasks.rs; there is no existing map to reuse.
 
 pub static ACTIVE_SCAN_COUNT: AtomicUsize = AtomicUsize::new(0);

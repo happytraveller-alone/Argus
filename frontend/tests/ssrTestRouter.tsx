@@ -1,6 +1,6 @@
 import type { PropsWithChildren } from "react";
 import { createElement } from "react";
-import { StaticRouter } from "react-router-dom/server";
+import { StaticRouter } from "react-router-dom";
 
 export function SsrRouter({
   children,

@@ -150,8 +150,9 @@ test("buildFindingDetailCodeSections 裁剪命中代码并插入省略占位", (
     section.displayLines?.slice(1, -1).map((line) => line.lineNumber),
     [27, 28, 29, 30, 31, 32, 33, 34],
   );
-  assert.equal(section.displayLines?.at(-1)?.lineNumber, null);
-  assert.equal(section.displayLines?.at(-1)?.content, "// ....");
+  const lastDisplayLine = section.displayLines[section.displayLines.length - 1];
+  assert.equal(lastDisplayLine?.lineNumber, null);
+  assert.equal(lastDisplayLine?.content, "// ....");
   assert.equal(
     section.displayLines?.find((line) => line.lineNumber === 30)?.isHighlighted,
     true,

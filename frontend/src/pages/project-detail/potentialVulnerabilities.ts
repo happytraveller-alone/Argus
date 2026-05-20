@@ -336,7 +336,7 @@ function buildTaskNode(params: {
 	for (const finding of params.findings) {
 		const relativePath = String(finding.relativePath || "").trim() || "-";
 		const segments = relativePath.split("/").filter(Boolean);
-		const fileName = segments.at(-1) || relativePath;
+		const fileName = segments[segments.length - 1] || relativePath;
 		const directorySegments = segments.slice(0, -1);
 
 		let currentChildren = rootNodes;

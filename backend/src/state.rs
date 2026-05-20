@@ -7,10 +7,8 @@ use sqlx::{postgres::PgPoolOptions, PgPool};
 use tokio::sync::{Mutex, RwLock};
 
 use crate::{
-    config::AppConfig, project_file_cache::ProjectFileCache,
-    runtime::a3s_box::pool::A3sBoxHandle,
-    runtime::intelligent::task::IntelligentTaskManager,
-    runtime::sandbox_pool::SandboxPool,
+    config::AppConfig, project_file_cache::ProjectFileCache, runtime::a3s_box::pool::A3sBoxHandle,
+    runtime::intelligent::task::IntelligentTaskManager, runtime::sandbox_pool::SandboxPool,
 };
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

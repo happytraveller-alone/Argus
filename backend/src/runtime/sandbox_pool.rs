@@ -42,16 +42,13 @@ pub type SandboxId = String;
 /// Callback invoked by `shutdown()` to destroy held standby sandboxes.
 /// Async, boxed, `Send + Sync` — supplied by the runner module so it can call
 /// `best_effort_delete_sandbox` without sandbox_pool.rs knowing the concrete type.
-pub type OnShutdownDestroy<T> = Arc<
-    dyn Fn(Vec<T>) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>
-        + Send
-        + Sync,
->;
+pub type OnShutdownDestroy<T> =
+    Arc<dyn Fn(Vec<T>) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>> + Send + Sync>;
 
 // ── Sandbox trait ─────────────────────────────────────────────────────────────
 
-/// Marker trait for types that can be pooled.  Concrete implementations
-/// (CubesandboxHandle, A3sBoxHandle) are added in Phase A.2 / Phase C.
+/// Marker trait for types that can be pooled. Concrete runner-specific handles
+/// implement this trait without exposing pool internals to scan dispatch code.
 pub trait Sandbox: Send + Sync + 'static {
     /// Discriminant used to group pool slots.  Must be cheaply cloneable and
     /// hashable (typically an enum or newtype over a string id).
@@ -387,7 +384,10 @@ impl<T: Sandbox> SandboxPool<T> {
             let mut tasks = self.refill_tasks.lock().await;
             while tasks.join_next().await.is_some() {}
         }
-        tracing::info!(stage = "standby_shutdown_drained", "all refill tasks joined");
+        tracing::info!(
+            stage = "standby_shutdown_drained",
+            "all refill tasks joined"
+        );
 
         // Step 3: drain standby queues.
         let remaining: Vec<T> = {
@@ -505,10 +505,7 @@ mod tests {
         Arc::new(|_| Box::pin(async { Ok(()) }))
     }
 
-    fn recording_destroy() -> (
-        OnShutdownDestroy<FakeSandbox>,
-        Arc<Mutex<Vec<String>>>,
-    ) {
+    fn recording_destroy() -> (OnShutdownDestroy<FakeSandbox>, Arc<Mutex<Vec<String>>>) {
         let log: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
         let log2 = Arc::clone(&log);
         let cb: OnShutdownDestroy<FakeSandbox> = Arc::new(move |sandboxes: Vec<FakeSandbox>| {
@@ -591,16 +588,18 @@ mod tests {
             slots
                 .entry(FakeKind::Alpha)
                 .or_default()
-                .push_back(FakeSandbox { id: "taken-sandbox".into() });
+                .push_back(FakeSandbox {
+                    id: "taken-sandbox".into(),
+                });
         }
 
         // Concurrently: take() and shutdown().
         // Because take() holds the slots lock atomically, exactly one wins.
         let pool_clone = Arc::clone(&pool);
-        let (taken_result, _) = tokio::join!(
-            async { pool_clone.take(&FakeKind::Alpha).await },
-            async { pool.shutdown().await }
-        );
+        let (taken_result, _) =
+            tokio::join!(async { pool_clone.take(&FakeKind::Alpha).await }, async {
+                pool.shutdown().await
+            });
 
         let destroyed_ids = log.lock().await;
         if let Some(taken) = taken_result {
@@ -633,12 +632,15 @@ mod tests {
                 &'a self,
                 _kind: FakeKind,
                 _permit: OwnedSemaphorePermit,
-            ) -> Pin<Box<dyn Future<Output = anyhow::Result<FakeSandbox>> + Send + 'a>> {
+            ) -> Pin<Box<dyn Future<Output = anyhow::Result<FakeSandbox>> + Send + 'a>>
+            {
                 let done = Arc::clone(&self.done);
                 Box::pin(async move {
                     tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
                     done.store(true, AOrdering::SeqCst);
-                    Ok(FakeSandbox { id: "slow-0".into() })
+                    Ok(FakeSandbox {
+                        id: "slow-0".into(),
+                    })
                 })
             }
         }
@@ -702,7 +704,10 @@ mod tests {
 
         // Pool should now have one sandbox.
         let s = pool.take(&FakeKind::Alpha).await;
-        assert!(s.is_some(), "pool should contain a sandbox after successful refill");
+        assert!(
+            s.is_some(),
+            "pool should contain a sandbox after successful refill"
+        );
     }
 
     // ── Test: priority_acquire_ondemand_wins_over_refill ──────────────────────
@@ -751,10 +756,9 @@ mod tests {
             start.elapsed()
         });
 
-        let (od_elapsed, rf_elapsed) = tokio::join!(
-            async { od_task.await.unwrap() },
-            async { rf_task.await.unwrap() },
-        );
+        let (od_elapsed, rf_elapsed) = tokio::join!(async { od_task.await.unwrap() }, async {
+            rf_task.await.unwrap()
+        },);
 
         // OnDemand blocks immediately, gets the permit as soon as it's released.
         // Refill wakes 50 ms later → its waiting duration should be less (already
@@ -802,7 +806,11 @@ mod tests {
             while tasks.join_next().await.is_some() {}
         }
 
-        assert_eq!(count.load(AOrdering::SeqCst), 2, "warmup should fill 2 slots");
+        assert_eq!(
+            count.load(AOrdering::SeqCst),
+            2,
+            "warmup should fill 2 slots"
+        );
         let s1 = pool.take(&FakeKind::Alpha).await;
         let s2 = pool.take(&FakeKind::Alpha).await;
         assert!(s1.is_some());
@@ -830,11 +838,15 @@ mod tests {
             slots
                 .entry(FakeKind::Alpha)
                 .or_default()
-                .push_back(FakeSandbox { id: "alpha-0".into() });
+                .push_back(FakeSandbox {
+                    id: "alpha-0".into(),
+                });
             slots
                 .entry(FakeKind::Beta)
                 .or_default()
-                .push_back(FakeSandbox { id: "beta-0".into() });
+                .push_back(FakeSandbox {
+                    id: "beta-0".into(),
+                });
         }
 
         let alpha = pool.take(&FakeKind::Alpha).await.unwrap();

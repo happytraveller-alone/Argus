@@ -106,12 +106,12 @@ pub fn exec_in_container(
     let mut truncated = false;
 
     if stdout.len() > max_bytes {
-        stdout.truncate(max_bytes);
+        stdout = truncate_utf8_bytes(&stdout, max_bytes);
         stdout.push_str("\n... [output truncated]");
         truncated = true;
     }
     if stderr.len() > max_bytes {
-        stderr.truncate(max_bytes);
+        stderr = truncate_utf8_bytes(&stderr, max_bytes);
         stderr.push_str("\n... [output truncated]");
         truncated = true;
     }
@@ -122,6 +122,18 @@ pub fn exec_in_container(
         stderr,
         truncated,
     })
+}
+
+fn truncate_utf8_bytes(text: &str, max_bytes: usize) -> String {
+    if text.len() <= max_bytes {
+        return text.to_string();
+    }
+
+    let mut end = max_bytes;
+    while end > 0 && !text.is_char_boundary(end) {
+        end -= 1;
+    }
+    text[..end].to_string()
 }
 
 /// Stop and remove the exploration container.
@@ -146,5 +158,24 @@ fn wait_with_timeout(
     match rx.recv_timeout(timeout) {
         Ok(result) => result.context("child process failed"),
         Err(_) => bail!("process timed out"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::truncate_utf8_bytes;
+
+    #[test]
+    fn truncate_utf8_bytes_preserves_char_boundary() {
+        let text = format!("{}终", "a".repeat(5));
+
+        let truncated = truncate_utf8_bytes(&text, 6);
+
+        assert_eq!(truncated, "a".repeat(5));
+    }
+
+    #[test]
+    fn truncate_utf8_bytes_keeps_full_string_below_limit() {
+        assert_eq!(truncate_utf8_bytes("ok", 8), "ok");
     }
 }

@@ -861,12 +861,8 @@ PYEOF
 podman_build_file_arg() {
   local source_file="$1"
   local prepared_file="$2"
-  if "$DRY_RUN" || is_truthy "$STUB_DOCKER"; then
-    printf '%s' "$source_file"
-    return 0
-  fi
-  prepare_podman_dockerfile "$source_file" "$prepared_file"
-  printf '%s' "$prepared_file"
+  # Podman 4.1+ supports --mount=type=cache natively; skip stripping.
+  printf '%s' "$source_file"
 }
 
 cleanup_podman_dockerfile() {
@@ -944,19 +940,7 @@ podman_build_local_images() {
     log "ARGUS_SKIP_BUILD=true; skipping image builds."
     return 0
   fi
-  local all_exist=true
-  for img in "argus/opengrep-runner-local:latest" "$PODMAN_BACKEND_IMAGE" "$PODMAN_FRONTEND_IMAGE"; do
-    if ! podman image exists "$img" 2>/dev/null; then
-      all_exist=false
-      break
-    fi
-  done
-  if [[ "$all_exist" == "true" ]]; then
-    log "All Podman images already exist; skipping rebuild. Set ARGUS_FORCE_BUILD=true to force."
-    if [[ "${ARGUS_FORCE_BUILD:-false}" != "true" ]]; then
-      return 0
-    fi
-  fi
+  log "Building Podman images from source (layer cache handles unchanged content)."
   podman_build_opengrep_runner_image
   podman_build_backend_image
   podman_build_frontend_image

@@ -21,8 +21,8 @@ Argus 是一个以 `Project` 为中心的代码安全审计工作台。
 
 - **Frontend**：`frontend/`，React + Vite + TypeScript，页面路由在 `frontend/src/app/routes.tsx`。
 - **Backend**：`backend/`，Rust + Axum，服务入口在 `backend/src/main.rs`，路由聚合在 `backend/src/routes/mod.rs`。
-- **Database**：PostgreSQL，通过 `sqlx` 访问，主要状态代码在 `backend/src/db/`；CodeQL C/C++ 的 accepted build plan 由 `rust_codeql_build_plans` 表承载，file/task-state 只作状态投影或 fallback。`rust_cubesandbox_templates` DDL 保留为 no-op（兼容旧库），新代码不再 SELECT；可通过 `scripts/purge-cubesandbox.sh --drop-tables` 显式 opt-in 删表。
-- **Runner/Sandbox**：Opengrep 默认产品选项仍是 `dockerfile_container` 动态 runner 容器；默认/推荐部署方式是 `argus-bootstrap.sh --wait-exit -- default`，它用 rootless Podman API 启动默认 Opengrep runner，不挂宿主 Docker socket。静态审计高级配置仍可把单次 Opengrep 任务切到 a3s-box MicroVM（`opengrep_sandbox=a3s_box`）。`dockerfile_container` 后端 runner 支持 `OPENGREP_RUNNER_RUNTIME=podman|docker`：无显式 env 时默认 Podman，Podman 路径会做 rootless proof，记录 no host network、source `ro` mount、rules `ro` mount、output `rw` mount metadata，并保持一任务一容器、结束即删除；默认/推荐是安全与 Docker-socket 故障修复取向，不代表 Podman 在本机 benchmark 更快（见 `.omx/research/podman-opengrep-runner-benchmark-20260519.md`）。Docker Compose 路径保留为显式本地/dev fallback，因挂载宿主 Docker socket 固定为 `docker`。CodeQL 路径目前禁用（cubesandbox 退役后等待 a3s 适配；HTTP 路由保留 `codeql_unavailable` 占位）。Runner preflight 验证配置的默认 Opengrep runner。`docker-compose.yml` 中的 runner service 仅作为 `runner-build` profile 镜像构建目标，默认启动不保留 runner service 容器。历史 AgentFlow runner service 当前不在 compose 主线中。
+- **Database**：PostgreSQL，通过 `sqlx` 访问，主要状态代码在 `backend/src/db/`；CodeQL C/C++ 的 accepted build plan 由 `rust_codeql_build_plans` 表承载，file/task-state 只作状态投影或 fallback。旧沙箱相关表不再由当前 Rust 主线读取或迁移；如旧库仍残留历史表，按 `docs/archive/cubesandbox/INDEX.md` 的归档背景处理。
+- **Runner/Sandbox**：Opengrep 默认产品选项仍是 `dockerfile_container` 动态 runner 容器；默认/推荐部署方式是 `argus-bootstrap.sh --wait-exit -- default`，它用 rootless Podman API 启动默认 Opengrep runner，不挂宿主 Docker socket。静态审计高级配置仍可把单次 Opengrep 任务切到 a3s-box MicroVM（`opengrep_sandbox=a3s_box`）。`dockerfile_container` 后端 runner 支持 `OPENGREP_RUNNER_RUNTIME=podman|docker`：无显式 env 时默认 Podman，Podman 路径会做 rootless proof，记录 no host network、source `ro` mount、rules `ro` mount、output `rw` mount metadata，并保持一任务一容器、结束即删除；默认/推荐是安全与 Docker-socket 故障修复取向，不代表 Podman 在本机 benchmark 更快（见 `.omx/research/podman-opengrep-runner-benchmark-20260519.md`）。Docker Compose 路径保留为显式本地/dev fallback，因挂载宿主 Docker socket 固定为 `docker`。CodeQL 路径目前禁用（旧隔离路径退役后等待 a3s 适配；HTTP 路由保留 `codeql_unavailable` 占位）。Runner preflight 验证配置的默认 Opengrep runner。`docker-compose.yml` 中的 runner service 仅作为 `runner-build` profile 镜像构建目标，默认启动不保留 runner service 容器。历史 AgentFlow runner service 当前不在 compose 主线中。
 
 如果只记一句话：**Argus 把一个 ZIP 项目归档成 `Project`，再围绕它启动静态审计，并把结果汇总回前端；智能审计执行链当前处于占位/重构过渡，仅基础 LLM 配置适配已开始落地。**
 
@@ -30,7 +30,7 @@ Argus 是一个以 `Project` 为中心的代码安全审计工作台。
 
 ### 静态审计
 
-当前稳定静态审计主线仍是 **Opengrep**，默认产品执行方式仍是 Dockerfile runner 动态容器。创建静态审计时，Opengrep 高级配置会把 `opengrep_sandbox` 传给后端：`dockerfile_container` 保持原默认产品路径，`a3s_box` 走 a3s-box MicroVM；公共选择器和生命周期 API 仍命名为 `opengrep`。推荐部署中 `dockerfile_container` 由 rootless Podman 执行；Docker Compose 是保留的本地/dev fallback，不改变前端选择项。CodeQL 隔离扫描路径在 cubesandbox 退役后处于不可用占位（HTTP 路由保留，inner 返回 `codeql_unavailable`，等待 a3s 适配落地，参见 follow-up F1）。查询资产仍在 `backend/assets/scan_rule_assets/rules_codeql`（`c`、`cpp`、`python` 来自官方 `github/codeql` 仓库），等待新执行通道接入。
+当前稳定静态审计主线仍是 **Opengrep**，默认产品执行方式仍是 Dockerfile runner 动态容器。创建静态审计时，Opengrep 高级配置会把 `opengrep_sandbox` 传给后端：`dockerfile_container` 保持原默认产品路径，`a3s_box` 走 a3s-box MicroVM；公共选择器和生命周期 API 仍命名为 `opengrep`。推荐部署中 `dockerfile_container` 由 rootless Podman 执行；Docker Compose 是保留的本地/dev fallback，不改变前端选择项。CodeQL 隔离扫描路径在旧隔离实现退役后处于不可用占位（HTTP 路由保留，inner 返回 `codeql_unavailable`，等待 a3s 适配落地，参见归档 follow-up F1）。查询资产仍在 `backend/assets/scan_rule_assets/rules_codeql`（`c`、`cpp`、`python` 来自官方 `github/codeql` 仓库），等待新执行通道接入。
 
 CodeQL 路径目前禁用：`StaticTaskRecord.engine="codeql"` 创建后立即标记 `codeql_unavailable`。前端 `CodeqlScanDetail` / `CodeqlExplorationPanel` 入口保留以避免 404，等待 a3s 后端接入后恢复完整 LLM 探索流程。详细历史见 `archive/cubesandbox/`。
 
@@ -102,7 +102,7 @@ Opengrep 静态任务和 finding 由 Rust backend 管理，前端在产品层把
 
 ### 创建静态审计
 
-1. 前端入口是 `frontend/src/components/scan/CreateProjectScanDialog.tsx` 和 `frontend/src/components/scan/CreateScanTaskDialog.tsx`。静态模式当前只暴露 Opengrep 主引擎；CodeQL 路径在 cubesandbox 退役后处于占位禁用状态（任务立即标 `codeql_unavailable`）。
+1. 前端入口是 `frontend/src/components/scan/CreateProjectScanDialog.tsx` 和 `frontend/src/components/scan/CreateScanTaskDialog.tsx`。静态模式当前只暴露 Opengrep 主引擎；CodeQL 路径在旧隔离实现退役后处于占位禁用状态（任务立即标 `codeql_unavailable`）。
 2. 前端调用 `frontend/src/shared/api/opengrep.ts`；Opengrep 高级配置会随创建 payload 传 `opengrep_sandbox`，默认 `dockerfile_container`，可选 `a3s_box`。
 3. 后端 `backend/src/routes/static_tasks.rs` 创建任务：默认 Opengrep 调度 `docker/opengrep-scan.sh`；选择 `a3s_box` 时走 `backend/src/runtime/a3s_box_runner.rs` 启动 krun-vm MicroVM 执行同一 `opengrep-scan` 包装器；`engine="codeql"` 任务立即标记 `codeql_unavailable`。
 4. 结果回到 `StaticAnalysis` 详情页和任务管理页。

@@ -4,15 +4,6 @@
 //! references (e.g., revival of removed env var, half-deleted module). Runs in
 //! every CI test invocation.
 //!
-//! Exemption choice: `--glob '!**/bootstrap/mod.rs'`
-//!   `bootstrap/mod.rs` contains the one-time migration helper
-//!   `migrate_remove_opengrep_pool_manifest` which legitimately references
-//!   `"opengrep-pool-manifest"` (the path it is deleting) and
-//!   `"CUBESANDBOX_OPENGREP_POOL_MANIFEST"` (the legacy env var it reads).
-//!   These references are intentional and must survive until the migration
-//!   helper is removed after vN+1 release. All other occurrences of the
-//!   forbidden patterns are genuine regressions.
-//!
 //! Refs:
 //!   spec: .omc/specs/deep-dive-opengrep-sandbox-auto-destroy.md (AC5)
 //!   plan: .omc/plans/ralplan-opengrep-sandbox-auto-destroy.md (Step 8)
@@ -23,8 +14,8 @@ fn pool_residue_grep() {
         "OpengrepSandboxPool",
         "opengrep_pool",
         "warm_opengrep_pool",
-        "CUBESANDBOX_OPENGREP_POOL_SIZE",
-        "CUBESANDBOX_OPENGREP_POOL_MANIFEST",
+        "OPENGREP_POOL_SIZE",
+        "OPENGREP_POOL_MANIFEST",
         "opengrep-pool-manifest",
     ];
 
@@ -52,10 +43,6 @@ fn try_rg_residue_check(forbidden: &[&str]) -> bool {
         "!**/target/**".into(),
         "--glob".into(),
         "!.git/**".into(),
-        // Exempt the migration helper: it legitimately holds legacy strings
-        // until the one-time migration is removed after vN+1 release.
-        "--glob".into(),
-        "!**/bootstrap/mod.rs".into(),
     ];
     for p in forbidden {
         args.push("-e".into());
@@ -92,8 +79,8 @@ fn try_rg_residue_check(forbidden: &[&str]) -> bool {
 
 // ─── walkdir fallback ─────────────────────────────────────────────────────────
 
-/// Pure-Rust fallback: walk backend/src/, skip bootstrap/mod.rs, scan each
-/// .rs file for forbidden patterns using plain string contains().
+/// Pure-Rust fallback: walk backend/src/ and scan each .rs file for forbidden
+/// patterns using plain string contains().
 fn walkdir_residue_check(forbidden: &[&str]) {
     let src_root = std::path::Path::new("/home/xyf/argus/backend/src");
     if !src_root.exists() {
@@ -105,10 +92,6 @@ fn walkdir_residue_check(forbidden: &[&str]) {
     let mut violations: Vec<String> = Vec::new();
 
     walk_rs_files(src_root, &mut |path, content| {
-        // Exempt the migration helper (same exemption as rg check above).
-        if path.ends_with("bootstrap/mod.rs") {
-            return;
-        }
         for (lineno, line) in content.lines().enumerate() {
             for pattern in forbidden {
                 if line.contains(pattern) {

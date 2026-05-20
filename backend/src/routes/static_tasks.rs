@@ -1385,15 +1385,24 @@ async fn run_codeql_scan_inner(
     state: &AppState,
     task_id: &str,
     project_id: &str,
-    target_path: &str,
+    _target_path: &str,
     options: CodeqlTaskOptions,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    use crate::runtime::codeql_container;
-
     let started_at = std::time::Instant::now();
-    let language = options.languages.first().cloned().unwrap_or("cpp".to_string());
+    let language = options
+        .languages
+        .first()
+        .cloned()
+        .unwrap_or("cpp".to_string());
 
-    update_scan_progress(state, task_id, 5.0, "preparing", "resolving project archive").await;
+    update_scan_progress(
+        state,
+        task_id,
+        5.0,
+        "preparing",
+        "resolving project archive",
+    )
+    .await;
 
     let (archive_path, _archive_name) = resolve_project_archive_input(state, project_id).await?;
     let workspace_root = scan_workspace_root();
@@ -1409,20 +1418,35 @@ async fn run_codeql_scan_inner(
     extract_archive_to_dir(&archive_path, &source_dir).await?;
 
     // Phase 1: Build plan check
-    update_scan_progress(state, task_id, 15.0, "build_plan_reuse_check", "checking existing build plan").await;
+    update_scan_progress(
+        state,
+        task_id,
+        15.0,
+        "build_plan_reuse_check",
+        "checking existing build plan",
+    )
+    .await;
 
-    let existing_plan = codeql_build_plans::load_active_project_build_plan(
-        state, project_id, &language,
-    ).await?;
+    let existing_plan =
+        codeql_build_plans::load_active_project_build_plan(state, project_id, &language).await?;
 
     let build_plan = if options.reset_build_plan || existing_plan.is_none() {
         // Phase 2: Compile exploration
-        update_scan_progress(state, task_id, 20.0, "compile_sandbox", "starting compile exploration").await;
+        update_scan_progress(
+            state,
+            task_id,
+            20.0,
+            "compile_sandbox",
+            "starting compile exploration",
+        )
+        .await;
 
         let image = state.config.scanner_codeql_image.clone();
         let memory_mb = state.config.codeql_ram_mb;
         let max_rounds = state.config.codeql_max_build_inference_rounds;
-        let allow_network = options.allow_network.unwrap_or(state.config.codeql_allow_network_during_build);
+        let allow_network = options
+            .allow_network
+            .unwrap_or(state.config.codeql_allow_network_during_build);
 
         let plan = run_codeql_compile_exploration(
             state,
@@ -1434,12 +1458,27 @@ async fn run_codeql_scan_inner(
             memory_mb,
             max_rounds,
             allow_network,
-        ).await?;
+        )
+        .await?;
 
-        update_scan_progress(state, task_id, 50.0, "build_plan_accepted", "build plan determined").await;
+        update_scan_progress(
+            state,
+            task_id,
+            50.0,
+            "build_plan_accepted",
+            "build plan determined",
+        )
+        .await;
         plan
     } else {
-        update_scan_progress(state, task_id, 20.0, "build_plan_reused", "reusing existing build plan").await;
+        update_scan_progress(
+            state,
+            task_id,
+            20.0,
+            "build_plan_reused",
+            "reusing existing build plan",
+        )
+        .await;
         let rec = existing_plan.unwrap();
         crate::scan::codeql::CompileSandboxPlan {
             language: rec.language.clone(),
@@ -1461,7 +1500,14 @@ async fn run_codeql_scan_inner(
     };
 
     // Phase 3: Formal scan
-    update_scan_progress(state, task_id, 55.0, "scanning", "generating scan entrypoint").await;
+    update_scan_progress(
+        state,
+        task_id,
+        55.0,
+        "scanning",
+        "generating scan entrypoint",
+    )
+    .await;
 
     let entrypoint_script = generate_codeql_entrypoint_script(
         &build_plan,
@@ -1472,20 +1518,24 @@ async fn run_codeql_scan_inner(
     let entrypoint_path = workspace_dir.join(".codeql-entrypoint.sh");
     tokio::fs::write(&entrypoint_path, &entrypoint_script).await?;
 
-    update_scan_progress(state, task_id, 60.0, "scanning", "executing codeql analysis").await;
+    update_scan_progress(
+        state,
+        task_id,
+        60.0,
+        "scanning",
+        "executing codeql analysis",
+    )
+    .await;
 
-    let runner_spec = build_codeql_runner_spec(
-        &state.config,
-        &workspace_dir,
-        &options,
-    );
+    let runner_spec = build_codeql_runner_spec(&state.config, &workspace_dir, &options);
 
-    let scan_result = tokio::task::spawn_blocking(move || {
-        crate::runtime::runner::execute(runner_spec)
-    }).await?;
+    let scan_result =
+        tokio::task::spawn_blocking(move || crate::runtime::runner::execute(runner_spec)).await?;
 
     if !scan_result.success {
-        let error_msg = scan_result.error.unwrap_or_else(|| "unknown scanner error".to_string());
+        let error_msg = scan_result
+            .error
+            .unwrap_or_else(|| "unknown scanner error".to_string());
         return Err(format!("codeql scan failed: {error_msg}").into());
     }
 
@@ -1529,6 +1579,37 @@ async fn extract_archive_to_dir(
     Ok(())
 }
 
+/// Build the LLM prompt for compile exploration inference.
+fn build_inference_prompt(
+    round: u32,
+    language: &str,
+    workspace_listing: &str,
+    prior_output: Option<&str>,
+    error_feedback: Option<&str>,
+) -> String {
+    let mut prompt = format!(
+        "You are a build system expert. Analyze the following workspace and produce a JSON compile plan for CodeQL static analysis.\n\
+         Language: {language}\n\
+         Workspace files:\n{workspace_listing}\n\n\
+         Respond with ONLY a JSON object in this exact format:\n\
+         {{\"language\":\"{language}\",\"commands\":[\"<cmd1>\",\"<cmd2>\"],\"build_mode\":\"manual\",\
+         \"working_directory\":\"/scan/workspace\",\"target_path\":\"/scan/workspace\",\
+         \"allow_network\":false,\"query_suite\":null}}\n\
+         If no build is needed (e.g. interpreted language), use build_mode \"none\" and empty commands array.\n"
+    );
+    if let Some(output) = prior_output {
+        prompt.push_str(&format!(
+            "\nRound {round} — previous command output:\n{output}\n"
+        ));
+    }
+    if let Some(err) = error_feedback {
+        prompt.push_str(&format!(
+            "\nThe previous attempt failed with:\n{err}\nPlease adjust the build commands.\n"
+        ));
+    }
+    prompt
+}
+
 async fn run_codeql_compile_exploration(
     state: &AppState,
     task_id: &str,
@@ -1537,54 +1618,254 @@ async fn run_codeql_compile_exploration(
     language: &str,
     image: &str,
     memory_mb: u64,
-    _max_rounds: u64,
+    max_rounds: u64,
     allow_network: bool,
 ) -> Result<crate::scan::codeql::CompileSandboxPlan, Box<dyn std::error::Error + Send + Sync>> {
-    use crate::runtime::codeql_container;
+    use crate::runtime::{
+        codeql_container,
+        intelligent::{
+            config::resolve_intelligent_llm_config,
+            llm::{HttpIntelligentLlmInvoker, IntelligentLlmInvoker},
+        },
+    };
 
+    // Resolve LLM config before starting the container — fail fast if unconfigured.
+    let llm_config = match system_config::load_current(state).await {
+        Ok(Some(cfg)) => match resolve_intelligent_llm_config(&cfg, &state.config) {
+            Ok(c) => Some(c),
+            Err(e) => {
+                tracing::warn!(
+                    target: "argus::codeql",
+                    task_id = %task_id,
+                    error = %e,
+                    "LLM not configured for compile exploration, falling back to autobuild"
+                );
+                None
+            }
+        },
+        Ok(None) => {
+            tracing::warn!(
+                target: "argus::codeql",
+                task_id = %task_id,
+                "no system config for compile exploration, falling back to autobuild"
+            );
+            None
+        }
+        Err(e) => {
+            tracing::warn!(
+                target: "argus::codeql",
+                task_id = %task_id,
+                error = %e,
+                "failed to load system config for compile exploration, falling back to autobuild"
+            );
+            None
+        }
+    };
+
+    // Start the exploration container — guard lives for the entire loop.
     let guard = tokio::task::spawn_blocking({
         let task_id = task_id.to_string();
         let image = image.to_string();
         let source_dir = source_dir.to_path_buf();
-        move || codeql_container::start_exploration_container(&task_id, &image, &source_dir, memory_mb)
+        move || {
+            codeql_container::start_exploration_container(&task_id, &image, &source_dir, memory_mb)
+        }
     })
     .await??;
 
     let container_name = guard.container_name().to_string();
 
-    let exec_result = tokio::task::spawn_blocking({
+    // Probe workspace for build files (limit to 4KB).
+    let workspace_listing = {
         let cn = container_name.clone();
-        move || {
+        let raw = tokio::task::spawn_blocking(move || {
             codeql_container::exec_in_container(
                 &cn,
-                "ls /scan/workspace && echo BUILD_EXPLORATION_COMPLETE",
-                60,
+                "find /scan/workspace -maxdepth 3 -name 'Makefile' -o -name 'CMakeLists.txt' \
+                 -o -name 'pom.xml' -o -name 'build.gradle' -o -name 'package.json' \
+                 -o -name 'setup.py' 2>/dev/null; echo '---'; ls /scan/workspace",
+                30,
                 None,
             )
-        }
-    })
-    .await??;
-
-    tracing::info!(
-        target: "argus::codeql",
-        task_id = %task_id,
-        exit_code = exec_result.exit_code,
-        "compile exploration baseline probe completed"
-    );
-
-    let plan = crate::scan::codeql::CompileSandboxPlan {
-        language: language.to_string(),
-        target_path: source_dir.display().to_string(),
-        build_mode: "none".to_string(),
-        commands: vec![],
-        working_directory: "/scan/workspace".to_string(),
-        allow_network,
-        query_suite: None,
-        source_fingerprint: String::new(),
-        dependency_fingerprint: String::new(),
-        status: "accepted".to_string(),
-        evidence_json: serde_json::json!({"source": "podman_exploration"}),
+        })
+        .await??;
+        tracing::info!(
+            target: "argus::codeql",
+            task_id = %task_id,
+            exit_code = raw.exit_code,
+            "compile exploration workspace probe completed"
+        );
+        text_excerpt_chars(&raw.stdout, 4096)
     };
+
+    // If LLM is not configured, skip inference and return autobuild fallback immediately.
+    let Some(llm_config) = llm_config else {
+        let plan = crate::scan::codeql::CompileSandboxPlan {
+            language: language.to_string(),
+            target_path: source_dir.display().to_string(),
+            build_mode: "none".to_string(),
+            commands: vec![],
+            working_directory: "/scan/workspace".to_string(),
+            allow_network,
+            query_suite: None,
+            source_fingerprint: String::new(),
+            dependency_fingerprint: String::new(),
+            status: "accepted".to_string(),
+            evidence_json: serde_json::json!({"source": "exploration_no_llm"}),
+        };
+        drop(guard);
+        return Ok(plan);
+    };
+
+    let invoker = HttpIntelligentLlmInvoker::default();
+    let mut prompt = build_inference_prompt(0, language, &workspace_listing, None, None);
+    let mut last_exec_output: Option<String> = None;
+    let mut final_plan: Option<crate::scan::codeql::CompileSandboxPlan> = None;
+
+    for round in 0..max_rounds {
+        tracing::info!(
+            target: "argus::codeql",
+            task_id = %task_id,
+            round = round,
+            "compile exploration LLM round starting"
+        );
+
+        // Call LLM.
+        let invocation = match invoker.invoke(&prompt, &llm_config).await {
+            Ok(inv) => inv,
+            Err(e) => {
+                tracing::warn!(
+                    target: "argus::codeql",
+                    task_id = %task_id,
+                    round = round,
+                    error = %e,
+                    "LLM invocation failed, aborting exploration"
+                );
+                break;
+            }
+        };
+
+        let response_text = invocation.content.trim().to_string();
+
+        // Parse the plan from LLM response.
+        let parsed = crate::scan::codeql::parse_compile_sandbox_plan(&response_text);
+        let plan = match parsed {
+            Ok(p) => p,
+            Err(e) => {
+                tracing::warn!(
+                    target: "argus::codeql",
+                    task_id = %task_id,
+                    round = round,
+                    error = %e,
+                    "failed to parse LLM compile plan, feeding error back"
+                );
+                prompt = build_inference_prompt(
+                    round as u32 + 1,
+                    language,
+                    &workspace_listing,
+                    last_exec_output.as_deref(),
+                    Some(&format!("JSON parse error: {e}")),
+                );
+                continue;
+            }
+        };
+
+        // If plan has no commands, accept it directly (autobuild / none mode).
+        if plan.commands.is_empty() {
+            tracing::info!(
+                target: "argus::codeql",
+                task_id = %task_id,
+                round = round,
+                build_mode = %plan.build_mode,
+                "LLM returned no-command plan, accepting"
+            );
+            final_plan = Some(plan);
+            break;
+        }
+
+        // Execute first command to verify it works.
+        let first_cmd = plan.commands[0].clone();
+        let cn = container_name.clone();
+        let exec_result = tokio::task::spawn_blocking(move || {
+            codeql_container::exec_in_container(&cn, &first_cmd, 120, Some(2048))
+        })
+        .await??;
+
+        let exec_summary = format!(
+            "exit_code={}\nstdout:\n{}\nstderr:\n{}",
+            exec_result.exit_code,
+            text_excerpt_chars(&exec_result.stdout, 1024),
+            text_excerpt_chars(&exec_result.stderr, 1024),
+        );
+        last_exec_output = Some(exec_summary.clone());
+
+        tracing::info!(
+            target: "argus::codeql",
+            task_id = %task_id,
+            round = round,
+            exit_code = exec_result.exit_code,
+            "compile exploration command verification"
+        );
+
+        if exec_result.exit_code != 0 {
+            // Command failed — feed output back to LLM.
+            prompt = build_inference_prompt(
+                round as u32 + 1,
+                language,
+                &workspace_listing,
+                Some(&exec_summary),
+                Some("The command exited with a non-zero exit code."),
+            );
+            continue;
+        }
+
+        // Command succeeded. For C/C++, validate capture evidence.
+        if language == "cpp" {
+            if let Err(e) = crate::scan::codeql::validate_compile_plan_capture(&plan) {
+                tracing::warn!(
+                    target: "argus::codeql",
+                    task_id = %task_id,
+                    round = round,
+                    error = %e,
+                    "C++ capture validation failed, feeding back"
+                );
+                prompt = build_inference_prompt(
+                    round as u32 + 1,
+                    language,
+                    &workspace_listing,
+                    Some(&exec_summary),
+                    Some(&format!("CodeQL C/C++ capture validation failed: {e}")),
+                );
+                continue;
+            }
+        }
+
+        // Plan verified — accept it.
+        final_plan = Some(plan);
+        break;
+    }
+
+    // Use inferred plan or fall back to autobuild.
+    let plan = final_plan.unwrap_or_else(|| {
+        tracing::info!(
+            target: "argus::codeql",
+            task_id = %task_id,
+            "compile exploration exhausted rounds, falling back to autobuild"
+        );
+        crate::scan::codeql::CompileSandboxPlan {
+            language: language.to_string(),
+            target_path: source_dir.display().to_string(),
+            build_mode: "none".to_string(),
+            commands: vec![],
+            working_directory: "/scan/workspace".to_string(),
+            allow_network,
+            query_suite: None,
+            source_fingerprint: String::new(),
+            dependency_fingerprint: String::new(),
+            status: "accepted".to_string(),
+            evidence_json: serde_json::json!({"source": "exploration_fallback"}),
+        }
+    });
 
     let now = now_rfc3339();
     let record = crate::scan::codeql::build_plan_record_from_compile_plan(
@@ -1704,10 +1985,7 @@ async fn update_scan_task_completed(
             .push(task_state::StaticTaskProgressLogRecord {
                 timestamp: now,
                 stage: "completed".to_string(),
-                message: format!(
-                    "scan completed: {} findings",
-                    findings_count
-                ),
+                message: format!("scan completed: {} findings", findings_count),
                 progress: 100.0,
                 level: "info".to_string(),
             });
@@ -1968,7 +2246,103 @@ async fn run_opengrep_scan_inner(
         }
 
         OpengrepSandboxKind::A3sBox => {
-            return Err("a3s_box sandbox is deprecated. Use dockerfile_container (podman) instead. Set opengrep_sandbox=dockerfile_container in your request.".into());
+            validate_opengrep_runner_deployment_config(&state.config)?;
+            let scanner_image = state.config.scanner_opengrep_image.clone();
+            let container_source_dir = "/scan/source";
+            let config_container_path = rule_inputs
+                .workspace_rules_dir
+                .as_ref()
+                .map(|path| workspace_container_path(&workspace_dir, path))
+                .transpose()?;
+            let output_container_path = format!("/scan/{output_rel_path}");
+            let summary_container_path = format!("/scan/{summary_rel_path}");
+            let log_container_path = format!("/scan/{log_rel_path}");
+            let a3s_spec = build_opengrep_a3s_box_runner_spec(
+                &state.config,
+                scanner_image.clone(),
+                &workspace_dir,
+                runner_resources,
+                OpengrepRunnerPaths {
+                    container_source_dir,
+                    manifest_container_path: None,
+                    config_container_path: config_container_path.as_deref(),
+                    output_container_path: &output_container_path,
+                    summary_rel_path: &summary_rel_path,
+                    summary_container_path: &summary_container_path,
+                    log_container_path: &log_container_path,
+                    stdout_rel_path: &stdout_rel_path,
+                    stderr_rel_path: &stderr_rel_path,
+                },
+            );
+            let docker_workspace_dir = workspace_dir.clone();
+            let docker_config = state.config.clone();
+            let docker_config_container_path_str =
+                config_container_path.as_deref().map(str::to_string);
+            let docker_output_container_path = output_container_path.clone();
+            let docker_summary_container_path = summary_container_path.clone();
+            let docker_log_container_path = log_container_path.clone();
+            let docker_stdout_rel_path = stdout_rel_path.clone();
+            let docker_stderr_rel_path = stderr_rel_path.clone();
+            let docker_summary_rel_path = summary_rel_path.clone();
+            let docker_spec_builder = move || {
+                build_opengrep_docker_fallback_runner_spec(
+                    &docker_config,
+                    scanner_image,
+                    &docker_workspace_dir,
+                    runner_resources,
+                    OpengrepRunnerPaths {
+                        container_source_dir,
+                        manifest_container_path: None,
+                        config_container_path: docker_config_container_path_str.as_deref(),
+                        output_container_path: &docker_output_container_path,
+                        summary_rel_path: &docker_summary_rel_path,
+                        summary_container_path: &docker_summary_container_path,
+                        log_container_path: &docker_log_container_path,
+                        stdout_rel_path: &docker_stdout_rel_path,
+                        stderr_rel_path: &docker_stderr_rel_path,
+                    },
+                )
+            };
+            let a3s_executor = crate::scan::opengrep_a3s::DefaultA3sBoxExecutor;
+            let docker_executor = crate::scan::opengrep_a3s::DefaultDockerExecutor;
+            let outcome = crate::scan::opengrep_a3s::scan_with_fallback(
+                &a3s_executor,
+                &docker_executor,
+                a3s_spec,
+                docker_spec_builder,
+                task_id,
+                Some(project_id),
+            )
+            .await?;
+            drop(resource_permit);
+            effective_executor_label = match outcome.runtime_used {
+                crate::scan::opengrep_a3s::RuntimeUsed::A3s => "a3s_box".to_string(),
+                crate::scan::opengrep_a3s::RuntimeUsed::DockerFallback => {
+                    "a3s_box_fallback_docker".to_string()
+                }
+            };
+            match outcome.output {
+                crate::scan::opengrep_a3s::ScanOutput::A3s(ref a3s_result) => {
+                    if !a3s_result.success {
+                        let error_msg = a3s_result.error.clone().unwrap_or_else(|| {
+                            format!("opengrep a3s-box exited with code {}", a3s_result.exit_code)
+                        });
+                        let _ = tokio::fs::remove_dir_all(&workspace_dir).await;
+                        return Err(format!("opengrep scan failed: {error_msg}").into());
+                    }
+                }
+                crate::scan::opengrep_a3s::ScanOutput::Docker(ref runner_result) => {
+                    if !runner_result.success {
+                        let error_msg = format_opengrep_runner_error(
+                            runner_result,
+                            Some(&workspace_dir.join(&log_rel_path)),
+                        )
+                        .await;
+                        let _ = tokio::fs::remove_dir_all(&workspace_dir).await;
+                        return Err(format!("opengrep scan failed: {error_msg}").into());
+                    }
+                }
+            }
         }
     }
 
@@ -2215,7 +2589,8 @@ fn build_opengrep_runner_spec(
         // controller. Keep default Podman portable by relying on scheduler
         // permits plus opengrep --jobs; honor an explicit CPU hard-limit opt-in.
         ContainerRuntime::Podman
-            if config.opengrep_runner_cpu_limit_explicit && config.opengrep_runner_cpu_limit > 0.0 =>
+            if config.opengrep_runner_cpu_limit_explicit
+                && config.opengrep_runner_cpu_limit > 0.0 =>
         {
             Some(resources.cpu_limit)
         }
@@ -2258,6 +2633,18 @@ fn build_opengrep_runner_spec(
             ContainerRuntime::Docker => None,
         },
     }
+}
+
+fn build_opengrep_docker_fallback_runner_spec(
+    config: &crate::config::AppConfig,
+    image: String,
+    workspace_dir: &std::path::Path,
+    resources: OpengrepRunnerResources,
+    paths: OpengrepRunnerPaths<'_>,
+) -> RunnerSpec {
+    let mut docker_config = config.clone();
+    docker_config.opengrep_runner_runtime = "docker".to_string();
+    build_opengrep_runner_spec(&docker_config, image, workspace_dir, resources, paths)
 }
 
 fn validate_opengrep_runner_deployment_config(
@@ -2319,7 +2706,9 @@ fn build_opengrep_a3s_box_runner_spec(
 #[derive(Clone, Debug)]
 struct OpengrepRunnerInputs {
     workspace_rules_dir: Option<PathBuf>,
+    #[cfg(test)]
     image_rule_manifest_paths: Vec<String>,
+    #[cfg(test)]
     user_rule_count: usize,
 }
 
@@ -2331,6 +2720,7 @@ async fn prepare_opengrep_runner_inputs(
 ) -> Result<Option<OpengrepRunnerInputs>, Box<dyn std::error::Error + Send + Sync>> {
     let image_rule_assets = selected_image_rule_assets(state, rule_ids, project_languages).await?;
     let image_rule_count = image_rule_assets.len();
+    #[cfg(test)]
     let image_rule_manifest_paths = image_rule_assets
         .iter()
         .map(|asset| asset.asset_path.clone())
@@ -2347,7 +2737,9 @@ async fn prepare_opengrep_runner_inputs(
 
     Ok(Some(OpengrepRunnerInputs {
         workspace_rules_dir: Some(rules_root),
+        #[cfg(test)]
         image_rule_manifest_paths,
+        #[cfg(test)]
         user_rule_count,
     }))
 }
@@ -2420,28 +2812,14 @@ async fn format_opengrep_runner_error(
     parts.join("; ")
 }
 
-async fn format_a3s_box_opengrep_runner_error(
-    result: &a3s_box_runner::A3sBoxRunnerResult,
-    opengrep_log_path: Option<&std::path::Path>,
-) -> String {
-    let mut parts = vec![result.error.clone().unwrap_or_else(|| {
-        format!(
-            "opengrep A3S Box workload exited with code {}",
-            result.exit_code
-        )
-    })];
-
-    if let Some(stdout_excerpt) = read_runner_output_excerpt(result.stdout_path.as_deref()).await {
-        parts.push(format!("stdout={stdout_excerpt}"));
+fn text_excerpt_chars(text: &str, max_chars: usize) -> String {
+    let mut chars = text.chars();
+    let excerpt: String = chars.by_ref().take(max_chars).collect();
+    if chars.next().is_some() {
+        format!("{excerpt}[truncated]")
+    } else {
+        excerpt
     }
-    if let Some(stderr_excerpt) = read_runner_output_excerpt(result.stderr_path.as_deref()).await {
-        parts.push(format!("stderr={stderr_excerpt}"));
-    }
-    if let Some(log_excerpt) = read_text_excerpt(opengrep_log_path).await {
-        parts.push(format!("log={log_excerpt}"));
-    }
-
-    parts.join("; ")
 }
 
 async fn read_runner_output_excerpt(path: Option<&str>) -> Option<String> {
@@ -4102,8 +4480,9 @@ mod tests {
     use crate::runtime::runner::ContainerRuntime;
 
     use super::{
-        build_opengrep_a3s_box_runner_spec, build_opengrep_mount_plan, build_opengrep_runner_spec,
-        extract_highest_rule_severity, extract_opengrep_task_options, format_opengrep_runner_error,
+        build_opengrep_a3s_box_runner_spec, build_opengrep_docker_fallback_runner_spec,
+        build_opengrep_mount_plan, build_opengrep_runner_spec, extract_highest_rule_severity,
+        extract_opengrep_task_options, format_opengrep_runner_error,
         prepare_opengrep_runner_inputs, prune_static_scan_non_source_paths,
         read_opengrep_results_text, static_task_value, validate_opengrep_runner_deployment_config,
         OpengrepResourceScheduler, OpengrepRunnerPaths, OpengrepRunnerResources,
@@ -4481,15 +4860,13 @@ rules:
     }
 
     #[test]
-    fn opengrep_runner_docker_fallback_can_pin_docker_runtime() {
+    fn opengrep_a3s_fallback_builder_pins_docker_runtime() {
         let mut config = AppConfig::for_tests();
         config.opengrep_runner_runtime = "podman".to_string();
-        let mut docker_fallback_config = config.clone();
-        docker_fallback_config.opengrep_runner_runtime = "docker".to_string();
 
-        let spec = build_opengrep_runner_spec(
-            &docker_fallback_config,
-            docker_fallback_config.scanner_opengrep_image.clone(),
+        let spec = build_opengrep_docker_fallback_runner_spec(
+            &config,
+            config.scanner_opengrep_image.clone(),
             std::path::Path::new("/tmp/opengrep-runtime"),
             OpengrepRunnerResources {
                 jobs: 2,
@@ -4515,6 +4892,24 @@ rules:
             spec.mount_plan.is_none(),
             "A3S fallback labeled docker must keep Docker runner semantics even when global runtime is podman"
         );
+    }
+
+    #[test]
+    fn text_excerpt_chars_truncates_without_splitting_utf8() {
+        let text = format!("{}终", "a".repeat(1024));
+
+        let excerpt = super::text_excerpt_chars(&text, 1024);
+
+        assert_eq!(excerpt, "a".repeat(1024) + "[truncated]");
+    }
+
+    #[test]
+    fn text_excerpt_chars_handles_workspace_listing_limit() {
+        let listing = format!("{}终", "a".repeat(4096));
+
+        let excerpt = super::text_excerpt_chars(&listing, 4096);
+
+        assert_eq!(excerpt, "a".repeat(4096) + "[truncated]");
     }
 
     #[test]

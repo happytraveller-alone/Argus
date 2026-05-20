@@ -16,7 +16,7 @@ use async_trait::async_trait;
 use tempfile::NamedTempFile;
 
 use backend_rust::runtime::a3s_box_runner::{A3sBoxRunnerResult, A3sBoxRunnerSpec};
-use backend_rust::runtime::runner::{RunnerResult, RunnerSpec};
+use backend_rust::runtime::runner::{ContainerRuntime, RunnerResult, RunnerSpec};
 use backend_rust::scan::opengrep_a3s::{
     scan_with_fallback, A3sBoxExecutor, A3sFailureReason, DockerExecutor, RuntimeUsed, ScanOutput,
 };
@@ -93,6 +93,7 @@ fn empty_docker_spec_builder() -> impl FnOnce() -> RunnerSpec + Send + 'static {
     || RunnerSpec {
         scanner_type: "opengrep".to_string(),
         image: String::new(),
+        container_runtime: ContainerRuntime::Docker,
         workspace_dir: String::new(),
         command: Vec::new(),
         timeout_seconds: 0,
@@ -108,6 +109,7 @@ fn empty_docker_spec_builder() -> impl FnOnce() -> RunnerSpec + Send + 'static {
         cpu_limit: None,
         pids_limit: None,
         network_disabled: false,
+        mount_plan: None,
     }
 }
 
@@ -193,9 +195,7 @@ async fn case_oom_via_stderr_text_triggers_docker_fallback() {
 #[tokio::test]
 async fn case_preflight_kvm_beats_oom_priority() {
     // exit 137 + KVM-unavailable stderr — classifier MUST pick PreflightFailed.
-    let (stderr_path, _keep) = write_stderr(
-        "KVM is not available\nprocess killed (signal: 9)",
-    );
+    let (stderr_path, _keep) = write_stderr("KVM is not available\nprocess killed (signal: 9)");
     let a3s_result = make_runner_result(137, Some(stderr_path), false);
     let a3s_exec = FakeA3sBoxExecutor::ok(a3s_result);
     let docker_exec = FakeDockerExecutor::new();

@@ -16,7 +16,7 @@
 
 ### 静态审计
 
-- **是什么**：当前稳定主线由 Opengrep 承担的规则扫描体验，产品层显示为“静态审计”。Opengrep 默认产品路径使用 Dockerfile runner 容器；默认/推荐部署用 rootless Podman 执行该 runner，也可以在高级配置里把单次任务切到 `opengrep_sandbox=a3s_box` 的 a3s MicroVM。Docker Compose/Docker runner 保留为显式本地/dev fallback。CodeQL 隔离扫描路径目前因 cubesandbox 退役处于不可用状态（详见 follow-up F1）。
+- **是什么**：当前稳定主线由 Opengrep 承担的规则扫描体验，产品层显示为“静态审计”。Opengrep 默认产品路径使用 Dockerfile runner 容器；默认/推荐部署用 rootless Podman 执行该 runner，也可以在高级配置里把单次任务切到 `opengrep_sandbox=a3s_box` 的 a3s MicroVM。Docker Compose/Docker runner 保留为显式本地/dev fallback。CodeQL 隔离扫描路径目前因旧隔离实现退役处于不可用状态（详见归档 follow-up F1）。
 - **不是什么**：历史多引擎静态审计集合；退役兼容、防回归测试或旧前端 API 残留不应重新成为当前入口。CodeQL 路径未恢复前不应作为可用引擎暴露。
 - **主要入口**：`backend/src/routes/static_tasks.rs`、`frontend/src/shared/api/opengrep.ts`、`frontend/src/pages/StaticAnalysis.tsx`。
 
@@ -49,7 +49,7 @@
 
 ### 沙箱预热池 / Standby pool of one-shot sandboxes
 
-- **是什么**：单次性沙箱预热层，把 microVM 生命周期（创建+连接 ~60s）移出扫描关键路径。后端在启动时按 `OPENGREP_STANDBY_POOL_SIZE` / `A3S_BOX_STANDBY_POOL_SIZE`（默认各 2）预热若干就绪沙箱；扫描分发时 `pool.take()` 拿一个 ready 沙箱直接用，扫完销毁；后台 `refill_in_background` 立即补一个进池。每个沙箱**仍然只服务一次扫描**（cold-start isolation 保留），不存在状态污染。当前活跃池只剩 a3s-box（cubesandbox 路径已于 2026-05-07 退役）。
+- **是什么**：单次性沙箱预热层，把 microVM 生命周期（创建+连接 ~60s）移出扫描关键路径。后端在启动时按 `OPENGREP_STANDBY_POOL_SIZE` / `A3S_BOX_STANDBY_POOL_SIZE`（默认各 2）预热若干就绪沙箱；扫描分发时 `pool.take()` 拿一个 ready 沙箱直接用，扫完销毁；后台 `refill_in_background` 立即补一个进池。每个沙箱**仍然只服务一次扫描**（cold-start isolation 保留），不存在状态污染。当前活跃池只剩 a3s-box；旧隔离路径已于 2026-05-07 退役。
 - **不是什么**：**不是**旧 multi-use warm pool（已在 2026-05-05 commit `63af399f` 删除）。"warm pool" 复用同一沙箱跑多次扫描，状态污染风险大；"standby pool" 每次取出即用即销，纯粹是**latency 优化**，不是 state-sharing。PR 标题 / 注释 / 识别符使用 "standby pool" / "pre-warm"，不要再用 "warm pool"。
 - **主要入口**：`backend/src/runtime/sandbox_pool.rs`（generic `SandboxPool<T: Sandbox>` + `Priority::OnDemand|Refill` semaphore + `OnShutdownDestroy` 回调）、`backend/src/runtime/a3s_box/pool.rs`（`A3sBoxHandle` + `A3sBoxFactory`，Option C.β image-cache-only）、`backend/src/main.rs` 启动 + shutdown 串接。
 - **维护提示**：a3s-box 受 single-shot CLI 限制走 Option C.β（image-cache-only pre-warm）；完整 ~70s 收益要 upstream a3s-box CLI 加 pause/resume 后才能切 Option C.α。`OPENGREP_STANDBY_POOL_DISABLED` / `A3S_BOX_STANDBY_POOL_DISABLED` env 变量是 kill switch（回滚到纯冷启动，无 503，只是慢）。

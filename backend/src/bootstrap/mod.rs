@@ -104,9 +104,6 @@ async fn build_report(state: &AppState) -> BootstrapReport {
         report.overall = BootstrapStatus::Degraded.as_str().to_string();
     }
 
-    // One-time manifest cleanup migration — runs before preflight.
-    migrate_remove_opengrep_pool_manifest().await;
-
     report.preflight = match preflight::run(state).await {
         Ok(status) => status,
         Err(error) => {
@@ -420,31 +417,6 @@ async fn ensure_rust_schema(pool: &PgPool) -> Result<()> {
     // in place; operators may drop them manually.
 
     Ok(())
-}
-
-// One-time migration: remove after vN+1 release.
-// Tracked for removal in Commit 2 body of this PR — do NOT leave orphaned
-// beyond one release cycle (see open-questions Q4 for path-coverage detail).
-async fn migrate_remove_opengrep_pool_manifest() {
-    // Canonical path per spec.
-    let canonical = std::path::PathBuf::from("/var/lib/argus/opengrep-pool-manifest.json");
-    // Legacy env-configured path (per open-question Q4): if the deprecated
-    // CUBESANDBOX_OPENGREP_POOL_MANIFEST env var is still set in the
-    // operator's environment, also delete that path. Do NOT propagate the
-    // env var anywhere; this is a one-shot read-and-forget.
-    let legacy = std::env::var("CUBESANDBOX_OPENGREP_POOL_MANIFEST")
-        .ok()
-        .map(std::path::PathBuf::from);
-
-    for path in std::iter::once(canonical).chain(legacy.into_iter()) {
-        match tokio::fs::remove_file(&path).await {
-            Ok(()) => tracing::info!(path = %path.display(),
-                "removed legacy opengrep pool manifest (one-time migration)"),
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
-            Err(e) => tracing::warn!(error = %e, path = %path.display(),
-                "failed to remove legacy opengrep pool manifest"),
-        }
-    }
 }
 
 fn mark_database_degraded(status: &mut DatabaseBootstrapStatus, message: String) {
