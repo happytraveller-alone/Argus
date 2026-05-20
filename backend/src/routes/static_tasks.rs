@@ -9,17 +9,17 @@ use std::{
 use async_stream::stream;
 use axum::http::StatusCode;
 use axum::{
+    Extension, Json, Router,
     extract::{Multipart, Path as AxumPath, Query, State},
     response::{
-        sse::{Event, KeepAlive, Sse},
         IntoResponse,
+        sse::{Event, KeepAlive, Sse},
     },
     routing::{get, post},
-    Extension, Json, Router,
 };
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
-use time::{format_description::well_known::Rfc3339, OffsetDateTime};
+use serde_json::{Value, json};
+use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 use uuid::Uuid;
 
 use crate::{
@@ -1965,7 +1965,9 @@ fn generate_codeql_entrypoint_script(
         String::new()
     } else {
         script.push_str("cat > /scan/workspace/source/.codeql-build.sh << 'BUILDEOF'\n");
-        script.push_str("#!/bin/sh\nset -e\ncd /scan/workspace/source\nmake clean 2>/dev/null || true\n");
+        script.push_str(
+            "#!/bin/sh\nset -e\ncd /scan/workspace/source\nmake clean 2>/dev/null || true\n",
+        );
         for cmd in &plan.commands {
             script.push_str(cmd);
             script.push('\n');
@@ -2349,42 +2351,42 @@ async fn run_opengrep_scan_inner(
                     stderr_rel_path: &stderr_rel_path,
                 },
             );
-            let docker_workspace_dir = workspace_dir.clone();
-            let docker_config = state.config.clone();
-            let docker_config_container_path_str =
+            let fallback_workspace_dir = workspace_dir.clone();
+            let fallback_config = state.config.clone();
+            let fallback_config_container_path_str =
                 config_container_path.as_deref().map(str::to_string);
-            let docker_output_container_path = output_container_path.clone();
-            let docker_summary_container_path = summary_container_path.clone();
-            let docker_log_container_path = log_container_path.clone();
-            let docker_stdout_rel_path = stdout_rel_path.clone();
-            let docker_stderr_rel_path = stderr_rel_path.clone();
-            let docker_summary_rel_path = summary_rel_path.clone();
-            let docker_spec_builder = move || {
-                build_opengrep_docker_fallback_runner_spec(
-                    &docker_config,
+            let fallback_output_container_path = output_container_path.clone();
+            let fallback_summary_container_path = summary_container_path.clone();
+            let fallback_log_container_path = log_container_path.clone();
+            let fallback_stdout_rel_path = stdout_rel_path.clone();
+            let fallback_stderr_rel_path = stderr_rel_path.clone();
+            let fallback_summary_rel_path = summary_rel_path.clone();
+            let fallback_spec_builder = move || {
+                build_opengrep_podman_fallback_runner_spec(
+                    &fallback_config,
                     scanner_image,
-                    &docker_workspace_dir,
+                    &fallback_workspace_dir,
                     runner_resources,
                     OpengrepRunnerPaths {
                         container_source_dir,
                         manifest_container_path: None,
-                        config_container_path: docker_config_container_path_str.as_deref(),
-                        output_container_path: &docker_output_container_path,
-                        summary_rel_path: &docker_summary_rel_path,
-                        summary_container_path: &docker_summary_container_path,
-                        log_container_path: &docker_log_container_path,
-                        stdout_rel_path: &docker_stdout_rel_path,
-                        stderr_rel_path: &docker_stderr_rel_path,
+                        config_container_path: fallback_config_container_path_str.as_deref(),
+                        output_container_path: &fallback_output_container_path,
+                        summary_rel_path: &fallback_summary_rel_path,
+                        summary_container_path: &fallback_summary_container_path,
+                        log_container_path: &fallback_log_container_path,
+                        stdout_rel_path: &fallback_stdout_rel_path,
+                        stderr_rel_path: &fallback_stderr_rel_path,
                     },
                 )
             };
             let a3s_executor = crate::scan::opengrep_a3s::DefaultA3sBoxExecutor;
-            let docker_executor = crate::scan::opengrep_a3s::DefaultDockerExecutor;
+            let fallback_executor = crate::scan::opengrep_a3s::DefaultFallbackRunnerExecutor;
             let outcome = crate::scan::opengrep_a3s::scan_with_fallback(
                 &a3s_executor,
-                &docker_executor,
+                &fallback_executor,
                 a3s_spec,
-                docker_spec_builder,
+                fallback_spec_builder,
                 task_id,
                 Some(project_id),
             )
@@ -2392,8 +2394,8 @@ async fn run_opengrep_scan_inner(
             drop(resource_permit);
             effective_executor_label = match outcome.runtime_used {
                 crate::scan::opengrep_a3s::RuntimeUsed::A3s => "a3s_box".to_string(),
-                crate::scan::opengrep_a3s::RuntimeUsed::DockerFallback => {
-                    "a3s_box_fallback_docker".to_string()
+                crate::scan::opengrep_a3s::RuntimeUsed::PodmanFallback => {
+                    "a3s_box_fallback_podman".to_string()
                 }
             };
             match outcome.output {
@@ -2406,7 +2408,7 @@ async fn run_opengrep_scan_inner(
                         return Err(format!("opengrep scan failed: {error_msg}").into());
                     }
                 }
-                crate::scan::opengrep_a3s::ScanOutput::Docker(ref runner_result) => {
+                crate::scan::opengrep_a3s::ScanOutput::Fallback(ref runner_result) => {
                     if !runner_result.success {
                         let error_msg = format_opengrep_runner_error(
                             runner_result,
@@ -2659,7 +2661,6 @@ fn build_opengrep_runner_spec(
 ) -> RunnerSpec {
     let container_runtime = opengrep_container_runtime(config);
     let cpu_limit = match container_runtime {
-        ContainerRuntime::Docker => Some(resources.cpu_limit),
         // Rootless Podman deployments may not expose the `cpu` cgroup
         // controller. Keep default Podman portable by relying on scheduler
         // permits plus opengrep --jobs; honor an explicit CPU hard-limit opt-in.
@@ -2705,28 +2706,34 @@ fn build_opengrep_runner_spec(
                 &workspace_dir.join("source"),
                 &workspace_dir.join("output"),
             )),
-            ContainerRuntime::Docker => None,
         },
     }
 }
 
-fn build_opengrep_docker_fallback_runner_spec(
+fn build_opengrep_podman_fallback_runner_spec(
     config: &crate::config::AppConfig,
     image: String,
     workspace_dir: &std::path::Path,
     resources: OpengrepRunnerResources,
     paths: OpengrepRunnerPaths<'_>,
-) -> RunnerSpec {
-    let mut docker_config = config.clone();
-    docker_config.opengrep_runner_runtime = "docker".to_string();
-    build_opengrep_runner_spec(&docker_config, image, workspace_dir, resources, paths)
+) -> anyhow::Result<RunnerSpec> {
+    let mut fallback_config = config.clone();
+    fallback_config.opengrep_runner_runtime = "podman".to_string();
+    validate_opengrep_runner_deployment_config(&fallback_config)
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    Ok(build_opengrep_runner_spec(
+        &fallback_config,
+        image,
+        workspace_dir,
+        resources,
+        paths,
+    ))
 }
 
 fn validate_opengrep_runner_deployment_config(
     config: &crate::config::AppConfig,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     match opengrep_container_runtime(config) {
-        ContainerRuntime::Docker => Ok(()),
         ContainerRuntime::Podman => {
             let container_host = env::var("CONTAINER_HOST").unwrap_or_default();
             if container_host.contains("docker.sock") {
@@ -2869,10 +2876,12 @@ async fn format_opengrep_runner_error(
     result: &runner::RunnerResult,
     opengrep_log_path: Option<&std::path::Path>,
 ) -> String {
-    let mut parts = vec![result
-        .error
-        .clone()
-        .unwrap_or_else(|| format!("opengrep exited with code {}", result.exit_code))];
+    let mut parts = vec![
+        result
+            .error
+            .clone()
+            .unwrap_or_else(|| format!("opengrep exited with code {}", result.exit_code)),
+    ];
 
     if let Some(stdout_excerpt) = read_runner_output_excerpt(result.stdout_path.as_deref()).await {
         parts.push(format!("stdout={stdout_excerpt}"));
@@ -4585,16 +4594,22 @@ mod tests {
     use crate::runtime::runner::ContainerRuntime;
 
     use super::{
-        build_opengrep_a3s_box_runner_spec, build_opengrep_docker_fallback_runner_spec,
-        build_opengrep_mount_plan, build_opengrep_runner_spec, extract_highest_rule_severity,
-        extract_opengrep_task_options, format_opengrep_runner_error,
+        OpengrepResourceScheduler, OpengrepRunnerPaths, OpengrepRunnerResources,
+        OpengrepSandboxKind, build_opengrep_a3s_box_runner_spec, build_opengrep_mount_plan,
+        build_opengrep_podman_fallback_runner_spec, build_opengrep_runner_spec,
+        extract_highest_rule_severity, extract_opengrep_task_options, format_opengrep_runner_error,
         prepare_opengrep_runner_inputs, prune_static_scan_non_source_paths,
         read_opengrep_results_text, static_task_value, validate_opengrep_runner_deployment_config,
-        OpengrepResourceScheduler, OpengrepRunnerPaths, OpengrepRunnerResources,
-        OpengrepSandboxKind,
     };
     use serde_json::json;
-    use std::{fs, path::Path, sync::mpsc, time::Duration};
+    use std::{
+        fs,
+        path::Path,
+        sync::{LazyLock, Mutex, mpsc},
+        time::Duration,
+    };
+
+    static TEST_ENV_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
 
     fn static_task_record_with_findings(
         findings: Vec<task_state::StaticFindingRecord>,
@@ -4858,10 +4873,10 @@ rules:
         assert_eq!(spec.cpu_limit, Some(8.0));
         assert_eq!(spec.pids_limit, Some(512));
         assert!(spec.network_disabled);
-        assert_eq!(spec.container_runtime, ContainerRuntime::Docker);
+        assert_eq!(spec.container_runtime, ContainerRuntime::Podman);
         assert!(
             spec.mount_plan.is_none(),
-            "Docker default must keep the named scan workspace volume path"
+            "Podman default must keep the named scan workspace volume path"
         );
         assert_eq!(spec.timeout_seconds, 0);
         assert_eq!(
@@ -4916,18 +4931,24 @@ rules:
             "default rootless Podman path must not require the cpu cgroup controller"
         );
         let mount_plan = spec.mount_plan.expect("mount plan");
-        assert!(mount_plan
-            .mounts
-            .iter()
-            .any(|mount| { mount.container_path == "/scan/source" && mount.read_only }));
-        assert!(mount_plan
-            .mounts
-            .iter()
-            .any(|mount| { mount.container_path == "/scan/output" && !mount.read_only }));
-        assert!(mount_plan
-            .mounts
-            .iter()
-            .any(|mount| { mount.container_path == "/scan/opengrep-rules" && mount.read_only }));
+        assert!(
+            mount_plan
+                .mounts
+                .iter()
+                .any(|mount| { mount.container_path == "/scan/source" && mount.read_only })
+        );
+        assert!(
+            mount_plan
+                .mounts
+                .iter()
+                .any(|mount| { mount.container_path == "/scan/output" && !mount.read_only })
+        );
+        assert!(
+            mount_plan
+                .mounts
+                .iter()
+                .any(|mount| { mount.container_path == "/scan/opengrep-rules" && mount.read_only })
+        );
     }
 
     #[test]
@@ -4965,11 +4986,11 @@ rules:
     }
 
     #[test]
-    fn opengrep_a3s_fallback_builder_pins_docker_runtime() {
+    fn opengrep_a3s_fallback_builder_pins_podman_runtime_and_mounts() {
         let mut config = AppConfig::for_tests();
-        config.opengrep_runner_runtime = "podman".to_string();
+        config.opengrep_runner_runtime = "docker".to_string();
 
-        let spec = build_opengrep_docker_fallback_runner_spec(
+        let spec = build_opengrep_podman_fallback_runner_spec(
             &config,
             config.scanner_opengrep_image.clone(),
             std::path::Path::new("/tmp/opengrep-runtime"),
@@ -4990,12 +5011,29 @@ rules:
                 stdout_rel_path: "output/stdout.txt",
                 stderr_rel_path: "output/stderr.txt",
             },
-        );
+        )
+        .expect("A3S Podman fallback spec");
 
-        assert_eq!(spec.container_runtime, ContainerRuntime::Docker);
+        assert_eq!(spec.container_runtime, ContainerRuntime::Podman);
+        assert!(spec.network_disabled);
+        let mount_plan = spec.mount_plan.expect("Podman fallback mount plan");
         assert!(
-            spec.mount_plan.is_none(),
-            "A3S fallback labeled docker must keep Docker runner semantics even when global runtime is podman"
+            mount_plan
+                .mounts
+                .iter()
+                .any(|mount| mount.container_path == "/scan/source" && mount.read_only)
+        );
+        assert!(
+            mount_plan
+                .mounts
+                .iter()
+                .any(|mount| mount.container_path == "/scan/opengrep-rules" && mount.read_only)
+        );
+        assert!(
+            mount_plan
+                .mounts
+                .iter()
+                .any(|mount| mount.container_path == "/scan/output" && !mount.read_only)
         );
     }
 
@@ -5019,6 +5057,7 @@ rules:
 
     #[test]
     fn opengrep_runner_podman_deployment_rejects_docker_socket_host() {
+        let _guard = TEST_ENV_LOCK.lock().expect("env lock");
         let mut config = AppConfig::for_tests();
         config.opengrep_runner_runtime = "podman".to_string();
         let previous = std::env::var("CONTAINER_HOST").ok();
@@ -5031,9 +5070,54 @@ rules:
         } else {
             std::env::remove_var("CONTAINER_HOST");
         }
-        assert!(result
-            .err()
-            .is_some_and(|error| error.to_string().contains("must not use a Docker socket")));
+        assert!(
+            result
+                .err()
+                .is_some_and(|error| error.to_string().contains("must not use a Docker socket"))
+        );
+    }
+
+    #[test]
+    fn opengrep_a3s_podman_fallback_builder_rejects_docker_socket_host() {
+        let _guard = TEST_ENV_LOCK.lock().expect("env lock");
+        let mut config = AppConfig::for_tests();
+        config.opengrep_runner_runtime = "docker".to_string();
+        let previous = std::env::var("CONTAINER_HOST").ok();
+        std::env::set_var("CONTAINER_HOST", "unix:///var/run/docker.sock");
+
+        let result = build_opengrep_podman_fallback_runner_spec(
+            &config,
+            config.scanner_opengrep_image.clone(),
+            std::path::Path::new("/tmp/opengrep-runtime"),
+            OpengrepRunnerResources {
+                jobs: 2,
+                cpu_limit: 2.0,
+                allocated_cores: 2,
+                total_cores: 2,
+            },
+            OpengrepRunnerPaths {
+                container_source_dir: "/scan/source",
+                manifest_container_path: None,
+                config_container_path: Some("/scan/opengrep-rules"),
+                output_container_path: "/scan/output/results.json",
+                summary_rel_path: "output/summary.json",
+                summary_container_path: "/scan/output/summary.json",
+                log_container_path: "/scan/output/log.txt",
+                stdout_rel_path: "output/stdout.txt",
+                stderr_rel_path: "output/stderr.txt",
+            },
+        );
+
+        if let Some(previous) = previous {
+            std::env::set_var("CONTAINER_HOST", previous);
+        } else {
+            std::env::remove_var("CONTAINER_HOST");
+        }
+        assert!(
+            result
+                .err()
+                .is_some_and(|error| error.to_string().contains("must not use a Docker socket"))
+        );
     }
 
     #[test]
@@ -5304,15 +5388,18 @@ rules:
         assert!(spec.command.contains(&"/tmp/workspace/source".to_string()));
         assert!(spec.command.contains(&"--config".to_string()));
         assert!(spec.command.contains(&"--manifest".to_string()));
-        assert!(spec
-            .command
-            .contains(&"/tmp/workspace/image-rules.manifest".to_string()));
-        assert!(spec
-            .command
-            .contains(&"/tmp/workspace/opengrep-rules".to_string()));
-        assert!(spec
-            .command
-            .contains(&"/tmp/workspace/output/results.json".to_string()));
+        assert!(
+            spec.command
+                .contains(&"/tmp/workspace/image-rules.manifest".to_string())
+        );
+        assert!(
+            spec.command
+                .contains(&"/tmp/workspace/opengrep-rules".to_string())
+        );
+        assert!(
+            spec.command
+                .contains(&"/tmp/workspace/output/results.json".to_string())
+        );
         assert_eq!(
             spec.memory_limit_mb,
             Some(config.opengrep_runner_memory_limit_mb)

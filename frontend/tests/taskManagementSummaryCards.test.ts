@@ -56,15 +56,32 @@ test("static and intelligent task pages use inline status badges instead of summ
 	assert.match(intelligentSource, /Badge/);
 });
 
-test("static and intelligent task pages expose only the toolbar create scan action", () => {
+function assertSinglePageCreateControl(source: string) {
+	assert.equal(source.match(/创建扫描/g)?.length ?? 0, 1);
+	assert.match(source, /<Plus className="w-3\.5 h-3\.5 mr-1\.5" \/>/);
+	assert.match(source, /<Button[\s\S]*?onClick=\{\(\) => setShowCreate(?:Static)?Dialog\(true\)\}[\s\S]*?>[\s\S]*?创建扫描[\s\S]*?<\/Button>/);
+	assert.doesNotMatch(source, /ClipboardPlus/);
+}
+
+test("static and intelligent task pages expose one page-level create scan action", () => {
 	const staticSource = readFileSync(staticTaskPagePath, "utf8");
 	const intelligentSource = readFileSync(intelligentTaskPagePath, "utf8");
 
-	for (const source of [staticSource, intelligentSource]) {
-		assert.equal(source.match(/创建扫描/g)?.length ?? 0, 1);
-		assert.match(source, /<Plus className="w-3\.5 h-3\.5 mr-1\.5" \/>/);
-		assert.doesNotMatch(source, /ClipboardPlus/);
-	}
+	assertSinglePageCreateControl(staticSource);
+	assertSinglePageCreateControl(intelligentSource);
+});
+
+test("static and intelligent task pages open CreateProjectScanDialog in the correct mode", () => {
+	const staticSource = readFileSync(staticTaskPagePath, "utf8");
+	const intelligentSource = readFileSync(intelligentTaskPagePath, "utf8");
+
+	assert.match(staticSource, /<CreateProjectScanDialog[\s\S]*?open=\{showCreateStaticDialog\}[\s\S]*?initialMode="static"[\s\S]*?lockMode[\s\S]*?navigateOnSuccess=\{false\}/);
+	assert.match(staticSource, /primaryCreateLabel="创建静态审计任务"/);
+	assert.doesNotMatch(staticSource, /initialMode="intelligent"/);
+
+	assert.match(intelligentSource, /<CreateProjectScanDialog[\s\S]*?open=\{showCreateDialog\}[\s\S]*?initialMode="intelligent"[\s\S]*?navigateOnSuccess=\{false\}/);
+	assert.doesNotMatch(intelligentSource, /initialMode="static"/);
+	assert.doesNotMatch(intelligentSource, /lockMode/);
 });
 
 test("static task management search input filters the visible task table", () => {

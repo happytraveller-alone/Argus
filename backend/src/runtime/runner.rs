@@ -18,28 +18,23 @@ const DEFAULT_SCAN_WORKSPACE_VOLUME: &str = "Argus_scan_workspace";
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ContainerRuntime {
-    Docker,
     Podman,
 }
 
 impl ContainerRuntime {
     pub fn as_str(self) -> &'static str {
         match self {
-            Self::Docker => "docker",
             Self::Podman => "podman",
         }
     }
 
-    pub fn from_config_value(value: &str) -> Self {
-        match value.trim().to_ascii_lowercase().as_str() {
-            "podman" => Self::Podman,
-            _ => Self::Docker,
-        }
+    pub fn from_config_value(_value: &str) -> Self {
+        Self::Podman
     }
 }
 
 fn default_container_runtime() -> ContainerRuntime {
-    ContainerRuntime::Docker
+    ContainerRuntime::Podman
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -164,17 +159,6 @@ fn scan_workspace_volume() -> String {
         .unwrap_or_else(|| DEFAULT_SCAN_WORKSPACE_VOLUME.to_string())
 }
 
-fn docker_bin_with_priority(keys: &[&str]) -> String {
-    keys.iter()
-        .find_map(|key| {
-            env::var(key)
-                .ok()
-                .map(|value| value.trim().to_string())
-                .filter(|value| !value.is_empty())
-        })
-        .unwrap_or_else(|| "docker".to_string())
-}
-
 fn container_bin_with_default(keys: &[&str], default: &str) -> String {
     keys.iter()
         .find_map(|key| {
@@ -186,23 +170,16 @@ fn container_bin_with_default(keys: &[&str], default: &str) -> String {
         .unwrap_or_else(|| default.to_string())
 }
 
-fn docker_bin(_scanner_type: Option<&str>) -> String {
-    docker_bin_with_priority(&["Argus_DOCKER_BIN", "BACKEND_DOCKER_BIN"])
-}
-
-fn container_runtime_bin(runtime: ContainerRuntime, _scanner_type: Option<&str>) -> String {
-    match runtime {
-        ContainerRuntime::Docker => docker_bin(_scanner_type),
-        ContainerRuntime::Podman => container_bin_with_default(
-            &[
-                "Argus_PODMAN_BIN",
-                "BACKEND_PODMAN_BIN",
-                "Argus_CONTAINER_BIN",
-                "BACKEND_CONTAINER_BIN",
-            ],
-            "podman",
-        ),
-    }
+fn container_runtime_bin(_runtime: ContainerRuntime, _scanner_type: Option<&str>) -> String {
+    container_bin_with_default(
+        &[
+            "Argus_PODMAN_BIN",
+            "BACKEND_PODMAN_BIN",
+            "Argus_CONTAINER_BIN",
+            "BACKEND_CONTAINER_BIN",
+        ],
+        "podman",
+    )
 }
 
 fn ensure_workspace_artifacts(workspace_dir: &str) -> Result<(PathBuf, PathBuf, PathBuf)> {
@@ -730,10 +707,7 @@ pub fn execute(spec: RunnerSpec) -> RunnerResult {
     let mut runner_environment = spec.env.clone();
     let mut effective_mounts: Vec<RunnerMount> = Vec::new();
     let mut rootless_status = "not_checked".to_string();
-    let mut rootless_proof_source = match container_runtime {
-        ContainerRuntime::Docker => "not_applicable".to_string(),
-        ContainerRuntime::Podman => "not_checked".to_string(),
-    };
+    let mut rootless_proof_source = "not_checked".to_string();
 
     let execution = (|| -> Result<RunnerResult> {
         let (resolved_root, resolved_workspace) =
@@ -1086,7 +1060,7 @@ pub fn stop_container_sync_with_runtime(container_id: &str, runtime: ContainerRu
 }
 
 pub fn stop_container_sync(container_id: &str) -> bool {
-    stop_container_sync_with_runtime(container_id, ContainerRuntime::Docker)
+    stop_container_sync_with_runtime(container_id, ContainerRuntime::Podman)
 }
 
 pub fn stop_container(container_id: &str) -> bool {
@@ -1216,7 +1190,7 @@ esac
         let result = execute(RunnerSpec {
             scanner_type: "generic".to_string(),
             image: "Argus/generic-runner:latest".to_string(),
-            container_runtime: ContainerRuntime::Docker,
+            container_runtime: ContainerRuntime::Podman,
             workspace_dir: workspace_dir.display().to_string(),
             command: vec![
                 "/opt/scanner/bin/scanner".to_string(),
@@ -1528,7 +1502,7 @@ esac
         let result = execute(RunnerSpec {
             scanner_type: "opengrep".to_string(),
             image: "argus/opengrep-runner:latest".to_string(),
-            container_runtime: ContainerRuntime::Docker,
+            container_runtime: ContainerRuntime::Podman,
             workspace_dir: workspace_dir.display().to_string(),
             command: vec!["opengrep-scan".to_string(), "--self-test".to_string()],
             timeout_seconds: 30,
@@ -1578,7 +1552,7 @@ esac
         let result = execute(RunnerSpec {
             scanner_type: "opengrep".to_string(),
             image: "argus/opengrep-runner:latest".to_string(),
-            container_runtime: ContainerRuntime::Docker,
+            container_runtime: ContainerRuntime::Podman,
             workspace_dir: workspace_dir.display().to_string(),
             command: vec!["opengrep-scan".to_string(), "--self-test".to_string()],
             timeout_seconds: 30,
@@ -1624,7 +1598,7 @@ esac
         let result = execute(RunnerSpec {
             scanner_type: "opengrep".to_string(),
             image: "argus/opengrep-runner-local:latest".to_string(),
-            container_runtime: ContainerRuntime::Docker,
+            container_runtime: ContainerRuntime::Podman,
             workspace_dir: workspace_dir.display().to_string(),
             command: vec!["opengrep-scan".to_string(), "--self-test".to_string()],
             timeout_seconds: 0,
@@ -1670,7 +1644,7 @@ esac
         let result = execute(RunnerSpec {
             scanner_type: "opengrep".to_string(),
             image: "argus/opengrep-runner:latest".to_string(),
-            container_runtime: ContainerRuntime::Docker,
+            container_runtime: ContainerRuntime::Podman,
             workspace_dir: workspace_dir.display().to_string(),
             command: vec![
                 "opengrep".to_string(),
@@ -1727,7 +1701,7 @@ esac
         let result = execute(RunnerSpec {
             scanner_type: "opengrep".to_string(),
             image: "argus/opengrep-runner:latest".to_string(),
-            container_runtime: ContainerRuntime::Docker,
+            container_runtime: ContainerRuntime::Podman,
             workspace_dir: workspace_dir.display().to_string(),
             command: vec![
                 "opengrep".to_string(),
@@ -1783,7 +1757,7 @@ esac
         let result = execute(RunnerSpec {
             scanner_type: "opengrep".to_string(),
             image: "argus/opengrep-runner:latest".to_string(),
-            container_runtime: ContainerRuntime::Docker,
+            container_runtime: ContainerRuntime::Podman,
             workspace_dir: temp_dir
                 .path()
                 .join("elsewhere/task-1")
@@ -1837,7 +1811,7 @@ esac
         let result = execute(RunnerSpec {
             scanner_type: "opengrep".to_string(),
             image: "argus/opengrep-runner-local:latest".to_string(),
-            container_runtime: ContainerRuntime::Docker,
+            container_runtime: ContainerRuntime::Podman,
             workspace_dir: workspace_dir.display().to_string(),
             command: vec!["opengrep".to_string(), "--version".to_string()],
             timeout_seconds: 0,
@@ -1879,7 +1853,7 @@ esac
         let result = execute(RunnerSpec {
             scanner_type: "opengrep".to_string(),
             image: "argus/opengrep-runner-local:latest".to_string(),
-            container_runtime: ContainerRuntime::Docker,
+            container_runtime: ContainerRuntime::Podman,
             workspace_dir: workspace_dir.display().to_string(),
             command: vec![
                 "opengrep".to_string(),
@@ -1937,7 +1911,7 @@ esac
         let result = execute(RunnerSpec {
             scanner_type: "opengrep".to_string(),
             image: "argus/opengrep-runner-local:latest".to_string(),
-            container_runtime: ContainerRuntime::Docker,
+            container_runtime: ContainerRuntime::Podman,
             workspace_dir: workspace_dir.display().to_string(),
             command: vec!["opengrep".to_string(), "scan".to_string()],
             timeout_seconds: 0,
@@ -1996,7 +1970,7 @@ esac
         let result = execute(RunnerSpec {
             scanner_type: "opengrep".to_string(),
             image: "argus/opengrep-runner-local:latest".to_string(),
-            container_runtime: ContainerRuntime::Docker,
+            container_runtime: ContainerRuntime::Podman,
             workspace_dir: workspace_dir.display().to_string(),
             command: vec!["opengrep-scan".to_string(), "--self-test".to_string()],
             timeout_seconds: 30,
@@ -2093,7 +2067,7 @@ esac
         let result = execute(RunnerSpec {
             scanner_type: "opengrep".to_string(),
             image: "argus/opengrep-runner-local:latest".to_string(),
-            container_runtime: ContainerRuntime::Docker,
+            container_runtime: ContainerRuntime::Podman,
             workspace_dir: workspace_dir.display().to_string(),
             command: vec!["opengrep-scan".to_string(), "--self-test".to_string()],
             timeout_seconds: 30,
@@ -2163,7 +2137,7 @@ esac
         let result = execute(RunnerSpec {
             scanner_type: "opengrep".to_string(),
             image: "argus/opengrep-runner-local:latest".to_string(),
-            container_runtime: ContainerRuntime::Docker,
+            container_runtime: ContainerRuntime::Podman,
             workspace_dir: workspace_dir.display().to_string(),
             command: vec!["opengrep-scan".to_string(), "--self-test".to_string()],
             timeout_seconds: 0,
@@ -2217,7 +2191,7 @@ esac
         let result = execute(RunnerSpec {
             scanner_type: "opengrep".to_string(),
             image: "argus/opengrep-runner-local:latest".to_string(),
-            container_runtime: ContainerRuntime::Docker,
+            container_runtime: ContainerRuntime::Podman,
             workspace_dir: workspace_dir.display().to_string(),
             command: vec!["opengrep-scan".to_string(), "--self-test".to_string()],
             timeout_seconds: 30,

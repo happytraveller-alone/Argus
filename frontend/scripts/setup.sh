@@ -31,6 +31,6 @@ if [ "$NODE_OK" = "1" ]; then
   fi
 fi
 
-echo "本机前端工具链不可用，切换到 Docker 前端环境完成安装"
+echo "本机前端工具链不可用，切换到 Podman 前端环境完成安装"
 cd "$REPO_ROOT"
 exec bash "$SCRIPT_DIR/run-in-dev-container.sh" pnpm install --no-frozen-lockfile

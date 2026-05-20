@@ -1003,7 +1003,6 @@ podman_run_backend() {
     -e "SCANNER_CODEQL_IMAGE=${SCANNER_CODEQL_IMAGE:-argus/codeql-runner:latest}" \
     -v argus_backend_uploads:/app/uploads \
     -v argus_backend_runtime_data:/app/data/runtime \
-    -v "$ROOT_DIR/oci:/app/oci:ro" \
     -v "$ARGUS_ENV_FILE:/app/.env:ro" \
     -v "$ROOT_DIR/docker/opengrep-scan.sh:/app/docker/opengrep-scan.sh:ro" \
     -v "$scan_workspace_host:$scan_workspace_host" \

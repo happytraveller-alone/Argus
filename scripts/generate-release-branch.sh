@@ -434,8 +434,8 @@ clean_generated_tree
 
 if [[ "$VALIDATE" == "true" ]]; then
   validate_release_tree
-  if command -v docker >/dev/null 2>&1; then
-    (cd "$OUTPUT_DIR" && docker compose -f docker-compose.yml config >/dev/null)
+  if command -v podman >/dev/null 2>&1; then
+    (cd "$OUTPUT_DIR" && podman compose -f docker-compose.yml config >/dev/null)
   fi
 fi
 

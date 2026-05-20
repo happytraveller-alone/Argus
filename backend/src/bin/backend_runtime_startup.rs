@@ -76,7 +76,7 @@ fn handle_runner(mut args: impl Iterator<Item = String>) -> Result<()> {
             println!("{}", serde_json::to_string(&result)?);
         }
         "stop" => {
-            let mut runtime = runner::ContainerRuntime::Docker;
+            let mut runtime = runner::ContainerRuntime::Podman;
             let mut flag = args.next().unwrap_or_default();
             if flag == "--runtime" {
                 let runtime_value = args.next().unwrap_or_default();

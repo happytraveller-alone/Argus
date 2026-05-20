@@ -32,7 +32,7 @@ async fn main() -> Result<()> {
     //
     // Option C.β: each "standby" entry is a pre-warmed OCI image cache.
     // No running microVM is held; boot latency is NOT eliminated.
-    // The pool eliminates the Docker→OCI conversion (30–60 s) on cold cache.
+    // The pool eliminates the Podman→OCI conversion (30–60 s) on cold cache.
     if !config.a3s_box_standby_pool_disabled {
         let a3s_target = config.a3s_box_standby_pool_size;
         if a3s_target > config.max_total_standby {

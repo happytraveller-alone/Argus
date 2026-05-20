@@ -87,7 +87,7 @@ export function getStaticAnalysisScanSchemeLabel(
   sandbox?: string | null,
 ): string {
   if (sandbox === "a3s_box") return "A3S 沙箱方案";
-  return "Docker 容器方案";
+  return "Podman 容器方案";
 }
 
 export interface CodeqlExplorationProgressEventLike {

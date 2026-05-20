@@ -311,7 +311,7 @@ impl AppConfig {
             opengrep_runner_cpu_limit: 8.0,
             opengrep_runner_cpu_limit_explicit: true,
             opengrep_runner_pids_limit: 512,
-            opengrep_runner_runtime: "docker".to_string(),
+            opengrep_runner_runtime: "podman".to_string(),
             opengrep_runner_rootless_socket_required: false,
             argus_a3s_localize_limit_mb: 50,
             opengrep_standby_pool_size: 0,
@@ -352,7 +352,7 @@ fn normalize_opengrep_runner_runtime(value: Option<&str>) -> String {
     {
         None | Some("") => "podman".to_string(),
         Some("podman") => "podman".to_string(),
-        _ => "docker".to_string(),
+        _ => "podman".to_string(),
     }
 }
 
@@ -412,10 +412,10 @@ mod tests {
     fn opengrep_runner_runtime_accepts_only_podman_override() {
         assert_eq!(normalize_opengrep_runner_runtime(Some("podman")), "podman");
         assert_eq!(normalize_opengrep_runner_runtime(Some("PODMAN")), "podman");
-        assert_eq!(normalize_opengrep_runner_runtime(Some("docker")), "docker");
+        assert_eq!(normalize_opengrep_runner_runtime(Some("docker")), "podman");
         assert_eq!(
             normalize_opengrep_runner_runtime(Some("surprise")),
-            "docker"
+            "podman"
         );
         assert_eq!(normalize_opengrep_runner_runtime(None), "podman");
     }

@@ -246,7 +246,7 @@ pub struct AppState {
     pub intelligent_task_manager: Arc<IntelligentTaskManager>,
     /// Standby pool for a3s-box image-cache entries (Phase C.3, Option C.β).
     /// Each slot represents a pre-warmed OCI image cache entry so that scans
-    /// skip the Docker→OCI conversion step on first use.
+    /// skip the Podman→OCI conversion step on first use.
     /// `None` when `a3s_box_standby_pool_disabled = true` or at init time.
     pub a3s_box_pool: Option<Arc<SandboxPool<A3sBoxHandle>>>,
 }

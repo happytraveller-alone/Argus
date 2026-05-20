@@ -1,18 +1,18 @@
 use axum::{
-    body::{to_bytes, Body},
+    body::{Body, to_bytes},
     http::{Method, Request, StatusCode},
 };
 use backend_rust::{
     app::build_router, config::AppConfig, db::task_state, runtime::shutdown::ShutdownGate,
     state::AppState,
 };
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::{env, fs, io::Write, os::unix::fs::PermissionsExt, path::PathBuf, sync::LazyLock};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::TcpListener,
     sync::Mutex,
-    time::{sleep, Duration},
+    time::{Duration, sleep},
 };
 use tower::util::ServiceExt;
 use uuid::Uuid;
@@ -128,10 +128,12 @@ async fn configure_verified_llm_with_base_url(app: &axum::Router, base_url: Stri
     )
     .unwrap();
     assert_eq!(payload["success"], true);
-    assert!(payload["metadata"]["fingerprint"]
-        .as_str()
-        .unwrap()
-        .starts_with("sha256:"));
+    assert!(
+        payload["metadata"]["fingerprint"]
+            .as_str()
+            .unwrap()
+            .starts_with("sha256:")
+    );
 }
 
 struct EnvVarGuard {
@@ -273,15 +275,18 @@ esac
     script_path
 }
 
-fn fake_docker_script(temp_dir: &tempfile::TempDir) -> PathBuf {
-    let script_path = temp_dir.path().join("fake-docker.sh");
+fn fake_podman_script(temp_dir: &tempfile::TempDir) -> PathBuf {
+    let script_path = temp_dir.path().join("fake-podman.sh");
     let script = r#"#!/bin/sh
 set -eu
-log_file="${FAKE_DOCKER_LOG:?}"
+log_file="${FAKE_PODMAN_LOG:?}"
 cmd="${1:-}"
 shift || true
 printf '%s|%s\n' "$cmd" "$*" >> "$log_file"
 case "$cmd" in
+  info)
+    printf 'true\n'
+    ;;
   create)
     printf 'fake-container\n'
     ;;
@@ -289,15 +294,14 @@ case "$cmd" in
     if [ "${1:-}" = "-a" ]; then
       shift || true
     fi
-    output="${FAKE_DOCKER_OUTPUT_PATH:-}"
-    summary="${FAKE_DOCKER_SUMMARY_PATH:-}"
-    scan_log="${FAKE_DOCKER_SCAN_LOG_PATH:-}"
-    if [ -z "$summary" ] && [ -n "${FAKE_DOCKER_LOG:-}" ]; then
+    output="${FAKE_PODMAN_OUTPUT_PATH:-}"
+    summary="${FAKE_PODMAN_SUMMARY_PATH:-}"
+    scan_log="${FAKE_PODMAN_SCAN_LOG_PATH:-}"
+    if [ -z "$summary" ] && [ -n "${FAKE_PODMAN_LOG:-}" ]; then
       create_args="$(grep '^create|' "$log_file" | tail -n 1 | cut -d'|' -f2-)"
       while [ $# -gt 0 ]; do shift || true; done
       set -- $create_args
-      host_root=""
-      container_root=""
+      output_host_root=""
       while [ "$#" -gt 0 ]; do
         case "$1" in
           -v)
@@ -306,6 +310,9 @@ case "$cmd" in
             host_root="${volume%%:*}"
             rest="${volume#*:}"
             container_root="${rest%%:*}"
+            if [ "$container_root" = "/scan/output" ]; then
+              output_host_root="$host_root"
+            fi
             ;;
           --summary)
             shift
@@ -322,15 +329,15 @@ case "$cmd" in
         esac
         shift || true
       done
-      if [ -n "$host_root" ] && [ -n "$container_root" ]; then
+      if [ -n "$output_host_root" ]; then
         case "$output" in
-          "$container_root"/*) output="$host_root/${output#"$container_root"/}" ;;
+          /scan/output/*) output="$output_host_root/${output#/scan/output/}" ;;
         esac
         case "$summary" in
-          "$container_root"/*) summary="$host_root/${summary#"$container_root"/}" ;;
+          /scan/output/*) summary="$output_host_root/${summary#/scan/output/}" ;;
         esac
         case "$scan_log" in
-          "$container_root"/*) scan_log="$host_root/${scan_log#"$container_root"/}" ;;
+          /scan/output/*) scan_log="$output_host_root/${scan_log#/scan/output/}" ;;
         esac
       fi
     fi
@@ -344,20 +351,20 @@ case "$cmd" in
     fi
     if [ -n "$scan_log" ]; then
       mkdir -p "$(dirname "$scan_log")"
-      printf 'fake docker opengrep scan\n' > "$scan_log"
+      printf 'fake podman fallback opengrep scan\n' > "$scan_log"
     fi
-    printf 'fake docker stdout\n'
+    printf 'fake podman fallback stdout\n'
     ;;
   wait)
     printf '0\n'
     ;;
   logs)
     if [ "${1:-}" = "--stdout" ]; then
-      printf 'fake docker stdout\n'
+      printf 'fake podman fallback stdout\n'
       exit 0
     fi
     if [ "${1:-}" = "--stderr" ]; then
-      printf 'fake docker stderr\n'
+      printf 'fake podman fallback stderr\n'
       exit 0
     fi
     ;;
@@ -366,7 +373,7 @@ case "$cmd" in
     ;;
 esac
 "#;
-    fs::write(&script_path, script).expect("write fake docker script");
+    fs::write(&script_path, script).expect("write fake podman script");
     let mut permissions = fs::metadata(&script_path).unwrap().permissions();
     permissions.set_mode(0o755);
     fs::set_permissions(&script_path, permissions).unwrap();
@@ -603,26 +610,27 @@ async fn opengrep_a3s_box_task_runs_through_static_task_api_with_fake_cli() {
 }
 
 #[tokio::test]
-async fn opengrep_a3s_box_task_falls_back_to_fake_docker_without_network() {
+async fn opengrep_a3s_box_task_falls_back_to_fake_podman_without_network() {
     let _env_lock = ENV_LOCK.lock().await;
     let temp_dir = tempfile::tempdir().expect("temp dir");
     let fake_a3s_box = fake_a3s_box_opengrep_script(&temp_dir);
-    let fake_docker = fake_docker_script(&temp_dir);
+    let fake_podman = fake_podman_script(&temp_dir);
     let fake_a3s_log = temp_dir.path().join("fake-a3s-box.log");
-    let fake_docker_log = temp_dir.path().join("fake-docker.log");
+    let fake_podman_log = temp_dir.path().join("fake-podman.log");
     let scan_root = temp_dir.path().join("scan-root");
     fs::create_dir_all(&scan_root).expect("mkdir scan root");
 
     let _bin = EnvVarGuard::set("A3S_BOX_BIN", fake_a3s_box.to_str().unwrap());
-    let _docker_bin = EnvVarGuard::set("Argus_DOCKER_BIN", fake_docker.to_str().unwrap());
+    let _podman_bin = EnvVarGuard::set("Argus_PODMAN_BIN", fake_podman.to_str().unwrap());
     let _a3s_log = EnvVarGuard::set("FAKE_A3S_BOX_LOG", fake_a3s_log.to_str().unwrap());
-    let _docker_log = EnvVarGuard::set("FAKE_DOCKER_LOG", fake_docker_log.to_str().unwrap());
+    let _podman_log = EnvVarGuard::set("FAKE_PODMAN_LOG", fake_podman_log.to_str().unwrap());
     let _workspace_root = EnvVarGuard::set("SCAN_WORKSPACE_ROOT", scan_root.to_str().unwrap());
     let _workspace_volume = EnvVarGuard::set("SCAN_WORKSPACE_VOLUME", scan_root.to_str().unwrap());
 
-    let mut config = isolated_test_config("opengrep-a3s-box-fake-docker-fallback");
+    let mut config = isolated_test_config("opengrep-a3s-box-fake-podman-fallback");
     config.scanner_opengrep_a3s_box_image = "argus/opengrep-runner:test".to_string();
     config.scanner_opengrep_image = "argus/opengrep-runner:test".to_string();
+    config.opengrep_runner_runtime = "podman".to_string();
     let state = AppState::from_config(config)
         .await
         .expect("state should build");
@@ -667,14 +675,19 @@ async fn opengrep_a3s_box_task_falls_back_to_fake_docker_without_network() {
     let record = wait_static_task(&state, &task_id).await;
     assert_eq!(record.status, "completed", "{:?}", record.error_message);
     assert_eq!(record.extra["opengrep_sandbox"], "a3s_box");
-    assert_eq!(record.extra["executor"], "a3s_box_fallback_docker");
+    assert_eq!(record.extra["executor"], "a3s_box_fallback_podman");
     assert_eq!(record.total_findings, 0);
     assert!(record.files_scanned >= 1);
 
     let a3s_logged = fs::read_to_string(fake_a3s_log).expect("fake a3s log");
     assert!(a3s_logged.contains("run|"));
-    let docker_logged = fs::read_to_string(fake_docker_log).expect("fake docker log");
-    assert!(docker_logged.contains("create|"));
-    assert!(docker_logged.contains("argus/opengrep-runner:test opengrep-scan"));
-    assert!(docker_logged.contains(scan_root.to_str().unwrap()));
+    let podman_logged = fs::read_to_string(fake_podman_log).expect("fake podman log");
+    assert!(podman_logged.contains("info|--format {{.Host.Security.Rootless}}"));
+    assert!(podman_logged.contains("create|"));
+    assert!(podman_logged.contains("--network none"));
+    assert!(podman_logged.contains(":/scan/source:ro"));
+    assert!(podman_logged.contains(":/scan/opengrep-rules:ro"));
+    assert!(podman_logged.contains(":/scan/output:rw"));
+    assert!(podman_logged.contains("argus/opengrep-runner:test opengrep-scan"));
+    assert!(podman_logged.contains(scan_root.to_str().unwrap()));
 }

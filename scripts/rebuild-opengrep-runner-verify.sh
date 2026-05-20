@@ -38,8 +38,8 @@ Options:
                          (default: OPENGREP_SCAN_JOBS or 0)
   --max-memory MB       opengrep --max-memory value
                          (default: OPENGREP_SCAN_MAX_MEMORY_MB or 2048)
-  --build-arg KEY=VAL   pass an extra docker build argument; repeatable
-  --no-build            skip docker build, but still run image self-test and scan
+  --build-arg KEY=VAL   pass an extra podman build argument; repeatable
+  --no-build            skip podman build, but still run image self-test and scan
   --keep-workdir        keep temporary extracted project files for inspection
   -h, --help            show this help
 
@@ -97,7 +97,7 @@ resolve_jobs() {
 }
 
 build_runner_image() {
-  local cmd=(docker build -f "$ROOT_DIR/docker/opengrep-runner.Dockerfile" -t "$IMAGE")
+  local cmd=(podman build -f "$ROOT_DIR/docker/opengrep-runner.Dockerfile" -t "$IMAGE")
   local build_arg
   for build_arg in "${BUILD_ARGS[@]}"; do
     cmd+=(--build-arg "$build_arg")
@@ -110,21 +110,21 @@ build_runner_image() {
 
 run_image_self_test() {
   log "running image self-test"
-  docker run --rm "$IMAGE" opengrep-scan --self-test
+  podman run --rm "$IMAGE" opengrep-scan --self-test
 }
 
 copy_latest_uploaded_archive() {
   local destination_dir="$1"
 
-  docker volume inspect "$UPLOADS_VOLUME" >/dev/null 2>&1 ||
-    die "Docker volume not found: $UPLOADS_VOLUME"
+  podman volume inspect "$UPLOADS_VOLUME" >/dev/null 2>&1 ||
+    die "container volume not found: $UPLOADS_VOLUME"
 
   mkdir -p "$destination_dir"
 
   local copied_name
   set +e
   copied_name="$(
-    docker run --rm \
+    podman run --rm \
       -v "$UPLOADS_VOLUME:/uploads:ro" \
       -v "$destination_dir:/out" \
       "$IMAGE" \
@@ -366,7 +366,7 @@ run_scan() {
   log "scanning target: $target_dir"
 
   set +e
-  docker run --rm \
+  podman run --rm \
     -e "OPENGREP_SCAN_JOBS=$effective_jobs" \
     -e "OPENGREP_SCAN_MAX_MEMORY_MB=$MAX_MEMORY" \
     -v "$target_dir:/scan/source:ro" \
@@ -447,7 +447,7 @@ while [ "$#" -gt 0 ]; do
   esac
 done
 
-require_command docker
+require_command podman
 require_command python3
 
 if [[ ! "$JOBS" =~ ^[0-9]+$ ]] || [ "$JOBS" -lt 0 ]; then

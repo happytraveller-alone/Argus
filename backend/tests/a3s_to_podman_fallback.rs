@@ -1,9 +1,9 @@
 //! Integration tests for `scan_with_fallback` (AC4).
 //!
-//! Verifies A3S → docker fallback paths trigger correctly per
+//! Verifies A3S → Podman fallback paths trigger correctly per
 //! `classify_a3s_error` priority (ImageCacheFailed > PreflightFailed >
 //! exit-137 OomKilled > TimeoutExceeded > stderr OomKilled), and the
-//! happy-path A3S success bypasses docker.
+//! happy-path A3S success bypasses Podman.
 //!
 //! Tracing assertion is deferred (no `tracing-test` dep available); tests
 //! validate `ScanOutcome.runtime_used` + `a3s_failure_reason` directly.
@@ -11,14 +11,17 @@
 use std::io::Write;
 use std::sync::Mutex;
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use async_trait::async_trait;
 use tempfile::NamedTempFile;
 
 use backend_rust::runtime::a3s_box_runner::{A3sBoxRunnerResult, A3sBoxRunnerSpec};
-use backend_rust::runtime::runner::{ContainerRuntime, RunnerResult, RunnerSpec};
+use backend_rust::runtime::runner::{
+    ContainerRuntime, RunnerMount, RunnerMountPlan, RunnerResult, RunnerSpec,
+};
 use backend_rust::scan::opengrep_a3s::{
-    scan_with_fallback, A3sBoxExecutor, A3sFailureReason, DockerExecutor, RuntimeUsed, ScanOutput,
+    A3sBoxExecutor, A3sFailureReason, FallbackRunnerExecutor, RuntimeUsed, ScanOutput,
+    scan_with_fallback,
 };
 
 // ── Fakes ────────────────────────────────────────────────────────────────────
@@ -51,30 +54,37 @@ impl A3sBoxExecutor for FakeA3sBoxExecutor {
     }
 }
 
-struct FakeDockerExecutor {
-    called: Mutex<bool>,
+struct FakeFallbackRunnerExecutor {
+    captured_spec: Mutex<Option<RunnerSpec>>,
 }
 
-impl FakeDockerExecutor {
+impl FakeFallbackRunnerExecutor {
     fn new() -> Self {
         Self {
-            called: Mutex::new(false),
+            captured_spec: Mutex::new(None),
         }
     }
     fn was_called(&self) -> bool {
-        *self.called.lock().unwrap()
+        self.captured_spec.lock().unwrap().is_some()
+    }
+    fn captured_spec(&self) -> RunnerSpec {
+        self.captured_spec
+            .lock()
+            .unwrap()
+            .clone()
+            .expect("fallback spec captured")
     }
 }
 
 #[async_trait]
-impl DockerExecutor for FakeDockerExecutor {
-    async fn execute(&self, _spec: RunnerSpec) -> Result<RunnerResult> {
-        *self.called.lock().unwrap() = true;
-        // Return a generic non-success runner result; scan_with_fallback should
-        // surface this verbatim in ScanOutput::Docker.
+impl FallbackRunnerExecutor for FakeFallbackRunnerExecutor {
+    async fn execute(&self, spec: RunnerSpec) -> Result<RunnerResult> {
+        *self.captured_spec.lock().unwrap() = Some(spec);
+        // Return a generic success runner result; scan_with_fallback should
+        // surface this verbatim in ScanOutput::Fallback.
         Ok(RunnerResult {
             success: true,
-            container_id: Some("fake-docker-fallback".to_string()),
+            container_id: Some("fake-podman-fallback".to_string()),
             exit_code: 0,
             stdout_path: None,
             stderr_path: None,
@@ -89,27 +99,33 @@ fn empty_a3s_spec() -> A3sBoxRunnerSpec {
     A3sBoxRunnerSpec::default()
 }
 
-fn empty_docker_spec_builder() -> impl FnOnce() -> RunnerSpec + Send + 'static {
-    || RunnerSpec {
-        scanner_type: "opengrep".to_string(),
-        image: String::new(),
-        container_runtime: ContainerRuntime::Docker,
-        workspace_dir: String::new(),
-        command: Vec::new(),
-        timeout_seconds: 0,
-        env: Default::default(),
-        expected_exit_codes: vec![0],
-        artifact_paths: Vec::new(),
-        capture_stdout_path: None,
-        capture_stderr_path: None,
-        completion_summary_path: None,
-        workspace_root_override: None,
-        memory_limit_mb: None,
-        memory_swap_limit_mb: None,
-        cpu_limit: None,
-        pids_limit: None,
-        network_disabled: false,
-        mount_plan: None,
+fn empty_fallback_spec_builder() -> impl FnOnce() -> Result<RunnerSpec> + Send + 'static {
+    || {
+        Ok(RunnerSpec {
+            scanner_type: "opengrep".to_string(),
+            image: String::new(),
+            container_runtime: ContainerRuntime::Podman,
+            workspace_dir: String::new(),
+            command: Vec::new(),
+            timeout_seconds: 0,
+            env: Default::default(),
+            expected_exit_codes: vec![0],
+            artifact_paths: Vec::new(),
+            capture_stdout_path: None,
+            capture_stderr_path: None,
+            completion_summary_path: None,
+            workspace_root_override: None,
+            memory_limit_mb: None,
+            memory_swap_limit_mb: None,
+            cpu_limit: None,
+            pids_limit: None,
+            network_disabled: true,
+            mount_plan: Some(RunnerMountPlan::new(vec![
+                RunnerMount::read_only("/tmp/source", "/scan/source"),
+                RunnerMount::read_only("/tmp/opengrep-rules", "/scan/opengrep-rules"),
+                RunnerMount::read_write("/tmp/output", "/scan/output"),
+            ])),
+        })
     }
 }
 
@@ -121,6 +137,33 @@ fn write_stderr(text: &str) -> (String, NamedTempFile) {
     tmp.write_all(text.as_bytes()).expect("tempfile write");
     let path = tmp.path().to_string_lossy().into_owned();
     (path, tmp)
+}
+
+fn assert_podman_fallback_spec(spec: &RunnerSpec) {
+    assert_eq!(spec.container_runtime, ContainerRuntime::Podman);
+    assert!(spec.network_disabled, "fallback must disable networking");
+    let mount_plan = spec.mount_plan.as_ref().expect("fallback mount plan");
+    assert!(
+        mount_plan
+            .mounts
+            .iter()
+            .any(|mount| mount.container_path == "/scan/source" && mount.read_only),
+        "source mount must be read-only: {mount_plan:?}"
+    );
+    assert!(
+        mount_plan
+            .mounts
+            .iter()
+            .any(|mount| mount.container_path == "/scan/opengrep-rules" && mount.read_only),
+        "rules mount must be read-only: {mount_plan:?}"
+    );
+    assert!(
+        mount_plan
+            .mounts
+            .iter()
+            .any(|mount| mount.container_path == "/scan/output" && !mount.read_only),
+        "output mount must be writable: {mount_plan:?}"
+    );
 }
 
 fn make_runner_result(
@@ -141,55 +184,60 @@ fn make_runner_result(
 // ── Cases ────────────────────────────────────────────────────────────────────
 
 #[tokio::test]
-async fn case_oom_via_exit_137_triggers_docker_fallback() {
+async fn case_oom_via_exit_137_triggers_podman_fallback() {
     let a3s_result = make_runner_result(137, None, false);
     let a3s_exec = FakeA3sBoxExecutor::ok(a3s_result);
-    let docker_exec = FakeDockerExecutor::new();
+    let fallback_exec = FakeFallbackRunnerExecutor::new();
 
     let outcome = scan_with_fallback(
         &a3s_exec,
-        &docker_exec,
+        &fallback_exec,
         empty_a3s_spec(),
-        empty_docker_spec_builder(),
+        empty_fallback_spec_builder(),
         "task-test-1",
         Some("project-test"),
     )
     .await
     .expect("scan_with_fallback ok");
 
-    assert_eq!(outcome.runtime_used, RuntimeUsed::DockerFallback);
+    assert_eq!(outcome.runtime_used, RuntimeUsed::PodmanFallback);
     assert_eq!(
         outcome.a3s_failure_reason,
         Some(A3sFailureReason::OomKilled)
     );
-    assert!(docker_exec.was_called(), "docker executor must be invoked");
-    assert!(matches!(outcome.output, ScanOutput::Docker(_)));
+    assert!(
+        fallback_exec.was_called(),
+        "fallback runner executor must be invoked"
+    );
+    assert_podman_fallback_spec(&fallback_exec.captured_spec());
+    assert!(matches!(outcome.output, ScanOutput::Fallback(_)));
 }
 
 #[tokio::test]
-async fn case_oom_via_stderr_text_triggers_docker_fallback() {
+async fn case_oom_via_stderr_text_triggers_podman_fallback() {
     let (stderr_path, _keep) = write_stderr("container OOMKilled by cgroup");
     let a3s_result = make_runner_result(1, Some(stderr_path), false);
     let a3s_exec = FakeA3sBoxExecutor::ok(a3s_result);
-    let docker_exec = FakeDockerExecutor::new();
+    let fallback_exec = FakeFallbackRunnerExecutor::new();
 
     let outcome = scan_with_fallback(
         &a3s_exec,
-        &docker_exec,
+        &fallback_exec,
         empty_a3s_spec(),
-        empty_docker_spec_builder(),
+        empty_fallback_spec_builder(),
         "task-test-2",
         None,
     )
     .await
     .expect("scan_with_fallback ok");
 
-    assert_eq!(outcome.runtime_used, RuntimeUsed::DockerFallback);
+    assert_eq!(outcome.runtime_used, RuntimeUsed::PodmanFallback);
     assert_eq!(
         outcome.a3s_failure_reason,
         Some(A3sFailureReason::OomKilled)
     );
-    assert!(docker_exec.was_called());
+    assert!(fallback_exec.was_called());
+    assert_podman_fallback_spec(&fallback_exec.captured_spec());
 }
 
 #[tokio::test]
@@ -198,53 +246,55 @@ async fn case_preflight_kvm_beats_oom_priority() {
     let (stderr_path, _keep) = write_stderr("KVM is not available\nprocess killed (signal: 9)");
     let a3s_result = make_runner_result(137, Some(stderr_path), false);
     let a3s_exec = FakeA3sBoxExecutor::ok(a3s_result);
-    let docker_exec = FakeDockerExecutor::new();
+    let fallback_exec = FakeFallbackRunnerExecutor::new();
 
     let outcome = scan_with_fallback(
         &a3s_exec,
-        &docker_exec,
+        &fallback_exec,
         empty_a3s_spec(),
-        empty_docker_spec_builder(),
+        empty_fallback_spec_builder(),
         "task-test-3",
         Some("project-priority"),
     )
     .await
     .expect("scan_with_fallback ok");
 
-    assert_eq!(outcome.runtime_used, RuntimeUsed::DockerFallback);
+    assert_eq!(outcome.runtime_used, RuntimeUsed::PodmanFallback);
     assert_eq!(
         outcome.a3s_failure_reason,
         Some(A3sFailureReason::PreflightFailed),
         "PreflightFailed must beat OomKilled when stderr has both"
     );
-    assert!(docker_exec.was_called());
+    assert!(fallback_exec.was_called());
+    assert_podman_fallback_spec(&fallback_exec.captured_spec());
 }
 
 #[tokio::test]
-async fn case_spawn_fail_executor_err_triggers_docker_fallback() {
+async fn case_spawn_fail_executor_err_triggers_podman_fallback() {
     // executor returns Err(...) — treat as image cache / spawn failure.
     // classify_a3s_error sees Some(image_cache_err) → ImageCacheFailed reason.
     let a3s_exec = FakeA3sBoxExecutor::err("a3s-box binary not found in PATH");
-    let docker_exec = FakeDockerExecutor::new();
+    let fallback_exec = FakeFallbackRunnerExecutor::new();
 
     let outcome = scan_with_fallback(
         &a3s_exec,
-        &docker_exec,
+        &fallback_exec,
         empty_a3s_spec(),
-        empty_docker_spec_builder(),
+        empty_fallback_spec_builder(),
         "task-test-4",
         None,
     )
     .await
     .expect("scan_with_fallback ok");
 
-    assert_eq!(outcome.runtime_used, RuntimeUsed::DockerFallback);
+    assert_eq!(outcome.runtime_used, RuntimeUsed::PodmanFallback);
     assert_eq!(
         outcome.a3s_failure_reason,
         Some(A3sFailureReason::ImageCacheFailed),
         "executor Err is classified as ImageCacheFailed (image_cache_err is Some)"
     );
-    assert!(docker_exec.was_called());
+    assert!(fallback_exec.was_called());
+    assert_podman_fallback_spec(&fallback_exec.captured_spec());
 }
 
 #[tokio::test]
@@ -254,39 +304,40 @@ async fn case_a3s_non_success_with_clean_stderr_falls_back_as_spawn_failed() {
     // SpawnFailed (default reason in unwrap_or branch).
     let a3s_result = make_runner_result(1, None, false);
     let a3s_exec = FakeA3sBoxExecutor::ok(a3s_result);
-    let docker_exec = FakeDockerExecutor::new();
+    let fallback_exec = FakeFallbackRunnerExecutor::new();
 
     let outcome = scan_with_fallback(
         &a3s_exec,
-        &docker_exec,
+        &fallback_exec,
         empty_a3s_spec(),
-        empty_docker_spec_builder(),
+        empty_fallback_spec_builder(),
         "task-test-5",
         Some("project-spawn"),
     )
     .await
     .expect("scan_with_fallback ok");
 
-    assert_eq!(outcome.runtime_used, RuntimeUsed::DockerFallback);
+    assert_eq!(outcome.runtime_used, RuntimeUsed::PodmanFallback);
     assert_eq!(
         outcome.a3s_failure_reason,
         Some(A3sFailureReason::SpawnFailed),
         "non-success without classifiable reason should default to SpawnFailed"
     );
-    assert!(docker_exec.was_called());
+    assert!(fallback_exec.was_called());
+    assert_podman_fallback_spec(&fallback_exec.captured_spec());
 }
 
 #[tokio::test]
 async fn case_success_no_fallback() {
     let a3s_result = make_runner_result(0, None, true);
     let a3s_exec = FakeA3sBoxExecutor::ok(a3s_result);
-    let docker_exec = FakeDockerExecutor::new();
+    let fallback_exec = FakeFallbackRunnerExecutor::new();
 
     let outcome = scan_with_fallback(
         &a3s_exec,
-        &docker_exec,
+        &fallback_exec,
         empty_a3s_spec(),
-        empty_docker_spec_builder(),
+        empty_fallback_spec_builder(),
         "task-test-6",
         Some("project-happy"),
     )
@@ -296,8 +347,8 @@ async fn case_success_no_fallback() {
     assert_eq!(outcome.runtime_used, RuntimeUsed::A3s);
     assert_eq!(outcome.a3s_failure_reason, None);
     assert!(
-        !docker_exec.was_called(),
-        "docker executor MUST NOT be invoked on A3S success"
+        !fallback_exec.was_called(),
+        "fallback executor MUST NOT be invoked on A3S success"
     );
     assert!(matches!(outcome.output, ScanOutput::A3s(_)));
 }

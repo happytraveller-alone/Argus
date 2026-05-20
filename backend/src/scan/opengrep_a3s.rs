@@ -1,10 +1,9 @@
-//! A3S → docker fallback wrapper for opengrep scans.
+//! A3S → Podman fallback wrapper for opengrep scans.
 //!
-//! Wraps `a3s_box_runner::execute` with classify_a3s_error + docker fallback
-//! per spec `deep-interview-a3s-perf-align-docker.md` ADR-A.
+//! Wraps `a3s_box_runner::execute` with classify_a3s_error + Podman fallback.
 //!
 //! Permit lifecycle: see ADR-A.P. Caller-provided OwnedSemaphorePermit is
-//! reused across A3S + docker fallback path; never released within wrapper.
+//! reused across A3S + Podman fallback path; never released within wrapper.
 //!
 //! `classify_a3s_error` priority order (matches ADR-C table):
 //!   1. ImageCacheFailed (caller passes Some when ensure_a3s_box_image_cached failed)
@@ -24,7 +23,7 @@ use async_trait::async_trait;
 
 use crate::runtime::a3s_box_runner::{self, A3sBoxRunnerResult, A3sBoxRunnerSpec};
 
-/// Failure classification for A3S runs that should trigger docker fallback.
+/// Failure classification for A3S runs that should trigger Podman fallback.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum A3sFailureReason {
     PreflightFailed,
@@ -98,23 +97,23 @@ pub fn classify_a3s_error(
 
 // ── scan_with_fallback ────────────────────────────────────────────────────────
 
-/// Pluggable docker runner for testability (mirrors `A3sBoxExecutor`).
+/// Pluggable fallback runner for testability (mirrors `A3sBoxExecutor`).
 ///
-/// Production path: `DefaultDockerExecutor` calls `tokio::task::spawn_blocking`
+/// Production path: `DefaultFallbackRunnerExecutor` calls `tokio::task::spawn_blocking`
 /// to wrap the synchronous `runner::execute(spec)`.
-/// Test path: `FakeDockerExecutor` returns canned `RunnerResult`.
+/// Test path: `FakeFallbackRunnerExecutor` returns canned `RunnerResult`.
 #[async_trait]
-pub trait DockerExecutor: Send + Sync {
+pub trait FallbackRunnerExecutor: Send + Sync {
     async fn execute(
         &self,
         spec: crate::runtime::runner::RunnerSpec,
     ) -> Result<crate::runtime::runner::RunnerResult>;
 }
 
-pub struct DefaultDockerExecutor;
+pub struct DefaultFallbackRunnerExecutor;
 
 #[async_trait]
-impl DockerExecutor for DefaultDockerExecutor {
+impl FallbackRunnerExecutor for DefaultFallbackRunnerExecutor {
     async fn execute(
         &self,
         spec: crate::runtime::runner::RunnerSpec,
@@ -133,27 +132,27 @@ impl DockerExecutor for DefaultDockerExecutor {
 pub enum RuntimeUsed {
     /// A3S path completed (success — no fallback needed).
     A3s,
-    /// A3S failed and docker path completed.
-    DockerFallback,
+    /// A3S failed and Podman fallback path completed.
+    PodmanFallback,
 }
 
-/// Raw scan output — caller pattern-matches and post-processes per docker
-/// vs a3s SARIF/log conventions (already split in static_tasks.rs).
+/// Raw scan output — caller pattern-matches and post-processes per A3S
+/// vs fallback-runner SARIF/log conventions (already split in static_tasks.rs).
 pub enum ScanOutput {
     A3s(A3sBoxRunnerResult),
-    Docker(crate::runtime::runner::RunnerResult),
+    Fallback(crate::runtime::runner::RunnerResult),
 }
 
 /// Output of `scan_with_fallback`.
 ///
-/// `a3s_failure_reason` is `Some` iff `runtime_used == DockerFallback` (i.e.
-/// docker took over because A3S classification returned a non-`None` reason).
+/// `a3s_failure_reason` is `Some` iff `runtime_used == PodmanFallback` (i.e.
+/// Podman fallback took over because A3S classification returned a non-`None` reason).
 pub struct ScanOutcome {
     pub runtime_used: RuntimeUsed,
     pub a3s_failure_reason: Option<A3sFailureReason>,
     /// Underlying scan output. Variant depends on which path produced it:
     /// - `A3s` → `A3sBoxRunnerResult` from A3S executor
-    /// - `DockerFallback` → `RunnerResult` from docker executor
+    /// - `PodmanFallback` → `RunnerResult` from fallback executor
     pub output: ScanOutput,
 }
 
@@ -169,32 +168,32 @@ async fn read_a3s_stderr_tail(stderr_path: Option<&str>) -> String {
     tokio::fs::read_to_string(path).await.unwrap_or_default()
 }
 
-/// Run an opengrep scan via A3S, falling back to docker on classified failure.
+/// Run an opengrep scan via A3S, falling back to Podman on classified failure.
 ///
 /// Permit lifecycle (ADR-A.P, Option P1 reuse): the resource permit must be
 /// held in the caller's scope across this call so it covers both the A3S
-/// attempt and the docker fallback attempt. We do NOT take it as a parameter
+/// attempt and the Podman fallback attempt. We do NOT take it as a parameter
 /// to stay decoupled from the caller's permit type (e.g.,
 /// `OpengrepResourcePermit` vs `tokio::sync::OwnedSemaphorePermit`); the
 /// caller is responsible for dropping it after `.await?` returns.
 ///
-/// Docker spec construction is delegated to `docker_spec_builder` closure
+/// Podman fallback spec construction is delegated to `fallback_spec_builder` closure
 /// (Option α from ADR-A): static_tasks.rs invokes its private
 /// `build_opengrep_runner_spec` inside the closure, avoiding pub-ifying that
 /// helper. Closure runs only when fallback triggers (lazy).
 ///
-/// Tracing: on fallback, emits `tracing::warn!(stage = "a3s_to_docker_fallback",
+/// Tracing: on fallback, emits `tracing::warn!(stage = "a3s_to_podman_fallback",
 /// reason, task_id, project_id, elapsed_ms, exit_code, ...)` per AC4.
 pub async fn scan_with_fallback<F>(
     a3s_executor: &dyn A3sBoxExecutor,
-    docker_executor: &dyn DockerExecutor,
+    fallback_executor: &dyn FallbackRunnerExecutor,
     a3s_spec: A3sBoxRunnerSpec,
-    docker_spec_builder: F,
+    fallback_spec_builder: F,
     task_id: &str,
     project_id: Option<&str>,
 ) -> Result<ScanOutcome>
 where
-    F: FnOnce() -> crate::runtime::runner::RunnerSpec + Send + 'static,
+    F: FnOnce() -> Result<crate::runtime::runner::RunnerSpec> + Send + 'static,
 {
     use std::time::Instant;
 
@@ -249,7 +248,7 @@ where
         stderr_tail.clone()
     };
     let diag = serde_json::json!({
-        "stage": "a3s_to_docker_fallback",
+        "stage": "a3s_to_podman_fallback",
         "reason": format!("{:?}", fallback_reason),
         "task_id": task_id,
         "project_id": project_id.unwrap_or(""),
@@ -299,28 +298,28 @@ where
     );
 
     tracing::warn!(
-        stage = "a3s_to_docker_fallback",
+        stage = "a3s_to_podman_fallback",
         reason = ?fallback_reason,
         task_id = %task_id,
         project_id = project_id.unwrap_or(""),
         elapsed_ms = elapsed.as_millis() as u64,
         exit_code = ?exit_code,
         stderr_tail_len = stderr_tail.len(),
-        "A3S opengrep failed; falling back to docker (permit reused)"
+        "A3S opengrep failed; falling back to Podman (permit reused)"
     );
 
-    // Build docker spec via caller-injected closure (Option α from ADR-A).
-    let docker_spec = tokio::task::spawn_blocking(docker_spec_builder)
+    // Build Podman spec via caller-injected closure (Option α from ADR-A).
+    let fallback_spec = tokio::task::spawn_blocking(fallback_spec_builder)
         .await
-        .map_err(anyhow::Error::from)?;
+        .map_err(anyhow::Error::from)??;
 
-    // Permit reused across docker run (ADR-A.P P1) — caller's scope holds it.
-    let docker_result = docker_executor.execute(docker_spec).await?;
+    // Permit reused across Podman fallback run (ADR-A.P P1) — caller's scope holds it.
+    let fallback_result = fallback_executor.execute(fallback_spec).await?;
 
     Ok(ScanOutcome {
-        runtime_used: RuntimeUsed::DockerFallback,
+        runtime_used: RuntimeUsed::PodmanFallback,
         a3s_failure_reason: Some(fallback_reason),
-        output: ScanOutput::Docker(docker_result),
+        output: ScanOutput::Fallback(fallback_result),
     })
 }
 
@@ -409,7 +408,7 @@ mod tests {
 
     #[test]
     fn classify_image_cache_failed() {
-        let err = anyhow!("docker registry connection refused");
+        let err = anyhow!("Podman registry connection refused");
         let r = classify_a3s_error(Some(0), "", Duration::from_secs(0), Some(&err));
         assert_eq!(r, Some(A3sFailureReason::ImageCacheFailed));
     }

@@ -84,8 +84,8 @@ services:
       XDG_DATA_HOME: /app/data/runtime/xdg-data
       XDG_CACHE_HOME: /app/data/runtime/xdg-cache
       XDG_CONFIG_HOME: /app/data/runtime/xdg-config
-      DOCKER_HOST: ${BACKEND_DOCKER_HOST:-unix:///var/run/docker.sock}
-      CONTAINER_CLI: ${CONTAINER_CLI:-docker}
+      CONTAINER_HOST: ${BACKEND_CONTAINER_HOST:-unix:///run/user/1000/podman/podman.sock}
+      CONTAINER_CLI: ${CONTAINER_CLI:-podman}
       HTTP_PROXY: ""
       HTTPS_PROXY: ""
       http_proxy: ""

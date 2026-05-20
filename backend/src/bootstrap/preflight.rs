@@ -191,9 +191,9 @@ fn configured_container_runtime(runtime: &str) -> String {
         "podman" => env::var("Argus_PODMAN_BIN")
             .or_else(|_| env::var("BACKEND_PODMAN_BIN"))
             .unwrap_or_else(|_| "podman".to_string()),
-        _ => env::var("Argus_DOCKER_BIN")
-            .or_else(|_| env::var("BACKEND_DOCKER_BIN"))
-            .unwrap_or_else(|_| "docker".to_string()),
+        _ => env::var("Argus_PODMAN_BIN")
+            .or_else(|_| env::var("BACKEND_PODMAN_BIN"))
+            .unwrap_or_else(|_| "podman".to_string()),
     }
 }
 
@@ -246,8 +246,8 @@ async fn build_opengrep_preflight_inputs(
 ) -> Result<Option<(PathBuf, Vec<String>, Vec<(PathBuf, String)>)>> {
     // Preflight only verifies the opengrep binary is functional.
     // Rule validation happens at scan time via the named workspace volume.
-    // Bind-mounting a temp dir fails in Docker-in-Docker because the Docker
-    // daemon resolves host paths, not container paths.
+    // Bind-mounting a temp dir fails in rootless Podman because the
+    // container runtime resolves host paths, not container paths.
     Ok(None)
 }
 
@@ -301,7 +301,7 @@ mod tests {
             .expect("opengrep spec should exist");
         assert_eq!(opengrep.command, vec!["opengrep-scan", "--self-test"]);
         assert!(opengrep.mounts.is_empty());
-        assert_eq!(opengrep.runtime, "docker");
+        assert_eq!(opengrep.runtime, "podman");
 
         for cleanup_dir in cleanup_dirs {
             let _ = tokio::fs::remove_dir_all(cleanup_dir).await;
@@ -315,16 +315,16 @@ mod tests {
             configured_container_runtime("podman"),
             "/usr/local/bin/podman"
         );
-        assert_eq!(configured_container_runtime("docker"), "docker");
+        assert_eq!(configured_container_runtime("docker"), "podman");
     }
 
     #[test]
-    fn static_runner_preflight_docker_run_uses_rm_cleanup() {
+    fn static_runner_preflight_podman_run_uses_rm_cleanup() {
         let cases = [RunnerPreflightSpec {
             name: "opengrep",
             image: "opengrep-runner:test".to_string(),
             command: vec!["opengrep-scan".to_string(), "--self-test".to_string()],
-            runtime: "docker".to_string(),
+            runtime: "podman".to_string(),
             mounts: vec![(
                 PathBuf::from("/tmp/argus-preflight"),
                 "/workspace".to_string(),

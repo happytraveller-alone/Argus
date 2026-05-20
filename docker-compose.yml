@@ -1,7 +1,7 @@
 # =============================================
 # Argus Docker Compose — 全量本地构建
 # =============================================
-# 启动: docker compose up --build
+# 启动: podman compose up --build (或 docker compose up --build)
 # backend 会在启动期通过配置的 container runtime 执行 Opengrep runner preflight。
 # opengrep-runner service 只作为 profile=runner-build 的镜像构建目标存在；
 # 默认启动不创建 runner service 容器。真正执行 Opengrep 扫描时，backend
@@ -161,8 +161,8 @@ services:
       XDG_DATA_HOME: /app/data/runtime/xdg-data
       XDG_CACHE_HOME: /app/data/runtime/xdg-cache
       XDG_CONFIG_HOME: /app/data/runtime/xdg-config
-      DOCKER_HOST: ${BACKEND_DOCKER_HOST:-unix:///var/run/docker.sock}
-      CONTAINER_CLI: ${CONTAINER_CLI:-docker}
+      CONTAINER_HOST: ${BACKEND_CONTAINER_HOST:-unix:///run/user/1000/podman/podman.sock}
+      CONTAINER_CLI: ${CONTAINER_CLI:-podman}
       HTTP_PROXY: ""
       HTTPS_PROXY: ""
       http_proxy: ""
