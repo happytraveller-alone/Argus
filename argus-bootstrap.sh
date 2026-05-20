@@ -944,6 +944,8 @@ podman_build_local_images() {
   podman_build_opengrep_runner_image
   podman_build_backend_image
   podman_build_frontend_image
+  log "Pruning intermediate build stage images."
+  podman image prune -f >/dev/null 2>&1 || true
 }
 
 podman_run_db() {
