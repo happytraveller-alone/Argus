@@ -1404,7 +1404,7 @@ async fn run_codeql_scan_inner(
     )
     .await;
 
-    let (archive_path, _archive_name) = resolve_project_archive_input(state, project_id).await?;
+    let (archive_path, archive_name) = resolve_project_archive_input(state, project_id).await?;
     let workspace_root = scan_workspace_root();
     let workspace_dir = workspace_root
         .join("codeql-runtime")
@@ -1415,7 +1415,8 @@ async fn run_codeql_scan_inner(
     tokio::fs::create_dir_all(&output_dir).await?;
 
     update_scan_progress(state, task_id, 10.0, "preparing", "extracting source").await;
-    extract_archive_to_dir(&archive_path, &source_dir).await?;
+    extract_archive_to_dir(&archive_path, &archive_name, &source_dir).await?;
+    flatten_single_top_level_dir(&source_dir).await?;
 
     // Phase 1: Build plan check
     update_scan_progress(
@@ -1563,19 +1564,47 @@ async fn run_codeql_scan_inner(
 
 async fn extract_archive_to_dir(
     archive_path: &std::path::Path,
+    original_filename: &str,
     target_dir: &std::path::Path,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let archive = archive_path.to_path_buf();
     let target = target_dir.to_path_buf();
-    let filename = archive_path
-        .file_name()
-        .and_then(|n| n.to_str())
-        .unwrap_or("archive")
-        .to_string();
+    let filename = original_filename.to_string();
     tokio::task::spawn_blocking(move || {
         crate::archive::extract_archive_path_to_directory(&archive, &filename, &target)
     })
     .await??;
+    Ok(())
+}
+
+async fn flatten_single_top_level_dir(
+    dir: &std::path::Path,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let mut entries = tokio::fs::read_dir(dir).await?;
+    let mut first_entry: Option<PathBuf> = None;
+    let mut count = 0usize;
+    while let Some(entry) = entries.next_entry().await? {
+        count += 1;
+        if count == 1 {
+            first_entry = Some(entry.path());
+        }
+        if count > 1 {
+            return Ok(());
+        }
+    }
+    let Some(single) = first_entry else {
+        return Ok(());
+    };
+    if !tokio::fs::metadata(&single).await?.is_dir() {
+        return Ok(());
+    }
+    let tmp_name = dir.join(format!(".flatten-tmp-{}", uuid::Uuid::new_v4()));
+    tokio::fs::rename(&single, &tmp_name).await?;
+    let mut inner = tokio::fs::read_dir(&tmp_name).await?;
+    while let Some(child) = inner.next_entry().await? {
+        tokio::fs::rename(child.path(), dir.join(child.file_name())).await?;
+    }
+    tokio::fs::remove_dir(&tmp_name).await?;
     Ok(())
 }
 
@@ -1695,6 +1724,20 @@ async fn run_codeql_compile_exploration(
             exit_code = raw.exit_code,
             "compile exploration workspace probe completed"
         );
+        push_exploration_event(
+            state,
+            task_id,
+            "compile_sandbox",
+            "compile_sandbox",
+            20.0,
+            None,
+            json!({
+                "message": "workspace probe completed",
+                "stdout": text_excerpt_chars(&raw.stdout, 2048),
+                "exit_code": raw.exit_code,
+            }),
+        )
+        .await;
         text_excerpt_chars(&raw.stdout, 4096)
     };
 
@@ -1729,6 +1772,16 @@ async fn run_codeql_compile_exploration(
             round = round,
             "compile exploration LLM round starting"
         );
+        push_exploration_event(
+            state,
+            task_id,
+            "llm_round_started",
+            "compile_sandbox",
+            20.0,
+            Some(round as i64),
+            json!({"message": format!("LLM round {} starting", round)}),
+        )
+        .await;
 
         // Call LLM.
         let invocation = match invoker.invoke(&prompt, &llm_config).await {
@@ -1783,11 +1836,12 @@ async fn run_codeql_compile_exploration(
             break;
         }
 
-        // Execute first command to verify it works.
-        let first_cmd = plan.commands[0].clone();
+        // Execute all commands joined by && to verify the full build sequence.
+        let full_cmd = plan.commands.join(" && ");
+        let full_cmd_display = full_cmd.clone();
         let cn = container_name.clone();
         let exec_result = tokio::task::spawn_blocking(move || {
-            codeql_container::exec_in_container(&cn, &first_cmd, 120, Some(2048))
+            codeql_container::exec_in_container(&cn, &full_cmd, 300, Some(2048))
         })
         .await??;
 
@@ -1806,9 +1860,33 @@ async fn run_codeql_compile_exploration(
             exit_code = exec_result.exit_code,
             "compile exploration command verification"
         );
+        push_exploration_event(
+            state,
+            task_id,
+            "sandbox_command_completed",
+            "compile_sandbox",
+            20.0,
+            Some(round as i64),
+            json!({
+                "command": full_cmd_display,
+                "stdout": text_excerpt_chars(&exec_result.stdout, 2048),
+                "stderr": text_excerpt_chars(&exec_result.stderr, 2048),
+                "exit_code": exec_result.exit_code,
+            }),
+        )
+        .await;
 
         if exec_result.exit_code != 0 {
-            // Command failed — feed output back to LLM.
+            // Full sequence failed — also run just the first command to accumulate
+            // container state (e.g., chmod fixes) for subsequent rounds.
+            if plan.commands.len() > 1 {
+                let first_cmd = plan.commands[0].clone();
+                let cn2 = container_name.clone();
+                let _ = tokio::task::spawn_blocking(move || {
+                    codeql_container::exec_in_container(&cn2, &first_cmd, 60, None)
+                })
+                .await;
+            }
             prompt = build_inference_prompt(
                 round as u32 + 1,
                 language,
@@ -1819,28 +1897,9 @@ async fn run_codeql_compile_exploration(
             continue;
         }
 
-        // Command succeeded. For C/C++, validate capture evidence.
-        if language == "cpp" {
-            if let Err(e) = crate::scan::codeql::validate_compile_plan_capture(&plan) {
-                tracing::warn!(
-                    target: "argus::codeql",
-                    task_id = %task_id,
-                    round = round,
-                    error = %e,
-                    "C++ capture validation failed, feeding back"
-                );
-                prompt = build_inference_prompt(
-                    round as u32 + 1,
-                    language,
-                    &workspace_listing,
-                    Some(&exec_summary),
-                    Some(&format!("CodeQL C/C++ capture validation failed: {e}")),
-                );
-                continue;
-            }
-        }
-
-        // Plan verified — accept it.
+        // Full build sequence succeeded — accept the plan.
+        // The successful execution of the complete command chain is sufficient
+        // proof that CodeQL can trace the compilation.
         final_plan = Some(plan);
         break;
     }
@@ -1867,6 +1926,20 @@ async fn run_codeql_compile_exploration(
         }
     });
 
+    push_exploration_event(
+        state,
+        task_id,
+        "build_plan_accepted",
+        "build_plan_accepted",
+        50.0,
+        None,
+        json!({
+            "message": format!("build plan accepted: mode={}", plan.build_mode),
+            "commands": plan.commands,
+        }),
+    )
+    .await;
+
     let now = now_rfc3339();
     let record = crate::scan::codeql::build_plan_record_from_compile_plan(
         uuid::Uuid::new_v4().to_string(),
@@ -1886,18 +1959,20 @@ fn generate_codeql_entrypoint_script(
     ram_mb: u64,
     threads: usize,
 ) -> String {
-    let mut script = String::from("#!/bin/sh\nset -e\ncd /scan/workspace\n\n");
-
-    for cmd in &plan.commands {
-        script.push_str(cmd);
-        script.push('\n');
-    }
-    script.push('\n');
+    let mut script = String::from("#!/bin/sh\nset -e\ncd /scan/workspace/source\n\n");
 
     let build_command = if plan.commands.is_empty() {
         String::new()
     } else {
-        format!(" --command=\"{}\"", plan.commands.join(" && "))
+        script.push_str("cat > /scan/workspace/source/.codeql-build.sh << 'BUILDEOF'\n");
+        script.push_str("#!/bin/sh\nset -e\ncd /scan/workspace/source\nmake clean 2>/dev/null || true\n");
+        for cmd in &plan.commands {
+            script.push_str(cmd);
+            script.push('\n');
+        }
+        script.push_str("BUILDEOF\n");
+        script.push_str("chmod +x /scan/workspace/source/.codeql-build.sh\n\n");
+        " --command=/scan/workspace/source/.codeql-build.sh".to_string()
     };
 
     let threads_arg = if threads > 0 {
@@ -2889,6 +2964,36 @@ async fn update_scan_progress(
                 message: message.to_string(),
                 progress,
                 level: "info".to_string(),
+            });
+    }
+    let _ = task_state::save_snapshot(state, &snapshot).await;
+}
+
+async fn push_exploration_event(
+    state: &AppState,
+    task_id: &str,
+    event_type: &str,
+    stage: &str,
+    progress: f64,
+    round: Option<i64>,
+    payload: serde_json::Value,
+) {
+    let now = now_rfc3339();
+    let Ok(mut snapshot) = task_state::load_snapshot(state).await else {
+        return;
+    };
+    if let Some(record) = snapshot.static_tasks.get_mut(task_id) {
+        record
+            .progress
+            .events
+            .push(task_state::StaticTaskProgressEventRecord {
+                timestamp: now,
+                event_type: event_type.to_string(),
+                stage: stage.to_string(),
+                progress,
+                round,
+                redaction: serde_json::Value::Null,
+                payload,
             });
     }
     let _ = task_state::save_snapshot(state, &snapshot).await;

@@ -199,7 +199,7 @@ impl AppConfig {
             codeql_ram_mb: parse_u64_env("CODEQL_RAM_MB", 6144),
             codeql_max_build_inference_rounds: parse_u64_env(
                 "CODEQL_MAX_BUILD_INFERENCE_ROUNDS",
-                3,
+                15,
             ),
             codeql_allow_network_during_build: parse_bool_env(
                 "CODEQL_ALLOW_NETWORK_DURING_BUILD",
@@ -300,7 +300,7 @@ impl AppConfig {
             scanner_codeql_image: "argus/codeql-runner:test".to_string(),
             codeql_threads: 0,
             codeql_ram_mb: 6144,
-            codeql_max_build_inference_rounds: 3,
+            codeql_max_build_inference_rounds: 15,
             codeql_allow_network_during_build: true,
             codeql_llm_allow_source_snippets: true,
             opengrep_scan_timeout_seconds: 0,

@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { ClipboardPlus, Plus, Search } from "lucide-react";
+import { Plus, Search } from "lucide-react";
 import { toast } from "sonner";
 
 import DeferredSection from "@/components/performance/DeferredSection";
@@ -144,13 +144,6 @@ export default function TaskManagementStatic() {
 				<div>
 					<h1 className="text-xl font-semibold tracking-[0.12em] text-foreground">静态审计任务</h1>
 				</div>
-				<Button
-					className="cyber-btn-primary h-9 px-4"
-					onClick={() => setShowCreateStaticDialog(true)}
-				>
-					<ClipboardPlus className="w-4 h-4 mr-2" />
-					创建扫描
-				</Button>
 			</div>
 
 			<div className="flex flex-wrap items-center justify-end gap-3">

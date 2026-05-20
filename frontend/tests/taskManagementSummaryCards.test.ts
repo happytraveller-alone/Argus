@@ -48,14 +48,23 @@ test("static and intelligent task pages use inline status badges instead of summ
 	assert.match(staticSource, /stats\.running/);
 	assert.match(staticSource, /stats\.failed/);
 	assert.match(staticSource, /Badge/);
-	assert.match(staticSource, /创建扫描/);
 
 	assert.doesNotMatch(intelligentSource, /TaskManagementSummaryCards/);
 	assert.match(intelligentSource, /stats\.completed/);
 	assert.match(intelligentSource, /stats\.running/);
 	assert.match(intelligentSource, /stats\.failed/);
 	assert.match(intelligentSource, /Badge/);
-	assert.match(intelligentSource, /创建扫描/);
+});
+
+test("static and intelligent task pages expose only the toolbar create scan action", () => {
+	const staticSource = readFileSync(staticTaskPagePath, "utf8");
+	const intelligentSource = readFileSync(intelligentTaskPagePath, "utf8");
+
+	for (const source of [staticSource, intelligentSource]) {
+		assert.equal(source.match(/创建扫描/g)?.length ?? 0, 1);
+		assert.match(source, /<Plus className="w-3\.5 h-3\.5 mr-1\.5" \/>/);
+		assert.doesNotMatch(source, /ClipboardPlus/);
+	}
 });
 
 test("static task management search input filters the visible task table", () => {

@@ -92,7 +92,7 @@ pub fn exec_in_container(
     let max_bytes = max_output_bytes.unwrap_or(MAX_OUTPUT_BYTES);
 
     let child = Command::new(&runtime_bin)
-        .args(["exec", container_name, "sh", "-c", command])
+        .args(["exec", "-w", "/scan/workspace", container_name, "sh", "-c", command])
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .spawn()
