@@ -40,6 +40,8 @@ PODMAN_POSTGRES_IMAGE="${ARGUS_PODMAN_POSTGRES_IMAGE:-${DOCKERHUB_LIBRARY_MIRROR
 PODMAN_REDIS_IMAGE="${ARGUS_PODMAN_REDIS_IMAGE:-${DOCKERHUB_LIBRARY_MIRROR:-m.daocloud.io/docker.io/library}/redis:8.6.2-alpine3.23}"
 PODMAN_TARGETARCH="${ARGUS_PODMAN_TARGETARCH:-amd64}"
 PODMAN_CONTAINER_SOCKET="/run/podman/podman.sock"
+PODMAN_SEQUENTIAL_BUILD="${ARGUS_SEQUENTIAL_BUILD:-false}"
+PODMAN_BUILD_LOG_DIR="${TMPDIR:-/tmp}"
 
 print_banner() {
   cat <<'BANNER'
@@ -60,7 +62,7 @@ usage() {
 $SCRIPT_NAME - Argus bootstrap helper
 
 Usage:
-  ./$SCRIPT_NAME [--runtime docker|podman] [--dry-run] [--wait-exit] [--help] -- <mode>
+  ./$SCRIPT_NAME [--runtime docker|podman] [--dry-run] [--wait-exit] [--sequential-build] [--help] -- <mode>
   ./$SCRIPT_NAME
   ./$SCRIPT_NAME -- default
   ./$SCRIPT_NAME -- keep-cache
@@ -707,6 +709,79 @@ podman_cleanup_runtime_containers() {
   done < <(podman_container_names)
 }
 
+podman_external_storage_container_ids() {
+  podman ps -a --external --filter 'status=storage' --format '{{.ID}}' 2>/dev/null \
+    | sed '/^[[:space:]]*$/d' \
+    | sort -u || true
+}
+
+podman_dangling_image_ids() {
+  {
+    podman images --filter 'dangling=true' -q 2>/dev/null || true
+    podman images --format '{{.ID}} {{.Repository}} {{.Tag}}' 2>/dev/null \
+      | awk '$2 == "<none>" && $3 == "<none>" {print $1}' || true
+  } | sed '/^[[:space:]]*$/d' | sort -u
+}
+
+podman_remove_external_storage_containers() {
+  local external_ids
+  external_ids="$(podman_external_storage_container_ids)"
+  if [[ -z "$external_ids" ]]; then
+    printf '0'
+    return 0
+  fi
+  local count=0 external_id
+  while IFS= read -r external_id; do
+    [[ -n "$external_id" ]] || continue
+    podman rm "$external_id" >/dev/null 2>&1 && count=$((count + 1)) || true
+  done <<< "$external_ids"
+  printf '%s' "$count"
+}
+
+podman_remove_image_ids() {
+  local image_ids="$1"
+  if [[ -z "$image_ids" ]]; then
+    printf '0'
+    return 0
+  fi
+  local count=0 image_id
+  # Remove only explicit dangling image IDs. Avoid Podman image/system prune so
+  # unrelated local build cache and named images remain untouched.
+  while IFS= read -r image_id; do
+    [[ -n "$image_id" ]] || continue
+    podman rmi "$image_id" >/dev/null 2>&1 && count=$((count + 1)) || true
+  done <<< "$image_ids"
+  printf '%s' "$count"
+}
+
+podman_cleanup_dangling_images() {
+  local label="${1:-Podman dangling cleanup}"
+  local before_file="${2:-}"
+  if "$DRY_RUN" || is_truthy "$STUB_DOCKER"; then
+    log "Dry-run/stub: skipping Podman dangling image cleanup for ${label}."
+    return 0
+  fi
+
+  local after_file image_ids removed external_removed image_removed
+  after_file="$(mktemp "${TMPDIR:-/tmp}/argus-podman-dangling-after.XXXXXX")"
+  podman_dangling_image_ids > "$after_file"
+  if [[ -n "$before_file" && -f "$before_file" ]]; then
+    image_ids="$(comm -13 "$before_file" "$after_file" || true)"
+  else
+    image_ids="$(cat "$after_file")"
+  fi
+
+  rm -f "$after_file"
+  [[ -z "$before_file" ]] || rm -f "$before_file"
+
+  external_removed="$(podman_remove_external_storage_containers)"
+  image_removed="$(podman_remove_image_ids "$image_ids")"
+  removed=$((external_removed + image_removed))
+  if (( removed > 0 )); then
+    log "Podman cleanup after ${label}: removed ${removed} dangling build resources."
+  fi
+}
+
 podman_prune_dangling() {
   if "$DRY_RUN" || is_truthy "$STUB_DOCKER"; then
     log "Dry-run/stub: skipping Podman dangling cleanup."
@@ -725,34 +800,12 @@ podman_prune_dangling() {
       podman rm -f "$cid" >/dev/null 2>&1 && removed=$((removed + 1)) || true
     done <<< "$exited_ids"
   fi
-  local dangling_images
-  # Clean up external storage containers (podman build leftovers) that hold image references
-  local external_ids
-  external_ids="$(podman ps -a --external --filter 'status=storage' --format '{{.ID}}' 2>/dev/null || true)"
-  if [[ -n "$external_ids" ]]; then
-    local ext_count
-    ext_count="$(printf '%s\n' $external_ids | wc -l)"
-    # shellcheck disable=SC2086
-    podman rm $external_ids >/dev/null 2>&1 || true
-    removed=$((removed + ext_count))
-  fi
-  dangling_images="$(podman images --filter 'dangling=true' -q 2>/dev/null || true)"
-  if [[ -n "$dangling_images" ]]; then
-    local img_count
-    img_count="$(printf '%s\n' $dangling_images | wc -l)"
-    # shellcheck disable=SC2086
-    podman rmi -f $dangling_images >/dev/null 2>&1 || true
-    removed=$((removed + img_count))
-  fi
-  local unnamed_images
-  unnamed_images="$(podman images --format '{{.ID}} {{.Repository}}' 2>/dev/null | awk '$2 == "<none>" {print $1}' || true)"
-  if [[ -n "$unnamed_images" ]]; then
-    local uimg_count
-    uimg_count="$(printf '%s\n' $unnamed_images | wc -l)"
-    # shellcheck disable=SC2086
-    podman rmi -f $unnamed_images >/dev/null 2>&1 || true
-    removed=$((removed + uimg_count))
-  fi
+
+  local external_removed image_removed image_ids
+  external_removed="$(podman_remove_external_storage_containers)"
+  image_ids="$(podman_dangling_image_ids)"
+  image_removed="$(podman_remove_image_ids "$image_ids")"
+  removed=$((removed + external_removed + image_removed))
   if (( removed > 0 )); then
     log "Podman cleanup: removed ${removed} dangling/exited resources."
   fi
@@ -882,18 +935,38 @@ cleanup_podman_dockerfile() {
   rm -f "$prepared_file"
 }
 
+podman_capture_dangling_before() {
+  if "$DRY_RUN" || is_truthy "$STUB_DOCKER"; then
+    printf ''
+    return 0
+  fi
+  local before_file
+  before_file="$(mktemp "${TMPDIR:-/tmp}/argus-podman-dangling-before.XXXXXX")"
+  podman_dangling_image_ids > "$before_file"
+  printf '%s' "$before_file"
+}
+
+podman_cleanup_after_successful_build() {
+  local label="$1"
+  local before_file="${2:-}"
+  if "$DRY_RUN" || is_truthy "$STUB_DOCKER"; then
+    log "Dry-run/stub: skipping Podman dangling cleanup after ${label}."
+    return 0
+  fi
+  podman_cleanup_dangling_images "$label" "$before_file"
+}
+
 podman_build_backend_image() {
   log "Building Argus backend Podman image: $PODMAN_BACKEND_IMAGE"
   local podman_backend_dockerfile
   podman_backend_dockerfile="$(podman_build_file_arg "$ROOT_DIR/docker/backend.Dockerfile" "${TMPDIR:-/tmp}/argus-backend-podman.Dockerfile.$$")"
-  local build_rc=0
+  local build_rc=0 dangling_before
+  dangling_before="$(podman_capture_dangling_before)"
   run_cmd podman build \
     --file "$podman_backend_dockerfile" \
     --target runtime-plain \
-    --build-arg "TARGETARCH=$PODMAN_TARGETARCH" \
+    --platform "linux/$PODMAN_TARGETARCH" \
     --build-arg "DOCKERHUB_LIBRARY_MIRROR=${DOCKERHUB_LIBRARY_MIRROR:-m.daocloud.io/docker.io/library}" \
-    --build-arg "UV_IMAGE=${UV_IMAGE:-m.daocloud.io/docker.io/library/ghcr.io/astral-sh/uv:0.7}" \
-    --build-arg "DOCKER_CLI_IMAGE=${DOCKER_CLI_IMAGE:-m.daocloud.io/docker.io/library/docker:27-cli}" \
     --build-arg "BACKEND_APT_MIRROR_PRIMARY=${BACKEND_APT_MIRROR_PRIMARY:-mirrors.aliyun.com}" \
     --build-arg "BACKEND_APT_SECURITY_PRIMARY=${BACKEND_APT_SECURITY_PRIMARY:-mirrors.aliyun.com}" \
     --build-arg "BACKEND_APT_MIRROR_FALLBACK=${BACKEND_APT_MIRROR_FALLBACK:-deb.debian.org}" \
@@ -901,6 +974,11 @@ podman_build_backend_image() {
     --tag "$PODMAN_BACKEND_IMAGE" \
     "$ROOT_DIR" || build_rc=$?
   cleanup_podman_dockerfile "$podman_backend_dockerfile" "$ROOT_DIR/docker/backend.Dockerfile"
+  if [[ "$build_rc" -eq 0 ]]; then
+    podman_cleanup_after_successful_build "$PODMAN_BACKEND_IMAGE" "$dangling_before"
+  else
+    [[ -z "$dangling_before" ]] || rm -f "$dangling_before"
+  fi
   return "$build_rc"
 }
 
@@ -908,17 +986,20 @@ podman_build_frontend_image() {
   log "Building Argus frontend Podman image: $PODMAN_FRONTEND_IMAGE"
   local podman_frontend_dockerfile
   podman_frontend_dockerfile="$(podman_build_file_arg "$ROOT_DIR/docker/frontend.Dockerfile" "${TMPDIR:-/tmp}/argus-frontend-podman.Dockerfile.$$")"
-  local build_rc=0
+  local build_rc=0 dangling_before
+  dangling_before="$(podman_capture_dangling_before)"
   run_cmd podman build \
     --file "$podman_frontend_dockerfile" \
     --target dev \
     --build-arg "DOCKERHUB_LIBRARY_MIRROR=${DOCKERHUB_LIBRARY_MIRROR:-m.daocloud.io/docker.io/library}" \
-    --build-arg "NPM_REGISTRY=${NPM_REGISTRY:-https://registry.npmmirror.com}" \
-    --build-arg "PNPM_VERSION=${PNPM_VERSION:-10.11.0}" \
-    --build-arg "WEAK_NETWORK=${WEAK_NETWORK:-false}" \
     --tag "$PODMAN_FRONTEND_IMAGE" \
     "$ROOT_DIR/frontend" || build_rc=$?
   cleanup_podman_dockerfile "$podman_frontend_dockerfile" "$ROOT_DIR/docker/frontend.Dockerfile"
+  if [[ "$build_rc" -eq 0 ]]; then
+    podman_cleanup_after_successful_build "$PODMAN_FRONTEND_IMAGE" "$dangling_before"
+  else
+    [[ -z "$dangling_before" ]] || rm -f "$dangling_before"
+  fi
   return "$build_rc"
 }
 
@@ -928,11 +1009,12 @@ podman_build_opengrep_runner_image() {
   log "Building Argus Opengrep runner Podman image: $image"
   local podman_runner_dockerfile
   podman_runner_dockerfile="$(podman_build_file_arg "$ROOT_DIR/docker/opengrep-runner.Dockerfile" "${TMPDIR:-/tmp}/argus-opengrep-runner-podman.Dockerfile.$$")"
-  local build_rc=0
+  local build_rc=0 dangling_before
+  dangling_before="$(podman_capture_dangling_before)"
   run_cmd podman build \
     --file "$podman_runner_dockerfile" \
     --target opengrep-runner \
-    --build-arg "TARGETARCH=$PODMAN_TARGETARCH" \
+    --platform "linux/$PODMAN_TARGETARCH" \
     --build-arg "DOCKERHUB_LIBRARY_MIRROR=${DOCKERHUB_LIBRARY_MIRROR:-m.daocloud.io/docker.io/library}" \
     --build-arg "BACKEND_APT_MIRROR_PRIMARY=${BACKEND_APT_MIRROR_PRIMARY:-mirrors.aliyun.com}" \
     --build-arg "BACKEND_APT_SECURITY_PRIMARY=${BACKEND_APT_SECURITY_PRIMARY:-mirrors.aliyun.com}" \
@@ -941,7 +1023,70 @@ podman_build_opengrep_runner_image() {
     --tag "$image" \
     "$ROOT_DIR" || build_rc=$?
   cleanup_podman_dockerfile "$podman_runner_dockerfile" "$ROOT_DIR/docker/opengrep-runner.Dockerfile"
+  if [[ "$build_rc" -eq 0 ]]; then
+    podman_cleanup_after_successful_build "$image" "$dangling_before"
+  else
+    [[ -z "$dangling_before" ]] || rm -f "$dangling_before"
+  fi
   return "$build_rc"
+}
+
+podman_prepull_base_images() {
+  if "$DRY_RUN" || is_truthy "$STUB_DOCKER"; then
+    log "Dry-run/stub: skipping base image pre-pull."
+    return 0
+  fi
+  log "Pre-pulling base images in parallel..."
+  local mirror="${DOCKERHUB_LIBRARY_MIRROR:-m.daocloud.io/docker.io/library}"
+  local -a images=(
+    "${mirror}/rust:1.90-slim-bookworm"
+    "${mirror}/debian:trixie-slim"
+    "${mirror}/node:22-alpine"
+    "${mirror}/node:22-slim"
+  )
+  local -a pull_pids=()
+  for img in "${images[@]}"; do
+    podman pull "$img" > /dev/null 2>&1 &
+    pull_pids+=($!)
+  done
+  local pull_failures=0
+  for pid in "${pull_pids[@]}"; do
+    wait "$pid" || ((pull_failures++))
+  done
+  if [[ "$pull_failures" -gt 0 ]]; then
+    log "Warning: $pull_failures base image(s) failed to pre-pull (builds will pull on demand)."
+  else
+    log "All base images pre-pulled."
+  fi
+}
+
+podman_predownload_a3s_box() {
+  if "$DRY_RUN" || is_truthy "$STUB_DOCKER"; then
+    log "Dry-run/stub: skipping A3S Box pre-download."
+    return 0
+  fi
+  local a3s_version="${A3S_BOX_BUILD_VERSION:-v2.0.3}"
+  local a3s_base_url="${A3S_BOX_BUILD_DOWNLOAD_URL:-https://v6.gh-proxy.org/https://github.com/AI45Lab/Box/releases/download}"
+  local cache_dir="${ROOT_DIR}/.cache/a3s-box"
+  local arch="${PODMAN_TARGETARCH:-amd64}"
+  local package="a3s-box-${a3s_version}-${arch}"
+  local target_file="${cache_dir}/${package}.tar.gz"
+
+  if [[ -f "$target_file" ]]; then
+    log "A3S Box binary already cached: $target_file"
+    return 0
+  fi
+
+  log "Pre-downloading A3S Box ${a3s_version} (cache warming for build)..."
+  mkdir -p "$cache_dir"
+  local url="${a3s_base_url}/${a3s_version}/${package}.tar.gz"
+  if curl -fsSL --retry 3 --connect-timeout 15 --max-time 300 "$url" -o "$target_file.tmp" 2>/dev/null; then
+    mv "$target_file.tmp" "$target_file"
+    log "A3S Box pre-downloaded to $target_file"
+  else
+    rm -f "$target_file.tmp"
+    log "Warning: A3S Box pre-download failed (build will download on demand)."
+  fi
 }
 
 podman_build_local_images() {
@@ -950,12 +1095,71 @@ podman_build_local_images() {
     log "ARGUS_SKIP_BUILD=true; skipping image builds."
     return 0
   fi
-  log "Building Podman images from source (layer cache handles unchanged content)."
-  podman_build_opengrep_runner_image
-  podman_build_backend_image
-  podman_build_frontend_image
-  log "Pruning intermediate build stage images."
-  podman image prune -f >/dev/null 2>&1 || true
+
+  if "$DRY_RUN" || is_truthy "$STUB_DOCKER" || is_truthy "$PODMAN_SEQUENTIAL_BUILD"; then
+    log "Building Podman images sequentially (visible logs for dry-run/stub or --sequential-build)."
+    podman_build_opengrep_runner_image
+    podman_build_backend_image
+    podman_build_frontend_image
+    return 0
+  fi
+
+  log "Building Podman images in parallel (layer cache handles unchanged content)."
+  podman_prepull_base_images
+  podman_predownload_a3s_box
+
+  local dangling_before_all
+  dangling_before_all="$(podman_capture_dangling_before)"
+
+  local -a build_pids=() build_names=() build_logs=()
+  local build_funcs=("podman_build_opengrep_runner_image" "podman_build_backend_image" "podman_build_frontend_image")
+  local image_names=("opengrep-runner" "backend" "frontend")
+  local total=${#build_funcs[@]}
+
+  for i in "${!build_funcs[@]}"; do
+    local logfile="${PODMAN_BUILD_LOG_DIR}/argus-build-${image_names[$i]}.log"
+    build_logs+=("$logfile")
+    build_names+=("${image_names[$i]}")
+    ( ${build_funcs[$i]} ) > "$logfile" 2>&1 &
+    build_pids+=($!)
+  done
+
+  local -a failed=() succeeded=()
+  for i in "${!build_pids[@]}"; do
+    if wait "${build_pids[$i]}"; then
+      succeeded+=("${build_names[$i]}")
+      printf "  [%d/%d] %s ✓\n" $((${#succeeded[@]} + ${#failed[@]})) "$total" "${build_names[$i]}"
+    else
+      failed+=("${build_names[$i]}")
+      printf "  [%d/%d] %s ✗ (retrying...)\n" $((${#succeeded[@]} + ${#failed[@]})) "$total" "${build_names[$i]}"
+    fi
+  done
+
+  if [[ ${#failed[@]} -gt 0 ]]; then
+    local -a retry_failed=()
+    for i in "${!failed[@]}"; do
+      local name="${failed[$i]}"
+      local func_idx
+      for fi in "${!image_names[@]}"; do
+        [[ "${image_names[$fi]}" == "$name" ]] && func_idx=$fi && break
+      done
+      local logfile="${PODMAN_BUILD_LOG_DIR}/argus-build-${name}-retry.log"
+      if ( ${build_funcs[$func_idx]} ) > "$logfile" 2>&1; then
+        printf "  [retry] %s ✓\n" "$name"
+      else
+        retry_failed+=("$name")
+        printf "  [retry] %s ✗ FAILED\n" "$name"
+        log "Build log for failed image $name:"
+        cat "$logfile" >&2
+      fi
+    done
+    if [[ ${#retry_failed[@]} -gt 0 ]]; then
+      fail "Image build failed after retry: ${retry_failed[*]}"
+    fi
+  fi
+
+  log "All Podman images built successfully."
+  podman_cleanup_dangling_images "parallel-build" "$dangling_before_all"
 }
 
 podman_run_db() {
@@ -1034,6 +1238,8 @@ podman_run_frontend() {
     -e https_proxy= \
     -e NO_PROXY='*' \
     -e "COREPACK_NPM_REGISTRY=${NPM_REGISTRY:-https://registry.npmmirror.com}" \
+    -e "FRONTEND_NPM_REGISTRY=${NPM_REGISTRY:-https://registry.npmmirror.com}" \
+    -e "PNPM_VERSION=${PNPM_VERSION:-10.11.0}" \
     -e FRONTEND_PUBLIC_URL="http://localhost:${FRONTEND_PORT}" \
     -e VITE_API_BASE_URL=/api/v1 \
     -e "VITE_API_TARGET=${VITE_API_TARGET:-http://127.0.0.1:${BACKEND_PORT}}" \
@@ -1065,20 +1271,37 @@ podman_load_a3s_box_opengrep_image() {
     run_cmd podman exec "$PODMAN_BACKEND_CONTAINER" a3s-box image-inspect "$image"
     return 0
   fi
-  run_cmd podman exec -u appuser "$PODMAN_BACKEND_CONTAINER" sh -c '
-    set -eu
-    image="$1"
-    if a3s-box image-inspect "$image" >/dev/null 2>&1; then
-      echo "A3S Box image already cached: $image"
-      exit 0
-    fi
-    tmp="/tmp/argus-opengrep-oci-$$.tar"
-    trap "rm -f \"\$tmp\"" EXIT
-    docker save "localhost/$image" -o "$tmp"
-    a3s-box load -i "$tmp" --tag "$image"
-    a3s-box image-inspect "$image" >/dev/null
-    echo "A3S Box image cached: $image"
-  ' sh "$image"
+
+  if podman exec -u appuser "$PODMAN_BACKEND_CONTAINER" a3s-box image-inspect "$image" >/dev/null 2>&1; then
+    log "A3S Box image already cached: $image"
+    return 0
+  fi
+
+  local archive_tmp="/tmp/argus-opengrep-oci-$$.tar"
+  local container_archive="/tmp/argus-opengrep-oci.tar"
+  local load_rc=0
+
+  podman save --format oci-archive -o "$archive_tmp" "$image" || load_rc=$?
+  if [[ "$load_rc" -ne 0 ]]; then
+    rm -f "$archive_tmp"
+    return "$load_rc"
+  fi
+
+  podman cp "$archive_tmp" "$PODMAN_BACKEND_CONTAINER:$container_archive" || load_rc=$?
+  rm -f "$archive_tmp"
+  if [[ "$load_rc" -ne 0 ]]; then
+    return "$load_rc"
+  fi
+
+  podman exec -u appuser "$PODMAN_BACKEND_CONTAINER" \
+    a3s-box load -i "$container_archive" --tag "$image" || load_rc=$?
+  podman exec "$PODMAN_BACKEND_CONTAINER" rm -f "$container_archive"
+
+  if [[ "$load_rc" -eq 0 ]]; then
+    podman exec -u appuser "$PODMAN_BACKEND_CONTAINER" a3s-box image-inspect "$image" >/dev/null
+    log "A3S Box image cached: $image"
+  fi
+  return "$load_rc"
 }
 
 build_runner_images() {
@@ -1558,6 +1781,10 @@ parse_args() {
         ;;
       --runtime=*)
         set_container_runtime "${1#--runtime=}"
+        shift
+        ;;
+      --sequential-build)
+        PODMAN_SEQUENTIAL_BUILD=true
         shift
         ;;
       --)

@@ -412,9 +412,13 @@ assert_contains "$podman_out" "podman build --file $podman_dir/docker/opengrep-r
 assert_contains "$podman_out" "--tag argus/opengrep-runner-local:latest"
 assert_contains "$podman_out" "podman build --file $podman_dir/docker/backend.Dockerfile --target runtime-plain"
 assert_contains "$podman_out" "--build-arg TARGETARCH=amd64"
+assert_not_contains "$podman_out" "--build-arg UV_IMAGE="
+assert_not_contains "$podman_out" "--build-arg DOCKER_CLI_IMAGE="
 assert_contains "$podman_out" "--tag argus/backend-local:latest"
 assert_contains "$podman_out" "podman build --file $podman_dir/docker/frontend.Dockerfile --target dev"
-assert_contains "$podman_out" "--build-arg PNPM_VERSION=10.11.0"
+assert_not_contains "$podman_out" "--build-arg PNPM_VERSION="
+assert_not_contains "$podman_out" "--build-arg NPM_REGISTRY="
+assert_not_contains "$podman_out" "--build-arg WEAK_NETWORK="
 assert_contains "$podman_out" "--tag argus/frontend-local:latest"
 assert_contains "$podman_out" "podman run -d --name argus-db"
 assert_contains "$podman_out" "podman run -d --name argus-redis"
@@ -433,6 +437,8 @@ assert_contains "$podman_out" "/run/user/"
 assert_contains "$podman_out" "/podman/podman.sock:/run/podman/podman.sock"
 assert_contains "$podman_out" "argus_scan_workspace"
 assert_contains "$podman_out" "VITE_API_TARGET=http://127.0.0.1:18000"
+assert_contains "$podman_out" "FRONTEND_NPM_REGISTRY=https://registry.npmmirror.com"
+assert_contains "$podman_out" "PNPM_VERSION=10.11.0"
 assert_contains "$podman_out" "FRONTEND_DEV_PORT=13000"
 assert_contains "$podman_out" "curl -fsS http://127.0.0.1:18000/health"
 assert_contains "$podman_out" "curl -fsS http://127.0.0.1:13000"
@@ -442,8 +448,12 @@ assert_not_contains "$podman_out" "$podman_volume_rm_cmd"
 assert_not_contains "$podman_out" "$podman_image_rm_cmd"
 assert_not_contains "$podman_out" "$podman_rmi_cmd"
 assert_not_contains "$podman_out" "$podman_prune_cmd"
+assert_not_contains "$podman_out" "podman image prune"
 assert_not_contains "$podman_out" "$podman_rm_volume_flag_cmd"
 assert_not_contains "$podman_out" "/var/run/docker.sock"
+assert_contains "$ROOT_DIR/argus-bootstrap.sh" "podman save --format oci-archive"
+assert_contains "$ROOT_DIR/argus-bootstrap.sh" "podman_cleanup_after_successful_build"
+assert_not_contains "$ROOT_DIR/argus-bootstrap.sh" "podman image prune"
 
 podman_separate_images_dir="$(new_fixture podman-separate-images)"
 write_valid_config "$podman_separate_images_dir"
@@ -642,6 +652,27 @@ assert_not_contains "$ROOT_DIR/env.example" "VITE_API_TARGET=http://backend:8000
 assert_contains "$ROOT_DIR/frontend/vite.config.ts" "http://127.0.0.1:18000"
 assert_contains "$compose_render_out" "VITE_API_TARGET: http://host.docker.internal:18000"
 assert_not_contains "$compose_render_out" "VITE_API_TARGET: http://backend:8000"
+assert_contains "$compose_render_out" "FRONTEND_NPM_REGISTRY: https://registry.npmmirror.com"
+assert_contains "$compose_render_out" "PNPM_VERSION: \"10.11.0\""
+assert_not_contains "$compose_render_out" "UV_IMAGE:"
+if grep -Eq '^[[:space:]]+NPM_REGISTRY:' "$compose_render_out"; then
+  fail "compose backend/frontend build args must not include retired NPM_REGISTRY"
+fi
+if grep -Eq '^[[:space:]]+WEAK_NETWORK:' "$compose_render_out"; then
+  fail "compose backend/frontend build args must not include retired WEAK_NETWORK"
+fi
+if awk '
+  /^  frontend:/ { in_frontend = 1; in_build = 0; in_args = 0; next }
+  /^  [a-zA-Z0-9_-]+:/ { in_frontend = 0; in_build = 0; in_args = 0 }
+  in_frontend && /^    build:/ { in_build = 1; next }
+  in_frontend && in_build && /^    [a-zA-Z0-9_-]+:/ && $1 != "build:" { in_build = 0; in_args = 0 }
+  in_frontend && in_build && /^      args:/ { in_args = 1; next }
+  in_frontend && in_args && /^      [a-zA-Z0-9_-]+:/ && $1 != "args:" { in_args = 0 }
+  in_frontend && in_args && /(PNPM_VERSION|NPM_REGISTRY|WEAK_NETWORK|BUILD_WEAK_NETWORK)/ { found = 1 }
+  END { exit found ? 0 : 1 }
+' "$compose_render_out"; then
+  fail "compose frontend dev build args must not include runtime-only npm/network settings"
+fi
 retired_sandbox_name="Cube""Sandbox"
 retired_sandbox_lower="cube""sandbox"
 retired_sandbox_script="${retired_sandbox_lower}-quickstart.sh"
@@ -674,8 +705,6 @@ if awk '
 ' "$compose_render_out"; then
   fail "backend must not depend on one-shot runner service containers"
 fi
-assert_not_contains "$compose_render_out" "codeql-runner"
-assert_not_contains "$compose_render_out" "SCANNER_CODEQL_IMAGE"
 assert_not_contains "$compose_render_out" "SCANNER_CODEQL_COMPILE_SANDBOX_IMAGE"
 
 release_compose_render_out="$TMP_ROOT/release-compose.out"

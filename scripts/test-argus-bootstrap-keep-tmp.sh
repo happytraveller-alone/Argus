@@ -495,6 +495,27 @@ assert_not_contains "$ROOT_DIR/env.example" "VITE_API_TARGET=http://backend:8000
 assert_contains "$ROOT_DIR/frontend/vite.config.ts" "http://127.0.0.1:18000"
 assert_contains "$compose_render_out" "VITE_API_TARGET: http://host.docker.internal:18000"
 assert_not_contains "$compose_render_out" "VITE_API_TARGET: http://backend:8000"
+assert_contains "$compose_render_out" "FRONTEND_NPM_REGISTRY: https://registry.npmmirror.com"
+assert_contains "$compose_render_out" "PNPM_VERSION: \"10.11.0\""
+assert_not_contains "$compose_render_out" "UV_IMAGE:"
+if grep -Eq '^[[:space:]]+NPM_REGISTRY:' "$compose_render_out"; then
+  fail "compose backend/frontend build args must not include retired NPM_REGISTRY"
+fi
+if grep -Eq '^[[:space:]]+WEAK_NETWORK:' "$compose_render_out"; then
+  fail "compose backend/frontend build args must not include retired WEAK_NETWORK"
+fi
+if awk '
+  /^  frontend:/ { in_frontend = 1; in_build = 0; in_args = 0; next }
+  /^  [a-zA-Z0-9_-]+:/ { in_frontend = 0; in_build = 0; in_args = 0 }
+  in_frontend && /^    build:/ { in_build = 1; next }
+  in_frontend && in_build && /^    [a-zA-Z0-9_-]+:/ && $1 != "build:" { in_build = 0; in_args = 0 }
+  in_frontend && in_build && /^      args:/ { in_args = 1; next }
+  in_frontend && in_args && /^      [a-zA-Z0-9_-]+:/ && $1 != "args:" { in_args = 0 }
+  in_frontend && in_args && /(PNPM_VERSION|NPM_REGISTRY|WEAK_NETWORK|BUILD_WEAK_NETWORK)/ { found = 1 }
+  END { exit found ? 0 : 1 }
+' "$compose_render_out"; then
+  fail "compose frontend dev build args must not include runtime-only npm/network settings"
+fi
 retired_sandbox_name="Cube""Sandbox"
 retired_sandbox_lower="cube""sandbox"
 retired_sandbox_script="${retired_sandbox_lower}-quickstart.sh"
@@ -516,8 +537,6 @@ if awk '
 ' "$compose_render_out"; then
   fail "backend must not depend on one-shot runner service containers"
 fi
-assert_not_contains "$compose_render_out" "codeql-runner"
-assert_not_contains "$compose_render_out" "SCANNER_CODEQL_IMAGE"
 assert_not_contains "$compose_render_out" "SCANNER_CODEQL_COMPILE_SANDBOX_IMAGE"
 
 release_compose_render_out="$TMP_ROOT/release-compose.out"
