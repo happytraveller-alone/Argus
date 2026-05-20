@@ -51,6 +51,11 @@ pub struct A3sBoxRunnerSpec {
     #[serde(default)]
     pub pids_limit: Option<u64>,
     #[serde(default)]
+    /// When true, run the workload with the official `a3s-box run
+    /// --network none` mode. When false, omit `--network` and let A3S Box use
+    /// its default TSI networking. Keeping this as a runner-level flag lets
+    /// OpenGrep stay offline today while future intelligent workloads can opt
+    /// into the default outbound-capable mode without a separate runner.
     pub network_disabled: bool,
     /// Maximum bytes captured from a3s-box subprocess stdout.
     /// Defaults to 1 MiB. Excess output is replaced by a sentinel suffix.
@@ -150,6 +155,12 @@ fn a3s_box_runner_root() -> PathBuf {
         .filter(|value| !value.is_empty())
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from(DEFAULT_A3S_BOX_RUNNER_ROOT))
+}
+
+fn a3s_home_dir() -> Option<PathBuf> {
+    env::var_os("A3S_HOME")
+        .map(PathBuf::from)
+        .or_else(|| env::var_os("HOME").map(|home| PathBuf::from(home).join(".a3s")))
 }
 
 fn a3s_box_cleanup_timeout() -> u64 {
@@ -754,14 +765,10 @@ fn a3s_box_cached_image_needs_reload(inspect_stdout: &str) -> Result<bool> {
         .and_then(serde_json::Value::as_str)
         .and_then(digest_sha256_hex)
         .context("a3s-box image-inspect JSON missing sha256 Digest")?;
-    let Some(home_dir) = env::var_os("HOME").map(PathBuf::from) else {
+    let Some(home_dir) = a3s_home_dir() else {
         return Ok(false);
     };
-    let cache_dir = home_dir
-        .join(".a3s")
-        .join("images")
-        .join("sha256")
-        .join(digest);
+    let cache_dir = home_dir.join("images").join("sha256").join(digest);
     if !cache_dir.exists() {
         return Ok(false);
     }
@@ -844,9 +851,7 @@ fn a3s_box_cache_marker_name(image: &str) -> String {
 }
 
 fn a3s_box_argus_marker_dir() -> Option<PathBuf> {
-    env::var_os("HOME")
-        .map(PathBuf::from)
-        .map(|home| home.join(".a3s").join("argus").join("source-images"))
+    a3s_home_dir().map(|home| home.join("argus").join("source-images"))
 }
 
 fn read_trimmed_file(path: &Path) -> Option<String> {
@@ -865,10 +870,10 @@ fn write_marker_file(path: &Path, value: &str) -> Result<()> {
 }
 
 fn remove_a3s_box_rootfs_cache_for_image(image: &str) -> Result<usize> {
-    let Some(home_dir) = env::var_os("HOME").map(PathBuf::from) else {
+    let Some(home_dir) = a3s_home_dir() else {
         return Ok(0);
     };
-    let cache_dir = home_dir.join(".a3s").join("cache").join("rootfs");
+    let cache_dir = home_dir.join("cache").join("rootfs");
     if !cache_dir.is_dir() {
         return Ok(0);
     }
@@ -1148,7 +1153,7 @@ fn ensure_a3s_box_image_cached(binary: &str, image: &str, meta_dir: &Path) -> Re
         "load".to_string(),
         "-i".to_string(),
         oci_tar_path.display().to_string(),
-        "-t".to_string(),
+        "--tag".to_string(),
         image.to_string(),
     ];
     let load = run_command_capture(
@@ -1577,9 +1582,6 @@ pub fn execute(spec: A3sBoxRunnerSpec) -> A3sBoxRunnerResult {
         let resolved_workspace = workspace
             .canonicalize()
             .with_context(|| format!("canonicalize workspace_dir: {}", workspace.display()))?;
-        if spec.network_disabled {
-            bail!("a3s-box CLI does not support network_disabled yet; refusing to start without a verified no-network mode");
-        }
         ensure_a3s_box_image_cached(&binary, &spec.image, &meta_dir)?;
         runner_command = rewrite_runner_command(&spec.command, &resolved_workspace);
         runner_command = build_localized_opengrep_command_with_limit(
@@ -1596,15 +1598,19 @@ pub fn execute(spec: A3sBoxRunnerSpec) -> A3sBoxRunnerResult {
             "--rm".to_string(),
             "--name".to_string(),
             box_name.clone(),
-            "--volume".to_string(),
+            "-v".to_string(),
             format!(
                 "{}:{}:rw",
                 resolved_workspace.display(),
                 resolved_workspace.display()
             ),
-            "--workdir".to_string(),
+            "-w".to_string(),
             resolved_workspace.display().to_string(),
         ];
+        if spec.network_disabled {
+            args.push("--network".to_string());
+            args.push("none".to_string());
+        }
         if let Some(limit_mb) = spec.memory_limit_mb {
             args.push("--memory".to_string());
             args.push(format_memory_limit_mb(limit_mb));
@@ -1613,12 +1619,8 @@ pub fn execute(spec: A3sBoxRunnerSpec) -> A3sBoxRunnerResult {
             args.push("--cpus".to_string());
             args.push(format_cpu_limit(limit));
         }
-        if let Some(limit) = spec.pids_limit {
-            args.push("--pids-limit".to_string());
-            args.push(limit.to_string());
-        }
         for (key, value) in &runner_environment {
-            args.push("--env".to_string());
+            args.push("-e".to_string());
             args.push(format!("{key}={value}"));
         }
         args.push(spec.image.clone());
@@ -2143,19 +2145,15 @@ esac
         assert!(logged.contains("run|"));
         assert!(logged.contains("--rm --name argus-opengrep-"));
         assert!(logged.contains(&format!(
-            "--volume {}:{}:rw",
+            "-v {}:{}:rw",
             workspace_dir.display(),
             workspace_dir.display()
         )));
-        assert!(logged.contains(&format!("--workdir {}", workspace_dir.display())));
+        assert!(logged.contains(&format!("-w {}", workspace_dir.display())));
         assert!(logged.contains("--memory 2048m"));
         assert!(logged.contains("--cpus 2"));
-        assert!(logged.contains("--pids-limit 512"));
         assert!(!logged.contains("--network none"));
-        assert!(logged.contains(&format!(
-            "--env RULE_ROOT={}/rules",
-            workspace_dir.display()
-        )));
+        assert!(logged.contains(&format!("-e RULE_ROOT={}/rules", workspace_dir.display())));
         assert!(
             logged.contains(&format!("{}/source", workspace_dir.display())),
             "localized wrapper should copy the workspace source: {logged}"
@@ -2398,7 +2396,7 @@ printf 'localized scan ok\n' > "$log"
         let a3s_logged = fs::read_to_string(fake_a3s_log).unwrap();
         assert!(a3s_logged.contains("image-inspect|argus/opengrep-runner:test"));
         assert!(a3s_logged.contains("load|-i "));
-        assert!(a3s_logged.contains("-t argus/opengrep-runner:test"));
+        assert!(a3s_logged.contains("--tag argus/opengrep-runner:test"));
         assert!(a3s_logged.contains("run|"));
         let container_logged = fs::read_to_string(fake_container_log).unwrap();
         assert!(container_logged.contains("image inspect argus/opengrep-runner:test"));
@@ -2411,7 +2409,7 @@ printf 'localized scan ok\n' > "$log"
     }
 
     #[test]
-    fn execute_rejects_unsupported_network_disabled_mode() {
+    fn execute_maps_network_disabled_to_official_network_none_mode() {
         let _lock = ENV_LOCK.lock().unwrap();
         let temp_dir = TempDir::new().unwrap();
         let fake_log = temp_dir.path().join("a3s-box.log");
@@ -2439,13 +2437,13 @@ printf 'localized scan ok\n' > "$log"
             ..Default::default()
         });
 
-        assert!(!result.success);
-        assert!(result
-            .error
-            .as_deref()
-            .unwrap_or_default()
-            .contains("network_disabled"));
-        assert!(!fake_log.exists(), "a3s-box must not start after rejection");
+        assert!(result.success, "{:?}", result.error);
+        let logged = fs::read_to_string(fake_log).unwrap();
+        assert!(logged.contains("run|"));
+        assert!(
+            logged.contains("--network none"),
+            "a3s-box offline scans must use the official --network none mode: {logged}"
+        );
     }
 
     #[test]

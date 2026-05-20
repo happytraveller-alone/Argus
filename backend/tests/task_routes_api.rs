@@ -1,18 +1,18 @@
 use axum::{
-    body::{Body, to_bytes},
+    body::{to_bytes, Body},
     http::{Method, Request, StatusCode},
 };
 use backend_rust::{
     app::build_router, config::AppConfig, db::task_state, runtime::shutdown::ShutdownGate,
     state::AppState,
 };
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use std::{env, fs, io::Write, os::unix::fs::PermissionsExt, path::PathBuf, sync::LazyLock};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::TcpListener,
     sync::Mutex,
-    time::{Duration, sleep},
+    time::{sleep, Duration},
 };
 use tower::util::ServiceExt;
 use uuid::Uuid;
@@ -128,12 +128,10 @@ async fn configure_verified_llm_with_base_url(app: &axum::Router, base_url: Stri
     )
     .unwrap();
     assert_eq!(payload["success"], true);
-    assert!(
-        payload["metadata"]["fingerprint"]
-            .as_str()
-            .unwrap()
-            .starts_with("sha256:")
-    );
+    assert!(payload["metadata"]["fingerprint"]
+        .as_str()
+        .unwrap()
+        .starts_with("sha256:"));
 }
 
 struct EnvVarGuard {
@@ -604,7 +602,11 @@ async fn opengrep_a3s_box_task_runs_through_static_task_api_with_fake_cli() {
     assert!(logged.contains("run|"));
     assert!(logged.contains("--rm"));
     assert!(logged.contains("--name argus-opengrep-"));
-    assert!(logged.contains("--volume "));
+    assert!(logged.contains("-v "));
+    assert!(
+        logged.contains("--network none"),
+        "A3S OpenGrep scans should run offline: {logged}"
+    );
     assert!(logged.contains("argus/opengrep-runner:test -- bash -lc"));
     assert!(logged.contains("opengrep-scan"));
 }

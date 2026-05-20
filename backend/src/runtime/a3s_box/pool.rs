@@ -2,15 +2,17 @@
 //!
 //! ## Design (Option C.β — image-cache-only standby)
 //!
-//! The a3s-box runtime model is single-shot: `a3s-box run` boots the microVM,
-//! executes the entrypoint, and exits (with `--rm`).  There is no separate
-//! `start`/`pause`/`resume`/`exec` lifecycle, so a pre-booted idle VM cannot
-//! be maintained in the pool.
+//! The current Argus A3S Box runner intentionally uses the official
+//! single-command `a3s-box run --rm IMAGE -- CMD...` path. A3S Box also
+//! exposes persisted `create`/`start`/`exec` flows, but this pool does not
+//! hold a pre-booted mutable VM: per-scan cold-start isolation stays intact
+//! for OpenGrep and future intelligent scan adapters.
 //!
 //! Instead, the pool's "standby" unit is a **warm image cache entry**: the
 //! Docker→OCI conversion run by `ensure_a3s_box_image_cached` (which takes
 //! 30–60 s on a cache miss) is pre-executed by the factory.  Each scan still
-//! starts a fresh `a3s-box run` process, but skips the conversion entirely.
+//! starts a fresh `a3s-box run --rm` process, but skips the conversion
+//! entirely.
 //!
 //! See `.omc/reports/autopilot-phase-c0-probe.md` for the full C.0 probe
 //! outcome and AC1 impact analysis.

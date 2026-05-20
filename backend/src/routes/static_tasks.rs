@@ -9,17 +9,17 @@ use std::{
 use async_stream::stream;
 use axum::http::StatusCode;
 use axum::{
-    Extension, Json, Router,
     extract::{Multipart, Path as AxumPath, Query, State},
     response::{
-        IntoResponse,
         sse::{Event, KeepAlive, Sse},
+        IntoResponse,
     },
     routing::{get, post},
+    Extension, Json, Router,
 };
 use serde::{Deserialize, Serialize};
-use serde_json::{Value, json};
-use time::{OffsetDateTime, format_description::well_known::Rfc3339};
+use serde_json::{json, Value};
+use time::{format_description::well_known::Rfc3339, OffsetDateTime};
 use uuid::Uuid;
 
 use crate::{
@@ -2324,7 +2324,7 @@ async fn run_opengrep_scan_inner(
 
         OpengrepSandboxKind::A3sBox => {
             validate_opengrep_runner_deployment_config(&state.config)?;
-            let scanner_image = state.config.scanner_opengrep_image.clone();
+            let scanner_image = state.config.scanner_opengrep_a3s_box_image.clone();
             let container_source_dir = "/scan/source";
             let config_container_path = rule_inputs
                 .workspace_rules_dir
@@ -2339,6 +2339,7 @@ async fn run_opengrep_scan_inner(
                 scanner_image.clone(),
                 &workspace_dir,
                 runner_resources,
+                Some(task_id),
                 OpengrepRunnerPaths {
                     container_source_dir,
                     manifest_container_path: None,
@@ -2749,11 +2750,12 @@ fn build_opengrep_a3s_box_runner_spec(
     image: String,
     workspace_dir: &std::path::Path,
     resources: OpengrepRunnerResources,
+    task_id: Option<&str>,
     paths: OpengrepRunnerPaths<'_>,
 ) -> a3s_box_runner::A3sBoxRunnerSpec {
     a3s_box_runner::A3sBoxRunnerSpec {
         scanner_type: "opengrep".to_string(),
-        task_id: None,
+        task_id: task_id.map(str::to_string),
         image,
         workspace_dir: workspace_dir.display().to_string(),
         command: opengrep::build_scan_command(&opengrep::ScanCommandArgs {
@@ -2773,8 +2775,8 @@ fn build_opengrep_a3s_box_runner_spec(
         capture_stderr_path: Some(paths.stderr_rel_path.to_string()),
         memory_limit_mb: Some(config.opengrep_runner_memory_limit_mb),
         cpu_limit: Some(resources.cpu_limit),
-        pids_limit: Some(config.opengrep_runner_pids_limit),
-        network_disabled: false,
+        pids_limit: None,
+        network_disabled: true,
         stdout_limit_bytes: config.a3s_box_stdout_limit_bytes,
         stderr_limit_bytes: config.a3s_box_stderr_limit_bytes,
         localize_max_source_bytes: Some(
@@ -2876,12 +2878,10 @@ async fn format_opengrep_runner_error(
     result: &runner::RunnerResult,
     opengrep_log_path: Option<&std::path::Path>,
 ) -> String {
-    let mut parts = vec![
-        result
-            .error
-            .clone()
-            .unwrap_or_else(|| format!("opengrep exited with code {}", result.exit_code)),
-    ];
+    let mut parts = vec![result
+        .error
+        .clone()
+        .unwrap_or_else(|| format!("opengrep exited with code {}", result.exit_code))];
 
     if let Some(stdout_excerpt) = read_runner_output_excerpt(result.stdout_path.as_deref()).await {
         parts.push(format!("stdout={stdout_excerpt}"));
@@ -4594,18 +4594,19 @@ mod tests {
     use crate::runtime::runner::ContainerRuntime;
 
     use super::{
-        OpengrepResourceScheduler, OpengrepRunnerPaths, OpengrepRunnerResources,
-        OpengrepSandboxKind, build_opengrep_a3s_box_runner_spec, build_opengrep_mount_plan,
+        build_opengrep_a3s_box_runner_spec, build_opengrep_mount_plan,
         build_opengrep_podman_fallback_runner_spec, build_opengrep_runner_spec,
         extract_highest_rule_severity, extract_opengrep_task_options, format_opengrep_runner_error,
         prepare_opengrep_runner_inputs, prune_static_scan_non_source_paths,
         read_opengrep_results_text, static_task_value, validate_opengrep_runner_deployment_config,
+        OpengrepResourceScheduler, OpengrepRunnerPaths, OpengrepRunnerResources,
+        OpengrepSandboxKind,
     };
     use serde_json::json;
     use std::{
         fs,
         path::Path,
-        sync::{LazyLock, Mutex, mpsc},
+        sync::{mpsc, LazyLock, Mutex},
         time::Duration,
     };
 
@@ -4931,24 +4932,18 @@ rules:
             "default rootless Podman path must not require the cpu cgroup controller"
         );
         let mount_plan = spec.mount_plan.expect("mount plan");
-        assert!(
-            mount_plan
-                .mounts
-                .iter()
-                .any(|mount| { mount.container_path == "/scan/source" && mount.read_only })
-        );
-        assert!(
-            mount_plan
-                .mounts
-                .iter()
-                .any(|mount| { mount.container_path == "/scan/output" && !mount.read_only })
-        );
-        assert!(
-            mount_plan
-                .mounts
-                .iter()
-                .any(|mount| { mount.container_path == "/scan/opengrep-rules" && mount.read_only })
-        );
+        assert!(mount_plan
+            .mounts
+            .iter()
+            .any(|mount| { mount.container_path == "/scan/source" && mount.read_only }));
+        assert!(mount_plan
+            .mounts
+            .iter()
+            .any(|mount| { mount.container_path == "/scan/output" && !mount.read_only }));
+        assert!(mount_plan
+            .mounts
+            .iter()
+            .any(|mount| { mount.container_path == "/scan/opengrep-rules" && mount.read_only }));
     }
 
     #[test]
@@ -5017,24 +5012,18 @@ rules:
         assert_eq!(spec.container_runtime, ContainerRuntime::Podman);
         assert!(spec.network_disabled);
         let mount_plan = spec.mount_plan.expect("Podman fallback mount plan");
-        assert!(
-            mount_plan
-                .mounts
-                .iter()
-                .any(|mount| mount.container_path == "/scan/source" && mount.read_only)
-        );
-        assert!(
-            mount_plan
-                .mounts
-                .iter()
-                .any(|mount| mount.container_path == "/scan/opengrep-rules" && mount.read_only)
-        );
-        assert!(
-            mount_plan
-                .mounts
-                .iter()
-                .any(|mount| mount.container_path == "/scan/output" && !mount.read_only)
-        );
+        assert!(mount_plan
+            .mounts
+            .iter()
+            .any(|mount| mount.container_path == "/scan/source" && mount.read_only));
+        assert!(mount_plan
+            .mounts
+            .iter()
+            .any(|mount| mount.container_path == "/scan/opengrep-rules" && mount.read_only));
+        assert!(mount_plan
+            .mounts
+            .iter()
+            .any(|mount| mount.container_path == "/scan/output" && !mount.read_only));
     }
 
     #[test]
@@ -5070,11 +5059,9 @@ rules:
         } else {
             std::env::remove_var("CONTAINER_HOST");
         }
-        assert!(
-            result
-                .err()
-                .is_some_and(|error| error.to_string().contains("must not use a Docker socket"))
-        );
+        assert!(result
+            .err()
+            .is_some_and(|error| error.to_string().contains("must not use a Docker socket")));
     }
 
     #[test]
@@ -5113,11 +5100,9 @@ rules:
         } else {
             std::env::remove_var("CONTAINER_HOST");
         }
-        assert!(
-            result
-                .err()
-                .is_some_and(|error| error.to_string().contains("must not use a Docker socket"))
-        );
+        assert!(result
+            .err()
+            .is_some_and(|error| error.to_string().contains("must not use a Docker socket")));
     }
 
     #[test]
@@ -5360,6 +5345,7 @@ rules:
             "argus/opengrep-runner:test".to_string(),
             workspace_dir,
             resources,
+            Some("task-123"),
             OpengrepRunnerPaths {
                 container_source_dir: "/tmp/workspace/source",
                 manifest_container_path: Some("/tmp/workspace/image-rules.manifest"),
@@ -5388,24 +5374,23 @@ rules:
         assert!(spec.command.contains(&"/tmp/workspace/source".to_string()));
         assert!(spec.command.contains(&"--config".to_string()));
         assert!(spec.command.contains(&"--manifest".to_string()));
-        assert!(
-            spec.command
-                .contains(&"/tmp/workspace/image-rules.manifest".to_string())
-        );
-        assert!(
-            spec.command
-                .contains(&"/tmp/workspace/opengrep-rules".to_string())
-        );
-        assert!(
-            spec.command
-                .contains(&"/tmp/workspace/output/results.json".to_string())
-        );
+        assert!(spec
+            .command
+            .contains(&"/tmp/workspace/image-rules.manifest".to_string()));
+        assert!(spec
+            .command
+            .contains(&"/tmp/workspace/opengrep-rules".to_string()));
+        assert!(spec
+            .command
+            .contains(&"/tmp/workspace/output/results.json".to_string()));
         assert_eq!(
             spec.memory_limit_mb,
             Some(config.opengrep_runner_memory_limit_mb)
         );
         assert_eq!(spec.cpu_limit, Some(2.0));
-        assert_eq!(spec.pids_limit, Some(config.opengrep_runner_pids_limit));
+        assert_eq!(spec.pids_limit, None);
+        assert!(spec.network_disabled);
+        assert_eq!(spec.task_id.as_deref(), Some("task-123"));
     }
 
     #[tokio::test]

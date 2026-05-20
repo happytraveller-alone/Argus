@@ -726,6 +726,16 @@ podman_prune_dangling() {
     done <<< "$exited_ids"
   fi
   local dangling_images
+  # Clean up external storage containers (podman build leftovers) that hold image references
+  local external_ids
+  external_ids="$(podman ps -a --external --filter 'status=storage' --format '{{.ID}}' 2>/dev/null || true)"
+  if [[ -n "$external_ids" ]]; then
+    local ext_count
+    ext_count="$(printf '%s\n' $external_ids | wc -l)"
+    # shellcheck disable=SC2086
+    podman rm $external_ids >/dev/null 2>&1 || true
+    removed=$((removed + ext_count))
+  fi
   dangling_images="$(podman images --filter 'dangling=true' -q 2>/dev/null || true)"
   if [[ -n "$dangling_images" ]]; then
     local img_count
@@ -1065,7 +1075,7 @@ podman_load_a3s_box_opengrep_image() {
     tmp="/tmp/argus-opengrep-oci-$$.tar"
     trap "rm -f \"\$tmp\"" EXIT
     docker save "localhost/$image" -o "$tmp"
-    a3s-box load -i "$tmp" -t "$image"
+    a3s-box load -i "$tmp" --tag "$image"
     a3s-box image-inspect "$image" >/dev/null
     echo "A3S Box image cached: $image"
   ' sh "$image"
@@ -1327,7 +1337,7 @@ try:
 finally:
     shutil.rmtree(work, ignore_errors=True)
 PYEOF
-        a3s-box load -i "$oci_tmp" -t "$image"
+        a3s-box load -i "$oci_tmp" --tag "$image"
         rm -f "$docker_tmp" "$oci_tmp"
         a3s-box image-inspect "$image" >/dev/null
         if [ -n "$source_image_id" ]; then
