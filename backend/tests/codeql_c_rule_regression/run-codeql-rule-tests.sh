@@ -89,11 +89,9 @@ assert_not_contains "strncat" "$TMP_DIR/c-UncheckedStringCopyLength.csv" "c/Unch
 
 assert_contains "memcpy" "$TMP_DIR/c-OverflowBuffer.csv" "c/OverflowBuffer"
 assert_contains "destination buffer" "$TMP_DIR/c-OverflowBuffer.csv" "c/OverflowBuffer"
-assert_contains "sizeof" "$TMP_DIR/c-SuspiciousSizeof.csv" "c/SuspiciousSizeof"
 assert_contains "sizeof" "$TMP_DIR/c-SuspiciousAddWithSizeof.csv" "c/SuspiciousAddWithSizeof"
 assert_contains "free" "$TMP_DIR/c-DoubleFree.csv" "c/DoubleFree"
 assert_contains "free" "$TMP_DIR/c-UseAfterFree.csv" "c/UseAfterFree"
-assert_contains "stack address" "$TMP_DIR/c-StackAddressEscapes.csv" "c/StackAddressEscapes"
 
 assert_contains "free" "$TMP_DIR/cpp-DoubleFree.csv" "cpp/DoubleFree"
 assert_contains "free" "$TMP_DIR/cpp-UseAfterFree.csv" "cpp/UseAfterFree"

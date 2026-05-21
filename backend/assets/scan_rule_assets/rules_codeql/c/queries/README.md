@@ -7,31 +7,16 @@ This pack contains C-applicable security queries copied from the official GitHub
 - Upstream license: MIT, copyright GitHub, Inc.; see `../LICENSE-codeql-MIT.txt`.
 - Imported upstream paths:
   - `cpp/ql/src/Critical/DoubleFree.ql`
-  - `cpp/ql/src/Critical/InconsistentNullnessTesting.ql`
-  - `cpp/ql/src/Critical/MemoryFreed.qll`
-  - `cpp/ql/src/Critical/MemoryMayNotBeFreed.ql`
-  - `cpp/ql/src/Critical/MemoryNeverFreed.ql`
-  - `cpp/ql/src/Critical/MissingNullTest.ql`
-  - `cpp/ql/src/Critical/NewArrayDeleteMismatch.ql`
   - `cpp/ql/src/Critical/NewDelete.qll`
-  - `cpp/ql/src/Critical/NewDeleteArrayMismatch.ql`
   - `cpp/ql/src/Critical/NewFreeMismatch.ql`
   - `cpp/ql/src/Critical/UseAfterFree.ql`
-  - `cpp/ql/src/Likely Bugs/Memory Management/AllocaInLoop.ql`
   - `cpp/ql/src/Likely Bugs/Memory Management/Buffer.qll`
   - `cpp/ql/src/Likely Bugs/Memory Management/ImproperNullTermination.ql`
-  - `cpp/ql/src/Likely Bugs/Memory Management/PointerOverflow.ql`
-  - `cpp/ql/src/Likely Bugs/Memory Management/PotentialBufferOverflow.ql`
   - `cpp/ql/src/Likely Bugs/Memory Management/ReturnStackAllocatedMemory.ql`
-  - `cpp/ql/src/Likely Bugs/Memory Management/StackAddressEscapes.ql`
   - `cpp/ql/src/Likely Bugs/Memory Management/StrncpyFlippedArgs.ql`
-  - `cpp/ql/src/Likely Bugs/Memory Management/SuspiciousCallToMemset.ql`
   - `cpp/ql/src/Likely Bugs/Memory Management/SuspiciousCallToStrncat.ql`
-  - `cpp/ql/src/Likely Bugs/Memory Management/SuspiciousSizeof.ql`
-  - `cpp/ql/src/Likely Bugs/Memory Management/UninitializedLocal.ql`
   - `cpp/ql/src/Likely Bugs/Memory Management/UnsafeUseOfStrcat.ql`
   - `cpp/ql/src/Likely Bugs/Memory Management/UsingExpiredStackAddress.ql`
-  - `cpp/ql/src/Microsoft/SAL.qll`
   - `cpp/ql/src/Security/CWE/CWE-014/MemsetMayBeDeleted.ql`
   - `cpp/ql/src/Security/CWE/CWE-022/TaintedPath.ql`
   - `cpp/ql/src/Security/CWE/CWE-078/ExecTainted.ql`
@@ -51,9 +36,6 @@ This pack contains C-applicable security queries copied from the official GitHub
   - `cpp/ql/src/Security/CWE/CWE-190/IntegerOverflowTainted.ql`
   - `cpp/ql/src/Security/CWE/CWE-190/TaintedAllocationSize.ql`
   - `cpp/ql/src/Security/CWE/CWE-193/InvalidPointerDeref.ql`
-  - `cpp/ql/src/Security/CWE/CWE-457/ConditionallyUninitializedVariable.ql`
-  - `cpp/ql/src/Security/CWE/CWE-457/InitializationFunctions.qll`
-  - `cpp/ql/src/Security/CWE/CWE-457/UninitializedVariables.qll`
   - `cpp/ql/src/Security/CWE/CWE-468/IncorrectPointerScaling.ql`
   - `cpp/ql/src/Security/CWE/CWE-468/IncorrectPointerScalingChar.ql`
   - `cpp/ql/src/Security/CWE/CWE-468/IncorrectPointerScalingCommon.qll`
@@ -63,10 +45,14 @@ This pack contains C-applicable security queries copied from the official GitHub
 
 Coverage focus:
 
-- pointer lifetime and ownership errors (`DoubleFree`, `UseAfterFree`, new/delete/free mismatches, returned/escaped stack addresses)
-- pointer arithmetic and bounds errors (`InvalidPointerDeref`, array index validation, pointer scaling)
-- string and buffer copy/append mistakes (`UnboundedWrite`, overrun/badly bounded writes, null termination, `strncpy`/`strncat` misuse)
-- allocation-size and initialization mistakes (`TaintedAllocationSize`, arithmetic taint, no terminator space, uninitialized variables, missing null tests)
+- direct exploit primitives such as command/path/SQL injection, tainted arithmetic, and tainted allocation sizes
+- memory-corruption and bounds errors (`InvalidPointerDeref`, array index validation, pointer scaling, and no terminator space)
+- string and buffer overflow mistakes (`UnboundedWrite`, overrun/badly bounded writes, null termination, `strncpy`/`strncat`/`strcat` misuse)
+- pointer lifetime and ownership vulnerabilities (`DoubleFree`, `UseAfterFree`, mismatched allocation/free, returned/expired stack addresses)
+
+Excluded scope:
+
+- coding-standard, quality, efficiency, or generic reliability checks that do not directly report an exploitable vulnerability class, such as leak-only checks, null-check recommendations, suspicious `sizeof` style checks, generic uninitialized-local checks, and deprecated broad potential-overflow queries.
 
 Argus supplemental queries:
 

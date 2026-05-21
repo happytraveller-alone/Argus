@@ -245,8 +245,6 @@ export default function CodeqlScanDetail() {
 		[codeqlTask?.status, codeqlExplorationEvents],
 	);
 
-	const showStages = scanStage !== "completed" && scanStage !== "failed";
-
 	useEffect(() => {
 		syncStateToUrl(tableState);
 	}, [syncStateToUrl, tableState]);
@@ -352,13 +350,11 @@ export default function CodeqlScanDetail() {
 				</div>
 			</div>
 
-			{/* Progress stage indicator — only shown while running */}
-			{showStages ? (
-				<div className="flex items-center gap-4 rounded border border-border bg-card/40 px-4 py-3">
-					<span className="text-xs text-muted-foreground shrink-0">扫描阶段</span>
-					<CodeqlScanStages stage={scanStage} />
-				</div>
-			) : null}
+			{/* Progress stage indicator — always visible */}
+			<div className="flex items-center gap-4 rounded border border-border bg-card/40 px-4 py-3">
+				<span className="text-xs text-muted-foreground shrink-0">扫描阶段</span>
+				<CodeqlScanStages stage={scanStage} />
+			</div>
 
 			{codeqlFailureReason ? (
 				<div className="cyber-card flex items-start gap-3 border border-rose-500/30 bg-rose-500/10 p-4">

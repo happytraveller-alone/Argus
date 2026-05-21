@@ -1,4 +1,4 @@
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Circle, Loader2, RefreshCw, Terminal } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -11,6 +11,12 @@ import {
 import { StepProgressIndicator } from "@/components/scan/StepProgressIndicator";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+	Dialog,
+	DialogContent,
+	DialogHeader,
+	DialogTitle,
+} from "@/components/ui/dialog";
 import { type SseEvent, useSseStream } from "@/hooks/useSseStream";
 import { getApiBaseUrl } from "@/shared/api/apiBase";
 import {
@@ -56,6 +62,82 @@ function Field({ label, value }: { label: string; value: React.ReactNode }) {
 				{label}
 			</span>
 			<span className="font-mono text-sm text-foreground">{value ?? "-"}</span>
+		</div>
+	);
+}
+
+type IntelligentScanStage = "pending" | "config_resolve" | "input_read" | "llm_invoke" | "completed" | "failed";
+
+function resolveIntelligentScanStage(
+	status: string | undefined,
+	events: SseEvent[],
+): IntelligentScanStage {
+	const s = String(status || "").trim().toLowerCase();
+	if (s === "completed") return "completed";
+	if (s === "failed" || s === "cancelled") return "failed";
+	if (s === "pending") return "pending";
+	const completedSteps = new Set<string>();
+	let activeStep: string | null = null;
+	for (const ev of events) {
+		const step = typeof ev.data?.step === "string" ? ev.data.step : null;
+		if (!step) continue;
+		if (ev.kind === "step_completed") completedSteps.add(step);
+		else if (ev.kind === "step_started") activeStep = step;
+	}
+	if (completedSteps.has("llm_invoke")) return "completed";
+	if (activeStep) return activeStep as IntelligentScanStage;
+	if (completedSteps.has("input_read")) return "llm_invoke";
+	if (completedSteps.has("config_resolve")) return "input_read";
+	return "config_resolve";
+}
+
+function IntelligentScanStages({ stage }: { stage: IntelligentScanStage }) {
+	const steps = [
+		{ key: "config_resolve", label: "配置解析" },
+		{ key: "input_read", label: "输入读取" },
+		{ key: "llm_invoke", label: "LLM 调用" },
+	];
+	const ORDER: Record<string, number> = { pending: -1, config_resolve: 0, input_read: 1, llm_invoke: 2, completed: 3, failed: 3 };
+	const currentIndex = ORDER[stage] ?? -1;
+
+	return (
+		<div className="flex items-center gap-0">
+			{steps.map((step, i) => {
+				const isDone = currentIndex > i || stage === "completed";
+				const isActive = currentIndex === i && stage !== "completed" && stage !== "failed" && stage !== "pending";
+				const isFailed = stage === "failed" && currentIndex === i;
+				return (
+					<div key={step.key} className="flex items-center">
+						<div className="flex flex-col items-center gap-1">
+							<div className={`flex h-6 w-6 items-center justify-center rounded-full border text-xs font-medium transition-colors ${
+								isDone
+									? "border-emerald-500/60 bg-emerald-500/20 text-emerald-300"
+									: isActive
+									? "border-sky-400/70 bg-sky-500/20 text-sky-300"
+									: isFailed
+									? "border-rose-500/60 bg-rose-500/20 text-rose-300"
+									: "border-border bg-muted/30 text-muted-foreground"
+							}`}>
+								{isDone ? (
+									<CheckCircle2 className="h-3.5 w-3.5" />
+								) : isActive ? (
+									<Loader2 className="h-3 w-3 animate-spin" />
+								) : (
+									<Circle className="h-3 w-3" />
+								)}
+							</div>
+							<span className={`text-[11px] whitespace-nowrap ${
+								isDone ? "text-emerald-300" : isActive ? "text-sky-300" : "text-muted-foreground"
+							}`}>
+								{step.label}
+							</span>
+						</div>
+						{i < steps.length - 1 && (
+							<div className={`mx-2 mb-4 h-px w-8 ${isDone ? "bg-emerald-500/40" : "bg-border"}`} />
+						)}
+					</div>
+				);
+			})}
 		</div>
 	);
 }
@@ -210,6 +292,7 @@ export default function AgentAuditDetail() {
 		}),
 	);
 	const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+	const [showLlmLog, setShowLlmLog] = useState(false);
 
 	const taskTerminal = record ? isTerminal(record.status) : false;
 	const sseUrl = taskId
@@ -332,6 +415,9 @@ export default function AgentAuditDetail() {
 		`发现问题 ${findings.length.toLocaleString()}`,
 	];
 
+	const scanStage = resolveIntelligentScanStage(record.status, activeEvents);
+	const llmEvents = eventLog.filter((ev) => ev.kind.includes("llm") || ev.kind === "step_started" || ev.kind === "step_completed");
+
 	const returnToParam =
 		new URLSearchParams(location.search).get("returnTo") || "";
 	const returnTo =
@@ -368,9 +454,6 @@ export default function AgentAuditDetail() {
 							</Badge>
 						))}
 					</fieldset>
-					<p className="w-full font-mono text-xs text-muted-foreground">
-						{record.taskId}
-					</p>
 				</div>
 				<div className="flex items-center gap-2">
 					{canCancel && (
@@ -387,6 +470,28 @@ export default function AgentAuditDetail() {
 					<Button
 						size="sm"
 						variant="outline"
+						className="cyber-btn-ghost h-8 px-3"
+						onClick={() => setShowLlmLog(true)}
+					>
+						<Terminal className="mr-1.5 h-3.5 w-3.5" />
+						时间日志
+					</Button>
+					<Button
+						size="sm"
+						variant="outline"
+						className="cyber-btn-outline h-8"
+						onClick={() => {
+							setLoading(true);
+							void fetchRecord();
+						}}
+						disabled={loading}
+					>
+						<RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
+						刷新
+					</Button>
+					<Button
+						size="sm"
+						variant="outline"
 						className="cyber-btn-outline h-8"
 						onClick={handleBack}
 					>
@@ -394,6 +499,12 @@ export default function AgentAuditDetail() {
 						返回
 					</Button>
 				</div>
+			</div>
+
+			{/* Progress stage indicator — always visible */}
+			<div className="relative flex items-center gap-4 rounded border border-border bg-card/40 px-4 py-3">
+				<span className="text-xs text-muted-foreground shrink-0">扫描阶段</span>
+				<IntelligentScanStages stage={scanStage} />
 			</div>
 
 			{/* Two-column main grid: left = findings table; right = execution progress + event log */}
@@ -433,8 +544,8 @@ export default function AgentAuditDetail() {
 
 				{/* Right column: execution progress + event log */}
 				<div className="flex min-h-[28rem] min-w-0 flex-col gap-5 overflow-y-auto pr-1 lg:h-full">
-					{/* Step progress section */}
-					{(sseEvents.length > 0 || (!taskTerminal && !sseComplete)) && (
+					{/* Step progress section — always visible */}
+					{(sseEvents.length > 0 || replayEvents.length > 0) && (
 						<div className="rounded-lg border border-border/60 bg-card/40 p-4">
 							<SectionTitle>执行进度</SectionTitle>
 							<StepProgressIndicator
@@ -476,6 +587,44 @@ export default function AgentAuditDetail() {
 					</div>
 				</div>
 			)}
+
+			{/* LLM Interaction Log Dialog */}
+			<Dialog open={showLlmLog} onOpenChange={setShowLlmLog}>
+				<DialogContent className="max-w-3xl max-h-[80vh] overflow-hidden flex flex-col">
+					<DialogHeader>
+						<DialogTitle>时间日志 — LLM 交互</DialogTitle>
+					</DialogHeader>
+					<div className="flex-1 overflow-y-auto">
+						<div className="flex flex-col gap-0">
+							{llmEvents.length === 0 ? (
+								<p className="py-8 text-center text-sm text-muted-foreground">暂无 LLM 交互记录</p>
+							) : (
+								llmEvents.map((ev, idx) => (
+									<div key={idx} className="flex items-start gap-3 border-b border-border/30 px-2 py-2.5 last:border-b-0">
+										<div className="flex flex-col items-center">
+											<div className="flex h-5 w-5 items-center justify-center rounded-full border border-sky-400/40 bg-sky-500/10">
+												<span className="h-1.5 w-1.5 rounded-full bg-sky-400" />
+											</div>
+											{idx < llmEvents.length - 1 && (
+												<div className="mt-0.5 w-px flex-1 bg-border/30" style={{ minHeight: "0.75rem" }} />
+											)}
+										</div>
+										<div className="min-w-0 flex-1">
+											<div className="flex items-baseline gap-2">
+												<span className="font-mono text-xs font-medium text-sky-300">{ev.kind}</span>
+												<span className="font-mono text-[10px] text-muted-foreground">{ev.timestamp}</span>
+											</div>
+											{ev.message && (
+												<p className="mt-0.5 text-xs text-foreground/80">{ev.message}</p>
+											)}
+										</div>
+									</div>
+								))
+							)}
+						</div>
+					</div>
+				</DialogContent>
+			</Dialog>
 		</div>
 	);
 }

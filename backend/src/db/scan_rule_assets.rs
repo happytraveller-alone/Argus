@@ -554,6 +554,37 @@ mod tests {
             );
         }
 
+        for retained in [
+            "rules_codeql/c/queries/IntegerOverflowTainted.ql",
+            "rules_codeql/c/queries/UncheckedStringCopyLength.ql",
+            "rules_codeql/cpp/queries/UnsafeCreateProcessCall.ql",
+            "rules_codeql/python/queries/UnsafeDeserialization.ql",
+        ] {
+            assert!(
+                paths.contains(retained),
+                "expected direct vulnerability CodeQL query to stay bundled: {retained}"
+            );
+        }
+
+        for removed in [
+            "rules_codeql/c/queries/AllocaInLoop.ql",
+            "rules_codeql/c/queries/MemoryNeverFreed.ql",
+            "rules_codeql/c/queries/MissingNullTest.ql",
+            "rules_codeql/c/queries/SuspiciousSizeof.ql",
+            "rules_codeql/c/queries/UninitializedLocal.ql",
+            "rules_codeql/cpp/queries/AllocaInLoop.ql",
+            "rules_codeql/cpp/queries/MemoryNeverFreed.ql",
+            "rules_codeql/cpp/queries/MissingNullTest.ql",
+            "rules_codeql/cpp/queries/ReturnCstrOfLocalStdString.ql",
+            "rules_codeql/cpp/queries/SuspiciousSizeof.ql",
+            "rules_codeql/cpp/queries/UninitializedLocal.ql",
+        ] {
+            assert!(
+                !paths.contains(removed),
+                "expected coding-standard/quality CodeQL query to stay pruned: {removed}"
+            );
+        }
+
         for asset in assets.iter().filter(|asset| {
             asset.asset_path.starts_with("rules_codeql/") && asset.asset_path.ends_with(".ql")
         }) {
