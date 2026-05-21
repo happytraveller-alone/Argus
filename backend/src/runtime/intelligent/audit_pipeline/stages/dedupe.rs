@@ -11,7 +11,7 @@ use super::super::{
 pub async fn run(
     ctx: &AuditRunContext,
     validation: &ValidationOutput,
-    events: &mut PipelineEventSink,
+    events: &PipelineEventSink,
 ) -> Result<DedupeOutput> {
     let stage = AuditStage::Dedupe;
     events.stage_started(stage);

@@ -12,7 +12,7 @@ pub async fn run(
     ctx: &AuditRunContext,
     recon: &ReconOutput,
     validation: &ValidationOutput,
-    events: &mut PipelineEventSink,
+    events: &PipelineEventSink,
 ) -> Result<GapfillOutput> {
     let stage = AuditStage::Gapfill;
     events.stage_started(stage);

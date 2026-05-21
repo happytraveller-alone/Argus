@@ -11,7 +11,7 @@ use super::super::{
     types::{fallback_recon, ReconOutput},
 };
 
-pub async fn run(ctx: &AuditRunContext, events: &mut PipelineEventSink) -> Result<ReconOutput> {
+pub async fn run(ctx: &AuditRunContext, events: &PipelineEventSink) -> Result<ReconOutput> {
     let stage = AuditStage::Recon;
     events.stage_started(stage);
     let target_files = select_representative_files(&ctx.entries, 40);

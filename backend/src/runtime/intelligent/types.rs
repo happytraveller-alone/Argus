@@ -84,6 +84,8 @@ pub struct IntelligentTaskFinding {
     pub reachable: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub trace_summary: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub poc_result: Option<serde_json::Value>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

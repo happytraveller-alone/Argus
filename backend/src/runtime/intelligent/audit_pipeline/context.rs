@@ -3,7 +3,10 @@ use std::{fmt, sync::Arc};
 use serde_json::json;
 
 use crate::runtime::intelligent::{
-    config::IntelligentLlmConfig, llm::IntelligentLlmInvoker, types::IntelligentTaskEvent,
+    agent_runner::AgentRunner,
+    config::IntelligentLlmConfig,
+    llm::IntelligentLlmInvoker,
+    types::IntelligentTaskEvent,
 };
 
 use super::repo::{ArchiveEntry, ProjectArchive};
@@ -51,6 +54,7 @@ pub struct AuditRunContext {
     pub entries: Vec<ArchiveEntry>,
     pub llm_config: IntelligentLlmConfig,
     pub invoker: Arc<dyn IntelligentLlmInvoker + Send + Sync>,
+    pub agent_runner: Option<Arc<dyn AgentRunner + Send + Sync>>,
 }
 
 impl AuditRunContext {
@@ -71,33 +75,42 @@ impl AuditRunContext {
             entries,
             llm_config,
             invoker,
+            agent_runner: None,
         }
     }
 }
 
+/// Channel-based event sink. `emit` takes `&self` so it can be shared across concurrent tasks.
+/// The broadcast sender forwards events to external subscribers; the mpsc sender collects them
+/// for the final `into_events()` drain.
+#[derive(Clone)]
 pub struct PipelineEventSink {
-    tx: tokio::sync::broadcast::Sender<IntelligentTaskEvent>,
-    events: Vec<IntelligentTaskEvent>,
+    broadcast_tx: tokio::sync::broadcast::Sender<IntelligentTaskEvent>,
+    collect_tx: tokio::sync::mpsc::UnboundedSender<IntelligentTaskEvent>,
 }
 
 impl PipelineEventSink {
-    pub fn new(tx: tokio::sync::broadcast::Sender<IntelligentTaskEvent>) -> Self {
-        Self { tx, events: vec![] }
+    /// Create a new sink. Returns the sink and a receiver that drains all emitted events.
+    pub fn new(
+        broadcast_tx: tokio::sync::broadcast::Sender<IntelligentTaskEvent>,
+    ) -> (Self, tokio::sync::mpsc::UnboundedReceiver<IntelligentTaskEvent>) {
+        let (collect_tx, collect_rx) = tokio::sync::mpsc::unbounded_channel();
+        (Self { broadcast_tx, collect_tx }, collect_rx)
     }
 
-    pub fn emit(&mut self, event: IntelligentTaskEvent) {
-        let _ = self.tx.send(event.clone());
-        self.events.push(event);
+    pub fn emit(&self, event: IntelligentTaskEvent) {
+        let _ = self.broadcast_tx.send(event.clone());
+        let _ = self.collect_tx.send(event);
     }
 
-    pub fn stage_started(&mut self, stage: AuditStage) {
+    pub fn stage_started(&self, stage: AuditStage) {
         self.emit(IntelligentTaskEvent::new("agent_started").with_data(json!({
             "stage": stage.as_str(),
             "agent": stage.as_str(),
         })));
     }
 
-    pub fn stage_completed(&mut self, stage: AuditStage, data: serde_json::Value) {
+    pub fn stage_completed(&self, stage: AuditStage, data: serde_json::Value) {
         self.emit(
             IntelligentTaskEvent::new("agent_completed").with_data(json!({
                 "stage": stage.as_str(),
@@ -105,9 +118,5 @@ impl PipelineEventSink {
                 "output": data,
             })),
         );
-    }
-
-    pub fn into_events(self) -> Vec<IntelligentTaskEvent> {
-        self.events
     }
 }

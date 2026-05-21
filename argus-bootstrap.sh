@@ -39,6 +39,7 @@ PODMAN_FRONTEND_IMAGE="${ARGUS_PODMAN_FRONTEND_IMAGE:-argus/frontend-local:lates
 PODMAN_POSTGRES_IMAGE="${ARGUS_PODMAN_POSTGRES_IMAGE:-${DOCKERHUB_LIBRARY_MIRROR:-m.daocloud.io/docker.io/library}/postgres:18.3-alpine3.23}"
 PODMAN_REDIS_IMAGE="${ARGUS_PODMAN_REDIS_IMAGE:-${DOCKERHUB_LIBRARY_MIRROR:-m.daocloud.io/docker.io/library}/redis:8.6.2-alpine3.23}"
 PODMAN_TARGETARCH="${ARGUS_PODMAN_TARGETARCH:-amd64}"
+PODMAN_AUDIT_SANDBOX_IMAGE="${ARGUS_PODMAN_AUDIT_SANDBOX_IMAGE:-argus/audit-sandbox:latest}"
 PODMAN_CONTAINER_SOCKET="/run/podman/podman.sock"
 PODMAN_SEQUENTIAL_BUILD="${ARGUS_SEQUENTIAL_BUILD:-false}"
 PODMAN_BUILD_LOG_DIR="${TMPDIR:-/tmp}"
@@ -1065,6 +1066,25 @@ podman_build_codeql_runner_image() {
   return "$build_rc"
 }
 
+podman_build_audit_sandbox_image() {
+  log "Building Argus audit sandbox Podman image: $PODMAN_AUDIT_SANDBOX_IMAGE"
+  local build_rc=0 dangling_before
+  dangling_before="$(podman_capture_dangling_before)"
+  run_cmd podman build \
+    --file "$ROOT_DIR/docker/audit-sandbox.Dockerfile" \
+    --platform "linux/$PODMAN_TARGETARCH" \
+    --build-arg "DOCKERHUB_LIBRARY_MIRROR=${DOCKERHUB_LIBRARY_MIRROR:-m.daocloud.io/docker.io/library}" \
+    --build-arg "APT_MIRROR=${BACKEND_APT_MIRROR_PRIMARY:-mirrors.aliyun.com}" \
+    --tag "$PODMAN_AUDIT_SANDBOX_IMAGE" \
+    "$ROOT_DIR" || build_rc=$?
+  if [[ "$build_rc" -eq 0 ]]; then
+    podman_cleanup_after_successful_build "$PODMAN_AUDIT_SANDBOX_IMAGE" "$dangling_before"
+  else
+    [[ -z "$dangling_before" ]] || rm -f "$dangling_before"
+  fi
+  return "$build_rc"
+}
+
 podman_prepull_base_images() {
   if "$DRY_RUN" || is_truthy "$STUB_DOCKER"; then
     log "Dry-run/stub: skipping base image pre-pull."
@@ -1141,6 +1161,7 @@ podman_build_local_images() {
     log "Building Podman images sequentially (visible logs for dry-run/stub or --sequential-build)."
     podman_build_opengrep_runner_image
     podman_build_codeql_runner_image
+    podman_build_audit_sandbox_image
     podman_build_backend_image
     podman_build_frontend_image
     return 0
@@ -1154,8 +1175,8 @@ podman_build_local_images() {
   dangling_before_all="$(podman_capture_dangling_before)"
 
   local -a build_pids=() build_names=() build_logs=()
-  local build_funcs=("podman_build_opengrep_runner_image" "podman_build_codeql_runner_image" "podman_build_backend_image" "podman_build_frontend_image")
-  local image_names=("opengrep-runner" "codeql-runner" "backend" "frontend")
+  local build_funcs=("podman_build_opengrep_runner_image" "podman_build_codeql_runner_image" "podman_build_audit_sandbox_image" "podman_build_backend_image" "podman_build_frontend_image")
+  local image_names=("opengrep-runner" "codeql-runner" "audit-sandbox" "backend" "frontend")
   local total=${#build_funcs[@]}
 
   for i in "${!build_funcs[@]}"; do
@@ -1257,6 +1278,7 @@ podman_run_backend() {
     -e "RUNNER_PREFLIGHT_STRICT=${RUNNER_PREFLIGHT_STRICT:-false}" \
     -e "CONTAINER_CLI=podman" \
     -e "SCANNER_CODEQL_IMAGE=${SCANNER_CODEQL_IMAGE:-localhost/argus/codeql-runner:latest}" \
+    -e "AUDIT_SANDBOX_IMAGE=${PODMAN_AUDIT_SANDBOX_IMAGE}" \
     -v argus_backend_uploads:/app/uploads \
     -v argus_backend_runtime_data:/app/data/runtime \
     -v "$ARGUS_ENV_FILE:/app/.env:ro" \

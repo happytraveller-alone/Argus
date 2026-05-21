@@ -11,7 +11,7 @@ use super::super::{
 pub async fn run(
     ctx: &AuditRunContext,
     trace: &TraceOutput,
-    events: &mut PipelineEventSink,
+    events: &PipelineEventSink,
 ) -> Result<FeedbackOutput> {
     let stage = AuditStage::Feedback;
     events.stage_started(stage);

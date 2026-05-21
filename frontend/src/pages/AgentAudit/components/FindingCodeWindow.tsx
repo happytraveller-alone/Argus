@@ -1,4 +1,6 @@
+import { useState } from "react";
 import type { FindingCodeWindowDisplayLine } from "@/shared/code-highlighting/types";
+import type { PocResult } from "@/shared/api/intelligentTasks";
 import { cn } from "@/shared/utils/utils";
 
 export type { FindingCodeWindowDisplayLine };
@@ -27,6 +29,7 @@ export interface FindingCodeWindowProps {
 	appearance?: FindingCodeWindowAppearance;
 	displayPreset?: string;
 	className?: string;
+	pocResult?: PocResult | null;
 }
 
 function normalizeLines({
@@ -113,6 +116,38 @@ export function shouldAutoScrollToFocusTarget(
 	return Boolean(next) && previous !== next;
 }
 
+function PocResultSection({ pocResult }: { pocResult: PocResult }) {
+	const [open, setOpen] = useState(false);
+	const output = [pocResult.stdout, pocResult.stderr].filter(Boolean).join("\n").trim();
+	return (
+		<div className="border-t border-border/60">
+			<button
+				type="button"
+				onClick={() => setOpen((v) => !v)}
+				className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-slate-300 hover:bg-white/[0.03]"
+			>
+				<span className="font-medium">PoC Result</span>
+				<span
+					className={cn(
+						"rounded border px-1.5 py-0.5 text-[11px] font-medium",
+						pocResult.reproduced
+							? "border-green-700/50 bg-green-900/40 text-green-300"
+							: "border-slate-600/50 bg-slate-800/60 text-slate-400",
+					)}
+				>
+					{pocResult.reproduced ? "Reproduced" : "Not Reproduced"}
+				</span>
+				<span className="ml-auto text-slate-500">{open ? "▲" : "▼"}</span>
+			</button>
+			{open && output && (
+				<pre className="overflow-x-auto whitespace-pre px-3 py-2 font-mono text-[13px] leading-5 text-slate-300 custom-scrollbar-dark">
+					{output}
+				</pre>
+			)}
+		</div>
+	);
+}
+
 export default function FindingCodeWindow({
 	lines,
 	displayLines,
@@ -127,6 +162,7 @@ export default function FindingCodeWindow({
 	appearance = "native-explorer",
 	displayPreset,
 	className,
+	pocResult,
 }: FindingCodeWindowProps) {
 	const resolvedDisplayLines = normalizeLines({
 		lines: lines ?? displayLines,
@@ -221,6 +257,7 @@ export default function FindingCodeWindow({
 					);
 				})}
 			</div>
+			{pocResult != null && <PocResultSection pocResult={pocResult} />}
 		</div>
 	);
 }

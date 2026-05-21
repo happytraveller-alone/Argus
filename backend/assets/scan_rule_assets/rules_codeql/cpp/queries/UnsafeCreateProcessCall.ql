@@ -62,15 +62,6 @@ module NullAppNameCreateProcessFunctionConfig implements DataFlow::ConfigSig {
       val = call.getArgument(call.getApplicationNameArgumentId())
     )
   }
-
-
-  Location getASelectedSourceLocation(DataFlow::Node source) { none() }
-
-  Location getASelectedSinkLocation(DataFlow::Node sink) {
-    exists(CreateProcessFunctionCall call | result = call.getLocation() |
-      sink.asExpr() = call.getArgument(call.getApplicationNameArgumentId())
-    )
-  }
 }
 
 module NullAppNameCreateProcessFunction = DataFlow::Global<NullAppNameCreateProcessFunctionConfig>;
@@ -89,15 +80,6 @@ module QuotedCommandInCreateProcessFunctionConfig implements DataFlow::ConfigSig
   predicate isSink(DataFlow::Node sink) {
     exists(CreateProcessFunctionCall call, Expr val | val = sink.asExpr() |
       val = call.getArgument(call.getCommandLineArgumentId())
-    )
-  }
-
-
-  Location getASelectedSourceLocation(DataFlow::Node source) { none() }
-
-  Location getASelectedSinkLocation(DataFlow::Node sink) {
-    exists(CreateProcessFunctionCall call | result = call.getLocation() |
-      sink.asExpr() = call.getArgument(call.getCommandLineArgumentId())
     )
   }
 }

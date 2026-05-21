@@ -46,7 +46,6 @@ This pack contains C++ security queries copied from the official GitHub CodeQL r
   - `cpp/ql/src/Security/CWE/CWE-190/Bounded.qll`
   - `cpp/ql/src/Security/CWE/CWE-190/TaintedAllocationSize.ql`
   - `cpp/ql/src/Security/CWE/CWE-193/InvalidPointerDeref.ql`
-  - `cpp/ql/src/Security/CWE/CWE-416/IteratorToExpiredContainer.ql`
   - `cpp/ql/src/Security/CWE/CWE-416/Temporaries.qll`
   - `cpp/ql/src/Security/CWE/CWE-416/UseOfStringAfterLifetimeEnds.ql`
   - `cpp/ql/src/Security/CWE/CWE-416/UseOfUniquePointerAfterLifetimeEnds.ql`
@@ -60,6 +59,10 @@ This pack contains C++ security queries copied from the official GitHub CodeQL r
   - `cpp/ql/src/Security/CWE/CWE-468/IncorrectPointerScalingVoid.ql`
   - `cpp/ql/src/Security/CWE/CWE-468/SuspiciousAddWithSizeof.ql`
   - `cpp/ql/src/Security/CWE/CWE-843/TypeConfusion.ql`
+
+Compatibility note:
+
+- `IteratorToExpiredContainer.ql` is intentionally not vendored because it depends on CodeQL library internals that are not exposed by the project's validated CodeQL CLI/qlpack version.
 
 Coverage focus:
 

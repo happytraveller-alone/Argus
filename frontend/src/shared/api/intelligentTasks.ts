@@ -12,11 +12,24 @@ export type IntelligentTaskStatus =
 	| "failed"
 	| "cancelled";
 
+export interface PocResult {
+	language: string;
+	exitCode: number;
+	stdout: string;
+	stderr: string;
+	reproduced: boolean;
+}
+
 export interface IntelligentTaskFinding {
 	id: string;
 	severity: string;
 	summary: string;
 	evidence: string;
+	pocResult?: PocResult | null;
+	validationStatus?: string | null;
+	reachable?: boolean | null;
+	traceSummary?: string | null;
+	coverageMatrix?: Record<string, unknown> | null;
 }
 
 export interface IntelligentTaskEventLogEntry {

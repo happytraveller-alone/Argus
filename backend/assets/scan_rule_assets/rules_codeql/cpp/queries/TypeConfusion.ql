@@ -33,7 +33,7 @@ predicate lastField(Field f) {
 bindingset[f1, offset, c2]
 pragma[inline_late]
 predicate hasCompatibleFieldAtOffset(Field f1, int offset, Class c2) {
-  exists(Field f2 | offset = f2.getOffsetInClass(c2) |
+  exists(Field f2 | offset = f2.getAByteOffsetIn(c2) |
     // Let's not deal with bit-fields for now.
     f2 instanceof BitField
     or
@@ -58,7 +58,7 @@ predicate prefix(Class c1, Class c2) {
     exists(Field f1, int offset |
       // Let's not deal with bit-fields for now.
       not f1 instanceof BitField and
-      offset = f1.getOffsetInClass(c1)
+      offset = f1.getAByteOffsetIn(c1)
     |
       hasCompatibleFieldAtOffset(f1, offset, c2)
     )
@@ -66,7 +66,7 @@ predicate prefix(Class c1, Class c2) {
     forall(Field f1, int offset |
       // Let's not deal with bit-fields for now.
       not f1 instanceof BitField and
-      offset = f1.getOffsetInClass(c1)
+      offset = f1.getAByteOffsetIn(c1)
     |
       hasCompatibleFieldAtOffset(f1, offset, c2)
     )

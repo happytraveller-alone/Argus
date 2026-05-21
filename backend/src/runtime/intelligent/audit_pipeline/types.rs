@@ -71,6 +71,16 @@ pub struct HuntOutput {
     pub findings: Vec<AuditFinding>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct PocResult {
+    pub language: String,
+    pub exit_code: i32,
+    pub stdout: String,
+    pub stderr: String,
+    pub reproduced: bool,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AuditFinding {
@@ -89,6 +99,12 @@ pub struct AuditFinding {
     pub confidence: Option<f64>,
     #[serde(default)]
     pub task_id: Option<String>,
+    #[serde(default)]
+    pub poc_code: Option<String>,
+    #[serde(default)]
+    pub poc_result: Option<PocResult>,
+    #[serde(default)]
+    pub hedged_language: Option<bool>,
 }
 
 impl Default for AuditFinding {
@@ -104,6 +120,9 @@ impl Default for AuditFinding {
             evidence: String::new(),
             confidence: None,
             task_id: None,
+            poc_code: None,
+            poc_result: None,
+            hedged_language: None,
         }
     }
 }
@@ -250,6 +269,7 @@ impl PipelineOutputs {
                     validation_status: Some(validated.validation_status.clone()),
                     reachable: trace.map(|trace| trace.reachable),
                     trace_summary: trace.map(|trace| trace.rationale.clone()),
+                    poc_result: finding.poc_result.as_ref().map(|p| serde_json::to_value(p).unwrap_or_default()),
                 }
             })
             .collect()

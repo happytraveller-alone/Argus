@@ -23,14 +23,14 @@ static void checked_strncat(char *src) {
 }
 
 
-static void unchecked_memcpy(char *src) {
+static void overflowing_memcpy(char *src) {
   char dst[8];
   memcpy(dst, src, 64);
 }
 
-static void badly_bounded_strncpy(char *src) {
+static void suspicious_sizeof_copy(char src[16]) {
   char dst[8];
-  strncpy(dst, src, sizeof(src));
+  memcpy(dst, src, sizeof(src));
 }
 
 static void pointer_scale_bad(void) {
@@ -40,9 +40,11 @@ static void pointer_scale_bad(void) {
   *bad = 1;
 }
 
-static int *return_stack_bad(void) {
+static int *escaped_global;
+
+static void stack_address_escape_bad(void) {
   int local = 1;
-  return &local;
+  escaped_global = &local;
 }
 
 static void double_free_bad(void) {
@@ -69,10 +71,10 @@ int main(int argc, char **argv) {
     unchecked_strcat(argv[1]);
     checked_strncpy(argv[1]);
     checked_strncat(argv[1]);
-    unchecked_memcpy(argv[1]);
-    badly_bounded_strncpy(argv[1]);
+    overflowing_memcpy(argv[1]);
+    suspicious_sizeof_copy(argv[1]);
     pointer_scale_bad();
-    (void)return_stack_bad();
+    stack_address_escape_bad();
     double_free_bad();
     use_after_free_bad();
     tainted_integer_overflow(atoi(argv[1]));
