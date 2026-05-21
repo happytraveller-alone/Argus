@@ -1,4 +1,5 @@
 pub mod codeql;
+pub mod codeql_rules;
 pub mod opengrep;
 pub mod opengrep_a3s;
 pub mod path_utils;

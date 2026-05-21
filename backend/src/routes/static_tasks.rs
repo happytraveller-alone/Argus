@@ -111,6 +111,8 @@ pub fn router() -> Router<AppState> {
                 .delete(delete_opengrep_rule),
         )
         .route("/tasks", get(list_opengrep_tasks).post(create_static_task))
+        .route("/codeql/rules", get(list_codeql_rules))
+        .route("/codeql/rules/stats", get(get_codeql_rule_stats))
         .route(
             "/codeql/tasks",
             get(list_codeql_tasks).post(create_codeql_task),
@@ -449,6 +451,90 @@ async fn get_opengrep_rule_stats(State(state): State<AppState>) -> Result<Json<V
 
 async fn get_generating_rules() -> Json<Vec<Value>> {
     Json(Vec::new())
+}
+
+async fn list_codeql_rules(
+    State(state): State<AppState>,
+    Query(query): Query<ListQuery>,
+) -> Result<Json<Value>, ApiError> {
+    let assets = crate::scan::codeql_rules::load_rule_assets(&state)
+        .await
+        .map_err(|e| ApiError::Internal(format!("failed to load codeql rules: {e}")))?;
+
+    let filtered: Vec<_> = if let Some(ref keyword) = query.keyword {
+        let kw = keyword.to_ascii_lowercase();
+        assets.into_iter().filter(|a| {
+            a.asset_path.to_ascii_lowercase().contains(&kw)
+                || a.metadata_json.get("name").and_then(|v| v.as_str())
+                    .unwrap_or("").to_ascii_lowercase().contains(&kw)
+        }).collect()
+    } else {
+        assets
+    };
+
+    let filtered: Vec<_> = if let Some(ref language) = query.language {
+        let lang = language.to_ascii_lowercase();
+        filtered.into_iter().filter(|a| {
+            let parts: Vec<&str> = a.asset_path.split('/').collect();
+            parts.get(1).map(|l| l.to_ascii_lowercase() == lang).unwrap_or(false)
+        }).collect()
+    } else {
+        filtered
+    };
+
+    let total = filtered.len();
+    let items: Vec<Value> = filtered
+        .into_iter()
+        .skip(query.skip.unwrap_or(0))
+        .take(query.limit.unwrap_or(1_000))
+        .map(|asset| {
+            let parts: Vec<&str> = asset.asset_path.split('/').collect();
+            let language = parts.get(1).unwrap_or(&"unknown").to_string();
+            let filename = parts.last().unwrap_or(&"").to_string();
+            let name = asset.metadata_json.get("name")
+                .and_then(|v| v.as_str())
+                .unwrap_or(&filename)
+                .to_string();
+            json!({
+                "id": asset.sha256,
+                "name": name,
+                "language": language,
+                "asset_path": asset.asset_path,
+                "file_format": asset.file_format,
+                "source": asset.source_kind,
+                "is_active": true,
+                "metadata": asset.metadata_json,
+            })
+        })
+        .collect();
+
+    Ok(Json(json!({
+        "data": items,
+        "total": total,
+    })))
+}
+
+async fn get_codeql_rule_stats(State(state): State<AppState>) -> Result<Json<Value>, ApiError> {
+    let assets = crate::scan::codeql_rules::load_rule_assets(&state)
+        .await
+        .map_err(|e| ApiError::Internal(format!("failed to load codeql rules: {e}")))?;
+
+    let mut languages = std::collections::BTreeSet::new();
+    for asset in &assets {
+        let parts: Vec<&str> = asset.asset_path.split('/').collect();
+        if let Some(lang) = parts.get(1) {
+            languages.insert(lang.to_string());
+        }
+    }
+
+    let total = assets.len();
+    Ok(Json(json!({
+        "total": total,
+        "active": total,
+        "inactive": 0,
+        "language_count": languages.len(),
+        "languages": languages.into_iter().collect::<Vec<_>>(),
+    })))
 }
 
 async fn get_opengrep_rule(

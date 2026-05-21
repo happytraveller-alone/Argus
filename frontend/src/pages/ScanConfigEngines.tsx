@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { Navigate, useSearchParams } from "react-router-dom";
 import OpengrepRules from "@/pages/OpengrepRules";
+import CodeqlRules from "@/pages/CodeqlRules";
 import {
 	DEFAULT_SCAN_ENGINE_TAB,
 	isScanEngineTab,
@@ -19,7 +20,7 @@ export function buildScanConfigEngineSearchParams(
 	currentParams: URLSearchParams,
 	value: string,
 ) {
-	const next = value === "opengrep" ? value : DEFAULT_SCAN_ENGINE_TAB;
+	const next = isScanEngineTab(value) ? value : DEFAULT_SCAN_ENGINE_TAB;
 	const nextParams = new URLSearchParams(currentParams);
 	for (const key of DATA_TABLE_URL_STATE_KEYS) {
 		nextParams.delete(key);
@@ -36,9 +37,7 @@ export default function ScanConfigEngines() {
 	}
 
 	const currentTab = useMemo(() => {
-		return rawTab === "opengrep" && isScanEngineTab(rawTab)
-			? rawTab
-			: DEFAULT_SCAN_ENGINE_TAB;
+		return isScanEngineTab(rawTab) ? rawTab : DEFAULT_SCAN_ENGINE_TAB;
 	}, [rawTab]);
 
 	const handleEngineChange = (value: string) => {
@@ -49,12 +48,21 @@ export default function ScanConfigEngines() {
 
 	return (
 		<div className="min-h-screen bg-background p-6">
-			<OpengrepRules
-				embedded
-				showEngineSelector
-				engineValue={currentTab}
-				onEngineChange={handleEngineChange}
-			/>
+			{currentTab === "codeql" ? (
+				<CodeqlRules
+					embedded
+					showEngineSelector
+					engineValue={currentTab}
+					onEngineChange={handleEngineChange}
+				/>
+			) : (
+				<OpengrepRules
+					embedded
+					showEngineSelector
+					engineValue={currentTab}
+					onEngineChange={handleEngineChange}
+				/>
+			)}
 		</div>
 	);
 }

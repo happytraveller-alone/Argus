@@ -8,7 +8,6 @@ import {
 	DataTable,
 	type DataTableQueryState,
 } from "@/components/data-table";
-import { StepProgressIndicator } from "@/components/scan/StepProgressIndicator";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -66,7 +65,11 @@ function Field({ label, value }: { label: string; value: React.ReactNode }) {
 	);
 }
 
-type IntelligentScanStage = "pending" | "config_resolve" | "input_read" | "llm_invoke" | "completed" | "failed";
+type IntelligentScanStage = "pending" | "recon" | "hunt" | "validate" | "gapfill" | "dedupe" | "trace" | "feedback" | "report" | "completed" | "failed";
+
+const INTELLIGENT_STAGE_ORDER: IntelligentScanStage[] = [
+	"recon", "hunt", "validate", "gapfill", "dedupe", "trace", "feedback", "report",
+];
 
 function resolveIntelligentScanStage(
 	status: string | undefined,
@@ -76,38 +79,50 @@ function resolveIntelligentScanStage(
 	if (s === "completed") return "completed";
 	if (s === "failed" || s === "cancelled") return "failed";
 	if (s === "pending") return "pending";
+	let lastActive: string | null = null;
 	const completedSteps = new Set<string>();
-	let activeStep: string | null = null;
 	for (const ev of events) {
 		const step = typeof ev.data?.step === "string" ? ev.data.step : null;
 		if (!step) continue;
 		if (ev.kind === "step_completed") completedSteps.add(step);
-		else if (ev.kind === "step_started") activeStep = step;
+		else if (ev.kind === "step_started") lastActive = step;
 	}
-	if (completedSteps.has("llm_invoke")) return "completed";
-	if (activeStep) return activeStep as IntelligentScanStage;
-	if (completedSteps.has("input_read")) return "llm_invoke";
-	if (completedSteps.has("config_resolve")) return "input_read";
-	return "config_resolve";
+	if (completedSteps.has("report")) return "completed";
+	if (lastActive && INTELLIGENT_STAGE_ORDER.includes(lastActive as IntelligentScanStage)) {
+		return lastActive as IntelligentScanStage;
+	}
+	for (let i = INTELLIGENT_STAGE_ORDER.length - 1; i >= 0; i--) {
+		if (completedSteps.has(INTELLIGENT_STAGE_ORDER[i])) {
+			const next = INTELLIGENT_STAGE_ORDER[i + 1];
+			return next ?? "completed";
+		}
+	}
+	return "recon";
 }
 
+const STAGE_LABELS: Record<string, string> = {
+	recon: "侦察",
+	hunt: "搜寻",
+	validate: "验证",
+	gapfill: "补漏",
+	dedupe: "去重",
+	trace: "追踪",
+	feedback: "反馈",
+	report: "报告",
+};
+
 function IntelligentScanStages({ stage }: { stage: IntelligentScanStage }) {
-	const steps = [
-		{ key: "config_resolve", label: "配置解析" },
-		{ key: "input_read", label: "输入读取" },
-		{ key: "llm_invoke", label: "LLM 调用" },
-	];
-	const ORDER: Record<string, number> = { pending: -1, config_resolve: 0, input_read: 1, llm_invoke: 2, completed: 3, failed: 3 };
+	const ORDER: Record<string, number> = { pending: -1, recon: 0, hunt: 1, validate: 2, gapfill: 3, dedupe: 4, trace: 5, feedback: 6, report: 7, completed: 8, failed: 8 };
 	const currentIndex = ORDER[stage] ?? -1;
 
 	return (
 		<div className="flex items-center gap-0">
-			{steps.map((step, i) => {
+			{INTELLIGENT_STAGE_ORDER.map((key, i) => {
 				const isDone = currentIndex > i || stage === "completed";
 				const isActive = currentIndex === i && stage !== "completed" && stage !== "failed" && stage !== "pending";
 				const isFailed = stage === "failed" && currentIndex === i;
 				return (
-					<div key={step.key} className="flex items-center">
+					<div key={key} className="flex items-center">
 						<div className="flex flex-col items-center gap-1">
 							<div className={`flex h-6 w-6 items-center justify-center rounded-full border text-xs font-medium transition-colors ${
 								isDone
@@ -129,11 +144,11 @@ function IntelligentScanStages({ stage }: { stage: IntelligentScanStage }) {
 							<span className={`text-[11px] whitespace-nowrap ${
 								isDone ? "text-emerald-300" : isActive ? "text-sky-300" : "text-muted-foreground"
 							}`}>
-								{step.label}
+								{STAGE_LABELS[key]}
 							</span>
 						</div>
-						{i < steps.length - 1 && (
-							<div className={`mx-2 mb-4 h-px w-8 ${isDone ? "bg-emerald-500/40" : "bg-border"}`} />
+						{i < INTELLIGENT_STAGE_ORDER.length - 1 && (
+							<div className={`mx-1.5 mb-4 h-px w-5 ${isDone ? "bg-emerald-500/40" : "bg-border"}`} />
 						)}
 					</div>
 				);
@@ -234,46 +249,6 @@ const findingColumns: AppColumnDef<IntelligentTaskFinding, unknown>[] = [
 			<span className="block max-w-[42rem] whitespace-normal font-mono text-xs text-muted-foreground">
 				{row.original.evidence || "-"}
 			</span>
-		),
-	},
-];
-
-const eventLogColumns: AppColumnDef<IntelligentTaskRecord["eventLog"][number], unknown>[] = [
-	{
-		id: "kind",
-		accessorFn: (row) => row.kind,
-		header: "类型",
-		meta: {
-			label: "类型",
-			align: "left",
-			width: 120,
-		},
-		cell: ({ row }) => <span className="text-sky-300">{row.original.kind}</span>,
-	},
-	{
-		id: "timestamp",
-		accessorFn: (row) => row.timestamp,
-		header: "时间",
-		meta: {
-			label: "时间",
-			align: "left",
-			minWidth: 180,
-		},
-		cell: ({ row }) => (
-			<span className="text-muted-foreground">{row.original.timestamp}</span>
-		),
-	},
-	{
-		id: "message",
-		accessorFn: (row) => row.message ?? "-",
-		header: "消息",
-		meta: {
-			label: "消息",
-			align: "left",
-			minWidth: 260,
-		},
-		cell: ({ row }) => (
-			<span className="text-foreground/80">{row.original.message ?? "-"}</span>
 		),
 	},
 ];
@@ -416,7 +391,6 @@ export default function AgentAuditDetail() {
 	];
 
 	const scanStage = resolveIntelligentScanStage(record.status, activeEvents);
-	const llmEvents = eventLog.filter((ev) => ev.kind.includes("llm") || ev.kind === "step_started" || ev.kind === "step_completed");
 
 	const returnToParam =
 		new URLSearchParams(location.search).get("returnTo") || "";
@@ -507,8 +481,8 @@ export default function AgentAuditDetail() {
 				<IntelligentScanStages stage={scanStage} />
 			</div>
 
-			{/* Two-column main grid: left = findings table; right = execution progress + event log */}
-			<div className="relative grid min-h-0 gap-5 lg:h-[calc(100vh-11rem)] lg:grid-cols-[minmax(0,6fr)_minmax(0,4fr)]">
+			{/* Findings table — full width */}
+			<div className="relative min-h-[28rem] lg:h-[calc(100vh-14rem)]">
 				<div className="min-h-[28rem] min-w-0 overflow-y-auto rounded-md pr-1 lg:h-full">
 					<DataTable
 						data={findings}
@@ -541,38 +515,6 @@ export default function AgentAuditDetail() {
 						fillContainerWidth
 					/>
 				</div>
-
-				{/* Right column: execution progress + event log */}
-				<div className="flex min-h-[28rem] min-w-0 flex-col gap-5 overflow-y-auto pr-1 lg:h-full">
-					{/* Step progress section — always visible */}
-					{(sseEvents.length > 0 || replayEvents.length > 0) && (
-						<div className="rounded-lg border border-border/60 bg-card/40 p-4">
-							<SectionTitle>执行进度</SectionTitle>
-							<StepProgressIndicator
-								events={
-									sseEvents.length > 0
-										? sseEvents
-										: (eventLog as typeof sseEvents)
-								}
-							/>
-						</div>
-					)}
-
-					{/* Event log */}
-					<div className="rounded-lg border border-border/60 bg-card/40 p-4">
-						<SectionTitle>事件日志 ({eventLog.length})</SectionTitle>
-						<DataTable
-							data={eventLog}
-							columns={eventLogColumns}
-							toolbar={false}
-							pagination={false}
-							className="border-border/30 bg-transparent"
-							tableClassName="min-w-[540px]"
-							tableContainerClassName="rounded-sm border-0"
-							emptyState={{ title: "暂无事件" }}
-						/>
-					</div>
-				</div>
 			</div>
 
 			{/* Below the grid (full width) */}
@@ -590,36 +532,72 @@ export default function AgentAuditDetail() {
 
 			{/* LLM Interaction Log Dialog */}
 			<Dialog open={showLlmLog} onOpenChange={setShowLlmLog}>
-				<DialogContent className="max-w-3xl max-h-[80vh] overflow-hidden flex flex-col">
+				<DialogContent className="max-w-4xl max-h-[80vh] overflow-hidden flex flex-col">
 					<DialogHeader>
-						<DialogTitle>时间日志 — LLM 交互</DialogTitle>
+						<DialogTitle>时间日志 ({eventLog.length})</DialogTitle>
 					</DialogHeader>
 					<div className="flex-1 overflow-y-auto">
 						<div className="flex flex-col gap-0">
-							{llmEvents.length === 0 ? (
-								<p className="py-8 text-center text-sm text-muted-foreground">暂无 LLM 交互记录</p>
+							{eventLog.length === 0 ? (
+								<p className="py-8 text-center text-sm text-muted-foreground">暂无交互记录</p>
 							) : (
-								llmEvents.map((ev, idx) => (
-									<div key={idx} className="flex items-start gap-3 border-b border-border/30 px-2 py-2.5 last:border-b-0">
-										<div className="flex flex-col items-center">
-											<div className="flex h-5 w-5 items-center justify-center rounded-full border border-sky-400/40 bg-sky-500/10">
-												<span className="h-1.5 w-1.5 rounded-full bg-sky-400" />
+								eventLog.map((ev, idx) => {
+									const data = ev.data && typeof ev.data === "object" ? (ev.data as Record<string, unknown>) : null;
+									const isLlm = ev.kind === "llm_attempt";
+									const isAgent = ev.kind === "agent_started" || ev.kind === "agent_completed";
+									return (
+										<div key={idx} className="flex items-start gap-3 border-b border-border/30 px-2 py-2.5 last:border-b-0">
+											<div className="flex flex-col items-center">
+												<div className={`flex h-5 w-5 items-center justify-center rounded-full border ${
+													isLlm
+														? "border-violet-400/40 bg-violet-500/10"
+														: isAgent
+														? "border-emerald-400/40 bg-emerald-500/10"
+														: "border-sky-400/40 bg-sky-500/10"
+												}`}>
+													<span className={`h-1.5 w-1.5 rounded-full ${
+														isLlm ? "bg-violet-400" : isAgent ? "bg-emerald-400" : "bg-sky-400"
+													}`} />
+												</div>
+												{idx < eventLog.length - 1 && (
+													<div className="mt-0.5 w-px flex-1 bg-border/30" style={{ minHeight: "0.75rem" }} />
+												)}
 											</div>
-											{idx < llmEvents.length - 1 && (
-												<div className="mt-0.5 w-px flex-1 bg-border/30" style={{ minHeight: "0.75rem" }} />
-											)}
-										</div>
-										<div className="min-w-0 flex-1">
-											<div className="flex items-baseline gap-2">
-												<span className="font-mono text-xs font-medium text-sky-300">{ev.kind}</span>
-												<span className="font-mono text-[10px] text-muted-foreground">{ev.timestamp}</span>
+											<div className="min-w-0 flex-1">
+												<div className="flex items-baseline gap-2">
+													<span className={`font-mono text-xs font-medium ${
+														isLlm ? "text-violet-300" : isAgent ? "text-emerald-300" : "text-sky-300"
+													}`}>{ev.kind}</span>
+													<span className="font-mono text-[10px] text-muted-foreground">{ev.timestamp}</span>
+												</div>
+												{ev.message && (
+													<p className="mt-0.5 text-xs text-foreground/80">{ev.message}</p>
+												)}
+												{isLlm && data && (
+													<div className="mt-1.5 space-y-1 rounded border border-violet-500/20 bg-violet-500/5 px-2.5 py-1.5">
+														<div className="flex flex-wrap gap-x-4 gap-y-0.5 text-[11px]">
+															<span className="text-muted-foreground">模型: <span className="text-violet-200">{String(data.model || "-")}</span></span>
+															<span className="text-muted-foreground">提供商: <span className="text-violet-200">{String(data.provider || "-")}</span></span>
+															<span className="text-muted-foreground">状态: <span className={data.success ? "text-emerald-300" : "text-rose-300"}>{data.success ? "成功" : "失败"}</span></span>
+														</div>
+														<div className="flex flex-wrap gap-x-4 gap-y-0.5 text-[11px]">
+															<span className="text-muted-foreground">开始: <span className="text-foreground/70">{String(data.started || "-")}</span></span>
+															<span className="text-muted-foreground">完成: <span className="text-foreground/70">{String(data.completed || "-")}</span></span>
+														</div>
+														{data.redacted_error && (
+															<p className="text-[11px] text-rose-300">错误: {String(data.redacted_error)}</p>
+														)}
+													</div>
+												)}
+												{isAgent && data && (
+													<div className="mt-1 text-[11px] text-muted-foreground">
+														Agent: <span className="text-emerald-200">{String(data.agent || data.stage || "-")}</span>
+													</div>
+												)}
 											</div>
-											{ev.message && (
-												<p className="mt-0.5 text-xs text-foreground/80">{ev.message}</p>
-											)}
 										</div>
-									</div>
-								))
+									);
+								})
 							)}
 						</div>
 					</div>
