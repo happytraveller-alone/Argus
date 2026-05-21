@@ -295,7 +295,7 @@ async fn system_config_helper_endpoints_are_available() {
 }
 
 #[tokio::test]
-async fn agent_preflight_redacts_credentials_and_reports_runner_stage() {
+async fn agent_preflight_redacts_credentials_and_reports_native_pipeline_ready() {
     let _env_guard = ENV_LOCK.lock().await;
     let _codex_home_guard = EnvVarGuard::remove("CODEX_HOME");
     let _codex_host_guard = EnvVarGuard::remove("ARGUS_CODEX_HOST_DIR");
@@ -349,9 +349,13 @@ async fn agent_preflight_redacts_credentials_and_reports_runner_stage() {
             .unwrap(),
     )
     .unwrap();
-    assert_eq!(stale_preflight_json["ok"], false);
-    assert_eq!(stale_preflight_json["stage"], "runner");
-    assert_eq!(stale_preflight_json["reasonCode"], "runner_missing");
+    assert_eq!(stale_preflight_json["ok"], true);
+    assert!(stale_preflight_json["stage"].is_null());
+    assert!(stale_preflight_json["reasonCode"].is_null());
+    assert_eq!(
+        stale_preflight_json["metadata"]["pipeline"]["agent_count"],
+        8
+    );
     assert_eq!(stale_preflight_json["savedConfig"]["apiKey"], "");
     assert_eq!(stale_preflight_json["savedConfig"]["hasSavedApiKey"], true);
     assert_eq!(stale_preflight_json["savedConfig"]["secretSource"], "saved");
@@ -405,14 +409,25 @@ async fn agent_preflight_redacts_credentials_and_reports_runner_stage() {
     )
     .unwrap();
 
-    assert_eq!(preflight_json["ok"], false);
-    assert_eq!(preflight_json["stage"], "runner");
-    assert_eq!(preflight_json["reasonCode"], "runner_missing");
+    assert_eq!(preflight_json["ok"], true);
+    assert!(preflight_json["stage"].is_null());
+    assert!(preflight_json["reasonCode"].is_null());
     assert_eq!(preflight_json["savedConfig"]["apiKey"], "");
     assert_eq!(preflight_json["savedConfig"]["hasSavedApiKey"], true);
     assert_eq!(preflight_json["savedConfig"]["secretSource"], "saved");
     assert!(!preflight_json.to_string().contains("sk-agentflow-secret"));
-    assert_eq!(preflight_json["metadata"]["runner"]["ok"], false);
+    assert_eq!(preflight_json["metadata"]["runner"]["ok"], true);
+    assert_eq!(
+        preflight_json["metadata"]["runner"]["reason_code"],
+        "native_rust_pipeline"
+    );
+    assert_eq!(
+        preflight_json["metadata"]["pipeline"]["agents"]
+            .as_array()
+            .unwrap()
+            .len(),
+        8
+    );
 }
 
 #[tokio::test]

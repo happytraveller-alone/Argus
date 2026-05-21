@@ -89,14 +89,8 @@ export default function CodeqlExplorationPanel({
 
   return (
     <section className="flex max-h-full min-h-0 flex-col rounded border border-border bg-card/40 p-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="text-sm font-semibold text-foreground">CodeQL 编译探索</h2>
-          <p className="text-xs text-muted-foreground">
-            LLM 轮次、沙箱命令、捕获验证和项目级构建方案复用证据
-          </p>
-        </div>
-        {canReset ? (
+      {canReset ? (
+        <div className="flex justify-end mb-3">
           <Button
             variant="outline"
             className="cyber-btn-outline h-8"
@@ -110,8 +104,8 @@ export default function CodeqlExplorationPanel({
             )}
             重置并重新探索
           </Button>
-        ) : null}
-      </div>
+        </div>
+      ) : null}
       <div
         ref={scrollAreaRef}
         className="mt-3 min-h-0 flex-1 overflow-y-auto pr-1"

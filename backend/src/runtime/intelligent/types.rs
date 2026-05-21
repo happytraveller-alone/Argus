@@ -68,6 +68,22 @@ pub struct IntelligentTaskFinding {
     pub severity: String,
     pub summary: String,
     pub evidence: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub file: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub line_start: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub line_end: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub vuln_class: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub confidence: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub validation_status: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reachable: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub trace_summary: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

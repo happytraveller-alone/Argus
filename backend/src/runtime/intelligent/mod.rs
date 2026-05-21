@@ -1,3 +1,4 @@
+pub mod audit_pipeline;
 pub mod config;
 pub mod llm;
 pub mod task;

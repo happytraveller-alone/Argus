@@ -1019,31 +1019,17 @@ pub async fn agent_preflight(
                         .unwrap_or_else(|_| build_quick_snapshot(&runtime_config));
                 let runner_metadata = annotate_llm_preflight_metadata(
                     add_preflight_attempt_metadata(
-                        agent_preflight_metadata("runner", "runner_missing", None),
+                        native_intelligent_pipeline_metadata(),
                         &attempted_row_ids,
                         Some(&row_id),
                         Some(&outcome.fingerprint),
                     ),
                     &runtime_config,
                 );
-                if runner_metadata["runner"]["ok"] != true {
-                    return Ok(Json(AgentPreflightPayload {
-                        ok: false,
-                        stage: Some("runner".to_string()),
-                        message: "智能审计初始化失败：AgentFlow runner 尚未配置或不可用。"
-                            .to_string(),
-                        reason_code: Some("runner_missing".to_string()),
-                        missing_fields: None,
-                        effective_config: selected_snapshot.clone(),
-                        saved_config: Some(selected_snapshot),
-                        metadata: Some(runner_metadata),
-                        llm_test_metadata: Some(stored.llm_test_metadata_json),
-                    }));
-                }
                 return Ok(Json(AgentPreflightPayload {
                     ok: true,
                     stage: None,
-                    message: "智能审计预检通过。".to_string(),
+                    message: "智能审计预检通过：原生 Rust 8-agent pipeline 可用。".to_string(),
                     reason_code: None,
                     missing_fields: None,
                     effective_config: selected_snapshot.clone(),
@@ -1440,6 +1426,34 @@ fn agent_preflight_metadata(stage: &str, reason_code: &str, details: Option<Valu
         },
         "details": details.unwrap_or(Value::Null),
     })
+}
+
+fn native_intelligent_pipeline_metadata() -> Value {
+    let mut metadata = agent_preflight_metadata("ok", "native_pipeline_ready", None);
+    metadata["llm"] = json!({
+        "ok": true,
+        "reason_code": "passed",
+    });
+    metadata["runner"] = json!({
+        "ok": true,
+        "reason_code": "native_rust_pipeline",
+        "kind": "rust_8_agent_pipeline",
+    });
+    metadata["pipeline"] = json!({
+        "ok": true,
+        "reason_code": "eight_agents_configured",
+        "agent_count": crate::runtime::intelligent::audit_pipeline::PIPELINE_AGENT_COUNT,
+        "agents": crate::runtime::intelligent::audit_pipeline::PIPELINE_AGENT_NAMES,
+    });
+    metadata["output_dir"] = json!({
+        "ok": true,
+        "reason_code": "task_state_file_backed",
+    });
+    metadata["resource"] = json!({
+        "ok": true,
+        "reason_code": "bounded_archive_context",
+    });
+    metadata
 }
 
 fn annotate_llm_preflight_metadata(mut metadata: Value, llm_config: &Value) -> Value {

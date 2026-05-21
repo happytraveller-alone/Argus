@@ -11,7 +11,7 @@
 use std::io::Write;
 use std::sync::Mutex;
 
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use tempfile::NamedTempFile;
 
@@ -20,8 +20,8 @@ use backend_rust::runtime::runner::{
     ContainerRuntime, RunnerMount, RunnerMountPlan, RunnerResult, RunnerSpec,
 };
 use backend_rust::scan::opengrep_a3s::{
-    A3sBoxExecutor, A3sFailureReason, FallbackRunnerExecutor, RuntimeUsed, ScanOutput,
-    scan_with_fallback,
+    scan_with_fallback, A3sBoxExecutor, A3sFailureReason, FallbackRunnerExecutor, RuntimeUsed,
+    ScanOutput,
 };
 
 // ── Fakes ────────────────────────────────────────────────────────────────────

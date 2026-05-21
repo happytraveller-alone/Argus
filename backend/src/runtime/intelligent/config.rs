@@ -8,7 +8,7 @@ use crate::{
     state::StoredSystemConfig,
 };
 
-const CLAW_DEFAULT_MODEL: &str = "claude-3-5-sonnet";
+const INTELLIGENT_DEFAULT_MODEL: &str = "gpt-5";
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub enum IntelligentLlmProvider {
@@ -20,7 +20,7 @@ pub enum IntelligentLlmProvider {
 
 impl IntelligentLlmProvider {
     #[must_use]
-    pub fn claw_auth_kind(&self) -> &'static str {
+    pub fn auth_kind(&self) -> &'static str {
         match self {
             Self::AnthropicCompatible => "anthropic_api_key",
             Self::OpenAiCompatible => "openai_compatible_bearer",
@@ -45,7 +45,7 @@ pub struct IntelligentLlmConfig {
     pub first_token_timeout_seconds: i64,
     pub stream_timeout_seconds: i64,
     pub custom_header_names: Vec<String>,
-    pub claw_auth_kind: &'static str,
+    pub auth_kind: &'static str,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -121,13 +121,13 @@ pub fn config_from_runtime(
 ) -> Result<IntelligentLlmConfig, IntelligentLlmConfigError> {
     let base_url = parse_absolute_base_url(&runtime.base_url, &provider)?;
     let model = if runtime.model.trim().is_empty() {
-        CLAW_DEFAULT_MODEL.to_string()
+        INTELLIGENT_DEFAULT_MODEL.to_string()
     } else {
         runtime.model
     };
     let mut custom_header_names: Vec<String> = runtime.custom_headers.keys().cloned().collect();
     custom_header_names.sort();
-    let claw_auth_kind = provider.claw_auth_kind();
+    let auth_kind = provider.auth_kind();
     Ok(IntelligentLlmConfig {
         row_id,
         provider,
@@ -141,7 +141,7 @@ pub fn config_from_runtime(
         first_token_timeout_seconds: runtime.llm_first_token_timeout,
         stream_timeout_seconds: runtime.llm_stream_timeout,
         custom_header_names,
-        claw_auth_kind,
+        auth_kind,
     })
 }
 
@@ -206,7 +206,7 @@ mod tests {
     };
 
     #[test]
-    fn resolves_enabled_schema_v2_row_into_claw_compatible_snapshot() {
+    fn resolves_enabled_schema_v2_row_into_provider_neutral_snapshot() {
         let app_config = AppConfig::for_tests();
         let stored = StoredSystemConfig {
             llm_config_json: json!({
@@ -249,7 +249,7 @@ mod tests {
 
         assert_eq!(config.row_id, "anthropic-row");
         assert_eq!(config.provider, IntelligentLlmProvider::AnthropicCompatible);
-        assert_eq!(config.claw_auth_kind, "anthropic_api_key");
+        assert_eq!(config.auth_kind, "anthropic_api_key");
         assert_eq!(config.model, "claude-sonnet-4.5");
         assert_eq!(config.base_url.as_str(), "https://api.anthropic.example/");
         assert_eq!(config.api_key, "sk-ant-secret");
@@ -297,7 +297,7 @@ mod tests {
     }
 
     #[test]
-    fn exposes_openai_compatible_runtime_for_future_claw_client_builder() {
+    fn exposes_openai_compatible_runtime_for_native_pipeline() {
         let app_config = AppConfig::for_tests();
         let stored = StoredSystemConfig {
             llm_config_json: json!({
@@ -320,7 +320,7 @@ mod tests {
         let config = resolve_intelligent_llm_config(&stored, &app_config).unwrap();
 
         assert_eq!(config.provider, IntelligentLlmProvider::OpenAiCompatible);
-        assert_eq!(config.claw_auth_kind, "openai_compatible_bearer");
+        assert_eq!(config.auth_kind, "openai_compatible_bearer");
         assert_eq!(config.base_url.as_str(), "https://gateway.example/v1");
         assert_eq!(
             llm_api_key(&stored, &app_config).as_deref(),

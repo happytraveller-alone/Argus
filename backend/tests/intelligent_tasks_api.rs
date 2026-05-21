@@ -41,8 +41,8 @@ struct ScriptedState {
     pub attempts: usize,
     /// Optional pre-invocation delay in milliseconds.
     pub delay_ms: u64,
-    /// Behavior: Ok(content) or Err(redacted_message).
-    pub result: Result<String, String>,
+    /// Behavior queue: Ok(content) or Err(redacted_message). The final item is reused.
+    pub results: Vec<Result<String, String>>,
 }
 
 impl ScriptedInvoker {
@@ -51,7 +51,20 @@ impl ScriptedInvoker {
             state: Arc::new(Mutex::new(ScriptedState {
                 attempts: 0,
                 delay_ms,
-                result: Ok(content.to_string()),
+                results: vec![Ok(content.to_string())],
+            })),
+        }
+    }
+
+    fn sequence(contents: Vec<&str>, delay_ms: u64) -> Self {
+        Self {
+            state: Arc::new(Mutex::new(ScriptedState {
+                attempts: 0,
+                delay_ms,
+                results: contents
+                    .into_iter()
+                    .map(|content| Ok(content.to_string()))
+                    .collect(),
             })),
         }
     }
@@ -61,7 +74,7 @@ impl ScriptedInvoker {
             state: Arc::new(Mutex::new(ScriptedState {
                 attempts: 0,
                 delay_ms: 0,
-                result: Err(redacted.to_string()),
+                results: vec![Err(redacted.to_string())],
             })),
         }
     }
@@ -81,7 +94,11 @@ impl IntelligentLlmInvoker for ScriptedInvoker {
         let (delay, result) = {
             let mut guard = self.state.lock().await;
             guard.attempts += 1;
-            (guard.delay_ms, guard.result.clone())
+            let index = guard
+                .attempts
+                .saturating_sub(1)
+                .min(guard.results.len().saturating_sub(1));
+            (guard.delay_ms, guard.results[index].clone())
         };
         if delay > 0 {
             tokio::time::sleep(std::time::Duration::from_millis(delay)).await;
@@ -210,10 +227,19 @@ async fn wait_until_terminal(
 }
 
 #[tokio::test]
-async fn create_returns_pending_or_running_then_completes_zero_findings() {
+async fn create_returns_pending_or_running_then_completes_with_eight_agent_finding() {
     // Use a small delay so the first list/get observation can see pending/running.
-    let invoker = Arc::new(ScriptedInvoker::ok(
-        "no security concerns detected; project file inventory looks routine.",
+    let invoker = Arc::new(ScriptedInvoker::sequence(
+        vec![
+            r#"{"architectureSummary":"Tiny test project","subsystems":[{"name":"docs","path":"README.md","purpose":"fixture"}],"initialTasks":[{"taskId":"hunt-docs","attackClass":"documentation_exposure","scopeHint":"Check README for obvious leaked secrets","targetFiles":["README.md"],"rationale":"fixture task","priority":1}]}"#,
+            r#"{"findings":[{"findingId":"F-1","file":"README.md","lineStart":1,"lineEnd":1,"vulnClass":"documentation_exposure","severity":"low","description":"README fixture is reviewable","evidence":"hello world","confidence":0.2}]}"#,
+            r#"{"findings":[{"findingId":"F-1","file":"README.md","lineStart":1,"lineEnd":1,"vulnClass":"documentation_exposure","severity":"low","description":"README fixture is reviewable","evidence":"hello world","confidence":0.2,"validationStatus":"confirmed","validationRationale":"fixture evidence is present"}]}"#,
+            r#"{"newTasks":[],"rationale":"No gaps in tiny fixture"}"#,
+            r#"{"groups":[{"groupId":"G-1","canonicalFindingId":"F-1","findingIds":["F-1"],"rootCause":"fixture documentation"}]}"#,
+            r#"{"traces":[{"findingId":"F-1","reachable":false,"confidence":0.8,"rationale":"static fixture only"}]}"#,
+            r#"{"newTasks":[],"patterns":["documentation_exposure"]}"#,
+            r#"{"summary":"8-agent intelligent audit completed; one low fixture finding.","findings":[],"recommendations":["Review documentation exposure."]}"#,
+        ],
         80,
     ));
     let state = build_state_with_invoker("create-success", invoker.clone()).await;
@@ -248,11 +274,27 @@ async fn create_returns_pending_or_running_then_completes_zero_findings() {
 
     let task_id = payload["taskId"].as_str().unwrap().to_string();
     let final_record = wait_until_terminal(&state, &task_id, 200).await;
-    assert_eq!(final_record.status, IntelligentTaskStatus::Completed);
+    if final_record.status != IntelligentTaskStatus::Completed {
+        panic!(
+            "expected completed, got {:?} at stage {:?}: {:?}; events: {:?}",
+            final_record.status,
+            final_record.failure_stage,
+            final_record.failure_reason,
+            final_record.event_log
+        );
+    }
     assert!(final_record.duration_ms.is_some());
     assert!(!final_record.input_summary.is_empty());
     assert!(!final_record.report_summary.is_empty());
-    assert!(final_record.findings.is_empty());
+    assert_eq!(final_record.findings.len(), 1);
+    let finding = &final_record.findings[0];
+    assert_eq!(finding.file.as_deref(), Some("README.md"));
+    assert_eq!(
+        finding.vuln_class.as_deref(),
+        Some("documentation_exposure")
+    );
+    assert_eq!(finding.validation_status.as_deref(), Some("confirmed"));
+    assert_eq!(finding.reachable, Some(false));
     assert!(final_record
         .event_log
         .iter()
@@ -261,7 +303,21 @@ async fn create_returns_pending_or_running_then_completes_zero_findings() {
         .event_log
         .iter()
         .any(|event| event.kind == "llm_attempt"));
-    assert_eq!(invoker.attempts().await, 1, "no retry expected");
+    assert_eq!(
+        invoker.attempts().await,
+        8,
+        "the intelligent task must run the reference-style 8-agent pipeline"
+    );
+    let completed_agents = final_record
+        .event_log
+        .iter()
+        .filter(|event| event.kind == "agent_completed")
+        .filter_map(|event| event.data.as_ref()?.get("agent")?.as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        completed_agents,
+        vec!["recon", "hunt", "validate", "gapfill", "dedupe", "trace", "feedback", "report"]
+    );
 }
 
 #[tokio::test]

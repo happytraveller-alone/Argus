@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
-import { AlertCircle, ArrowLeft, Ban, Loader2, RefreshCw } from "lucide-react";
+import { AlertCircle, ArrowLeft, Ban, CheckCircle2, Circle, Loader2, RefreshCw, Terminal } from "lucide-react";
 import {
 	AlertDialog,
 	AlertDialogAction,
@@ -11,6 +11,12 @@ import {
 	AlertDialogHeader,
 	AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+	Dialog,
+	DialogContent,
+	DialogHeader,
+	DialogTitle,
+} from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -33,7 +39,83 @@ import {
 	formatStaticAnalysisDuration,
 	getStaticAnalysisTaskDisplayDurationMs,
 	isStaticAnalysisPollableStatus,
+	type CodeqlExplorationProgressEventLike,
 } from "./static-analysis/viewModel";
+
+type CodeqlScanStage = "pending" | "exploration" | "building" | "scanning" | "completed" | "failed";
+
+function resolveCodeqlScanStage(
+	status: string | undefined,
+	events: CodeqlExplorationProgressEventLike[],
+): CodeqlScanStage {
+	const s = String(status || "").trim().toLowerCase();
+	if (s === "completed") return "completed";
+	if (s === "failed" || s === "interrupted" || s === "cancelled" || s === "aborted") return "failed";
+	if (s === "pending") return "pending";
+	const hasBuildPlanAccepted = events.some(
+		(e) => e.stage === "build_plan_accepted" || e.event_type === "build_plan_accepted",
+	);
+	if (hasBuildPlanAccepted) return "scanning";
+	const hasExplorationEvent = events.some((e) => {
+		const kind = String(e.stage || e.event_type || "");
+		return kind.includes("compile_sandbox") || kind.includes("llm_round") || kind.includes("sandbox_command");
+	});
+	if (hasExplorationEvent) return "exploration";
+	if (s === "running") return "exploration";
+	return "pending";
+}
+
+function CodeqlScanStages({ stage }: { stage: CodeqlScanStage }) {
+	const steps = [
+		{ key: "exploration", label: "编译探索" },
+		{ key: "building", label: "CodeQL 构建" },
+		{ key: "scanning", label: "规则扫描" },
+	];
+	const ORDER: Record<string, number> = { pending: -1, exploration: 0, building: 1, scanning: 2, completed: 3, failed: 3 };
+	const currentIndex = ORDER[stage] ?? -1;
+
+	return (
+		<div className="flex items-center gap-0">
+			{steps.map((step, i) => {
+				const stepIndex = i;
+				const isDone = currentIndex > stepIndex || stage === "completed";
+				const isActive = currentIndex === stepIndex && stage !== "completed" && stage !== "failed" && stage !== "pending";
+				const isFailed = stage === "failed" && currentIndex === stepIndex;
+				return (
+					<div key={step.key} className="flex items-center">
+						<div className="flex flex-col items-center gap-1">
+							<div className={`flex h-6 w-6 items-center justify-center rounded-full border text-xs font-medium transition-colors ${
+								isDone
+									? "border-emerald-500/60 bg-emerald-500/20 text-emerald-300"
+									: isActive
+									? "border-sky-400/70 bg-sky-500/20 text-sky-300"
+									: isFailed
+									? "border-rose-500/60 bg-rose-500/20 text-rose-300"
+									: "border-border bg-muted/30 text-muted-foreground"
+							}`}>
+								{isDone ? (
+									<CheckCircle2 className="h-3.5 w-3.5" />
+								) : isActive ? (
+									<Loader2 className="h-3 w-3 animate-spin" />
+								) : (
+									<Circle className="h-3 w-3" />
+								)}
+							</div>
+							<span className={`text-[11px] whitespace-nowrap ${
+								isDone ? "text-emerald-300" : isActive ? "text-sky-300" : "text-muted-foreground"
+							}`}>
+								{step.label}
+							</span>
+						</div>
+						{i < steps.length - 1 && (
+							<div className={`mx-2 mb-4 h-px w-8 ${isDone ? "bg-emerald-500/40" : "bg-border"}`} />
+						)}
+					</div>
+				);
+			})}
+		</div>
+	);
+}
 
 export default function CodeqlScanDetail() {
 	const { taskId: rawTaskId } = useParams<{ taskId: string }>();
@@ -92,6 +174,7 @@ export default function CodeqlScanDetail() {
 	const [tableState, setTableState] = useState<DataTableQueryState>(() =>
 		createStaticAnalysisInitialTableState(initialState),
 	);
+	const [showExploration, setShowExploration] = useState(false);
 
 	const unifiedRows = useMemo(
 		() =>
@@ -156,6 +239,13 @@ export default function CodeqlScanDetail() {
 		() => failureReasons.find((reason) => reason.engine === "codeql") ?? null,
 		[failureReasons],
 	);
+
+	const scanStage = useMemo(
+		() => resolveCodeqlScanStage(codeqlTask?.status, codeqlExplorationEvents),
+		[codeqlTask?.status, codeqlExplorationEvents],
+	);
+
+	const showStages = scanStage !== "completed" && scanStage !== "failed";
 
 	useEffect(() => {
 		syncStateToUrl(tableState);
@@ -232,6 +322,15 @@ export default function CodeqlScanDetail() {
 						</Button>
 					) : null}
 					<Button
+						size="sm"
+						variant="outline"
+						className="cyber-btn-ghost h-8 px-3"
+						onClick={() => setShowExploration(true)}
+					>
+						<Terminal className="w-3.5 h-3.5 mr-1.5" />
+						编译探索
+					</Button>
+					<Button
 						variant="outline"
 						className="cyber-btn-outline h-8"
 						onClick={() => void refreshAll(false)}
@@ -253,6 +352,14 @@ export default function CodeqlScanDetail() {
 				</div>
 			</div>
 
+			{/* Progress stage indicator — only shown while running */}
+			{showStages ? (
+				<div className="flex items-center gap-4 rounded border border-border bg-card/40 px-4 py-3">
+					<span className="text-xs text-muted-foreground shrink-0">扫描阶段</span>
+					<CodeqlScanStages stage={scanStage} />
+				</div>
+			) : null}
+
 			{codeqlFailureReason ? (
 				<div className="cyber-card flex items-start gap-3 border border-rose-500/30 bg-rose-500/10 p-4">
 					<AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-rose-400" />
@@ -265,37 +372,42 @@ export default function CodeqlScanDetail() {
 						</pre>
 						{canResetCodeqlBuildPlan ? (
 							<p className="pt-1 text-[11px] text-rose-200/70">
-								可在右侧"CodeQL
-								编译探索"面板点击"重置并重新探索"重新触发构建方案探索。
+								可点击"编译探索"按钮打开面板，点击"重置并重新探索"重新触发构建方案探索。
 							</p>
 						) : null}
 					</div>
 				</div>
 			) : null}
 
-			<div className="grid min-h-0 gap-5 lg:h-[calc(100vh-11rem)] lg:grid-cols-[minmax(0,6fr)_minmax(0,4fr)]">
-				<div className="min-h-[28rem] min-w-0 overflow-y-auto rounded-md pr-1 lg:h-full">
-					<StaticAnalysisFindingsTable
-						currentRoute={currentRoute}
-						loadingInitial={loadingInitial}
-						rows={unifiedRows}
-						state={tableState}
-						showEngineColumn={false}
-						onStateChange={setTableState}
-						updatingKey={updatingKey}
-						onToggleStatus={handleToggleStatus}
-					/>
-				</div>
-
-				<div className="min-h-[28rem] min-w-0 overflow-y-auto pr-1 lg:h-full">
-					<CodeqlExplorationPanel
-						events={codeqlExplorationEvents}
-						canReset={canResetCodeqlBuildPlan}
-						resetting={resettingCodeqlPlan}
-						onReset={handleResetCodeqlBuildPlan}
-					/>
-				</div>
+			<div className="min-h-[28rem] overflow-x-auto">
+				<StaticAnalysisFindingsTable
+					currentRoute={currentRoute}
+					loadingInitial={loadingInitial}
+					rows={unifiedRows}
+					state={tableState}
+					showEngineColumn={false}
+					onStateChange={setTableState}
+					updatingKey={updatingKey}
+					onToggleStatus={handleToggleStatus}
+				/>
 			</div>
+
+			{/* Exploration Dialog */}
+			<Dialog open={showExploration} onOpenChange={setShowExploration}>
+				<DialogContent className="max-w-3xl max-h-[80vh] overflow-hidden flex flex-col">
+					<DialogHeader>
+						<DialogTitle>CodeQL 编译探索</DialogTitle>
+					</DialogHeader>
+					<div className="flex-1 overflow-y-auto">
+						<CodeqlExplorationPanel
+							events={codeqlExplorationEvents}
+							canReset={canResetCodeqlBuildPlan}
+							resetting={resettingCodeqlPlan}
+							onReset={handleResetCodeqlBuildPlan}
+						/>
+					</div>
+				</DialogContent>
+			</Dialog>
 
 			{/* Interrupt confirmation dialog */}
 			<AlertDialog

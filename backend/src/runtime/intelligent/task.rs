@@ -9,9 +9,9 @@ use tokio::{
 use uuid::Uuid;
 
 use crate::{
-    archive,
     db::{intelligent_task_state, system_config},
     runtime::intelligent::{
+        audit_pipeline,
         config::resolve_intelligent_llm_config,
         llm::{HttpIntelligentLlmInvoker, IntelligentLlmInvoker},
         types::{IntelligentTaskEvent, IntelligentTaskRecord},
@@ -208,100 +208,56 @@ impl IntelligentTaskManager {
                 .with_data(json!({ "step": "config_resolve" })),
         );
 
-        // --- input_read step ---
+        // --- 8-agent audit pipeline step ---
         let _ = tx.send(
-            IntelligentTaskEvent::new("step_started").with_data(json!({ "step": "input_read" })),
+            IntelligentTaskEvent::new("step_started")
+                .with_data(json!({ "step": "audit_pipeline" })),
         );
 
-        // Build input summary from project archive listing
-        let input_summary = self.build_input_summary(&state, &project_id).await;
-
-        let input_summary = match input_summary {
-            Ok(summary) => {
-                let _ = tx.send(
-                    IntelligentTaskEvent::new("step_completed")
-                        .with_data(json!({ "step": "input_read" })),
-                );
-                summary
-            }
-            Err(err_msg) => {
-                let failed_evt =
-                    IntelligentTaskEvent::new("input_read_failed").with_message(err_msg.clone());
-                let _ = tx.send(failed_evt.clone());
-                let _ = intelligent_task_state::update_record(&state, &task_id, |r| {
-                    r.mark_failed("input_read", &err_msg);
-                    r.append_event(failed_evt.clone());
-                })
-                .await;
-                self.live_tasks.lock().await.remove(&task_id);
-                return;
-            }
-        };
-
-        // Save input_summary to record before invoking LLM
-        let _ = intelligent_task_state::update_record(&state, &task_id, |r| {
-            r.input_summary = input_summary.clone();
-        })
-        .await;
-
-        // Compose prompt
-        let prompt = format!(
-            "You are a security auditor. Analyze the following project file inventory for potential security concerns.\n\n{input_summary}\n\nProvide a brief security summary."
-        );
-
-        // --- llm_invoke step ---
-        let _ = tx.send(
-            IntelligentTaskEvent::new("step_started").with_data(json!({ "step": "llm_invoke" })),
-        );
-        let _ = tx.send(IntelligentTaskEvent::new("thinking_start"));
-
-        // Invoke LLM (single attempt, no retry)
         let invoker = Arc::clone(&self.invoker);
-        let invocation_result = invoker.invoke(&prompt, &config).await;
+        let pipeline_result =
+            audit_pipeline::run_pipeline(&state, &task_id, &project_id, &config, invoker, &tx)
+                .await;
 
         let duration_ms = started.elapsed().as_millis() as u64;
 
-        match invocation_result {
-            Ok(invocation) => {
-                let report_summary = invocation.content.chars().take(500).collect::<String>();
-                let attempt_event = invocation.attempt_event;
-
-                // Emit thinking token (truncated to 500 chars) then thinking_end
-                let _ = tx.send(
-                    IntelligentTaskEvent::new("thinking_token").with_data(json!({
-                        "content": report_summary,
-                    })),
-                );
-                let _ = tx.send(IntelligentTaskEvent::new("thinking_end"));
+        match pipeline_result {
+            Ok(result) => {
                 let _ = tx.send(
                     IntelligentTaskEvent::new("step_completed")
-                        .with_data(json!({ "step": "llm_invoke" })),
+                        .with_data(json!({ "step": "audit_pipeline" })),
                 );
-
                 let _ = intelligent_task_state::update_record(&state, &task_id, |r| {
                     r.duration_ms = Some(duration_ms);
-                    r.report_summary = report_summary.clone();
-                    r.append_event(attempt_event.clone());
-                    // mark_completed validates proof fields
+                    r.input_summary = result.input_summary.clone();
+                    r.report_summary = result.report_summary.clone();
+                    r.findings = result.findings.clone();
+                    for event in result.events.clone() {
+                        r.append_event(event);
+                    }
                     if let Err(validation_err) = r.mark_completed() {
                         r.mark_failed("completion_validation", validation_err);
                     }
                 })
                 .await;
-
-                let _ = tx.send(attempt_event);
             }
-            Err(err) => {
-                let _ = tx.send(IntelligentTaskEvent::new("thinking_end"));
-                let fail_evt = IntelligentTaskEvent::new("llm_attempt").with_data(json!({
-                    "success": false,
-                    "redacted_error": err.redacted_message,
-                }));
+            Err(error) => {
+                let error_message = error.to_string();
+                let failure_stage = if error_message.starts_with("[llm_request]") {
+                    "llm_request"
+                } else if error_message.contains("has no archive") {
+                    "input_read"
+                } else {
+                    "audit_pipeline"
+                };
+                let fail_evt = IntelligentTaskEvent::new("audit_pipeline_failed")
+                    .with_message(error_message.clone())
+                    .with_data(json!({ "stage": failure_stage }));
                 let _ = tx.send(fail_evt.clone());
                 let _ = intelligent_task_state::update_record(&state, &task_id, |r| {
                     r.duration_ms = Some(duration_ms);
                     r.append_event(fail_evt.clone());
-                    r.mark_failed("llm_request", &err.redacted_message);
+                    r.mark_failed(failure_stage, error_message.clone());
                 })
                 .await;
             }
@@ -309,46 +265,5 @@ impl IntelligentTaskManager {
 
         self.live_tasks.lock().await.remove(&task_id);
         // tx is dropped here → all broadcast::Receivers will see RecvError::Closed
-    }
-
-    async fn build_input_summary(
-        &self,
-        state: &AppState,
-        project_id: &str,
-    ) -> Result<String, String> {
-        use crate::db::projects;
-
-        let project = projects::get_project(state, project_id)
-            .await
-            .map_err(|e| format!("failed to load project: {e}"))?;
-
-        let Some(project) = project else {
-            return Err(format!("project not found: {project_id}"));
-        };
-
-        let Some(archive_meta) = project.archive else {
-            return Err(format!("project {project_id} has no archive"));
-        };
-
-        let storage_path = std::path::PathBuf::from(&archive_meta.storage_path);
-        let entries =
-            archive::list_archive_files_from_path(&storage_path, &archive_meta.original_filename)
-                .map_err(|e| format!("failed to list archive: {e}"))?;
-
-        const MAX_ENTRIES: usize = 200;
-        let lines: Vec<String> = entries
-            .iter()
-            .take(MAX_ENTRIES)
-            .map(|e| format!("{} ({}B)", e.path, e.size))
-            .collect();
-
-        let total = entries.len();
-        let shown = lines.len();
-        let mut summary = format!("Project file inventory ({shown}/{total} files):\n");
-        summary.push_str(&lines.join("\n"));
-        if total > MAX_ENTRIES {
-            summary.push_str(&format!("\n... and {} more files", total - MAX_ENTRIES));
-        }
-        Ok(summary)
     }
 }

@@ -268,7 +268,7 @@ mod tests {
             first_token_timeout_seconds: 30,
             stream_timeout_seconds: 60,
             custom_header_names: vec![],
-            claw_auth_kind: "openai_compatible_bearer",
+            auth_kind: "openai_compatible_bearer",
         }
     }
 

@@ -1897,6 +1897,40 @@ async fn run_codeql_compile_exploration(
             continue;
         }
 
+        // Exit code is 0 but check for stderr errors or stdout error patterns.
+        // A build plan is only acceptable if there are no compilation errors.
+        let stderr_trimmed = exec_result.stderr.trim();
+        let stdout_lower = exec_result.stdout.to_lowercase();
+        let has_stderr_errors = !stderr_trimmed.is_empty()
+            && (stderr_trimmed.contains("error:")
+                || stderr_trimmed.contains("Error:")
+                || stderr_trimmed.contains("ERROR")
+                || stderr_trimmed.contains("fatal:")
+                || stderr_trimmed.contains("FAILED")
+                || stderr_trimmed.contains("BUILD FAILURE")
+                || stderr_trimmed.contains("compilation failed")
+                || stderr_trimmed.contains("cannot find symbol"));
+        let has_stdout_errors = stdout_lower.contains("build failure")
+            || stdout_lower.contains("compilation error")
+            || stdout_lower.contains("fatal error")
+            || stdout_lower.contains("[error]");
+
+        if has_stderr_errors || has_stdout_errors {
+            let hint = if has_stderr_errors {
+                "The command exited with code 0 but stderr contains error messages. The build is not clean — fix the errors."
+            } else {
+                "The command exited with code 0 but stdout contains error messages. The build is not clean — fix the errors."
+            };
+            prompt = build_inference_prompt(
+                round as u32 + 1,
+                language,
+                &workspace_listing,
+                Some(&exec_summary),
+                Some(hint),
+            );
+            continue;
+        }
+
         // Full build sequence succeeded — accept the plan.
         // The successful execution of the complete command chain is sufficient
         // proof that CodeQL can trace the compilation.
@@ -1959,7 +1993,7 @@ fn generate_codeql_entrypoint_script(
     ram_mb: u64,
     threads: usize,
 ) -> String {
-    let mut script = String::from("#!/bin/sh\nset -e\ncd /scan/workspace/source\n\n");
+    let mut script = String::from("#!/bin/sh\ncd /scan/workspace/source\n\n");
 
     let build_command = if plan.commands.is_empty() {
         String::new()
@@ -1984,8 +2018,14 @@ fn generate_codeql_entrypoint_script(
     };
 
     script.push_str(&format!(
-        "codeql database create /scan/codeql-db --language={language}{build_command} --ram={ram_mb}{threads_arg} --overwrite\n\n"
+        "codeql database create /scan/codeql-db --language={language}{build_command} --ram={ram_mb}{threads_arg} --overwrite || CREATE_RC=$?\n"
     ));
+    script.push_str("CREATE_RC=${CREATE_RC:-0}\n");
+    script.push_str("if [ \"$CREATE_RC\" -eq 2 ]; then\n");
+    script.push_str("  echo 'codeql database create exited with code 2 (extraction issues), continuing with analysis'\n");
+    script.push_str("elif [ \"$CREATE_RC\" -ne 0 ]; then\n");
+    script.push_str("  exit $CREATE_RC\n");
+    script.push_str("fi\n\n");
 
     let query_suite = plan
         .query_suite
@@ -1994,8 +2034,14 @@ fn generate_codeql_entrypoint_script(
         .to_string();
     script.push_str("mkdir -p /scan/workspace/output\n\n");
     script.push_str(&format!(
-        "codeql database analyze /scan/codeql-db --format=sarif-latest --output=/scan/workspace/output/results.sarif --ram={ram_mb}{threads_arg} {query_suite}\n"
+        "codeql database analyze /scan/codeql-db --format=sarif-latest --output=/scan/workspace/output/results.sarif --ram={ram_mb}{threads_arg} {query_suite} || ANALYZE_RC=$?\n"
     ));
+    script.push_str("ANALYZE_RC=${ANALYZE_RC:-0}\n");
+    script.push_str("if [ \"$ANALYZE_RC\" -eq 2 ]; then\n");
+    script.push_str("  echo 'codeql analyze exited with code 2 (some queries failed), treating as partial success'\n");
+    script.push_str("elif [ \"$ANALYZE_RC\" -ne 0 ]; then\n");
+    script.push_str("  exit $ANALYZE_RC\n");
+    script.push_str("fi\n");
 
     script
 }
