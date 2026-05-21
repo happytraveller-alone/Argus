@@ -146,7 +146,6 @@ module Config implements DataFlow::StateConfigSig {
     result instanceof DataFlow::FeatureHasSinkCallContext
   }
 
-  predicate observeDiffInformedIncrementalMode() { any() }
 
   Location getASelectedSourceLocation(DataFlow::Node source) { none() }
 

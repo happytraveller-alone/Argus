@@ -179,9 +179,6 @@ module Config implements DataFlow::ConfigSig {
 
   int fieldFlowBranchLimit() { result = 0 }
 
-  predicate observeDiffInformedIncrementalMode() {
-    none() // used both positively and negatively
-  }
 }
 
 module Flow = DataFlow::Global<Config>;

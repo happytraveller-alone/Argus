@@ -151,7 +151,6 @@ module ExecTaintConfig implements DataFlow::StateConfigSig {
     isSink(node, state) // Prevent duplicates along a call chain, since `shellCommand` will include wrappers
   }
 
-  predicate observeDiffInformedIncrementalMode() { any() }
 
   Location getASelectedSinkLocation(DataFlow::Node sink) {
     exists(DataFlow::Node concatResult, Expr command, ExecState state |

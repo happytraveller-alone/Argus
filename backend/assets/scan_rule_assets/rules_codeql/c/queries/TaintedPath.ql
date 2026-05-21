@@ -94,7 +94,6 @@ module TaintedPathConfig implements DataFlow::ConfigSig {
     isSink(node)
   }
 
-  predicate observeDiffInformedIncrementalMode() { any() }
 
   Location getASelectedSinkLocation(DataFlow::Node sink) {
     result = sink.asIndirectArgument().getLocation()

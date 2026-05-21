@@ -63,7 +63,6 @@ module NullAppNameCreateProcessFunctionConfig implements DataFlow::ConfigSig {
     )
   }
 
-  predicate observeDiffInformedIncrementalMode() { any() }
 
   Location getASelectedSourceLocation(DataFlow::Node source) { none() }
 
@@ -93,7 +92,6 @@ module QuotedCommandInCreateProcessFunctionConfig implements DataFlow::ConfigSig
     )
   }
 
-  predicate observeDiffInformedIncrementalMode() { any() }
 
   Location getASelectedSourceLocation(DataFlow::Node source) { none() }
 
