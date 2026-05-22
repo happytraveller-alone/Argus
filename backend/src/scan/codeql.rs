@@ -136,8 +136,34 @@ pub async fn materialize_query_directory_for_languages(
     materialize_query_assets(workspace_dir, assets).await
 }
 
+fn extract_json_from_llm_response(raw: &str) -> Result<&str> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        anyhow::bail!("LLM returned empty response");
+    }
+    // Strip markdown code fences
+    let stripped = if trimmed.starts_with("```") {
+        let content = trimmed
+            .strip_prefix("```json")
+            .or_else(|| trimmed.strip_prefix("```"))
+            .unwrap_or(trimmed);
+        content.strip_suffix("```").unwrap_or(content).trim()
+    } else {
+        trimmed
+    };
+    // Find JSON object boundaries
+    if let (Some(start), Some(end)) = (stripped.find('{'), stripped.rfind('}')) {
+        if start <= end {
+            return Ok(&stripped[start..=end]);
+        }
+    }
+    // If no braces found, return the stripped content as-is (let serde give a better error)
+    Ok(stripped)
+}
+
 pub fn parse_compile_sandbox_plan(plan_text: &str) -> Result<CompileSandboxPlan> {
-    let payload = serde_json::from_str::<Value>(plan_text)?;
+    let json_str = extract_json_from_llm_response(plan_text)?;
+    let payload = serde_json::from_str::<Value>(json_str)?;
     let language = normalize_language(
         payload
             .get("language")

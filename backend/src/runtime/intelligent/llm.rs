@@ -111,6 +111,26 @@ impl IntelligentLlmInvoker for HttpIntelligentLlmInvoker {
 
         match result {
             Ok(content) => {
+                if content.trim().is_empty() {
+                    let attempt_event = IntelligentTaskEvent::new("llm_attempt").with_data(json!({
+                        "provider": format!("{:?}", config.provider),
+                        "model": config.model,
+                        "fingerprint": config.llm_fingerprint_for_log(),
+                        "started": started_at,
+                        "completed": finished_at,
+                        "success": false,
+                        "redacted_error": "LLM returned empty response",
+                    }));
+                    return Err(IntelligentLlmInvocationError {
+                        stage: "llm_request",
+                        redacted_message: attempt_event
+                            .data
+                            .as_ref()
+                            .and_then(|d| d["redacted_error"].as_str())
+                            .unwrap_or("LLM returned empty response")
+                            .to_string(),
+                    });
+                }
                 let attempt_event = IntelligentTaskEvent::new("llm_attempt").with_data(json!({
                     "provider": format!("{:?}", config.provider),
                     "model": config.model,
