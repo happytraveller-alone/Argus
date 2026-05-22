@@ -504,6 +504,7 @@ async fn list_codeql_rules(
                 "source": asset.source_kind,
                 "is_active": true,
                 "metadata": asset.metadata_json,
+                "content": asset.content,
             })
         })
         .collect();

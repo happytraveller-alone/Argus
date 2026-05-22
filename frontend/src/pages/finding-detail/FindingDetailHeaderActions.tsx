@@ -37,8 +37,8 @@ export function FindingDetailHeaderActions({
             className={cn(
               "cyber-btn-outline h-12 px-5 text-[1.1375rem] tracking-[0.14em]",
               "border-sky-500/50 text-sky-100 hover:text-white",
-              "hover:border-sky-400/80 hover:bg-sky-500/10",
-              "shadow-[0_0_12px_rgba(14,165,233,0.35)] transition duration-200",
+              "hover:bg-sky-500/10",
+              "transition duration-200",
               "focus-visible:border-sky-200/70 focus-visible:bg-sky-500/15",
             )}
             >

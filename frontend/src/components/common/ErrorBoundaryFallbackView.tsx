@@ -48,7 +48,7 @@ const VARIANT_VISUALS: Record<ErrorBoundaryVariant, VariantVisuals> = {
     panelBorderClassName: 'border-rose-400/24',
     panelGlow: 'radial-gradient(circle, rgba(244,63,94,0.16) 0%, rgba(15,23,42,0) 72%)',
     actionClassName:
-      'border-rose-400/25 bg-rose-500/10 text-rose-50 hover:border-rose-300/40 hover:bg-rose-500/16',
+      'border-rose-400/25 bg-rose-500/10 text-rose-50 hover:bg-rose-500/16',
   },
   'backend-offline': {
     icon: Server,
@@ -60,7 +60,7 @@ const VARIANT_VISUALS: Record<ErrorBoundaryVariant, VariantVisuals> = {
     panelBorderClassName: 'border-sky-400/24',
     panelGlow: 'radial-gradient(circle, rgba(14,165,233,0.18) 0%, rgba(15,23,42,0) 72%)',
     actionClassName:
-      'border-sky-400/25 bg-sky-500/10 text-sky-50 hover:border-sky-300/40 hover:bg-sky-500/16',
+      'border-sky-400/25 bg-sky-500/10 text-sky-50 hover:bg-sky-500/16',
   },
 };
 

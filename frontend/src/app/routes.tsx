@@ -5,6 +5,7 @@ import type { I18nKey } from "@/shared/i18n";
 import type { SidebarNavGroupId } from "@/app/sidebarNavGroups";
 import { buildOpengrepRulesRedirectPath } from "@/shared/utils/legacyRouteRedirect";
 
+const Home = lazy(() => import("@/pages/Home"));
 const Dashboard = lazy(() => import("@/pages/Dashboard"));
 const DashboardMockPreview = lazy(() => import("@/pages/DashboardMockPreview"));
 const Projects = lazy(() => import("@/pages/Projects"));
@@ -56,9 +57,9 @@ const routes: RouteConfig[] = [
 		name: "首页",
 		nameKey: "route.home",
 		path: "/",
-		element: <Navigate to="/dashboard" replace />,
-		visible: false,
-		navVisible: false,
+		element: <Home />,
+		visible: true,
+		navVisible: true,
 		navGroup: "main",
 		navOrder: 10,
 	},

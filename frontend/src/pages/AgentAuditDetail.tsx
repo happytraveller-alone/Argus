@@ -434,7 +434,7 @@ export default function AgentAuditDetail() {
 						<Button
 							size="sm"
 							variant="outline"
-							className="cyber-btn-ghost h-8 border-rose-500/35 px-3 text-rose-200 hover:border-rose-500/55 hover:bg-rose-500/10 hover:text-rose-100"
+							className="cyber-btn-ghost h-8 border-rose-500/35 px-3 text-rose-200 hover:bg-rose-500/10 hover:text-rose-100"
 							disabled={cancelling}
 							onClick={() => void handleCancel()}
 						>

@@ -13,6 +13,7 @@ export interface CodeqlRule {
     source: string;
     is_active: boolean;
     metadata: Record<string, unknown>;
+    content: string;
 }
 
 export interface CodeqlRulesPage {

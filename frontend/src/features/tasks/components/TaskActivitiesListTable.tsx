@@ -54,9 +54,9 @@ const TASK_ACTIVITIES_TABLE_BODY_TEXT_CLASSNAME = "text-sm";
 const TASK_ACTIVITIES_TABLE_ACTION_BUTTON_CLASSNAME =
 	"cyber-btn-ghost h-8 px-2.5";
 const TASK_ACTIVITIES_TABLE_CANCEL_BUTTON_CLASSNAME =
-	"cyber-btn-ghost h-8 border-rose-500/35 px-2.5 text-rose-200 hover:border-rose-500/55 hover:bg-rose-500/10 hover:text-rose-100";
+	"cyber-btn-ghost h-8 border-rose-500/35 px-2.5 text-rose-200 hover:bg-rose-500/10 hover:text-rose-100";
 const TASK_ACTIVITIES_TABLE_DELETE_BUTTON_CLASSNAME =
-	"cyber-btn-ghost h-8 border-rose-500/35 px-2.5 text-rose-200 hover:border-rose-500/55 hover:bg-rose-500/10 hover:text-rose-100";
+	"cyber-btn-ghost h-8 border-rose-500/35 px-2.5 text-rose-200 hover:bg-rose-500/10 hover:text-rose-100";
 const DEFECT_SUMMARY_ITEMS = [
 	{ key: "critical", label: "严重" },
 	{ key: "high", label: "高危" },

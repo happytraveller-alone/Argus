@@ -19,10 +19,10 @@ export const LANGUAGE_STATS_RETRY_INTERVAL_MS = 2500;
 export const LANGUAGE_STATS_MAX_RETRIES = 6;
 
 export const PROJECT_ACTION_BTN =
-	"border border-sky-400/35 bg-gradient-to-r from-sky-500/20 via-cyan-500/16 to-blue-500/20 text-sky-100 shadow-[0_8px_22px_-14px_rgba(14,165,233,0.9)] hover:from-sky-500/30 hover:via-cyan-500/24 hover:to-blue-500/30 hover:border-sky-300/55";
+	"border border-sky-500/30 bg-sky-500/12 text-sky-100 hover:bg-sky-500/22";
 
 export const PROJECT_ACTION_BTN_SUBTLE =
-	"border border-sky-500/30 bg-sky-500/12 text-sky-100 hover:bg-sky-500/22 hover:border-sky-400/55";
+	"border border-border bg-muted/50 text-foreground hover:bg-muted";
 
 export function stripArchiveSuffix(filename: string) {
 	return stripSupportedArchiveSuffix(filename);

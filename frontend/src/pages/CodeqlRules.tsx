@@ -247,6 +247,34 @@ export default function CodeqlRules({
 									</Select>
 								</div>
 							)}
+							{/* Language filter dropdown */}
+							<div className="min-w-[120px]">
+								<Select
+									value={languageFilter || "__all__"}
+									onValueChange={(value) => {
+										const lang = value === "__all__" ? "" : value;
+										setTableState((current) => ({
+											...current,
+											columnFilters: lang
+												? [{ id: "language", value: lang }]
+												: [],
+											pagination: { ...current.pagination, pageIndex: 0 },
+										}));
+									}}
+								>
+									<SelectTrigger className="cyber-input h-9">
+										<SelectValue placeholder="全部语言" />
+									</SelectTrigger>
+									<SelectContent className="cyber-dialog border-border">
+										<SelectItem value="__all__">全部语言</SelectItem>
+										{(stats?.languages ?? []).map((lang) => (
+											<SelectItem key={lang} value={lang}>
+												{lang}
+											</SelectItem>
+										))}
+									</SelectContent>
+								</Select>
+							</div>
 							<div className="relative w-full max-w-sm">
 								<Input
 									value={tableState.globalFilter as string}
@@ -362,6 +390,12 @@ export default function CodeqlRules({
 									</pre>
 								</div>
 							)}
+							<div>
+								<div className="text-xs text-muted-foreground font-mono mb-1">规则内容：</div>
+								<pre className="text-xs font-mono text-foreground/90 whitespace-pre-wrap break-words bg-muted/30 rounded-lg p-4 border border-border">
+									{selectedRule.content || "无内容"}
+								</pre>
+							</div>
 						</div>
 					)}
 				</DialogContent>
