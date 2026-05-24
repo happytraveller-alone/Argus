@@ -22,6 +22,7 @@ RUN --mount=type=cache,id=argus-opengrep-runner-apt-lists,target=/var/lib/apt/li
   --mount=type=cache,id=argus-opengrep-runner-apt-cache,target=/var/cache/apt,sharing=locked \
   --mount=type=cache,id=argus-opengrep-runner-tool-archive,target=/var/cache/argus-tools \
   set -eux; \
+  unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY all_proxy ALL_PROXY; \
   . /etc/os-release; \
   CODENAME="${VERSION_CODENAME:-trixie}"; \
   write_sources() { \
@@ -112,6 +113,7 @@ ENV PYTHONUTF8=1
 RUN --mount=type=cache,id=argus-opengrep-runner-runtime-apt-lists,target=/var/lib/apt/lists,sharing=locked \
   --mount=type=cache,id=argus-opengrep-runner-runtime-apt-cache,target=/var/cache/apt,sharing=locked \
   set -eux; \
+  unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY all_proxy ALL_PROXY; \
   . /etc/os-release; \
   CODENAME="${VERSION_CODENAME:-trixie}"; \
   write_sources() { \

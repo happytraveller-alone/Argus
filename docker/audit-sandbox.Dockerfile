@@ -8,7 +8,8 @@ ARG APT_MIRROR=mirrors.aliyun.com
 # Switch apt sources for faster builds in China
 RUN sed -i "s|deb.debian.org|${APT_MIRROR}|g" /etc/apt/sources.list.d/debian.sources 2>/dev/null || true
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY all_proxy ALL_PROXY; \
+    apt-get update && apt-get install -y --no-install-recommends \
     grep \
     findutils \
     coreutils \

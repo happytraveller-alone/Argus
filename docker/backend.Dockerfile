@@ -115,6 +115,7 @@ ARG BACKEND_APT_SECURITY_FALLBACK
 RUN --mount=type=cache,id=argus-a3s-box-binary-apt-lists,target=/var/lib/apt/lists,sharing=locked \
   --mount=type=cache,id=argus-a3s-box-binary-apt-cache,target=/var/cache/apt,sharing=locked \
   set -eux; \
+  unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY all_proxy ALL_PROXY; \
   . /etc/os-release; \
   CODENAME="${VERSION_CODENAME:-trixie}"; \
   write_sources() { \

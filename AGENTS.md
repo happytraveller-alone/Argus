@@ -383,17 +383,15 @@ Execute `omx setup` to install all components. Execute `omx doctor` to verify in
 <claude-mem-context>
 # Memory Context
 
-# [argus] recent context, 2026-05-19 10:02pm GMT+8
+# [argus] recent context, 2026-05-22 1:22pm GMT+8
 
 Legend: 🎯session 🔴bugfix 🟣feature 🔄refactor ✅change 🔵discovery ⚖️decision 🚨security_alert 🔐security_note
 Format: ID TIME TYPE TITLE
 Fetch details: get_observations([IDs]) | Search: mem-search skill
 
-Stats: 50 obs (24,423t read) | 931,766t work | 97% savings
+Stats: 50 obs (24,409t read) | 917,368t work | 97% savings
 
 ### May 4, 2026
-180 4:52a 🔵 Backend provision state machine lacks cubemaster template deletion integration
-181 " 🔵 Template cleanup removes filesystem paths but not containerd snapshots
 184 4:54a ⚖️ Deep-dive interview completed with comprehensive spec ready for implementation
 185 5:04a 🔵 Multi-layer template cleanup architecture analyzed and documented
 186 5:05a 🔵 Implementation infrastructure exists for all 5 acceptance criteria
@@ -453,6 +451,9 @@ S37 Fix CodeQL OOM errors on small source files in Argus: backend defaults to 61
 240 4:17p 🔵 Database schema missing CodeQL event logging tables; backend logs completely empty
 ### May 19, 2026
 243 6:25p 🔵 Argus bootstrap fails due to existing Podman volume conflict
+### May 20, 2026
+248 9:49p 🔵 Podman v5.8.2 build dependencies missing in standard repositories
+249 9:56p 🔵 Podman v5.8.2 binaries successfully compile and install, but man pages missing from build
 
-Access 932k tokens of past work via get_observations([IDs]) or mem-search skill.
+Access 917k tokens of past work via get_observations([IDs]) or mem-search skill.
 </claude-mem-context>

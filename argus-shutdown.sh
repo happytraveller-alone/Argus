@@ -17,6 +17,8 @@
 
 set -euo pipefail
 
+export SUPPRESS_BOLTDB_WARNING=1
+
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
@@ -115,16 +117,18 @@ step2_podman_down() {
   if [[ "$MODE" == "full" ]]; then
     log "  Mode=full under Podman: preserving Podman volumes and images by plan."
   fi
+
+  local stop_timeout=15
   local name
+
+  # Phase A: Stop and remove known named containers
   for name in "${PODMAN_CONTAINER_NAMES[@]}"; do
     if [[ "$DRY_RUN" == true ]]; then
-      run_cmd "verify Podman labels for ${name}" \
-        podman inspect --format '{{ index .Config.Labels "io.argus.project" }} {{ index .Config.Labels "io.argus.runtime" }}' "$name"
-      run_cmd "podman stop ${name}" podman stop "$name"
-      run_cmd "podman rm ${name}" podman rm "$name"
+      run_cmd "podman stop ${name}" podman stop -t "$stop_timeout" "$name"
+      run_cmd "podman rm -f ${name}" podman rm -f "$name"
       continue
     fi
-    if ! podman container exists "$name"; then
+    if ! podman container exists "$name" 2>/dev/null; then
       log "  ${name}: not present; skipping."
       continue
     fi
@@ -132,9 +136,37 @@ step2_podman_down() {
       warn "skipping ${name}: missing required ${PODMAN_PROJECT_LABEL} and ${PODMAN_RUNTIME_LABEL} labels"
       continue
     fi
-    run_cmd "podman stop ${name}" podman stop "$name" || true
-    run_cmd "podman rm ${name}" podman rm "$name" || true
+    log "  Stopping ${name}..."
+    podman stop -t "$stop_timeout" "$name" 2>/dev/null || true
+    podman rm -f "$name" 2>/dev/null || true
   done
+
+  # Phase B: Catch orphan containers with argus label not in the known list
+  local orphans
+  orphans="$(podman ps -a --filter "label=io.argus.project=argus" --format '{{.Names}}' 2>/dev/null || true)"
+  if [[ -n "$orphans" ]]; then
+    local orphan
+    while IFS= read -r orphan; do
+      [[ -z "$orphan" ]] && continue
+      # Skip if already handled in Phase A
+      local known=false
+      for name in "${PODMAN_CONTAINER_NAMES[@]}"; do
+        [[ "$orphan" == "$name" ]] && known=true && break
+      done
+      if [[ "$known" == true ]]; then continue; fi
+      log "  Orphan argus container found: ${orphan}; stopping and removing."
+      if [[ "$DRY_RUN" == true ]]; then
+        run_cmd "podman stop orphan ${orphan}" podman stop -t "$stop_timeout" "$orphan"
+        run_cmd "podman rm -f orphan ${orphan}" podman rm -f "$orphan"
+      else
+        podman stop -t "$stop_timeout" "$orphan" 2>/dev/null || true
+        podman rm -f "$orphan" 2>/dev/null || true
+      fi
+      ORPHAN_WARNINGS=$((ORPHAN_WARNINGS + 1))
+    done <<< "$orphans"
+  fi
+
+  log "  Step 2 complete: all argus containers stopped and removed."
 }
 
 # ---------------------------------------------------------------------------

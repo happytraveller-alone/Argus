@@ -88,17 +88,12 @@ export function StaticEngineConfigDialogContent({
                 <p className="mt-1">{PLACEHOLDER_COPY[engine]}</p>
               </div>
             </div>
-            <div className="grid gap-2 md:grid-cols-2">
+            <div className="grid gap-2 md:grid-cols-1">
               {[
                 {
                   value: "dockerfile_container" as const,
                   title: "Dockerfile 容器",
                   description: "使用 docker/opengrep-runner.Dockerfile 构建的当前默认容器。",
-                },
-                {
-                  value: "a3s_box" as const,
-                  title: "A3S Box MicroVM",
-                  description: "使用 a3s-box 运行 OpenGrep OCI 镜像，保留沙箱级隔离与结果回收。",
                 },
               ].map((item) => {
                 const selected = opengrepSandbox === item.value;

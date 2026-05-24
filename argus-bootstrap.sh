@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
+# Strip host proxy env vars early: container builds cannot reach host-only
+# proxies (e.g. 127.0.0.1:7897) and would fail with connection refused.
+unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY all_proxy ALL_PROXY no_proxy NO_PROXY 2>/dev/null || true
+
+export SUPPRESS_BOLTDB_WARNING=1
+
 SCRIPT_NAME="$(basename "$0")"
 ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
 COMPOSE_FILE="$ROOT_DIR/docker-compose.yml"
@@ -408,7 +414,24 @@ require_real_tools() {
     podman)
       command -v podman >/dev/null 2>&1 || fail "podman CLI not found"
       command -v python3 >/dev/null 2>&1 || fail "python3 is required to prepare Podman-compatible Dockerfiles"
-      podman info >/dev/null || fail "Podman daemon/runtime is not reachable"
+      # Auto-recovery: if podman socket is unreachable (common on WSL2 where
+      # podman.socket systemd unit may be masked at /etc/xdg/systemd/user/),
+      # start the API service manually. Permanent fix:
+      #   sudo rm /etc/xdg/systemd/user/podman.socket
+      #   systemctl --user daemon-reload
+      #   systemctl --user enable --now podman.socket
+      if ! podman info >/dev/null 2>&1; then
+        log "Podman socket not reachable; attempting to start podman system service..."
+        local _sock="/run/user/$(id -u)/podman/podman.sock"
+        mkdir -p "$(dirname "$_sock")"
+        podman system service --time=0 "unix://$_sock" &disown
+        local _wait=0
+        while [[ $_wait -lt 5 ]] && ! podman info >/dev/null 2>&1; do
+          sleep 1; ((_wait++))
+        done
+        podman info >/dev/null 2>&1 || fail "Podman daemon/runtime is not reachable (auto-start failed)"
+        log "Podman system service started successfully."
+      fi
       local podman_rootless
       podman_rootless="$(podman info --format '{{.Host.Security.Rootless}}' 2>/dev/null || true)"
       [[ "$podman_rootless" == "true" ]] || fail "Podman runtime must be rootless for Argus runner mode"
@@ -514,6 +537,11 @@ ensure_podman_rootless_socket_env() {
   case "$ARGUS_PODMAN_SOCKET_PATH" in
     *docker.sock*) fail "Podman runtime must not use Docker socket path: $ARGUS_PODMAN_SOCKET_PATH" ;;
   esac
+  # Rootless Podman socket is 0700 by default; backend container needs access
+  # via bind-mount across user namespaces, so widen permissions.
+  if [[ -S "$ARGUS_PODMAN_SOCKET_PATH" ]]; then
+    chmod 0777 "$ARGUS_PODMAN_SOCKET_PATH" 2>/dev/null || true
+  fi
 }
 
 podman_volume_mountpoint() {
@@ -1156,6 +1184,11 @@ podman_build_local_images() {
     log "ARGUS_SKIP_BUILD=true; skipping image builds."
     return 0
   fi
+
+  # Podman auto-injects host proxy env vars into build context; clear them
+  # so container builds can reach registries directly without host proxy.
+  # (Primary clearing is at script top; this is a safety net for subshells.)
+  unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY all_proxy ALL_PROXY no_proxy NO_PROXY 2>/dev/null || true
 
   if "$DRY_RUN" || is_truthy "$STUB_DOCKER" || is_truthy "$PODMAN_SEQUENTIAL_BUILD"; then
     log "Building Podman images sequentially (visible logs for dry-run/stub or --sequential-build)."
