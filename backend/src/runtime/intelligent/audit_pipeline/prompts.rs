@@ -126,6 +126,59 @@ Output format — JSON object with this exact schema:
 
 Constraints: do not mark reachable on a hunch; infrastructure uncertainty is not proof of unreachable; output only JSON."#;
 
+/// Pass 1 prompt: LLM-directed retrieval. Given a finding + pre-resolved symbol,
+/// the model returns up to 5 query requests against the CodeIntelligence backend.
+///
+/// Used by the two-pass Trace stage when `ctx.code_intel` is available and the
+/// finding's language is indexed. See plan §Phase 3 / Step 3.2.
+pub const TRACE_PASS1_PROMPT: &str = r#"Role: You are a reachability analyst directing structural code retrieval.
+Objective: For ONE canonical finding, decide which code-graph queries would reveal whether an external attacker can reach the vulnerable sink. Return at most 5 query requests.
+
+Available query tools (executed by the audit runtime, results fed back in Pass 2):
+- get_callers: find functions that call a symbol. args: { "symbol": string, "depth": 1..5 }
+- get_callees: find functions that the symbol calls. args: { "symbol": string, "depth": 1..5 }
+- get_context: function body, imports, related symbols at a file:line. args: { "file": string, "line": number }
+- search_symbol: locate a symbol by name across the codebase. args: { "name": string }
+- get_call_chain: trace a call chain from file:line through hops. args: { "from_file": string, "from_line": number, "max_hops": 1..5 }
+
+Methodology:
+1. Anchor on the provided file/line and resolved symbol.
+2. Prefer get_callers / get_call_chain to walk UP toward entry points.
+3. Use get_context if you need the enclosing function body to spot guards.
+4. Use search_symbol only when you must locate a referenced name.
+5. Order queries by expected information value; cap total at 5.
+
+Output format — JSON object with this exact schema:
+{
+  "queries": [
+    { "tool": "get_callers" | "get_callees" | "get_context" | "search_symbol" | "get_call_chain", "args": { ... } }
+  ]
+}
+
+Constraints: do not invent symbols not present in the input; max 5 queries; output only JSON."#;
+
+/// Pass 2 prompt: reachability verdict. LLM receives the finding + Pass 1 retrieval
+/// results and emits a single TraceResult.
+pub const TRACE_PASS2_PROMPT: &str = r#"Role: You are a reachability analyst issuing a final verdict from structural evidence.
+Objective: Given ONE canonical finding and the results of code-graph queries, decide whether attacker-controlled input can reach the vulnerable sink from an external entry point.
+
+Methodology:
+1. Inspect callers / call chains for paths from external entry points (HTTP handlers, CLI argument parsers, file parsers, queue consumers) to the sink.
+2. Check the function context for authentication, authorization, or sanitization gates on every path.
+3. If at least one ungated path exists from external input to the sink, mark reachable=true.
+4. If every path is blocked by a hard gate (verified auth, strict validation), mark reachable=false.
+5. If evidence is inconclusive, mark reachable=false with a low confidence and explain the gap.
+
+Output format — JSON object with this exact schema:
+{
+  "finding_id": "string (matches input finding_id)",
+  "reachable": true | false,
+  "confidence": number (0.0 to 1.0),
+  "rationale": "string (cite specific callers / chains / gates from the retrieval results)"
+}
+
+Constraints: cite retrieval evidence in the rationale; do not invent code; output only JSON."#;
+
 const GAPFILL: &str = r#"Role: You are a coverage analyst. Identify under-examined areas of the codebase.
 Objective: Compare completed hunt coverage against the recon subsystem map. Propose new narrow hunt tasks only for cells that are genuinely under-explored.
 

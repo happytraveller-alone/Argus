@@ -240,7 +240,8 @@ pub async fn run_pipeline_with_config(
 
     // ── Phase 3: dedupe → trace ───────────────────────────────────────────────
     outputs.dedupe = stages::dedupe::run(&ctx, &outputs.validate, &event_sink).await?;
-    outputs.trace = stages::trace::run(&ctx, &outputs.dedupe, &event_sink).await?;
+    outputs.trace =
+        stages::trace::run(&ctx, &outputs.dedupe, &outputs.validate, &event_sink).await?;
 
     // ── Phase 4: feedback → hunt → validate → dedupe → trace loop ────────────
     for fb_iter in 0..config.feedback_iterations {
@@ -279,7 +280,8 @@ pub async fn run_pipeline_with_config(
         outputs.hunt.findings.extend(fb_hunt.findings);
         outputs.validate = stages::validate::run(&ctx, &outputs.hunt, &event_sink).await?;
         outputs.dedupe = stages::dedupe::run(&ctx, &outputs.validate, &event_sink).await?;
-        outputs.trace = stages::trace::run(&ctx, &outputs.dedupe, &event_sink).await?;
+        outputs.trace =
+        stages::trace::run(&ctx, &outputs.dedupe, &outputs.validate, &event_sink).await?;
     }
 
         // ── Phase 5: report ───────────────────────────────────────────
