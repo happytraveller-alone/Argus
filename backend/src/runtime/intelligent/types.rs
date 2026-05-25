@@ -113,6 +113,11 @@ pub struct IntelligentTaskRecord {
     pub failure_reason: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub failure_stage: Option<String>,
+    /// `true` when the scan ran in degraded mode because codegraph indexing
+    /// failed or fell back per-finding. Surfaced so users know the call-graph
+    /// based reasoning was unavailable. See `.omc/plans/ralplan-codegraph-integration-v2.md` §AC5.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub partial_analysis: bool,
 }
 
 impl IntelligentTaskRecord {
@@ -139,6 +144,7 @@ impl IntelligentTaskRecord {
             findings: Vec::new(),
             failure_reason: None,
             failure_stage: None,
+            partial_analysis: false,
         }
     }
 
