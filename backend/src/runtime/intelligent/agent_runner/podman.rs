@@ -95,6 +95,77 @@ impl PodmanSession {
         self.container_id = new.container_id.clone();
         Ok(())
     }
+
+    /// Create a PodmanSession variant for codegraph indexing/querying.
+    ///
+    /// Differs from `create()` in three ways:
+    ///   1. Source is a host-extracted directory bind-mounted at `/codegraph/src:ro`
+    ///      (NOT a raw archive file at `/workspace`)
+    ///   2. A writable index directory is bind-mounted at `/codegraph/index:rw` so
+    ///      `codegraph init` can write the SQLite database
+    ///   3. A read-only cache directory at `/codegraph/cache_in:ro` lets the client
+    ///      check for an existing cached index before re-indexing
+    ///
+    /// Tmpfs raised to 1GB (vs 512MB default) — codegraph uses /tmp for SQLite WAL.
+    /// Runs as auditor (uid 1000), matches existing image user.
+    ///
+    /// See `.omc/plans/ralplan-codegraph-integration-v2.md` §Step 2.2.
+    pub async fn create_for_codegraph(
+        staging_dir: &str,
+        index_dir: &str,
+        cache_dir: &str,
+        image: &str,
+    ) -> Result<Self> {
+        let vol_src = format!("{staging_dir}:/codegraph/src:ro");
+        let vol_index = format!("{index_dir}:/codegraph/index:rw");
+        let vol_cache = format!("{cache_dir}:/codegraph/cache_in:ro");
+        let output = Command::new("podman")
+            .args([
+                "run", "-d", "--rm",
+                "--read-only",
+                "--tmpfs", "/tmp:rw,size=1g",
+                "--user", "1000",
+                "--label", "argus-codegraph=true",
+                "-v", &vol_src,
+                "-v", &vol_index,
+                "-v", &vol_cache,
+                image, "sleep", "infinity",
+            ])
+            .output()
+            .await
+            .context("podman run (codegraph variant) failed")?;
+
+        if !output.status.success() {
+            bail!(
+                "podman run (codegraph variant): {}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+        }
+
+        let container_id = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        if container_id.is_empty() {
+            bail!("podman run (codegraph variant) returned empty container ID");
+        }
+
+        let session = Self {
+            container_id,
+            workspace_path: "/codegraph/src".to_string(),
+            default_exec_timeout_ms: 60_000,
+            // archive_path is reused as staging_dir for symmetry with restart()
+            // (not currently called for codegraph sessions but kept consistent).
+            archive_path: staging_dir.to_string(),
+            image: image.to_string(),
+        };
+
+        let running = session
+            .health_check()
+            .await
+            .context("codegraph container health check failed")?;
+        if !running {
+            bail!("codegraph container not running after create");
+        }
+        Ok(session)
+    }
 }
 
 fn truncate(mut s: String) -> String {

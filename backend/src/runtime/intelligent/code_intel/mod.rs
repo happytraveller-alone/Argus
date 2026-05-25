@@ -11,7 +11,10 @@
 //!
 //! See `.omc/plans/ralplan-codegraph-integration-v2.md` for the full integration plan.
 
+pub mod cache;
 pub mod codegraph_client;
+pub mod protocol;
+pub mod staging;
 pub mod types;
 
 use anyhow::Result;
