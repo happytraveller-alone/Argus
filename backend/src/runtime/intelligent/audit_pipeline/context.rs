@@ -1,9 +1,16 @@
-use std::{fmt, sync::Arc};
+use std::{
+    fmt,
+    sync::{
+        atomic::AtomicBool,
+        Arc,
+    },
+};
 
 use serde_json::json;
 
 use crate::runtime::intelligent::{
     agent_runner::AgentRunner,
+    code_intel::CodeIntelligence,
     config::IntelligentLlmConfig,
     llm::IntelligentLlmInvoker,
     types::IntelligentTaskEvent,
@@ -55,6 +62,13 @@ pub struct AuditRunContext {
     pub llm_config: IntelligentLlmConfig,
     pub invoker: Arc<dyn IntelligentLlmInvoker + Send + Sync>,
     pub agent_runner: Option<Arc<dyn AgentRunner + Send + Sync>>,
+    /// Optional code intelligence backend (codegraph). When `None`, stages
+    /// fall back to single-pass behavior (no regression vs pre-integration).
+    pub code_intel: Option<Arc<dyn CodeIntelligence>>,
+    /// Set to `true` when codegraph init fails or any stage falls back from
+    /// two-pass to single-pass. Surfaced in the final task record so users
+    /// know the scan ran in degraded mode.
+    pub partial_analysis: Arc<AtomicBool>,
 }
 
 impl AuditRunContext {
@@ -76,7 +90,18 @@ impl AuditRunContext {
             llm_config,
             invoker,
             agent_runner: None,
+            code_intel: None,
+            partial_analysis: Arc::new(AtomicBool::new(false)),
         }
+    }
+
+    /// Builder method to attach a CodeIntelligence backend to the context.
+    /// Returns `self` so callers can chain construction without breaking the
+    /// existing `new()` signature.
+    #[must_use]
+    pub fn with_code_intel(mut self, intel: Arc<dyn CodeIntelligence>) -> Self {
+        self.code_intel = Some(intel);
+        self
     }
 }
 
