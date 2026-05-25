@@ -1297,6 +1297,14 @@ podman_run_backend() {
     --label "$PODMAN_PROJECT_LABEL" \
     --label "$PODMAN_RUNTIME_LABEL" \
     --network host \
+    -e HTTP_PROXY= \
+    -e HTTPS_PROXY= \
+    -e http_proxy= \
+    -e https_proxy= \
+    -e ALL_PROXY= \
+    -e all_proxy= \
+    -e NO_PROXY='*' \
+    -e no_proxy='*' \
     --env-file "$ARGUS_ENV_FILE" \
     --env-file "$ARGUS_LLM_ENV_FILE" \
     -e "BIND_ADDR=0.0.0.0:${BACKEND_PORT}" \

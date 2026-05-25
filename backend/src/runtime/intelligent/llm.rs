@@ -77,7 +77,10 @@ pub struct HttpIntelligentLlmInvoker {
 impl Default for HttpIntelligentLlmInvoker {
     fn default() -> Self {
         Self {
-            client: Client::new(),
+            client: Client::builder()
+                .no_proxy()
+                .build()
+                .expect("failed to build no-proxy HTTP client"),
         }
     }
 }
@@ -225,6 +228,7 @@ impl HttpIntelligentLlmInvoker {
 
         let body = json!({
             "model": config.model,
+            "system": "You are a security audit assistant. Respond ONLY with the requested JSON object. Do not use any tools. Do not call any functions. Output raw JSON text directly.",
             "messages": [{"role": "user", "content": prompt}],
             "max_tokens": config.max_tokens_per_call,
         });
@@ -250,10 +254,49 @@ impl HttpIntelligentLlmInvoker {
             .await
             .map_err(|e| redact_for_logging(&e.to_string(), config))?;
 
-        let content = json["content"][0]["text"]
-            .as_str()
-            .unwrap_or("")
-            .to_string();
+        let content_array = json.get("content").and_then(|c| c.as_array());
+
+        // Primary: extract first non-empty text block
+        let text_content = content_array
+            .and_then(|arr| {
+                arr.iter()
+                    .filter(|item| item.get("type").and_then(|t| t.as_str()) == Some("text"))
+                    .find_map(|item| {
+                        let t = item.get("text").and_then(|t| t.as_str()).unwrap_or("");
+                        if t.trim().is_empty() { None } else { Some(t.to_string()) }
+                    })
+            })
+            .unwrap_or_default();
+
+        // Fallback: if proxy injected tools and model put output in tool_use input
+        let content = if text_content.is_empty() {
+            let tool_content = content_array
+                .and_then(|arr| {
+                    arr.iter()
+                        .filter(|item| item.get("type").and_then(|t| t.as_str()) == Some("tool_use"))
+                        .find_map(|item| {
+                            let input = item.get("input")?;
+                            if input.is_object() || input.is_array() {
+                                Some(serde_json::to_string(input).unwrap_or_default())
+                            } else {
+                                input.as_str().map(|s| s.to_string())
+                            }
+                        })
+                })
+                .unwrap_or_default();
+            if tool_content.is_empty() {
+                tracing::warn!(
+                    stage = "anthropic_empty_response",
+                    content_array_len = content_array.map(|a| a.len()),
+                    stop_reason = ?json.get("stop_reason"),
+                    "invoke_anthropic: no usable content in response"
+                );
+            }
+            tool_content
+        } else {
+            text_content
+        };
+
         Ok(content)
     }
 }
