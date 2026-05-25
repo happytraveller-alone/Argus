@@ -18,6 +18,7 @@ use serde_json::json;
 use crate::{
     db::projects,
     runtime::intelligent::{
+        code_intel::{cache::CodeGraphCache, codegraph_client::CodeGraphClient, CodeIntelligence},
         config::IntelligentLlmConfig,
         llm::IntelligentLlmInvoker,
         types::{IntelligentTaskEvent, IntelligentTaskFinding},
@@ -137,7 +138,7 @@ pub async fn run_pipeline_with_config(
         })),
     );
 
-    let ctx = AuditRunContext::new(
+    let mut ctx = AuditRunContext::new(
         task_id.to_string(),
         project_id.to_string(),
         project.name.clone(),
@@ -147,13 +148,52 @@ pub async fn run_pipeline_with_config(
         invoker,
     );
 
+    // ── CodeGraph code intelligence bring-up (best-effort) ───────────────────
+    // Per plan §Step 2.7. archive_meta.sha256 already exists at ingest, so this
+    // does NOT count against AC4's 30s budget. On failure, partial_analysis is
+    // flagged and stages fall back to single-pass behavior automatically.
+    let code_intel_client: Option<Arc<CodeGraphClient>> = {
+        match try_init_code_intel(archive_meta, &config.audit_sandbox_image).await {
+            Ok(client) => {
+                event_sink.emit(
+                    IntelligentTaskEvent::new("codegraph_init_completed").with_data(json!({
+                        "archiveSha256": archive_meta.sha256,
+                        "languagesIndexed": client.languages_indexed(),
+                    })),
+                );
+                let arc = Arc::new(client);
+                ctx.code_intel = Some(arc.clone());
+                Some(arc)
+            }
+            Err(err) => {
+                ctx.partial_analysis
+                    .store(true, std::sync::atomic::Ordering::Relaxed);
+                event_sink.emit(
+                    IntelligentTaskEvent::new("codegraph_init_failed").with_data(json!({
+                        "archiveSha256": archive_meta.sha256,
+                        "error": err.to_string(),
+                    })),
+                );
+                tracing::warn!(
+                    archive_sha256 = %archive_meta.sha256,
+                    error = %err,
+                    "codegraph init failed; scan continuing in degraded mode"
+                );
+                None
+            }
+        }
+    };
+
     // Token budget tracker (approximate — incremented per LLM call attempt event).
     let _token_counter = Arc::new(AtomicU64::new(0));
 
-    let mut outputs = PipelineOutputs::default();
-
-    // ── Phase 1: recon ────────────────────────────────────────────────────────
-    outputs.recon = stages::recon::run(&ctx, &event_sink).await?;
+    // Run stages inside an inner async block so cleanup runs even on stage error.
+    // The existing `?` operator semantics inside the block produce a Result we
+    // inspect AFTER calling shutdown on the code intel client.
+    let stages_result: Result<PipelineOutputs> = async {
+        // ── Phase 1: recon ────────────────────────────────────────────────
+        let mut outputs = PipelineOutputs::default();
+        outputs.recon = stages::recon::run(&ctx, &event_sink).await?;
 
     // ── Phase 2: hunt → validate → gapfill loop ───────────────────────────────
     let mut hunt_tasks = outputs.recon.initial_tasks.clone();
@@ -242,14 +282,28 @@ pub async fn run_pipeline_with_config(
         outputs.trace = stages::trace::run(&ctx, &outputs.dedupe, &event_sink).await?;
     }
 
-    // ── Phase 5: report ───────────────────────────────────────────────────────
-    outputs.report = stages::report::run(&ctx, &outputs, &event_sink).await?;
+        // ── Phase 5: report ───────────────────────────────────────────
+        outputs.report = stages::report::run(&ctx, &outputs, &event_sink).await?;
+        Ok(outputs)
+    }
+    .await;
 
+    // ── CodeGraph shutdown (always runs, even on stage error) ────────────────
+    // Per plan §Step 2.6: explicit lifecycle. PodmanSession::Drop remains as a
+    // last-resort safety net for panic paths.
+    if let Some(client) = code_intel_client.as_ref() {
+        if let Err(err) = client.shutdown().await {
+            tracing::warn!(error = %err, "codegraph shutdown failed");
+        }
+    }
+
+    let outputs = stages_result?;
     let findings = outputs.to_task_findings();
     event_sink.emit(
         IntelligentTaskEvent::new("pipeline_completed").with_data(json!({
             "agentCount": PIPELINE_AGENT_COUNT,
             "findingCount": findings.len(),
+            "partialAnalysis": ctx.partial_analysis.load(std::sync::atomic::Ordering::Relaxed),
         })),
     );
 
@@ -263,6 +317,24 @@ pub async fn run_pipeline_with_config(
         findings,
         events,
     })
+}
+
+/// Best-effort code intelligence bring-up. Failure is the caller's signal to
+/// continue in degraded mode (single-pass for all stages). See plan §Step 2.7.
+async fn try_init_code_intel(
+    archive_meta: &crate::state::StoredProjectArchive,
+    sandbox_image: &str,
+) -> Result<CodeGraphClient> {
+    let cache = Arc::new(CodeGraphCache::new().context("CodeGraphCache::new failed")?);
+    let archive_path = std::path::Path::new(&archive_meta.storage_path);
+    CodeGraphClient::init(
+        archive_path,
+        &archive_meta.original_filename,
+        archive_meta.sha256.clone(),
+        sandbox_image,
+        cache,
+    )
+    .await
 }
 
 #[must_use]

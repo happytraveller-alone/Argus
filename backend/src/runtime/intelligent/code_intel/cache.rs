@@ -20,7 +20,8 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
-use fs2::FileExt;
+// fs2::FileExt methods called via fully-qualified syntax to avoid the
+// std::os::unix::fs::FileExt name collision introduced in Rust 1.89.
 use tokio::task::spawn_blocking;
 
 /// Concurrent-safe cache of codegraph SQLite indexes, keyed by archive SHA256.
