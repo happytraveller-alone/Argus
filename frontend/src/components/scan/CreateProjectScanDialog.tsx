@@ -6,6 +6,7 @@ import type { Project } from "@/shared/types";
 import { isZipProject } from "@/shared/utils/projectUtils";
 import {
 	createCodeqlScanTask,
+	createJoernScanTask,
 	createOpengrepScanTask,
 	getAllOpengrepRules,
 	type OpengrepSandboxMode,
@@ -98,6 +99,7 @@ export default function CreateProjectScanDialog({
 	const [opengrepSandbox, setOpengrepSandbox] =
 		useState<OpengrepSandboxMode>("dockerfile_container");
 	const [codeqlEnabled, setCodeqlEnabled] = useState(false);
+	const [joernEnabled, setJoernEnabled] = useState(false);
 	const [configEngine, setConfigEngine] = useState<StaticTool | null>(null);
 	const [activeRules, setActiveRules] = useState<OpengrepRule[]>([]);
 	const previousSearchTermRef = useRef("");
@@ -145,6 +147,7 @@ export default function CreateProjectScanDialog({
 		setOpengrepEnabled(true);
 		setOpengrepSandbox("dockerfile_container");
 		setCodeqlEnabled(false);
+		setJoernEnabled(false);
 		setConfigEngine(null);
 
 		const loadProjects = async () => {
@@ -220,6 +223,7 @@ export default function CreateProjectScanDialog({
 		const hasStaticEngine = hasSelectedPrimaryStaticEngine({
 			opengrep: opengrepEnabled,
 			codeql: codeqlEnabled,
+			joern: joernEnabled,
 		});
 		if (sourceMode === "upload") {
 			if (!newProjectName.trim() || !newProjectFile) return false;
@@ -237,6 +241,7 @@ export default function CreateProjectScanDialog({
 		opengrepEnabled,
 		opengrepSandbox,
 		codeqlEnabled,
+		joernEnabled,
 	]);
 
 	const createStaticTasksForProject = async (
@@ -244,10 +249,12 @@ export default function CreateProjectScanDialog({
 	): Promise<StaticTaskCreateResult> => {
 		let opengrepTask: { id: string } | null = null;
 		let codeqlTask: { id: string } | null = null;
+		let joernTask: { id: string } | null = null;
 		if (
 			!hasSelectedPrimaryStaticEngine({
 				opengrep: opengrepEnabled,
 				codeql: codeqlEnabled,
+				joern: joernEnabled,
 			})
 		) {
 			throw new Error("请至少启用一个扫描引擎");
@@ -287,7 +294,17 @@ export default function CreateProjectScanDialog({
 				languages: codeqlLanguages.length > 0 ? codeqlLanguages : undefined,
 			});
 		}
-		const primaryTaskId = opengrepTask?.id ?? codeqlTask?.id;
+		if (joernEnabled) {
+			joernTask = await createJoernScanTask({
+				project_id: project.id,
+				name: appendStaticScanBatchMarker(
+					`${taskNamePrefix}-Joern-${project.name}`,
+					staticBatchId,
+				),
+				target_path: ".",
+			});
+		}
+		const primaryTaskId = opengrepTask?.id ?? codeqlTask?.id ?? joernTask?.id;
 		if (!primaryTaskId) {
 			throw new Error("静态审计任务创建失败");
 		}
@@ -299,6 +316,10 @@ export default function CreateProjectScanDialog({
 		if (codeqlTask) {
 			params.set("codeqlTaskId", codeqlTask.id);
 			params.set("engine", "codeql");
+		}
+		if (joernTask) {
+			params.set("joernTaskId", joernTask.id);
+			params.set("engine", "joern");
 		}
 		return { primaryTaskId, params };
 	};
@@ -391,6 +412,7 @@ export default function CreateProjectScanDialog({
 				!hasSelectedPrimaryStaticEngine({
 					opengrep: opengrepEnabled,
 					codeql: codeqlEnabled,
+					joern: joernEnabled,
 				})
 			) {
 				toast.error("请至少启用一个扫描引擎");
@@ -448,11 +470,24 @@ export default function CreateProjectScanDialog({
 	};
 	const handleOpengrepEnabledChange = (enabled: boolean) => {
 		setOpengrepEnabled(enabled);
-		if (enabled) setCodeqlEnabled(false);
+		if (enabled) {
+			setCodeqlEnabled(false);
+			setJoernEnabled(false);
+		}
 	};
 	const handleCodeqlEnabledChange = (enabled: boolean) => {
 		setCodeqlEnabled(enabled);
-		if (enabled) setOpengrepEnabled(false);
+		if (enabled) {
+			setOpengrepEnabled(false);
+			setJoernEnabled(false);
+		}
+	};
+	const handleJoernEnabledChange = (enabled: boolean) => {
+		setJoernEnabled(enabled);
+		if (enabled) {
+			setOpengrepEnabled(false);
+			setCodeqlEnabled(false);
+		}
 	};
 	return (
 		<CreateProjectScanDialogContent
@@ -486,6 +521,8 @@ export default function CreateProjectScanDialog({
 			setOpengrepSandbox={setOpengrepSandbox}
 			codeqlEnabled={codeqlEnabled}
 			setCodeqlEnabled={handleCodeqlEnabledChange}
+			joernEnabled={joernEnabled}
+			setJoernEnabled={handleJoernEnabledChange}
 			showReturnButton={showReturnButton}
 			onReturn={onReturn}
 			primaryCreateLabel={primaryCreateLabel}

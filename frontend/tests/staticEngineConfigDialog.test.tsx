@@ -44,5 +44,25 @@ test("StaticEngineConfigDialogContent renders opengrep options without retired s
   assert.match(markup, /Dockerfile 容器/);
   assert.match(markup, /A3S Box MicroVM/);
   assert.doesNotMatch(markup, new RegExp("Cube" + "Sandbox"));
-  assert.match(markup, /aria-pressed="true"[^>]*><span[^>]*><span[^>]*><\/span><span[^>]*>A3S Box MicroVM/);
+  assert.match(markup, /aria-pressed="false"[^>]*>[\s\S]*Dockerfile 容器/);
+});
+
+test("StaticEngineConfigDialogContent renders Joern as backend-managed CPG scan", () => {
+  const markup = renderToStaticMarkup(
+    createElement(StaticEngineConfigDialogContent, {
+      engine: "joern",
+      scanMode: "static",
+      enabled: true,
+      creating: false,
+      blockedReason: null,
+      onNavigateToEngineConfig: () => {},
+      onRequestClose: () => {},
+    }),
+  );
+
+  assert.match(markup, /Joern 配置/);
+  assert.match(markup, /Joern 图结构扫描/);
+  assert.match(markup, /后端配置的 Joern 镜像/);
+  assert.match(markup, /libplist C 代码 CPG/);
+  assert.doesNotMatch(markup, /启用规则/);
 });

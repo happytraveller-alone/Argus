@@ -17,7 +17,7 @@ test("buildScanConfigEngineSearchParams clears data-table state when switching e
 
   const nextParams = buildScanConfigEngineSearchParams(currentParams, "codeql");
 
-  assert.equal(nextParams.get("tab"), "opengrep");
+  assert.equal(nextParams.get("tab"), "codeql");
   assert.equal(nextParams.get("page"), null);
   assert.equal(nextParams.get("pageSize"), null);
   assert.equal(nextParams.get("q"), null);
@@ -35,12 +35,12 @@ test("buildScanConfigEngineSearchParams preserves unrelated params", () => {
 
   const nextParams = buildScanConfigEngineSearchParams(currentParams, "codeql");
 
-  assert.equal(nextParams.get("tab"), "opengrep");
+  assert.equal(nextParams.get("tab"), "codeql");
   assert.equal(nextParams.get("foo"), "bar");
   assert.equal(nextParams.get("page"), null);
 });
 
-test("scan engine selector options expose opengrep and codeql", () => {
+test("scan engine selector options expose static engines", () => {
   assert.deepEqual(SCAN_ENGINE_SELECTOR_OPTIONS, [
     {
       label: "opengrep",
@@ -49,6 +49,10 @@ test("scan engine selector options expose opengrep and codeql", () => {
     {
       label: "CodeQL",
       value: "codeql",
+    },
+    {
+      label: "Joern",
+      value: "joern",
     },
   ]);
 });

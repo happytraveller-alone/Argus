@@ -112,6 +112,10 @@ pub struct RunnerSpec {
     #[serde(default)]
     pub capture_stderr_path: Option<String>,
     #[serde(default)]
+    pub stdout_limit_bytes: Option<usize>,
+    #[serde(default)]
+    pub stderr_limit_bytes: Option<usize>,
+    #[serde(default)]
     pub completion_summary_path: Option<String>,
     #[serde(default)]
     pub workspace_root_override: Option<String>,
@@ -330,12 +334,36 @@ fn write_retained_log(path: &Path, text: &str) -> Result<Option<String>> {
     Ok(Some(path.display().to_string()))
 }
 
-fn write_full_text(path: &Path, text: &str) -> Result<String> {
+fn limit_text_by_bytes(text: &str, limit_bytes: Option<usize>) -> String {
+    let Some(limit_bytes) = limit_bytes else {
+        return text.to_string();
+    };
+    let bytes = text.as_bytes();
+    if bytes.len() <= limit_bytes {
+        return text.to_string();
+    }
+    if limit_bytes == 0 {
+        return "[truncated: output exceeded 0 byte limit]".to_string();
+    }
+
+    let mut prefix_len = limit_bytes.min(bytes.len());
+    while !text.is_char_boundary(prefix_len) {
+        prefix_len -= 1;
+    }
+    format!(
+        "{}\n[truncated: output exceeded {} byte limit]",
+        &text[..prefix_len],
+        limit_bytes
+    )
+}
+
+fn write_full_text(path: &Path, text: &str, limit_bytes: Option<usize>) -> Result<String> {
+    let content = limit_text_by_bytes(text, limit_bytes);
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)
             .with_context(|| format!("create output parent: {}", parent.display()))?;
     }
-    fs::write(path, text).with_context(|| format!("write output file: {}", path.display()))?;
+    fs::write(path, content).with_context(|| format!("write output file: {}", path.display()))?;
     Ok(path.display().to_string())
 }
 
@@ -920,12 +948,24 @@ pub fn execute(spec: RunnerSpec) -> RunnerResult {
         let captured_stdout_path = spec
             .capture_stdout_path
             .as_ref()
-            .map(|relative| write_full_text(&workspace.join(relative), &stdout_text))
+            .map(|relative| {
+                write_full_text(
+                    &workspace.join(relative),
+                    &stdout_text,
+                    spec.stdout_limit_bytes,
+                )
+            })
             .transpose()?;
         let captured_stderr_path = spec
             .capture_stderr_path
             .as_ref()
-            .map(|relative| write_full_text(&workspace.join(relative), &stderr_text))
+            .map(|relative| {
+                write_full_text(
+                    &workspace.join(relative),
+                    &stderr_text,
+                    spec.stderr_limit_bytes,
+                )
+            })
             .transpose()?;
 
         let keep_logs = needs_debug_capture;
@@ -1207,6 +1247,8 @@ esac
             artifact_paths: vec![],
             capture_stdout_path: None,
             capture_stderr_path: None,
+            stdout_limit_bytes: None,
+            stderr_limit_bytes: None,
             completion_summary_path: None,
             workspace_root_override: None,
             memory_limit_mb: None,
@@ -1282,6 +1324,8 @@ esac
             artifact_paths: vec![],
             capture_stdout_path: None,
             capture_stderr_path: None,
+            stdout_limit_bytes: None,
+            stderr_limit_bytes: None,
             completion_summary_path: None,
             workspace_root_override: None,
             memory_limit_mb: None,
@@ -1357,6 +1401,8 @@ esac
             artifact_paths: vec![],
             capture_stdout_path: None,
             capture_stderr_path: None,
+            stdout_limit_bytes: None,
+            stderr_limit_bytes: None,
             completion_summary_path: None,
             workspace_root_override: None,
             memory_limit_mb: None,
@@ -1406,6 +1452,8 @@ esac
             artifact_paths: vec![],
             capture_stdout_path: None,
             capture_stderr_path: None,
+            stdout_limit_bytes: None,
+            stderr_limit_bytes: None,
             completion_summary_path: None,
             workspace_root_override: None,
             memory_limit_mb: None,
@@ -1457,6 +1505,8 @@ esac
             artifact_paths: vec![],
             capture_stdout_path: None,
             capture_stderr_path: None,
+            stdout_limit_bytes: None,
+            stderr_limit_bytes: None,
             completion_summary_path: None,
             workspace_root_override: None,
             memory_limit_mb: None,
@@ -1511,6 +1561,8 @@ esac
             artifact_paths: vec![],
             capture_stdout_path: None,
             capture_stderr_path: None,
+            stdout_limit_bytes: None,
+            stderr_limit_bytes: None,
             completion_summary_path: None,
             workspace_root_override: None,
             memory_limit_mb: None,
@@ -1561,6 +1613,8 @@ esac
             artifact_paths: vec![],
             capture_stdout_path: None,
             capture_stderr_path: None,
+            stdout_limit_bytes: None,
+            stderr_limit_bytes: None,
             completion_summary_path: None,
             workspace_root_override: None,
             memory_limit_mb: None,
@@ -1607,6 +1661,8 @@ esac
             artifact_paths: vec![],
             capture_stdout_path: None,
             capture_stderr_path: None,
+            stdout_limit_bytes: None,
+            stderr_limit_bytes: None,
             completion_summary_path: None,
             workspace_root_override: None,
             memory_limit_mb: None,
@@ -1657,6 +1713,8 @@ esac
             artifact_paths: vec![],
             capture_stdout_path: None,
             capture_stderr_path: None,
+            stdout_limit_bytes: None,
+            stderr_limit_bytes: None,
             completion_summary_path: None,
             workspace_root_override: None,
             memory_limit_mb: None,
@@ -1714,6 +1772,8 @@ esac
             artifact_paths: vec![],
             capture_stdout_path: None,
             capture_stderr_path: None,
+            stdout_limit_bytes: None,
+            stderr_limit_bytes: None,
             completion_summary_path: None,
             workspace_root_override: None,
             memory_limit_mb: None,
@@ -1774,6 +1834,8 @@ esac
             artifact_paths: vec![],
             capture_stdout_path: None,
             capture_stderr_path: None,
+            stdout_limit_bytes: None,
+            stderr_limit_bytes: None,
             completion_summary_path: None,
             workspace_root_override: None,
             memory_limit_mb: None,
@@ -1820,6 +1882,8 @@ esac
             artifact_paths: vec![],
             capture_stdout_path: None,
             capture_stderr_path: None,
+            stdout_limit_bytes: None,
+            stderr_limit_bytes: None,
             completion_summary_path: None,
             workspace_root_override: None,
             memory_limit_mb: None,
@@ -1869,6 +1933,8 @@ esac
             artifact_paths: vec![],
             capture_stdout_path: None,
             capture_stderr_path: None,
+            stdout_limit_bytes: None,
+            stderr_limit_bytes: None,
             completion_summary_path: None,
             workspace_root_override: None,
             memory_limit_mb: Some(500),
@@ -1920,6 +1986,8 @@ esac
             artifact_paths: vec![],
             capture_stdout_path: Some("output/results.txt".to_string()),
             capture_stderr_path: Some("output/stderr.txt".to_string()),
+            stdout_limit_bytes: None,
+            stderr_limit_bytes: None,
             completion_summary_path: None,
             workspace_root_override: None,
             memory_limit_mb: None,
@@ -1943,6 +2011,63 @@ esac
         let logged = fs::read_to_string(&fake_log).unwrap();
         assert!(!logged.contains("logs|--stdout"), "{logged}");
         assert!(!logged.contains("logs|--stderr"), "{logged}");
+    }
+
+    #[test]
+    fn execute_applies_stdout_stderr_capture_limits() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        let temp_dir = TempDir::new().unwrap();
+        let fake_log = temp_dir.path().join("docker.log");
+        let fake_docker = fake_docker_script(&temp_dir);
+        let workspace_root = temp_dir.path().join("scan-root");
+        let workspace_dir = workspace_root.join("joern/task-capture-limits");
+        let source_dir = workspace_dir.join("source");
+        let output_dir = workspace_dir.join("output");
+        fs::create_dir_all(&workspace_dir).unwrap();
+        fs::create_dir_all(&source_dir).unwrap();
+        fs::create_dir_all(&output_dir).unwrap();
+
+        let _podman_bin = EnvVarGuard::set("Argus_PODMAN_BIN", fake_docker.to_str().unwrap());
+        let _docker_log = EnvVarGuard::set("FAKE_DOCKER_LOG", fake_log.to_str().unwrap());
+        let _workspace_root =
+            EnvVarGuard::set("SCAN_WORKSPACE_ROOT", workspace_root.to_str().unwrap());
+        let _workspace_volume = EnvVarGuard::set("SCAN_WORKSPACE_VOLUME", "Argus_scan_workspace");
+        let _start_stdout = EnvVarGuard::set("FAKE_START_STDOUT", "abcdef");
+        let _start_stderr = EnvVarGuard::set("FAKE_START_STDERR", "uvwxyz");
+
+        let result = execute(RunnerSpec {
+            scanner_type: "joern".to_string(),
+            image: "ghcr.io/joernio/joern:nightly".to_string(),
+            container_runtime: ContainerRuntime::Podman,
+            workspace_dir: workspace_dir.display().to_string(),
+            command: vec!["/bin/sh".to_string(), "/scan/workspace/run.sh".to_string()],
+            timeout_seconds: 0,
+            env: BTreeMap::new(),
+            expected_exit_codes: vec![0],
+            artifact_paths: vec![],
+            capture_stdout_path: Some("output/stdout.log".to_string()),
+            capture_stderr_path: Some("output/stderr.log".to_string()),
+            stdout_limit_bytes: Some(3),
+            stderr_limit_bytes: Some(2),
+            completion_summary_path: None,
+            workspace_root_override: None,
+            memory_limit_mb: None,
+            memory_swap_limit_mb: None,
+            cpu_limit: None,
+            pids_limit: None,
+            network_disabled: false,
+            mount_plan: Some(RunnerMountPlan::new(vec![
+                RunnerMount::read_write(workspace_dir.display().to_string(), "/scan/workspace"),
+                RunnerMount::read_only(source_dir.display().to_string(), "/scan/source"),
+                RunnerMount::read_write(output_dir.display().to_string(), "/scan/output"),
+            ])),
+        });
+
+        assert!(result.success, "{:?}", result.error);
+        let stdout = fs::read_to_string(result.stdout_path.clone().unwrap()).unwrap();
+        let stderr = fs::read_to_string(result.stderr_path.clone().unwrap()).unwrap();
+        assert!(stdout.starts_with("abc\n[truncated: output exceeded 3 byte limit]"));
+        assert!(stderr.starts_with("uv\n[truncated: output exceeded 2 byte limit]"));
     }
 
     #[test]
@@ -1979,6 +2104,8 @@ esac
             artifact_paths: vec![],
             capture_stdout_path: None,
             capture_stderr_path: None,
+            stdout_limit_bytes: None,
+            stderr_limit_bytes: None,
             completion_summary_path: Some("output/scan-summary.json".to_string()),
             workspace_root_override: None,
             memory_limit_mb: None,
@@ -2076,6 +2203,8 @@ esac
             artifact_paths: vec![],
             capture_stdout_path: None,
             capture_stderr_path: None,
+            stdout_limit_bytes: None,
+            stderr_limit_bytes: None,
             completion_summary_path: Some("output/scan-summary.json".to_string()),
             workspace_root_override: None,
             memory_limit_mb: None,
@@ -2146,6 +2275,8 @@ esac
             artifact_paths: vec![],
             capture_stdout_path: None,
             capture_stderr_path: None,
+            stdout_limit_bytes: None,
+            stderr_limit_bytes: None,
             completion_summary_path: Some("output/scan-summary.json".to_string()),
             workspace_root_override: None,
             memory_limit_mb: None,
@@ -2200,6 +2331,8 @@ esac
             artifact_paths: vec![],
             capture_stdout_path: None,
             capture_stderr_path: None,
+            stdout_limit_bytes: None,
+            stderr_limit_bytes: None,
             completion_summary_path: Some("output/scan-summary.json".to_string()),
             workspace_root_override: None,
             memory_limit_mb: None,

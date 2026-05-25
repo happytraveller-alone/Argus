@@ -5,6 +5,11 @@ import {
 	type TaskActivityItem,
 } from "@/features/tasks/services/taskActivities";
 import { cancelIntelligentTask } from "@/shared/api/intelligentTasks";
+import {
+	interruptCodeqlScanTask,
+	interruptJoernScanTask,
+	interruptOpengrepScanTask,
+} from "@/shared/api/opengrep";
 
 const STALE_MS = 30_000;
 const MAX_AGE_MS = 5 * 60_000;
@@ -174,6 +179,12 @@ export async function cancelTaskActivity(
 	}
 	if (target.mode === "intelligent") {
 		await cancelIntelligentTask(target.taskId);
+	} else if (target.engine === "opengrep") {
+		await interruptOpengrepScanTask(target.taskId);
+	} else if (target.engine === "codeql") {
+		await interruptCodeqlScanTask(target.taskId);
+	} else if (target.engine === "joern") {
+		await interruptJoernScanTask(target.taskId);
 	} else {
 		throw new Error(`不支持的取消模式：${target.mode}`);
 	}

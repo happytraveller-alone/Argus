@@ -29,6 +29,7 @@ import { api } from "@/shared/api/database";
 import {
 	createOpengrepScanTask,
 	createCodeqlScanTask,
+	createJoernScanTask,
 	getAllOpengrepRules,
 	type OpengrepSandboxMode,
 	type OpengrepRule,
@@ -121,6 +122,7 @@ export default function CreateScanTaskDialog({
 	const [staticTools, setStaticTools] = useState<StaticToolSelection>({
 		opengrep: true,
 		codeql: false,
+		joern: false,
 	});
 	const [staticRules, setStaticRules] = useState<OpengrepRule[]>([]);
 	const [selectedRuleIds, setSelectedRuleIds] = useState<string[]>([]);
@@ -193,6 +195,7 @@ export default function CreateScanTaskDialog({
 			setStaticTools({
 				opengrep: true,
 				codeql: false,
+				joern: false,
 			});
 			setConfigEngine(null);
 			setOpengrepSandbox("dockerfile_container");
@@ -277,6 +280,7 @@ export default function CreateScanTaskDialog({
 
 		let opengrepTask: { id: string } | null = null;
 		let codeqlTask: { id: string } | null = null;
+		let joernTask: { id: string } | null = null;
 		const staticBatchId = createStaticScanBatchId();
 
 		if (staticTools.opengrep) {
@@ -350,7 +354,17 @@ export default function CreateScanTaskDialog({
 				languages: codeqlLanguages.length > 0 ? codeqlLanguages : undefined,
 			});
 		}
-		const primaryTaskId = opengrepTask?.id ?? codeqlTask?.id;
+		if (staticTools.joern) {
+			joernTask = await createJoernScanTask({
+				project_id: projectId,
+				name: appendStaticScanBatchMarker(
+					`静态分析-Joern-${projectName}`,
+					staticBatchId,
+				),
+				target_path: ".",
+			});
+		}
+		const primaryTaskId = opengrepTask?.id ?? codeqlTask?.id ?? joernTask?.id;
 		if (!primaryTaskId) {
 			throw new Error("静态分析任务创建失败");
 		}
@@ -362,6 +376,10 @@ export default function CreateScanTaskDialog({
 		if (codeqlTask) {
 			params.set("codeqlTaskId", codeqlTask.id);
 			params.set("engine", "codeql");
+		}
+		if (joernTask) {
+			params.set("joernTaskId", joernTask.id);
+			params.set("engine", "joern");
 		}
 
 		return {
@@ -488,11 +506,12 @@ export default function CreateScanTaskDialog({
 		effectiveTargetFiles,
 		staticTools.opengrep,
 		staticTools.codeql,
+		staticTools.joern,
 		opengrepSandbox,
 	]);
 
 	const handleStaticToolsChange = (next: StaticToolSelection) => {
-		const changedPrimaryEngine = (["opengrep", "codeql"] as const).find(
+		const changedPrimaryEngine = (["opengrep", "codeql", "joern"] as const).find(
 			(engine) => staticTools[engine] !== next[engine],
 		);
 		if (changedPrimaryEngine && isPrimaryStaticEngine(changedPrimaryEngine)) {

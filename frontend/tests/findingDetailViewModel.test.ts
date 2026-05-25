@@ -9,6 +9,7 @@ import {
   buildCodeqlFindingDetailModel,
   buildFullFileDisplayLines,
   buildFindingDetailCodeSections,
+  buildJoernFindingDetailModel,
   buildOpengrepFindingDetailModel,
   isFindingDetailFullFilePathSupported,
 } from "../src/pages/finding-detail/viewModel.ts";
@@ -240,6 +241,20 @@ test("buildFindingDetailPath 为 codeql 详情保留 engine 查询参数", () =>
   );
 });
 
+test("buildFindingDetailPath 为 joern 详情保留 engine 查询参数", () => {
+  const route = buildFindingDetailPath({
+    source: "static",
+    taskId: "task-joern",
+    findingId: "finding-joern",
+    engine: "joern",
+  });
+
+  assert.equal(
+    route,
+    "/finding-detail/static/task-joern/finding-joern?engine=joern",
+  );
+});
+
 test("buildAgentFindingDetailModel 将概览信息直接收敛为 overviewItems", () => {
   const model = buildAgentFindingDetailModel({
     finding: agentFinding,
@@ -375,6 +390,38 @@ test("buildCodeqlFindingDetailModel 复用静态详情模型并展示 CodeQL 来
   assert.equal(
     model.trackingItems.find((item) => item.label === "规则标识")?.value,
     "cpp/overflow-buffer",
+  );
+  assert.deepEqual(model.codeBrowserTarget, {
+    filePath: "src/app/db.py",
+    line: 23,
+  });
+});
+
+test("buildJoernFindingDetailModel 复用静态详情模型并展示 Joern 来源", () => {
+  const model = buildJoernFindingDetailModel({
+    finding: {
+      ...opengrepFinding,
+      id: "jn-1",
+      scan_task_id: "task-joern",
+      rule_name: "joern-c-buffer-overflow-libplist-cve-2017-6439",
+      description: "Joern detected a libplist buffer overflow sink.",
+      severity: "ERROR",
+      confidence: "HIGH",
+    },
+    taskId: "task-joern",
+    findingId: "finding-joern",
+    taskName: "Joern Scan",
+    projectId: "project-zip",
+    projectSourceType: "zip",
+  });
+
+  assert.equal(
+    model.trackingItems.find((item) => item.label === "来源")?.value,
+    "静态审计 · Joern",
+  );
+  assert.equal(
+    model.trackingItems.find((item) => item.label === "规则标识")?.value,
+    "joern-c-buffer-overflow-libplist-cve-2017-6439",
   );
   assert.deepEqual(model.codeBrowserTarget, {
     filePath: "src/app/db.py",

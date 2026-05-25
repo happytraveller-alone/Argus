@@ -15,6 +15,7 @@ test("StaticAnalysisSummaryCards keeps the initial progress label pending while 
     createElement(summaryCardsModule.StaticAnalysisSummaryCards, {
       opengrepTask: null,
       codeqlTask: null,
+      joernTask: null,
       enabledEngines: ["opengrep"],
       loadingInitial: true,
     }),
@@ -55,7 +56,8 @@ test("StaticAnalysisSummaryCards keeps all enabled engines pending while multi-e
         updated_at: "2026-03-23T10:01:00.000Z",
       },
       codeqlTask: null,
-      enabledEngines: ["opengrep", "codeql"],
+      joernTask: null,
+      enabledEngines: ["opengrep", "codeql", "joern"],
       loadingInitial: true,
     }),
   );
@@ -65,6 +67,7 @@ test("StaticAnalysisSummaryCards keeps all enabled engines pending while multi-e
   assert.doesNotMatch(markup, /0%/);
   assert.doesNotMatch(markup, /Opengrep · 任务待处理/);
   assert.doesNotMatch(markup, /CodeQL · 任务待处理/);
+  assert.doesNotMatch(markup, /Joern · 任务待处理/);
   assert.doesNotMatch(markup, /Opengrep · 任务完成/);
 });
 
@@ -113,7 +116,7 @@ test("StaticAnalysis uses the CodeQL-only 6:4 split for first-run task detail", 
 
   assert.match(source, /isCodeqlOnlyDetail/);
   assert.match(source, /lg:grid-cols-\[minmax\(0,6fr\)_minmax\(0,4fr\)\]/);
-  assert.match(source, /showEngineColumn=\{false\}/);
+  assert.match(source, /showEngineColumn=\{!isSingleEngineDetail\}/);
   assert.match(source, /lg:h-\[calc\(100vh-11rem\)\]/);
 });
 
@@ -127,7 +130,7 @@ test("StaticAnalysis and CodeqlScanDetail read project names directly from backe
     "utf8",
   );
 
-  assert.match(staticSource, /opengrepTask\?\.project_name \|\| codeqlTask\?\.project_name/);
+  assert.match(staticSource, /opengrepTask\?\.project_name \|\| codeqlTask\?\.project_name \|\| joernTask\?\.project_name/);
   assert.match(codeqlSource, /codeqlTask\?\.project_name/);
   assert.doesNotMatch(staticSource, /getProjectById/);
   assert.doesNotMatch(codeqlSource, /getProjectById/);

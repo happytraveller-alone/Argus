@@ -31,6 +31,9 @@ test("fetchTaskActivities uses backend visible total for opengrep static defect 
 				],
 			};
 		}
+		if (url.startsWith("/static-tasks/joern/tasks")) {
+			return { data: [] };
+		}
 		throw new Error(`Unexpected apiClient.get call: ${url}`);
 	}) as typeof apiClient.get;
 
@@ -82,6 +85,9 @@ test("fetchTaskActivities uses backend visible opengrep severity buckets", async
 				],
 			};
 		}
+		if (url.startsWith("/static-tasks/joern/tasks")) {
+			return { data: [] };
+		}
 		throw new Error(`Unexpected apiClient.get call: ${url}`);
 	}) as typeof apiClient.get;
 
@@ -128,6 +134,9 @@ test("fetchTaskActivities keeps zero visible opengrep findings at zero despite s
 					},
 				],
 			};
+		}
+		if (url.startsWith("/static-tasks/joern/tasks")) {
+			return { data: [] };
 		}
 		throw new Error(`Unexpected apiClient.get call: ${url}`);
 	}) as typeof apiClient.get;
@@ -200,6 +209,9 @@ test("fetchTaskActivities does not request retired agent task or removed static 
 				],
 			};
 		}
+		if (url.startsWith("/static-tasks/joern/tasks")) {
+			return { data: [] };
+		}
 		throw new Error(`Unexpected apiClient.get call: ${url}`);
 	}) as typeof apiClient.get;
 
@@ -215,7 +227,7 @@ test("fetchTaskActivities does not request retired agent task or removed static 
 			critical: 0,
 			high: 0,
 			medium: 0,
-			low: 1,
+			low: 3,
 		});
 		assert.equal(
 			activities[0]?.route,
@@ -229,6 +241,7 @@ test("fetchTaskActivities does not request retired agent task or removed static 
 		assert.deepEqual(calls, [
 			"/static-tasks/tasks?limit=20",
 			"/static-tasks/codeql/tasks?limit=20",
+			"/static-tasks/joern/tasks?limit=20",
 		]);
 	} finally {
 		apiClient.get = originalGet;
@@ -268,6 +281,9 @@ test("static task management activity source includes both opengrep and codeql t
 				data: [],
 			};
 		}
+		if (url.startsWith("/static-tasks/joern/tasks")) {
+			return { data: [] };
+		}
 		throw new Error(`Unexpected apiClient.get call: ${url}`);
 	}) as typeof apiClient.get;
 
@@ -290,6 +306,82 @@ test("static task management activity source includes both opengrep and codeql t
 		assert.deepEqual(calls, [
 			"/static-tasks/tasks?limit=20",
 			"/static-tasks/codeql/tasks?limit=20",
+			"/static-tasks/joern/tasks?limit=20",
+		]);
+	} finally {
+		apiClient.get = originalGet;
+	}
+});
+
+
+test("static task management activity source includes joern tasks", async () => {
+	const originalGet = apiClient.get;
+	const calls: string[] = [];
+
+	apiClient.get = (async (url: string) => {
+		calls.push(url);
+		if (url.startsWith("/static-tasks/tasks")) {
+			return { data: [] };
+		}
+		if (url.startsWith("/static-tasks/codeql/tasks")) {
+			return { data: [] };
+		}
+		if (url.startsWith("/static-tasks/joern/tasks")) {
+			return {
+				data: [
+					{
+						id: "jn-5",
+						project_id: "project-5",
+						name: appendStaticScanBatchMarker("静态分析-Joern", "static-batch-5"),
+						status: "completed",
+						target_path: ".",
+						total_findings: 1,
+						critical_count: 1,
+						high_count: 0,
+						medium_count: 0,
+						low_count: 0,
+						error_count: 1,
+						warning_count: 0,
+						scan_duration_ms: 900,
+						files_scanned: 1,
+						lines_scanned: 300,
+						created_at: "2026-03-13T14:00:00.000Z",
+						updated_at: "2026-03-13T14:01:00.000Z",
+						engine: "joern",
+					},
+				],
+			};
+		}
+		throw new Error(`Unexpected apiClient.get call: ${url}`);
+	}) as typeof apiClient.get;
+
+	try {
+		const activities = await fetchTaskActivities(
+			[{ id: "project-5", name: "Joern Project" }] as any,
+			20,
+		);
+
+		assert.equal(activities.length, 1);
+		assert.equal(activities[0]?.engineLabel, "Joern");
+		assert.deepEqual(activities[0]?.staticFindingStats, {
+			critical: 1,
+			high: 0,
+			medium: 0,
+			low: 0,
+		});
+		assert.equal(
+			activities[0]?.route,
+			"/static-analysis/jn-5?muteToast=1&joernTaskId=jn-5&engine=joern",
+		);
+		assert.deepEqual(activities[0]?.cancelTarget, {
+			mode: "static",
+			engine: "joern",
+			taskId: "jn-5",
+		});
+		assert.deepEqual(calls, [
+			"/static-tasks/tasks?limit=20",
+			"/static-tasks/codeql/tasks?limit=20",
+			"/static-tasks/joern/tasks?limit=20",
 		]);
 	} finally {
 		apiClient.get = originalGet;

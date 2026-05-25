@@ -18,7 +18,7 @@ const staticAnalysisPageSource = readFileSync(
   "utf8",
 );
 
-test("buildUnifiedFindingRows normalizes opengrep and codeql rows", () => {
+test("buildUnifiedFindingRows normalizes opengrep, codeql and joern rows", () => {
   const rows = buildUnifiedFindingRows({
     opengrepFindings: [
       {
@@ -56,9 +56,22 @@ test("buildUnifiedFindingRows normalizes opengrep and codeql rows", () => {
       },
     ],
     codeqlTaskId: "task-cq",
+    joernFindings: [
+      {
+        id: "jn-1",
+        scan_task_id: "task-jn",
+        severity: "ERROR",
+        confidence: "HIGH",
+        file_path: "/scan/project/src/bplist.c",
+        start_line: 288,
+        status: "open",
+        rule: { check_id: "joern-c-buffer-overflow-libplist-cve-2017-6439" },
+      },
+    ],
+    joernTaskId: "task-jn",
   });
 
-  assert.equal(rows.length, 2);
+  assert.equal(rows.length, 3);
   assert.equal(rows[0]?.engine, "opengrep");
   assert.equal(rows[0]?.rule, "auth-rule");
   assert.equal(rows[0]?.filePath, "repo/src/auth.ts");
@@ -68,6 +81,10 @@ test("buildUnifiedFindingRows normalizes opengrep and codeql rows", () => {
   assert.equal(rows[1]?.taskId, "task-cq");
   assert.equal(rows[1]?.rule, "cpp/sql-injection");
   assert.equal(rows[1]?.filePath, "src/main.cpp");
+  assert.equal(rows[2]?.engine, "joern");
+  assert.equal(rows[2]?.taskId, "task-jn");
+  assert.equal(rows[2]?.rule, "joern-c-buffer-overflow-libplist-cve-2017-6439");
+  assert.equal(rows[2]?.filePath, "src/bplist.c");
 });
 
 test("resolveStaticAnalysisDetailTaskIds treats engine as a table filter, not a CodeQL detail selector", () => {
@@ -76,21 +93,28 @@ test("resolveStaticAnalysisDetailTaskIds treats engine as a table filter, not a 
       taskId: "og-1",
       searchParams: new URLSearchParams("engine=codeql"),
     }),
-    { opengrepTaskId: "og-1", codeqlTaskId: "" },
+    { opengrepTaskId: "og-1", codeqlTaskId: "", joernTaskId: "" },
   );
   assert.deepEqual(
     resolveStaticAnalysisDetailTaskIds({
       taskId: "og-1",
       searchParams: new URLSearchParams("opengrepTaskId=og-2&engine=codeql"),
     }),
-    { opengrepTaskId: "og-2", codeqlTaskId: "" },
+    { opengrepTaskId: "og-2", codeqlTaskId: "", joernTaskId: "" },
   );
   assert.deepEqual(
     resolveStaticAnalysisDetailTaskIds({
       taskId: "cq-1",
       searchParams: new URLSearchParams("codeqlTaskId=cq-2&engine=codeql"),
     }),
-    { opengrepTaskId: "", codeqlTaskId: "cq-2" },
+    { opengrepTaskId: "", codeqlTaskId: "cq-2", joernTaskId: "" },
+  );
+  assert.deepEqual(
+    resolveStaticAnalysisDetailTaskIds({
+      taskId: "jn-1",
+      searchParams: new URLSearchParams("joernTaskId=jn-2&engine=joern"),
+    }),
+    { opengrepTaskId: "", codeqlTaskId: "", joernTaskId: "jn-2" },
   );
 });
 
@@ -161,7 +185,7 @@ test("static analysis finding status helpers expose tri-state labels and tones",
   );
 });
 
-test("buildStaticAnalysisListState filters, sorts and paginates opengrep/codeql rows", () => {
+test("buildStaticAnalysisListState filters, sorts and paginates static engine rows", () => {
   const rows = [
     {
       key: "a",
@@ -205,6 +229,20 @@ test("buildStaticAnalysisListState filters, sorts and paginates opengrep/codeql 
       confidenceScore: 2,
       status: "open",
     },
+    {
+      key: "d",
+      id: "d",
+      taskId: "3",
+      engine: "joern",
+      rule: "rule-d",
+      filePath: "src/bplist.c",
+      line: 288,
+      severity: "CRITICAL",
+      severityScore: 4,
+      confidence: "HIGH",
+      confidenceScore: 3,
+      status: "open",
+    },
   ] as const;
 
   const state = buildStaticAnalysisListState({
@@ -217,11 +255,11 @@ test("buildStaticAnalysisListState filters, sorts and paginates opengrep/codeql 
     pageSize: 2,
   });
 
-  assert.equal(state.totalRows, 3);
+  assert.equal(state.totalRows, 4);
   assert.equal(state.totalPages, 2);
   assert.deepEqual(
     state.pagedRows.map((row) => row.key),
-    ["b", "a"],
+    ["d", "b"],
   );
 
   const filtered = buildStaticAnalysisListState({
@@ -237,6 +275,21 @@ test("buildStaticAnalysisListState filters, sorts and paginates opengrep/codeql 
   assert.deepEqual(
     filtered.pagedRows.map((row) => row.key),
     ["c"],
+  );
+
+  const joernFiltered = buildStaticAnalysisListState({
+    rows: [...rows],
+    engineFilter: "joern",
+    statusFilter: "open",
+    severityFilter: "CRITICAL",
+    confidenceFilter: "HIGH",
+    page: 1,
+    pageSize: 10,
+  });
+
+  assert.deepEqual(
+    joernFiltered.pagedRows.map((row) => row.key),
+    ["d"],
   );
 });
 
@@ -278,7 +331,7 @@ test("getStaticAnalysisTaskDisplayDurationMs falls back to updated_at for comple
   assert.equal(duration, 45_000);
 });
 
-test("getStaticAnalysisTotalDisplayDurationMs sums opengrep and codeql durations", () => {
+test("getStaticAnalysisTotalDisplayDurationMs sums static engine durations", () => {
   const duration = viewModel.getStaticAnalysisTotalDisplayDurationMs({
     opengrepTask: {
       id: "og-completed",
@@ -296,13 +349,21 @@ test("getStaticAnalysisTotalDisplayDurationMs sums opengrep and codeql durations
       updated_at: "2026-03-12T07:00:40.000Z",
       scan_duration_ms: 0,
     },
+    joernTask: {
+      id: "jn-completed",
+      project_id: "project-4",
+      status: "completed",
+      created_at: "2026-03-12T07:00:00.000Z",
+      updated_at: "2026-03-12T07:00:10.000Z",
+      scan_duration_ms: 10_000,
+    },
     nowMs: Date.parse("2026-03-12T07:01:30.000Z"),
   });
 
-  assert.equal(duration, 155_000);
+  assert.equal(duration, 165_000);
 });
 
-test("buildStaticAnalysisProgressSummary follows grouped opengrep/codeql status", () => {
+test("buildStaticAnalysisProgressSummary follows grouped static engine status", () => {
   const runningSummary = buildStaticAnalysisProgressSummary({
     opengrepTask: {
       id: "og-1",
@@ -317,6 +378,13 @@ test("buildStaticAnalysisProgressSummary follows grouped opengrep/codeql status"
       status: "completed",
       created_at: "2026-03-12T07:00:30.000Z",
       updated_at: "2026-03-12T07:05:00.000Z",
+    },
+    joernTask: {
+      id: "jn-1",
+      project_id: "project-1",
+      status: "completed",
+      created_at: "2026-03-12T07:00:45.000Z",
+      updated_at: "2026-03-12T07:03:00.000Z",
     },
     nowMs: Date.parse("2026-03-12T07:12:00.000Z"),
   });
@@ -337,6 +405,13 @@ test("buildStaticAnalysisProgressSummary follows grouped opengrep/codeql status"
       status: "completed",
       created_at: "2026-03-12T07:00:15.000Z",
       updated_at: "2026-03-12T07:04:00.000Z",
+    },
+    joernTask: {
+      id: "jn-2",
+      project_id: "project-2",
+      status: "completed",
+      created_at: "2026-03-12T07:00:20.000Z",
+      updated_at: "2026-03-12T07:03:00.000Z",
     },
     nowMs: Date.parse("2026-03-12T07:12:00.000Z"),
   });
@@ -452,7 +527,7 @@ test("buildStaticAnalysisHeaderSummary exposes Opengrep scan scheme label", () =
 			codeqlTask: null,
 			enabledEngines: ["opengrep"],
 		}).scanSchemeLabel,
-		"Docker 容器方案",
+		"Podman 容器方案",
 	);
 	assert.equal(
 		viewModel.buildStaticAnalysisHeaderSummary({
@@ -460,7 +535,7 @@ test("buildStaticAnalysisHeaderSummary exposes Opengrep scan scheme label", () =
 			codeqlTask: null,
 			enabledEngines: ["opengrep"],
 		}).scanSchemeLabel,
-		"Docker 容器方案",
+		"Podman 容器方案",
 	);
 	assert.equal(
 		viewModel.buildStaticAnalysisHeaderSummary({
@@ -469,6 +544,15 @@ test("buildStaticAnalysisHeaderSummary exposes Opengrep scan scheme label", () =
 			enabledEngines: ["opengrep"],
 		}).scanSchemeLabel,
 		"A3S 沙箱方案",
+	);
+	assert.equal(
+		viewModel.buildStaticAnalysisHeaderSummary({
+			opengrepTask: null,
+			codeqlTask: null,
+			joernTask: { ...baseTask, id: "jn-1" },
+			enabledEngines: ["joern"],
+		}).scanSchemeLabel,
+		"Joern CPG 方案",
 	);
 });
 
@@ -503,11 +587,12 @@ test("StaticAnalysis page uses backend task project names for the display fallba
   assert.doesNotMatch(staticAnalysisPageSource, /getProjectById/);
   assert.match(
     staticAnalysisPageSource,
-    /opengrepTask\?\.project_name \|\| codeqlTask\?\.project_name/,
+    /opengrepTask\?\.project_name \|\| codeqlTask\?\.project_name \|\| joernTask\?\.project_name/,
   );
   assert.match(staticAnalysisPageSource, /staticProjectName/);
   assert.match(staticAnalysisPageSource, /fallbackProjectName/);
   assert.match(staticAnalysisPageSource, /codeqlTaskId/);
+  assert.match(staticAnalysisPageSource, /joernTaskId/);
 });
 
 test("buildCodeqlExplorationTimelineRows exposes CodeQL evidence and redaction state", () => {

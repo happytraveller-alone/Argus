@@ -37,7 +37,7 @@ use crate::{
         },
         shutdown::ShutdownGate,
     },
-    scan::{codeql, opengrep, scope_filters},
+    scan::{codeql, joern, opengrep, scope_filters},
     state::AppState,
 };
 
@@ -50,6 +50,43 @@ struct CodeqlTaskOptions {
     build_mode: Option<String>,
     allow_network: Option<bool>,
     reset_build_plan: bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum StaticEngineKind {
+    Opengrep,
+    Codeql,
+    Joern,
+}
+
+impl StaticEngineKind {
+    fn from_optional(value: Option<&str>) -> Result<Self, ApiError> {
+        match value.map(str::trim).filter(|value| !value.is_empty()) {
+            None => Ok(Self::Opengrep),
+            Some(value) => Self::from_value(value).ok_or_else(|| {
+                ApiError::BadRequest(format!(
+                    "unsupported static scan engine '{value}'; supported engines: opengrep, codeql, joern"
+                ))
+            }),
+        }
+    }
+
+    fn from_value(value: &str) -> Option<Self> {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "opengrep" => Some(Self::Opengrep),
+            "codeql" => Some(Self::Codeql),
+            "joern" => Some(Self::Joern),
+            _ => None,
+        }
+    }
+
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Opengrep => "opengrep",
+            Self::Codeql => "codeql",
+            Self::Joern => "joern",
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -146,6 +183,32 @@ pub fn router() -> Router<AppState> {
         .route(
             "/codeql/findings/{finding_id}/status",
             post(update_codeql_finding_status),
+        )
+        .route(
+            "/joern/tasks",
+            get(list_joern_tasks).post(create_joern_task),
+        )
+        .route(
+            "/joern/tasks/{task_id}",
+            get(get_joern_task).delete(delete_joern_task),
+        )
+        .route(
+            "/joern/tasks/{task_id}/interrupt",
+            post(interrupt_joern_task),
+        )
+        .route("/joern/tasks/{task_id}/progress", get(get_joern_progress))
+        .route("/joern/tasks/{task_id}/findings", get(list_joern_findings))
+        .route(
+            "/joern/tasks/{task_id}/findings/{finding_id}/context",
+            get(get_joern_finding_context),
+        )
+        .route(
+            "/joern/tasks/{task_id}/findings/{finding_id}",
+            get(get_joern_finding),
+        )
+        .route(
+            "/joern/findings/{finding_id}/status",
+            post(update_joern_finding_status),
         )
         .route(
             "/tasks/{task_id}",
@@ -463,21 +526,34 @@ async fn list_codeql_rules(
 
     let filtered: Vec<_> = if let Some(ref keyword) = query.keyword {
         let kw = keyword.to_ascii_lowercase();
-        assets.into_iter().filter(|a| {
-            a.asset_path.to_ascii_lowercase().contains(&kw)
-                || a.metadata_json.get("name").and_then(|v| v.as_str())
-                    .unwrap_or("").to_ascii_lowercase().contains(&kw)
-        }).collect()
+        assets
+            .into_iter()
+            .filter(|a| {
+                a.asset_path.to_ascii_lowercase().contains(&kw)
+                    || a.metadata_json
+                        .get("name")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_ascii_lowercase()
+                        .contains(&kw)
+            })
+            .collect()
     } else {
         assets
     };
 
     let filtered: Vec<_> = if let Some(ref language) = query.language {
         let lang = language.to_ascii_lowercase();
-        filtered.into_iter().filter(|a| {
-            let parts: Vec<&str> = a.asset_path.split('/').collect();
-            parts.get(1).map(|l| l.to_ascii_lowercase() == lang).unwrap_or(false)
-        }).collect()
+        filtered
+            .into_iter()
+            .filter(|a| {
+                let parts: Vec<&str> = a.asset_path.split('/').collect();
+                parts
+                    .get(1)
+                    .map(|l| l.to_ascii_lowercase() == lang)
+                    .unwrap_or(false)
+            })
+            .collect()
     } else {
         filtered
     };
@@ -491,7 +567,9 @@ async fn list_codeql_rules(
             let parts: Vec<&str> = asset.asset_path.split('/').collect();
             let language = parts.get(1).unwrap_or(&"unknown").to_string();
             let filename = parts.last().unwrap_or(&"").to_string();
-            let name = asset.metadata_json.get("name")
+            let name = asset
+                .metadata_json
+                .get("name")
                 .and_then(|v| v.as_str())
                 .unwrap_or(&filename)
                 .to_string();
@@ -842,13 +920,12 @@ async fn create_static_task(
     if gate.is_set() {
         return (StatusCode::SERVICE_UNAVAILABLE, "server shutting down").into_response();
     }
-    let engine = optional_string(&payload, "engine").unwrap_or_else(|| "opengrep".to_string());
-    if engine.eq_ignore_ascii_case("codeql") {
-        return create_static_task_for_engine(state, payload, "codeql")
-            .await
-            .into_response();
-    }
-    create_static_task_for_engine(state, payload, "opengrep")
+    let engine =
+        match StaticEngineKind::from_optional(optional_string(&payload, "engine").as_deref()) {
+            Ok(engine) => engine,
+            Err(error) => return error.into_response(),
+        };
+    create_static_task_for_engine(state, payload, engine)
         .await
         .into_response()
 }
@@ -861,7 +938,20 @@ async fn create_codeql_task(
     if gate.is_set() {
         return (StatusCode::SERVICE_UNAVAILABLE, "server shutting down").into_response();
     }
-    create_static_task_for_engine(state, payload, "codeql")
+    create_static_task_for_engine(state, payload, StaticEngineKind::Codeql)
+        .await
+        .into_response()
+}
+
+async fn create_joern_task(
+    State(state): State<AppState>,
+    Extension(gate): Extension<ShutdownGate>,
+    Json(payload): Json<Value>,
+) -> impl IntoResponse {
+    if gate.is_set() {
+        return (StatusCode::SERVICE_UNAVAILABLE, "server shutting down").into_response();
+    }
+    create_static_task_for_engine(state, payload, StaticEngineKind::Joern)
         .await
         .into_response()
 }
@@ -869,13 +959,14 @@ async fn create_codeql_task(
 async fn create_static_task_for_engine(
     state: AppState,
     payload: Value,
-    engine: &str,
+    engine: StaticEngineKind,
 ) -> Result<Json<Value>, ApiError> {
     let project_id = required_string(&payload, "project_id")?;
 
     let now = now_rfc3339();
     let task_id = Uuid::new_v4().to_string();
     let target_path = optional_string(&payload, "target_path").unwrap_or_else(|| ".".to_string());
+    let engine_name = engine.as_str();
     let rule_ids = payload
         .get("rule_ids")
         .and_then(Value::as_array)
@@ -885,12 +976,12 @@ async fn create_static_task_for_engine(
                 .collect::<Vec<_>>()
         })
         .unwrap_or_default();
-    let codeql_options = if engine.eq_ignore_ascii_case("codeql") {
+    let codeql_options = if engine == StaticEngineKind::Codeql {
         Some(extract_codeql_task_options(&payload))
     } else {
         None
     };
-    let opengrep_options = if engine.eq_ignore_ascii_case("opengrep") {
+    let opengrep_options = if engine == StaticEngineKind::Opengrep {
         Some(extract_opengrep_task_options(&payload))
     } else {
         None
@@ -908,10 +999,10 @@ async fn create_static_task_for_engine(
 
     let mut record = task_state::StaticTaskRecord {
         id: task_id.clone(),
-        engine: engine.to_string(),
+        engine: engine_name.to_string(),
         project_id: project_id.clone(),
         project_name: None,
-        name: optional_string(&payload, "name").unwrap_or_else(|| format!("{engine}-task")),
+        name: optional_string(&payload, "name").unwrap_or_else(|| format!("{engine_name}-task")),
         status: "running".to_string(),
         target_path: target_path.clone(),
         total_findings: 0,
@@ -921,7 +1012,7 @@ async fn create_static_task_for_engine(
         created_at: now.clone(),
         updated_at: Some(now.clone()),
         extra: json!({
-            "engine": engine,
+            "engine": engine_name,
             "error_count": 0,
             "warning_count": 0,
             "high_confidence_count": 0,
@@ -931,13 +1022,13 @@ async fn create_static_task_for_engine(
         progress: task_state::StaticTaskProgressRecord {
             progress: 0.0,
             current_stage: Some("initializing".to_string()),
-            message: Some(format!("preparing {engine} scan")),
+            message: Some(format!("preparing {engine_name} scan")),
             started_at: Some(now.clone()),
             updated_at: Some(now.clone()),
             logs: vec![task_state::StaticTaskProgressLogRecord {
                 timestamp: now,
                 stage: "initializing".to_string(),
-                message: format!("{engine} scan task created"),
+                message: format!("{engine_name} scan task created"),
                 progress: 0.0,
                 level: "info".to_string(),
             }],
@@ -995,34 +1086,39 @@ async fn create_static_task_for_engine(
 
     let bg_state = state.clone();
     let bg_task_id = task_id.clone();
-    let engine_for_task = engine.to_string();
     tokio::spawn(async move {
         // Hold an ActiveScanGuard for the lifetime of this scan task.
         // shutdown_signal waits for ACTIVE_SCAN_COUNT to reach zero before
         // letting axum exit, ensuring best_effort_delete_sandbox always runs.
         let _scan_guard = crate::runtime::shutdown::ActiveScanGuard::enter();
-        if engine_for_task == "codeql" {
-            run_codeql_scan(
-                bg_state,
-                bg_task_id,
-                project_id,
-                target_path,
-                rule_ids,
-                codeql_options.unwrap_or_default(),
-            )
-            .await;
-        } else {
-            run_opengrep_scan(
-                bg_state,
-                bg_task_id,
-                project_id,
-                target_path,
-                rule_ids,
-                opengrep_options.unwrap_or(OpengrepTaskOptions {
-                    sandbox: OpengrepSandboxKind::DockerfileContainer,
-                }),
-            )
-            .await;
+        match engine {
+            StaticEngineKind::Codeql => {
+                run_codeql_scan(
+                    bg_state,
+                    bg_task_id,
+                    project_id,
+                    target_path,
+                    rule_ids,
+                    codeql_options.unwrap_or_default(),
+                )
+                .await;
+            }
+            StaticEngineKind::Joern => {
+                run_joern_scan(bg_state, bg_task_id, project_id, target_path, rule_ids).await;
+            }
+            StaticEngineKind::Opengrep => {
+                run_opengrep_scan(
+                    bg_state,
+                    bg_task_id,
+                    project_id,
+                    target_path,
+                    rule_ids,
+                    opengrep_options.unwrap_or(OpengrepTaskOptions {
+                        sandbox: OpengrepSandboxKind::DockerfileContainer,
+                    }),
+                )
+                .await;
+            }
         }
     });
 
@@ -1136,6 +1232,34 @@ async fn interrupt_codeql_task(
     interrupt_static_task(&state, "codeql", &task_id).await
 }
 
+async fn list_joern_tasks(
+    State(state): State<AppState>,
+    Query(query): Query<ListQuery>,
+) -> Result<Json<Vec<Value>>, ApiError> {
+    list_static_tasks(&state, "joern", query).await
+}
+
+async fn get_joern_task(
+    State(state): State<AppState>,
+    AxumPath(task_id): AxumPath<String>,
+) -> Result<Json<Value>, ApiError> {
+    get_static_task(&state, "joern", &task_id).await
+}
+
+async fn delete_joern_task(
+    State(state): State<AppState>,
+    AxumPath(task_id): AxumPath<String>,
+) -> Result<Json<Value>, ApiError> {
+    delete_static_task(&state, "joern", &task_id).await
+}
+
+async fn interrupt_joern_task(
+    State(state): State<AppState>,
+    AxumPath(task_id): AxumPath<String>,
+) -> Result<Json<Value>, ApiError> {
+    interrupt_static_task(&state, "joern", &task_id).await
+}
+
 async fn get_opengrep_progress(
     State(state): State<AppState>,
     AxumPath(task_id): AxumPath<String>,
@@ -1240,6 +1364,14 @@ async fn get_codeql_progress(
     get_static_progress(&state, "codeql", &task_id, query).await
 }
 
+async fn get_joern_progress(
+    State(state): State<AppState>,
+    AxumPath(task_id): AxumPath<String>,
+    Query(query): Query<ProgressQuery>,
+) -> Result<Json<Value>, ApiError> {
+    get_static_progress(&state, "joern", &task_id, query).await
+}
+
 async fn reset_codeql_project_build_plan(
     State(state): State<AppState>,
     AxumPath(project_id): AxumPath<String>,
@@ -1288,6 +1420,36 @@ async fn update_codeql_finding_status(
     Query(query): Query<StatusQuery>,
 ) -> Result<Json<Value>, ApiError> {
     update_static_finding_status(&state, "codeql", &finding_id, &query.status).await
+}
+
+async fn list_joern_findings(
+    State(state): State<AppState>,
+    AxumPath(task_id): AxumPath<String>,
+    Query(query): Query<ListQuery>,
+) -> Result<Json<Vec<Value>>, ApiError> {
+    list_static_findings(&state, "joern", &task_id, &query).await
+}
+
+async fn get_joern_finding(
+    State(state): State<AppState>,
+    AxumPath((task_id, finding_id)): AxumPath<(String, String)>,
+) -> Result<Json<Value>, ApiError> {
+    get_static_finding(&state, "joern", &task_id, &finding_id).await
+}
+
+async fn get_joern_finding_context(
+    State(state): State<AppState>,
+    AxumPath((task_id, finding_id)): AxumPath<(String, String)>,
+) -> Result<Json<Value>, ApiError> {
+    get_static_finding_context(&state, "joern", &task_id, &finding_id).await
+}
+
+async fn update_joern_finding_status(
+    State(state): State<AppState>,
+    AxumPath(finding_id): AxumPath<String>,
+    Query(query): Query<StatusQuery>,
+) -> Result<Json<Value>, ApiError> {
+    update_static_finding_status(&state, "joern", &finding_id, &query.status).await
 }
 
 async fn get_opengrep_finding(
@@ -1466,6 +1628,117 @@ async fn run_codeql_scan(
         let elapsed_ms = started_at.elapsed().as_millis() as i64;
         let _ = update_scan_task_failed(&state, &task_id, &error.to_string(), elapsed_ms).await;
     }
+}
+
+async fn run_joern_scan(
+    state: AppState,
+    task_id: String,
+    project_id: String,
+    target_path: String,
+    _rule_ids: Vec<String>,
+) {
+    let started_at = std::time::Instant::now();
+    if let Err(error) = run_joern_scan_inner(&state, &task_id, &project_id, &target_path).await {
+        let elapsed_ms = started_at.elapsed().as_millis() as i64;
+        let _ = update_scan_task_failed(&state, &task_id, &error.to_string(), elapsed_ms).await;
+    }
+}
+
+async fn run_joern_scan_inner(
+    state: &AppState,
+    task_id: &str,
+    project_id: &str,
+    _target_path: &str,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let started_at = std::time::Instant::now();
+    update_scan_progress(
+        state,
+        task_id,
+        5.0,
+        "preparing",
+        "resolving project archive",
+    )
+    .await;
+
+    let (archive_path, archive_name) = resolve_project_archive_input(state, project_id).await?;
+    let workspace_root = scan_workspace_root();
+    let workspace_dir = workspace_root
+        .join("joern-runtime")
+        .join(Uuid::new_v4().to_string());
+    let source_dir = workspace_dir.join("source");
+    let output_dir = workspace_dir.join("output");
+    tokio::fs::create_dir_all(&source_dir).await?;
+    tokio::fs::create_dir_all(&output_dir).await?;
+
+    update_scan_progress(state, task_id, 15.0, "extracting", "extracting source").await;
+    extract_archive_to_dir(&archive_path, &archive_name, &source_dir).await?;
+    flatten_single_top_level_dir(&source_dir).await?;
+    let scan_input_paths = collect_relative_paths_from_directory(&source_dir)?;
+    let files_scanned = scan_input_paths.len();
+
+    update_scan_progress(
+        state,
+        task_id,
+        30.0,
+        "preparing_rules",
+        "preparing joern query package",
+    )
+    .await;
+    let query_dir = joern::materialize_query_directory(state, &workspace_dir).await?;
+    let wrapper_script = joern::build_wrapper_script(&joern::JoernOutputPaths::default());
+    let wrapper_path = workspace_dir.join("argus-joern-wrapper.sh");
+    tokio::fs::write(&wrapper_path, wrapper_script).await?;
+
+    update_scan_progress(
+        state,
+        task_id,
+        45.0,
+        "building_cpg",
+        "running joern CPG construction and queries",
+    )
+    .await;
+    let spec = build_joern_runner_spec(
+        &state.config,
+        &workspace_dir,
+        &source_dir,
+        &query_dir,
+        &output_dir,
+    );
+    let runner_result =
+        tokio::task::spawn_blocking(move || crate::runtime::runner::execute(spec)).await?;
+    if !runner_result.success {
+        let error_msg = runner_result.error.unwrap_or_else(|| {
+            format!("joern runner exited with code {}", runner_result.exit_code)
+        });
+        let _ = tokio::fs::remove_dir_all(&workspace_dir).await;
+        return Err(format!("joern scan failed: {error_msg}").into());
+    }
+
+    update_scan_progress(state, task_id, 75.0, "processing", "parsing joern output").await;
+    let parsed = joern::parse_output_dir(
+        &output_dir,
+        task_id,
+        source_dir.to_str(),
+        Some(&scan_input_paths),
+        state.config.joern_results_json_limit_bytes,
+    )
+    .await?;
+
+    update_scan_progress(state, task_id, 90.0, "finalizing", "saving joern findings").await;
+    let elapsed_ms = started_at.elapsed().as_millis() as i64;
+    store_joern_results(
+        state,
+        task_id,
+        &parsed.findings,
+        parsed.summary,
+        parsed.graph_proof,
+        files_scanned,
+        elapsed_ms,
+    )
+    .await?;
+
+    let _ = tokio::fs::remove_dir_all(&workspace_dir).await;
+    Ok(())
 }
 
 async fn run_codeql_scan_inner(
@@ -2133,6 +2406,149 @@ fn generate_codeql_entrypoint_script(
     script
 }
 
+fn build_joern_runner_spec(
+    config: &crate::config::AppConfig,
+    workspace_dir: &std::path::Path,
+    source_dir: &std::path::Path,
+    query_dir: &std::path::Path,
+    output_dir: &std::path::Path,
+) -> RunnerSpec {
+    let mut env = BTreeMap::new();
+    env.insert("JOERN_SOURCE_DIR".to_string(), "/scan/source".to_string());
+    env.insert("JOERN_OUTPUT_DIR".to_string(), "/scan/output".to_string());
+    env.insert(
+        "JOERN_QUERY_DIR".to_string(),
+        "/scan/joern-queries".to_string(),
+    );
+
+    RunnerSpec {
+        scanner_type: "joern".to_string(),
+        image: config.scanner_joern_image.clone(),
+        container_runtime: ContainerRuntime::Podman,
+        workspace_dir: workspace_dir.display().to_string(),
+        command: vec![
+            "/bin/sh".to_string(),
+            "/scan/workspace/argus-joern-wrapper.sh".to_string(),
+        ],
+        timeout_seconds: config.joern_scan_timeout_seconds,
+        env,
+        expected_exit_codes: vec![0],
+        artifact_paths: Vec::new(),
+        capture_stdout_path: Some(joern::STDOUT_REL_PATH.to_string()),
+        capture_stderr_path: Some(joern::STDERR_REL_PATH.to_string()),
+        stdout_limit_bytes: Some(config.joern_stdout_limit_bytes),
+        stderr_limit_bytes: Some(config.joern_stderr_limit_bytes),
+        completion_summary_path: Some(joern::SUMMARY_REL_PATH.to_string()),
+        workspace_root_override: None,
+        memory_limit_mb: Some(config.joern_runner_memory_limit_mb),
+        memory_swap_limit_mb: Some(config.joern_runner_memory_limit_mb),
+        cpu_limit: (config.joern_runner_cpu_limit > 0.0).then_some(config.joern_runner_cpu_limit),
+        pids_limit: Some(config.joern_runner_pids_limit),
+        network_disabled: config.joern_network_disabled,
+        mount_plan: Some(RunnerMountPlan::new(vec![
+            RunnerMount::read_write(workspace_dir.display().to_string(), "/scan/workspace"),
+            RunnerMount::read_only(source_dir.display().to_string(), "/scan/source"),
+            RunnerMount::read_only(query_dir.display().to_string(), "/scan/joern-queries"),
+            RunnerMount::read_write(output_dir.display().to_string(), "/scan/output"),
+        ])),
+    }
+}
+
+async fn store_joern_results(
+    state: &AppState,
+    task_id: &str,
+    findings: &[task_state::StaticFindingRecord],
+    summary: Value,
+    graph_proof: Value,
+    files_scanned: usize,
+    elapsed_ms: i64,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let now = now_rfc3339();
+    let error_count = findings
+        .iter()
+        .filter(|finding| {
+            finding
+                .payload
+                .get("severity")
+                .and_then(Value::as_str)
+                .is_some_and(|severity| severity.eq_ignore_ascii_case("ERROR"))
+        })
+        .count();
+    let warning_count = findings
+        .iter()
+        .filter(|finding| {
+            finding
+                .payload
+                .get("severity")
+                .and_then(Value::as_str)
+                .is_some_and(|severity| severity.eq_ignore_ascii_case("WARNING"))
+        })
+        .count();
+    let high_confidence_count = findings
+        .iter()
+        .filter(|finding| {
+            finding
+                .payload
+                .get("confidence")
+                .and_then(Value::as_str)
+                .is_some_and(|confidence| confidence.eq_ignore_ascii_case("HIGH"))
+        })
+        .count();
+
+    let mut snapshot = task_state::load_snapshot(state).await?;
+    if let Some(record) = snapshot.static_tasks.get_mut(task_id) {
+        record.status = "completed".to_string();
+        record.total_findings = findings.len() as i64;
+        record.scan_duration_ms = elapsed_ms;
+        record.files_scanned = files_scanned as i64;
+        record.error_message = None;
+        record.updated_at = Some(now.clone());
+        record.extra = json!({
+            "engine": "joern",
+            "executor": "runner_spec_podman",
+            "error_count": error_count,
+            "warning_count": warning_count,
+            "high_confidence_count": high_confidence_count,
+            "lines_scanned": 0,
+            "files_scanned": files_scanned,
+            "joern_summary": summary,
+            "joern_graph_proof": graph_proof,
+            "joern_docs_evidence": joern::docs_evidence(),
+        });
+        record.findings = findings.to_vec();
+        let events = record.progress.events.clone();
+        record.progress = task_state::StaticTaskProgressRecord {
+            progress: 100.0,
+            current_stage: Some("completed".to_string()),
+            message: Some(format!(
+                "joern scan completed: {} findings in {}ms",
+                findings.len(),
+                elapsed_ms
+            )),
+            started_at: record.progress.started_at.clone(),
+            updated_at: Some(now.clone()),
+            logs: {
+                let mut logs = record.progress.logs.clone();
+                logs.push(task_state::StaticTaskProgressLogRecord {
+                    timestamp: now,
+                    stage: "completed".to_string(),
+                    message: format!(
+                        "joern scan completed: {} findings, {} files scanned",
+                        findings.len(),
+                        files_scanned
+                    ),
+                    progress: 100.0,
+                    level: "info".to_string(),
+                });
+                logs
+            },
+            events,
+        };
+    }
+    task_state::save_snapshot(state, &snapshot).await?;
+    Ok(())
+}
+
 fn build_codeql_runner_spec(
     config: &crate::config::AppConfig,
     workspace_dir: &std::path::Path,
@@ -2156,6 +2572,8 @@ fn build_codeql_runner_spec(
         artifact_paths: Vec::new(),
         capture_stdout_path: Some("output/stdout.log".to_string()),
         capture_stderr_path: Some("output/stderr.log".to_string()),
+        stdout_limit_bytes: None,
+        stderr_limit_bytes: None,
         completion_summary_path: None,
         workspace_root_override: None,
         memory_limit_mb: Some(config.codeql_ram_mb),
@@ -2828,6 +3246,8 @@ fn build_opengrep_runner_spec(
         artifact_paths: Vec::new(),
         capture_stdout_path: Some(paths.stdout_rel_path.to_string()),
         capture_stderr_path: Some(paths.stderr_rel_path.to_string()),
+        stdout_limit_bytes: None,
+        stderr_limit_bytes: None,
         completion_summary_path: Some(paths.summary_rel_path.to_string()),
         workspace_root_override: None,
         memory_limit_mb: Some(config.opengrep_runner_memory_limit_mb),
@@ -3154,7 +3574,10 @@ async fn update_scan_task_failed(
         if record.status == "interrupted" {
             record.progress.progress = 100.0;
             record.progress.current_stage = Some("interrupted".to_string());
-            record.progress.message = Some("codeql task interrupted in rust backend".to_string());
+            record.progress.message = Some(format!(
+                "{} task interrupted in rust backend",
+                record.engine
+            ));
             record.progress.updated_at = Some(now);
             task_state::save_snapshot(state, &snapshot).await?;
             return Ok(());
@@ -4728,7 +5151,7 @@ mod tests {
     use crate::runtime::runner::ContainerRuntime;
 
     use super::{
-        build_opengrep_a3s_box_runner_spec, build_opengrep_mount_plan,
+        build_joern_runner_spec, build_opengrep_a3s_box_runner_spec, build_opengrep_mount_plan,
         build_opengrep_podman_fallback_runner_spec, build_opengrep_runner_spec,
         extract_highest_rule_severity, extract_opengrep_task_options, format_opengrep_runner_error,
         prepare_opengrep_runner_inputs, prune_static_scan_non_source_paths,
@@ -5112,6 +5535,75 @@ rules:
 
         assert_eq!(spec.container_runtime, ContainerRuntime::Podman);
         assert_eq!(spec.cpu_limit, Some(2.5));
+    }
+
+    #[test]
+    fn joern_runner_spec_uses_runner_spec_with_stable_outputs_and_resources() {
+        let mut config = AppConfig::for_tests();
+        config.scanner_joern_image = "local/joern:test".to_string();
+        config.joern_scan_timeout_seconds = 123;
+        config.joern_runner_memory_limit_mb = 8192;
+        config.joern_runner_cpu_limit = 2.5;
+        config.joern_runner_pids_limit = 2048;
+        config.joern_network_disabled = true;
+        config.joern_stdout_limit_bytes = 23456;
+        config.joern_stderr_limit_bytes = 34567;
+
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let workspace_dir = temp_dir.path();
+        let source_dir = workspace_dir.join("source");
+        let query_dir = workspace_dir.join("joern-queries");
+        let output_dir = workspace_dir.join("output");
+        let spec =
+            build_joern_runner_spec(&config, workspace_dir, &source_dir, &query_dir, &output_dir);
+
+        assert_eq!(spec.scanner_type, "joern");
+        assert_eq!(spec.image, "local/joern:test");
+        assert_eq!(spec.container_runtime, ContainerRuntime::Podman);
+        assert_eq!(
+            spec.command,
+            vec!["/bin/sh", "/scan/workspace/argus-joern-wrapper.sh"]
+        );
+        assert_eq!(spec.timeout_seconds, 123);
+        assert_eq!(
+            spec.capture_stdout_path.as_deref(),
+            Some("output/stdout.log")
+        );
+        assert_eq!(
+            spec.capture_stderr_path.as_deref(),
+            Some("output/stderr.log")
+        );
+        assert_eq!(spec.stdout_limit_bytes, Some(23456));
+        assert_eq!(spec.stderr_limit_bytes, Some(34567));
+        assert_eq!(
+            spec.completion_summary_path.as_deref(),
+            Some("output/summary.json")
+        );
+        assert_eq!(spec.memory_limit_mb, Some(8192));
+        assert_eq!(spec.memory_swap_limit_mb, Some(8192));
+        assert_eq!(spec.cpu_limit, Some(2.5));
+        assert_eq!(spec.pids_limit, Some(2048));
+        assert!(spec.network_disabled);
+        assert_eq!(spec.env["JOERN_SOURCE_DIR"], "/scan/source");
+        assert_eq!(spec.env["JOERN_OUTPUT_DIR"], "/scan/output");
+        assert_eq!(spec.env["JOERN_QUERY_DIR"], "/scan/joern-queries");
+        let mount_plan = spec.mount_plan.expect("joern mount plan");
+        assert!(mount_plan
+            .mounts
+            .iter()
+            .any(|mount| mount.container_path == "/scan/workspace" && !mount.read_only));
+        assert!(mount_plan
+            .mounts
+            .iter()
+            .any(|mount| mount.container_path == "/scan/source" && mount.read_only));
+        assert!(mount_plan
+            .mounts
+            .iter()
+            .any(|mount| mount.container_path == "/scan/joern-queries" && mount.read_only));
+        assert!(mount_plan
+            .mounts
+            .iter()
+            .any(|mount| mount.container_path == "/scan/output" && !mount.read_only));
     }
 
     #[test]

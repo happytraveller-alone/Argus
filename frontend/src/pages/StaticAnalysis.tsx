@@ -65,12 +65,12 @@ export default function StaticAnalysis() {
   const currentRoute = `${location.pathname}${location.search}`;
   const { initialState, syncStateToUrl } = useDataTableUrlState(true);
 
-  const { opengrepTaskId, codeqlTaskId } = useMemo(
+  const { opengrepTaskId, codeqlTaskId, joernTaskId } = useMemo(
     () => resolveStaticAnalysisDetailTaskIds({ taskId, searchParams }),
     [searchParams, taskId],
   );
 
-  const hasEnabledEngine = Boolean(opengrepTaskId || codeqlTaskId);
+  const hasEnabledEngine = Boolean(opengrepTaskId || codeqlTaskId || joernTaskId);
   const [tableState, setTableState] = useState<DataTableQueryState>(() =>
     createStaticAnalysisInitialTableState(initialState),
   );
@@ -82,8 +82,10 @@ export default function StaticAnalysis() {
   const {
     opengrepTask,
     codeqlTask,
+    joernTask,
     opengrepFindings,
     codeqlFindings,
+    joernFindings,
     codeqlExplorationEvents,
     loadingInitial,
     loadingTask,
@@ -99,14 +101,16 @@ export default function StaticAnalysis() {
     handleToggleStatus,
     canInterruptOpengrep,
     canInterruptCodeql,
+    canInterruptJoern,
     canResetCodeqlBuildPlan,
   } = useStaticAnalysisData({
     hasEnabledEngine,
     opengrepTaskId,
     codeqlTaskId,
+    joernTaskId,
   });
 
-  const isTaskCompleted = opengrepTask?.status === "completed";
+  const isTaskCompleted = Boolean(opengrepTaskId && opengrepTask?.status === "completed");
 
   const unifiedRows = useMemo(
     () =>
@@ -115,10 +119,14 @@ export default function StaticAnalysis() {
         opengrepTaskId,
         codeqlFindings,
         codeqlTaskId,
+        joernFindings,
+        joernTaskId,
       }),
     [
       codeqlFindings,
       codeqlTaskId,
+      joernFindings,
+      joernTaskId,
       opengrepFindings,
       opengrepTaskId,
     ],
@@ -128,17 +136,19 @@ export default function StaticAnalysis() {
     const engines: Engine[] = [];
     if (opengrepTaskId) engines.push("opengrep");
     if (codeqlTaskId) engines.push("codeql");
+    if (joernTaskId) engines.push("joern");
     return engines;
-  }, [codeqlTaskId, opengrepTaskId]);
-  const isCodeqlOnlyDetail = Boolean(codeqlTaskId && !opengrepTaskId);
+  }, [codeqlTaskId, joernTaskId, opengrepTaskId]);
+  const isCodeqlOnlyDetail = Boolean(codeqlTaskId && !opengrepTaskId && !joernTaskId);
+  const isSingleEngineDetail = enabledEngines.length <= 1;
 
   const shouldTickClock = useMemo(
-    () => [opengrepTask, codeqlTask].some((task) => isStaticAnalysisPollableStatus(task?.status)),
-    [codeqlTask, opengrepTask],
+    () => [opengrepTask, codeqlTask, joernTask].some((task) => isStaticAnalysisPollableStatus(task?.status)),
+    [codeqlTask, joernTask, opengrepTask],
   );
   const nowMs = useTaskClock({ enabled: shouldTickClock, intervalMs: 1000 });
   const staticProjectName = String(
-    opengrepTask?.project_name || codeqlTask?.project_name || "",
+    opengrepTask?.project_name || codeqlTask?.project_name || joernTask?.project_name || "",
   ).trim();
   const fallbackProjectName = useMemo(
     () => String(staticProjectName || "").trim() || "-",
@@ -149,12 +159,13 @@ export default function StaticAnalysis() {
       buildStaticAnalysisHeaderSummary({
         opengrepTask,
         codeqlTask,
+        joernTask,
         enabledEngines,
         loadingInitial,
         nowMs,
         fallbackProjectName,
       }),
-    [codeqlTask, enabledEngines, fallbackProjectName, loadingInitial, nowMs, opengrepTask],
+    [codeqlTask, enabledEngines, fallbackProjectName, joernTask, loadingInitial, nowMs, opengrepTask],
   );
   const headerTags = useMemo(
     () => [
@@ -242,6 +253,16 @@ export default function StaticAnalysis() {
               中止 CodeQL
             </Button>
           ) : null}
+          {canInterruptJoern ? (
+            <Button
+              variant="outline"
+              className="cyber-btn-outline h-8"
+              onClick={() => setInterruptTarget("joern")}
+            >
+              <Ban className="w-3.5 h-3.5 mr-1.5" />
+              中止 Joern
+            </Button>
+          ) : null}
           {isTaskCompleted ? (
             <Button
               variant="outline"
@@ -290,7 +311,7 @@ export default function StaticAnalysis() {
           loadingInitial={loadingInitial}
           rows={unifiedRows}
           state={tableState}
-          showEngineColumn={false}
+          showEngineColumn={!isSingleEngineDetail}
           onStateChange={setTableState}
           updatingKey={updatingKey}
           onToggleStatus={handleToggleStatus}
@@ -319,7 +340,7 @@ export default function StaticAnalysis() {
           <AlertDialogHeader>
             <AlertDialogTitle>确认中止任务？</AlertDialogTitle>
             <AlertDialogDescription>
-              即将中止 {interruptTarget === "codeql" ? "CodeQL" : "Opengrep"} 扫描任务。中止后任务状态将更新为已中断。
+              即将中止 {interruptTarget === "codeql" ? "CodeQL" : interruptTarget === "joern" ? "Joern" : "Opengrep"} 扫描任务。中止后任务状态将更新为已中断。
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

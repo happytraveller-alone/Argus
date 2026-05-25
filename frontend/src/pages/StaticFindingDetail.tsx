@@ -25,7 +25,8 @@ export default function StaticFindingDetail() {
 			findingId: normalizedFindingId,
 			engine:
 				engine === "opengrep" ||
-				engine === "codeql"
+				engine === "codeql" ||
+				engine === "joern"
 					? engine
 					: undefined,
 		});

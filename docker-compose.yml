@@ -118,6 +118,14 @@ services:
       OPENGREP_SCAN_MAX_MEMORY_MB: "${OPENGREP_SCAN_MAX_MEMORY_MB:-2048}"
       OPENGREP_RUNNER_MEMORY_LIMIT_MB: "${OPENGREP_RUNNER_MEMORY_LIMIT_MB:-2048}"
       OPENGREP_RUNNER_CPU_LIMIT: "${OPENGREP_RUNNER_CPU_LIMIT:-0}"
+      JOERN_SCAN_TIMEOUT_SECONDS: "${JOERN_SCAN_TIMEOUT_SECONDS:-1800}"
+      JOERN_RESULTS_JSON_LIMIT_BYTES: "${JOERN_RESULTS_JSON_LIMIT_BYTES:-268435456}"
+      JOERN_STDOUT_LIMIT_BYTES: "${JOERN_STDOUT_LIMIT_BYTES:-1048576}"
+      JOERN_STDERR_LIMIT_BYTES: "${JOERN_STDERR_LIMIT_BYTES:-1048576}"
+      JOERN_RUNNER_MEMORY_LIMIT_MB: "${JOERN_RUNNER_MEMORY_LIMIT_MB:-4096}"
+      JOERN_RUNNER_CPU_LIMIT: "${JOERN_RUNNER_CPU_LIMIT:-0}"
+      JOERN_RUNNER_PIDS_LIMIT: "${JOERN_RUNNER_PIDS_LIMIT:-1024}"
+      JOERN_NETWORK_DISABLED: "${JOERN_NETWORK_DISABLED:-true}"
       # Default container runtime for the Opengrep scanner runner.
       # Override with OPENGREP_RUNNER_RUNTIME=docker for the Docker socket path.
       OPENGREP_RUNNER_RUNTIME: "${OPENGREP_RUNNER_RUNTIME:-podman}"
@@ -145,6 +153,7 @@ services:
       BACKEND_PYPI_INDEX_CANDIDATES: ${BACKEND_PYPI_INDEX_CANDIDATES:-https://mirrors.aliyun.com/pypi/simple/,https://pypi.tuna.tsinghua.edu.cn/simple,https://pypi.mirrors.ustc.edu.cn/simple/,https://mirrors.cloud.tencent.com/pypi/simple/,https://mirrors.huaweicloud.com/repository/pypi/simple/,https://mirrors.bfsu.edu.cn/pypi/web/simple/,https://pypi.org/simple}
       SCANNER_OPENGREP_IMAGE: ${SCANNER_OPENGREP_IMAGE:-argus/opengrep-runner-local:latest}
       SCANNER_CODEQL_IMAGE: ${SCANNER_CODEQL_IMAGE:-localhost/argus/codeql-runner:latest}
+      SCANNER_JOERN_IMAGE: ${SCANNER_JOERN_IMAGE:-ghcr.io/joernio/joern:nightly}
       SCANNER_OPENGREP_A3S_BOX_IMAGE: ${SCANNER_OPENGREP_A3S_BOX_IMAGE:-${SCANNER_OPENGREP_IMAGE:-argus/opengrep-runner-local:latest}}
       CODEQL_LLM_ALLOW_SOURCE_SNIPPETS: "${CODEQL_LLM_ALLOW_SOURCE_SNIPPETS:-true}"
       CODEQL_ALLOW_NETWORK_DURING_BUILD: "${CODEQL_ALLOW_NETWORK_DURING_BUILD:-true}"

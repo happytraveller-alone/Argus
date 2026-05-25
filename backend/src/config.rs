@@ -47,6 +47,7 @@ pub struct AppConfig {
     pub scanner_opengrep_image: String,
     pub scanner_opengrep_a3s_box_image: String,
     pub scanner_codeql_image: String,
+    pub scanner_joern_image: String,
     pub codeql_threads: usize,
     pub codeql_ram_mb: u64,
     pub codeql_max_build_inference_rounds: u64,
@@ -119,6 +120,14 @@ pub struct AppConfig {
     /// full output.
     /// Env: OPENGREP_RESULTS_JSON_LIMIT_BYTES, default 256 MiB.
     pub opengrep_results_json_limit_bytes: usize,
+    pub joern_scan_timeout_seconds: u64,
+    pub joern_results_json_limit_bytes: usize,
+    pub joern_stdout_limit_bytes: usize,
+    pub joern_stderr_limit_bytes: usize,
+    pub joern_runner_memory_limit_mb: u64,
+    pub joern_runner_cpu_limit: f64,
+    pub joern_runner_pids_limit: u64,
+    pub joern_network_disabled: bool,
 }
 
 impl AppConfig {
@@ -195,6 +204,8 @@ impl AppConfig {
                 .unwrap_or_else(|| "argus/opengrep-runner:latest".to_string()),
             scanner_codeql_image: env::var("SCANNER_CODEQL_IMAGE")
                 .unwrap_or_else(|_| "localhost/argus/codeql-runner:latest".to_string()),
+            scanner_joern_image: env::var("SCANNER_JOERN_IMAGE")
+                .unwrap_or_else(|_| crate::scan::joern::DEFAULT_JOERN_IMAGE.to_string()),
             codeql_threads: parse_usize_env("CODEQL_THREADS", 0),
             codeql_ram_mb: parse_u64_env("CODEQL_RAM_MB", 6144),
             codeql_max_build_inference_rounds: parse_u64_env(
@@ -244,6 +255,17 @@ impl AppConfig {
                 "OPENGREP_RESULTS_JSON_LIMIT_BYTES",
                 268_435_456,
             ),
+            joern_scan_timeout_seconds: parse_u64_env("JOERN_SCAN_TIMEOUT_SECONDS", 1800),
+            joern_results_json_limit_bytes: parse_usize_env(
+                "JOERN_RESULTS_JSON_LIMIT_BYTES",
+                268_435_456,
+            ),
+            joern_stdout_limit_bytes: parse_usize_env("JOERN_STDOUT_LIMIT_BYTES", 1_048_576),
+            joern_stderr_limit_bytes: parse_usize_env("JOERN_STDERR_LIMIT_BYTES", 1_048_576),
+            joern_runner_memory_limit_mb: parse_u64_env("JOERN_RUNNER_MEMORY_LIMIT_MB", 4096),
+            joern_runner_cpu_limit: parse_f64_env("JOERN_RUNNER_CPU_LIMIT", 0.0),
+            joern_runner_pids_limit: parse_u64_env("JOERN_RUNNER_PIDS_LIMIT", 1024),
+            joern_network_disabled: parse_bool_env("JOERN_NETWORK_DISABLED", true),
         })
     }
 
@@ -298,6 +320,7 @@ impl AppConfig {
             scanner_opengrep_image: "argus/opengrep-runner:test".to_string(),
             scanner_opengrep_a3s_box_image: "argus/opengrep-runner:test".to_string(),
             scanner_codeql_image: "argus/codeql-runner:test".to_string(),
+            scanner_joern_image: "ghcr.io/joernio/joern:nightly".to_string(),
             codeql_threads: 0,
             codeql_ram_mb: 6144,
             codeql_max_build_inference_rounds: 15,
@@ -324,6 +347,14 @@ impl AppConfig {
             a3s_box_stdout_limit_bytes: 1_048_576,
             a3s_box_stderr_limit_bytes: 1_048_576,
             opengrep_results_json_limit_bytes: 268_435_456,
+            joern_scan_timeout_seconds: 1800,
+            joern_results_json_limit_bytes: 268_435_456,
+            joern_stdout_limit_bytes: 1_048_576,
+            joern_stderr_limit_bytes: 1_048_576,
+            joern_runner_memory_limit_mb: 4096,
+            joern_runner_cpu_limit: 0.0,
+            joern_runner_pids_limit: 1024,
+            joern_network_disabled: true,
         }
     }
 }
@@ -406,7 +437,37 @@ fn parse_f64_env(key: &str, default: f64) -> f64 {
 
 #[cfg(test)]
 mod tests {
-    use super::normalize_opengrep_runner_runtime;
+    use std::sync::Mutex;
+
+    use super::{normalize_opengrep_runner_runtime, AppConfig};
+
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    struct EnvVarGuard {
+        key: String,
+        original: Option<String>,
+    }
+
+    impl EnvVarGuard {
+        fn set(key: &str, value: &str) -> Self {
+            let original = std::env::var(key).ok();
+            std::env::set_var(key, value);
+            Self {
+                key: key.to_string(),
+                original,
+            }
+        }
+    }
+
+    impl Drop for EnvVarGuard {
+        fn drop(&mut self) {
+            if let Some(original) = &self.original {
+                std::env::set_var(&self.key, original);
+            } else {
+                std::env::remove_var(&self.key);
+            }
+        }
+    }
 
     #[test]
     fn opengrep_runner_runtime_accepts_only_podman_override() {
@@ -418,5 +479,46 @@ mod tests {
             "podman"
         );
         assert_eq!(normalize_opengrep_runner_runtime(None), "podman");
+    }
+
+    #[test]
+    fn joern_config_defaults_are_deterministic() {
+        let config = AppConfig::for_tests();
+
+        assert_eq!(config.scanner_joern_image, "ghcr.io/joernio/joern:nightly");
+        assert_eq!(config.joern_scan_timeout_seconds, 1800);
+        assert_eq!(config.joern_results_json_limit_bytes, 268_435_456);
+        assert_eq!(config.joern_stdout_limit_bytes, 1_048_576);
+        assert_eq!(config.joern_stderr_limit_bytes, 1_048_576);
+        assert_eq!(config.joern_runner_memory_limit_mb, 4096);
+        assert_eq!(config.joern_runner_cpu_limit, 0.0);
+        assert_eq!(config.joern_runner_pids_limit, 1024);
+        assert!(config.joern_network_disabled);
+    }
+
+    #[test]
+    fn joern_config_reads_env_overrides() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        let _image = EnvVarGuard::set("SCANNER_JOERN_IMAGE", "local/joern:test");
+        let _timeout = EnvVarGuard::set("JOERN_SCAN_TIMEOUT_SECONDS", "77");
+        let _results = EnvVarGuard::set("JOERN_RESULTS_JSON_LIMIT_BYTES", "12345");
+        let _stdout = EnvVarGuard::set("JOERN_STDOUT_LIMIT_BYTES", "23456");
+        let _stderr = EnvVarGuard::set("JOERN_STDERR_LIMIT_BYTES", "34567");
+        let _memory = EnvVarGuard::set("JOERN_RUNNER_MEMORY_LIMIT_MB", "8192");
+        let _cpu = EnvVarGuard::set("JOERN_RUNNER_CPU_LIMIT", "2.5");
+        let _pids = EnvVarGuard::set("JOERN_RUNNER_PIDS_LIMIT", "2048");
+        let _network = EnvVarGuard::set("JOERN_NETWORK_DISABLED", "false");
+
+        let config = AppConfig::from_env().expect("config from env");
+
+        assert_eq!(config.scanner_joern_image, "local/joern:test");
+        assert_eq!(config.joern_scan_timeout_seconds, 77);
+        assert_eq!(config.joern_results_json_limit_bytes, 12345);
+        assert_eq!(config.joern_stdout_limit_bytes, 23456);
+        assert_eq!(config.joern_stderr_limit_bytes, 34567);
+        assert_eq!(config.joern_runner_memory_limit_mb, 8192);
+        assert_eq!(config.joern_runner_cpu_limit, 2.5);
+        assert_eq!(config.joern_runner_pids_limit, 2048);
+        assert!(!config.joern_network_disabled);
     }
 }

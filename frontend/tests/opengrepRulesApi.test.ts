@@ -3,7 +3,11 @@ import assert from "node:assert/strict";
 
 import { apiClient } from "../src/shared/api/serverClient.ts";
 import {
+  createJoernScanTask,
   createOpengrepScanTask,
+  getJoernScanFindings,
+  getJoernScanProgress,
+  getJoernScanTask,
   getAllOpengrepRules,
   getOpengrepRuleStats,
   getOpengrepRules,
@@ -152,5 +156,109 @@ test("createOpengrepScanTask sends the selected sandbox mode", async () => {
         opengrep_sandbox: "a3s_box",
       },
     },
+  ]);
+});
+
+test("Joern static API maps task, progress and findings routes", async () => {
+  const originalGet = apiClient.get;
+  const originalPost = apiClient.post;
+  const getCalls: string[] = [];
+  const postCalls: Array<{ url: string; body: unknown }> = [];
+
+  apiClient.post = (async (url: string, body: unknown) => {
+    postCalls.push({ url, body });
+    return {
+      data: {
+        id: "jn-1",
+        engine: "joern",
+        project_id: "project-1",
+        name: "scan",
+        status: "pending",
+        target_path: ".",
+        total_findings: 0,
+        error_count: 0,
+        warning_count: 0,
+        scan_duration_ms: 0,
+        files_scanned: 0,
+        lines_scanned: 0,
+        created_at: "2026-05-04T00:00:00Z",
+      },
+    };
+  }) as typeof apiClient.post;
+
+  apiClient.get = (async (url: string) => {
+    getCalls.push(url);
+    if (url.endsWith("/progress")) {
+      return { data: { task_id: "jn-1", engine: "joern", status: "running", progress: 50, logs: [] } };
+    }
+    if (url.includes("/findings")) {
+      return {
+        data: [
+          {
+            id: "finding-1",
+            scan_task_id: "jn-1",
+            engine: "joern",
+            rule: { check_id: "joern-c-buffer-overflow-libplist-cve-2017-6439" },
+            file_path: "src/bplist.c",
+            start_line: 288,
+            severity: "ERROR",
+            status: "open",
+            confidence: "HIGH",
+          },
+        ],
+      };
+    }
+    return {
+      data: {
+        id: "jn-1",
+        engine: "joern",
+        project_id: "project-1",
+        name: "scan",
+        status: "completed",
+        target_path: ".",
+        total_findings: 1,
+        error_count: 1,
+        warning_count: 0,
+        scan_duration_ms: 1000,
+        files_scanned: 1,
+        lines_scanned: 300,
+        created_at: "2026-05-04T00:00:00Z",
+      },
+    };
+  }) as typeof apiClient.get;
+
+  try {
+    await createJoernScanTask({
+      project_id: "project-1",
+      name: "scan",
+      target_path: ".",
+    });
+    await getJoernScanTask("jn-1");
+    await getJoernScanProgress("jn-1", true);
+    const findings = await getJoernScanFindings({
+      taskId: "jn-1",
+      skip: 0,
+      limit: 20,
+    });
+    assert.equal(findings[0]?.engine, "joern");
+  } finally {
+    apiClient.get = originalGet;
+    apiClient.post = originalPost;
+  }
+
+  assert.deepEqual(postCalls, [
+    {
+      url: "/static-tasks/joern/tasks",
+      body: {
+        project_id: "project-1",
+        name: "scan",
+        target_path: ".",
+      },
+    },
+  ]);
+  assert.deepEqual(getCalls, [
+    "/static-tasks/joern/tasks/jn-1",
+    "/static-tasks/joern/tasks/jn-1/progress",
+    "/static-tasks/joern/tasks/jn-1/findings?skip=0&limit=20",
   ]);
 });

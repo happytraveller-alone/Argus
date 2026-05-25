@@ -28,11 +28,21 @@ test("groups engines with same static batch id", () => {
         name: appendStaticScanBatchMarker("静态分析-CodeQL-p1", batchId),
       },
     ] as any,
+    joernTasks: [
+      {
+        id: "jn-1",
+        project_id: "p1",
+        status: "completed",
+        created_at: "2026-03-13T10:06:00.000Z",
+        name: appendStaticScanBatchMarker("静态分析-Joern-p1", batchId),
+      },
+    ] as any,
   });
 
   assert.equal(groups.length, 1);
   assert.equal(groups[0]?.opengrepTask?.id, "og-1");
   assert.equal(groups[0]?.codeqlTask?.id, "cq-1");
+  assert.equal(groups[0]?.joernTask?.id, "jn-1");
 });
 
 test("does not merge different static batches even within pairing window", () => {
@@ -113,6 +123,18 @@ test("resolveStaticScanGroupStatus returns failed/interrupted/pending without OT
     resolveStaticScanGroupStatus({
       codeqlTask: {
         id: "cq-3",
+        project_id: "p1",
+        status: "completed",
+        created_at: "2026-03-17T00:00:00.000Z",
+      } as any
+    }),
+    "completed",
+  );
+
+  assert.equal(
+    resolveStaticScanGroupStatus({
+      joernTask: {
+        id: "jn-1",
         project_id: "p1",
         status: "completed",
         created_at: "2026-03-17T00:00:00.000Z",

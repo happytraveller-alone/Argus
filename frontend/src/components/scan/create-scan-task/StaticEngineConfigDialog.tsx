@@ -30,6 +30,7 @@ export interface StaticEngineConfigDialogProps extends StaticEngineConfigDialogC
 const PLACEHOLDER_COPY: Record<ScanEngineTab, string> = {
   opengrep: "选择本次 Opengrep 任务使用 Dockerfile 容器或 A3S Box MicroVM。",
   codeql: "后续将支持语言、查询包和构建命令等任务级配置。",
+  joern: "使用后端配置的 Joern 镜像与内置 C/C++ 查询构建 CPG；首版不提供任务级规则管理。",
 };
 
 function getEngineTitle(engine: ScanEngineTab) {
@@ -38,6 +39,8 @@ function getEngineTitle(engine: ScanEngineTab) {
       return "Opengrep";
     case "codeql":
       return "CodeQL";
+    case "joern":
+      return "Joern";
   }
 }
 
@@ -62,7 +65,11 @@ export function StaticEngineConfigDialogContent({
               {engineTitle} 配置
             </h2>
             <p className="text-xs text-muted-foreground">
-              {engine === "opengrep" ? "选择本次任务的沙箱执行方式。" : "该引擎的任务级配置即将开放。"}
+              {engine === "opengrep"
+                ? "选择本次任务的沙箱执行方式。"
+                : engine === "joern"
+                  ? "Joern 首版使用后端镜像与内置查询，无任务级规则配置。"
+                  : "该引擎的任务级配置即将开放。"}
             </p>
           </div>
           <Badge className={enabled ? "cyber-badge-success" : "cyber-badge-muted"}>
@@ -124,6 +131,19 @@ export function StaticEngineConfigDialogContent({
                   </button>
                 );
               })}
+            </div>
+          </div>
+        ) : engine === "joern" ? (
+          <div className="rounded-md border border-border/60 bg-muted/20 p-4 text-sm text-muted-foreground">
+            <div className="flex items-start gap-2">
+              <Info className="mt-0.5 h-4 w-4 text-sky-300" />
+              <div>
+                <p className="text-foreground">Joern 图结构扫描</p>
+                <p className="mt-1">{PLACEHOLDER_COPY[engine]}</p>
+                <p className="mt-2">
+                  当前验收聚焦 libplist C 代码 CPG 构建与缓冲区溢出规则检出；不会在前端暴露规则管理或任务级查询编辑。
+                </p>
+              </div>
             </div>
           </div>
         ) : (

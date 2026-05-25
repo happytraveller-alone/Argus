@@ -33,7 +33,8 @@ const IDLE_FALSE_BUTTON_CLASS =
 
 function getEngineLabel(engine: UnifiedFindingRow["engine"]) {
 	if (engine === "opengrep") return "Opengrep";
-	return "CodeQL";
+	if (engine === "codeql") return "CodeQL";
+	return "Joern";
 }
 
 function getEngineBadgeClass(engine: UnifiedFindingRow["engine"]) {
@@ -43,7 +44,7 @@ function getEngineBadgeClass(engine: UnifiedFindingRow["engine"]) {
 	if (engine === "codeql") {
 		return "bg-cyan-500/20 text-cyan-300 border-cyan-500/30";
 	}
-	return "bg-cyan-500/20 text-cyan-300 border-cyan-500/30";
+	return "bg-violet-500/20 text-violet-300 border-violet-500/30";
 }
 
 export function getColumns(input: {
@@ -87,6 +88,7 @@ export function getColumns(input: {
 				filterOptions: [
 					{ label: "Opengrep", value: "opengrep" },
 					{ label: "CodeQL", value: "codeql" },
+					{ label: "Joern", value: "joern" },
 				],
 			},
 			cell: ({ row }) => (

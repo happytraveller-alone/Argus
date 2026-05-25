@@ -3,7 +3,8 @@ import type { AgentFinding } from "@/shared/api/agentTasks";
 export type FindingSource = "static" | "agent";
 export type StaticFindingEngine =
 	| "opengrep"
-	| "codeql";
+	| "codeql"
+	| "joern";
 
 export type FindingDetailLocationState = {
 	fromTaskDetail: true;
@@ -29,7 +30,8 @@ export function buildFindingDetailPath(params: {
 	const engine = String(params.engine || "").trim();
 	if (
 		engine !== "opengrep" &&
-		engine !== "codeql"
+		engine !== "codeql" &&
+		engine !== "joern"
 	) {
 		return basePath;
 	}

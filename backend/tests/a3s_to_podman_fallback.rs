@@ -113,6 +113,8 @@ fn empty_fallback_spec_builder() -> impl FnOnce() -> Result<RunnerSpec> + Send +
             artifact_paths: Vec::new(),
             capture_stdout_path: None,
             capture_stderr_path: None,
+            stdout_limit_bytes: None,
+            stderr_limit_bytes: None,
             completion_summary_path: None,
             workspace_root_override: None,
             memory_limit_mb: None,

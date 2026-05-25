@@ -13,11 +13,13 @@ export interface StaticScanTaskLike {
 export interface StaticScanGroup<
 	TOpengrepTask extends StaticScanTaskLike = StaticScanTaskLike,
 	TCodeqlTask extends StaticScanTaskLike = StaticScanTaskLike,
+	TJoernTask extends StaticScanTaskLike = StaticScanTaskLike,
 > {
 	projectId: string;
 	createdAt: string;
 	opengrepTask?: TOpengrepTask;
 	codeqlTask?: TCodeqlTask;
+	joernTask?: TJoernTask;
 }
 
 export type StaticScanGroupStatus =
@@ -27,9 +29,10 @@ export type StaticScanGroupStatus =
 	| "failed"
 	| "interrupted";
 
-type EngineTask<TOpengrepTask, TCodeqlTask> =
+type EngineTask<TOpengrepTask, TCodeqlTask, TJoernTask> =
 	| { engine: "opengrep"; task: TOpengrepTask }
-	| { engine: "codeql"; task: TCodeqlTask };
+	| { engine: "codeql"; task: TCodeqlTask }
+	| { engine: "joern"; task: TJoernTask };
 
 function normalizeTimestamp(value: string): number {
 	const timestamp = new Date(value).getTime();
@@ -43,24 +46,27 @@ function normalizeStatus(value: string | null | undefined): string {
 export function buildStaticScanGroups<
 	TOpengrepTask extends StaticScanTaskLike,
 	TCodeqlTask extends StaticScanTaskLike,
+	TJoernTask extends StaticScanTaskLike = StaticScanTaskLike,
 >(params: {
 	opengrepTasks: TOpengrepTask[];
 	codeqlTasks?: TCodeqlTask[];
+	joernTasks?: TJoernTask[];
 	pairingWindowMs?: number;
-}): Array<StaticScanGroup<TOpengrepTask, TCodeqlTask>> {
+}): Array<StaticScanGroup<TOpengrepTask, TCodeqlTask, TJoernTask>> {
 	const {
 		opengrepTasks,
 		codeqlTasks = [],
+		joernTasks = [],
 		pairingWindowMs = STATIC_SCAN_PAIRING_WINDOW_MS,
 	} = params;
 
 	const tasksByProject = new Map<
 		string,
-		Array<EngineTask<TOpengrepTask, TCodeqlTask>>
+		Array<EngineTask<TOpengrepTask, TCodeqlTask, TJoernTask>>
 	>();
 	const pushTask = (
 		projectId: string,
-		engineTask: EngineTask<TOpengrepTask, TCodeqlTask>,
+		engineTask: EngineTask<TOpengrepTask, TCodeqlTask, TJoernTask>,
 	) => {
 		const list = tasksByProject.get(projectId) || [];
 		list.push(engineTask);
@@ -73,8 +79,11 @@ export function buildStaticScanGroups<
 	for (const task of codeqlTasks) {
 		pushTask(task.project_id, { engine: "codeql", task });
 	}
+	for (const task of joernTasks) {
+		pushTask(task.project_id, { engine: "joern", task });
+	}
 
-	const groups: Array<StaticScanGroup<TOpengrepTask, TCodeqlTask>> = [];
+	const groups: Array<StaticScanGroup<TOpengrepTask, TCodeqlTask, TJoernTask>> = [];
 
 	for (const [projectId, list] of tasksByProject.entries()) {
 		const sorted = [...list].sort(
@@ -88,11 +97,11 @@ export function buildStaticScanGroups<
 		const legacyTasks = sorted.filter(
 			(item) => !extractStaticScanBatchId(item.task.name),
 		);
-		const projectGroups: Array<StaticScanGroup<TOpengrepTask, TCodeqlTask>> = [];
+		const projectGroups: Array<StaticScanGroup<TOpengrepTask, TCodeqlTask, TJoernTask>> = [];
 
 		const assignTaskToGroups = (
-			item: EngineTask<TOpengrepTask, TCodeqlTask>,
-			candidateGroups: Array<StaticScanGroup<TOpengrepTask, TCodeqlTask>>,
+			item: EngineTask<TOpengrepTask, TCodeqlTask, TJoernTask>,
+			candidateGroups: Array<StaticScanGroup<TOpengrepTask, TCodeqlTask, TJoernTask>>,
 			ignoreWindow = false,
 		) => {
 			const taskTimestamp = normalizeTimestamp(item.task.created_at);
@@ -107,7 +116,8 @@ export function buildStaticScanGroups<
 
 				const hasSameEngineTask =
 					(item.engine === "opengrep" && Boolean(group.opengrepTask)) ||
-					(item.engine === "codeql" && Boolean(group.codeqlTask));
+					(item.engine === "codeql" && Boolean(group.codeqlTask)) ||
+					(item.engine === "joern" && Boolean(group.joernTask));
 				if (hasSameEngineTask) continue;
 
 				if (diff < bestDiff) {
@@ -117,14 +127,16 @@ export function buildStaticScanGroups<
 			}
 
 			if (bestGroupIndex === -1) {
-				const nextGroup: StaticScanGroup<TOpengrepTask, TCodeqlTask> = {
+				const nextGroup: StaticScanGroup<TOpengrepTask, TCodeqlTask, TJoernTask> = {
 					projectId,
 					createdAt: item.task.created_at,
 				};
 				if (item.engine === "opengrep") {
 					nextGroup.opengrepTask = item.task;
-				} else {
+				} else if (item.engine === "codeql") {
 					nextGroup.codeqlTask = item.task;
+				} else {
+					nextGroup.joernTask = item.task;
 				}
 				candidateGroups.push(nextGroup);
 				return;
@@ -133,14 +145,16 @@ export function buildStaticScanGroups<
 			const targetGroup = candidateGroups[bestGroupIndex];
 			if (item.engine === "opengrep") {
 				targetGroup.opengrepTask = item.task;
-			} else {
+			} else if (item.engine === "codeql") {
 				targetGroup.codeqlTask = item.task;
+			} else {
+				targetGroup.joernTask = item.task;
 			}
 		};
 
 		const groupsByBatch = new Map<
 			string,
-			Array<StaticScanGroup<TOpengrepTask, TCodeqlTask>>
+			Array<StaticScanGroup<TOpengrepTask, TCodeqlTask, TJoernTask>>
 		>();
 		for (const item of batchTaggedTasks) {
 			const batchId = extractStaticScanBatchId(item.task.name);
@@ -153,7 +167,7 @@ export function buildStaticScanGroups<
 			projectGroups.push(...groupsOfBatch);
 		}
 
-		const legacyGroups: Array<StaticScanGroup<TOpengrepTask, TCodeqlTask>> = [];
+		const legacyGroups: Array<StaticScanGroup<TOpengrepTask, TCodeqlTask, TJoernTask>> = [];
 		for (const item of legacyTasks) {
 			assignTaskToGroups(item, legacyGroups, false);
 		}
@@ -166,9 +180,13 @@ export function buildStaticScanGroups<
 }
 
 export function resolveStaticScanGroupStatus(
-	group: Pick<StaticScanGroup, "opengrepTask" | "codeqlTask">,
+	group: Pick<StaticScanGroup, "opengrepTask" | "codeqlTask" | "joernTask">,
 ): StaticScanGroupStatus {
-	const statuses = [group.opengrepTask?.status, group.codeqlTask?.status]
+	const statuses = [
+		group.opengrepTask?.status,
+		group.codeqlTask?.status,
+		group.joernTask?.status,
+	]
 		.map((status) => normalizeStatus(status))
 		.filter(Boolean);
 

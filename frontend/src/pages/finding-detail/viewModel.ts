@@ -948,6 +948,22 @@ export function buildCodeqlFindingDetailModel(params: {
   });
 }
 
+export function buildJoernFindingDetailModel(params: {
+  finding: OpengrepFinding;
+  taskId: string;
+  findingId: string;
+  taskName?: string | null;
+  context?: OpengrepFindingContext | null;
+  projectId?: string | null;
+  projectSourceType?: ProjectSourceType | null;
+  projectName?: string | null;
+}): FindingDetailPageModel {
+  return buildStaticFindingDetailModel({
+    ...params,
+    sourceLabel: "静态审计 · Joern",
+  });
+}
+
 function buildStaticFindingDetailModel(params: {
   finding: OpengrepFinding;
   taskId: string;

@@ -8,6 +8,7 @@ import FindingDetailView from "@/pages/finding-detail/FindingDetailView";
 import {
   buildAgentFindingDetailModel,
   buildCodeqlFindingDetailModel,
+  buildJoernFindingDetailModel,
   getAgentFalsePositiveEvidence,
   buildOpengrepFindingDetailModel,
   isAgentFalsePositiveFinding,
@@ -18,6 +19,9 @@ import {
   getCodeqlFindingContext,
   getCodeqlScanFinding,
   getCodeqlScanTask,
+  getJoernFindingContext,
+  getJoernScanFinding,
+  getJoernScanTask,
   getOpengrepScanFinding,
   getOpengrepScanTask,
   type OpengrepFinding,
@@ -35,7 +39,7 @@ import {
 import SilentLoadingState from "@/components/performance/SilentLoadingState";
 
 type FindingSource = "static" | "agent";
-type StaticEngine = "opengrep" | "codeql";
+type StaticEngine = "opengrep" | "codeql" | "joern";
 
 function decodePathParam(raw: string | undefined): string {
   try {
@@ -54,6 +58,7 @@ function resolveFindingSource(raw: string | undefined): FindingSource | null {
 function resolveStaticEngine(raw: string | null): StaticEngine {
   const value = decodePathParam(raw ?? undefined).toLowerCase();
   if (value === "codeql") return "codeql";
+  if (value === "joern") return "joern";
   return "opengrep";
 }
 
@@ -168,6 +173,24 @@ export default function FindingDetail() {
             const nextProject = await databaseApi.getProjectById(task.project_id);
             if (cancelled) return;
             setProject(nextProject);
+          } else if (staticEngine === "joern") {
+            const [task, finding, context] = await Promise.all([
+              getJoernScanTask(taskId),
+              getJoernScanFinding({ taskId, findingId }),
+              getJoernFindingContext({
+                taskId,
+                findingId,
+                before: 5,
+                after: 5,
+              }),
+            ]);
+            if (cancelled) return;
+            setStaticTask(task);
+            setStaticFinding(finding);
+            setStaticContext(context);
+            const nextProject = await databaseApi.getProjectById(task.project_id);
+            if (cancelled) return;
+            setProject(nextProject);
           } else {
             const [task, finding, context] = await Promise.all([
               getOpengrepScanTask(taskId),
@@ -236,6 +259,19 @@ export default function FindingDetail() {
 
     if (source === "static" && staticEngine === "codeql" && staticFinding) {
       return buildCodeqlFindingDetailModel({
+        finding: staticFinding,
+        taskId,
+        findingId,
+        taskName: staticTask?.name,
+        context: staticContext,
+        projectId: project?.id,
+        projectSourceType: project?.source_type,
+        projectName: project?.name,
+      });
+    }
+
+    if (source === "static" && staticEngine === "joern" && staticFinding) {
+      return buildJoernFindingDetailModel({
         finding: staticFinding,
         taskId,
         findingId,

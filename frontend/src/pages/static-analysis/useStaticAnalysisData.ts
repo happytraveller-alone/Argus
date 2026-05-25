@@ -4,12 +4,17 @@ import {
   getCodeqlScanFindings,
   getCodeqlScanProgress,
   getCodeqlScanTask,
+  getJoernScanFindings,
+  getJoernScanProgress,
+  getJoernScanTask,
   getOpengrepScanFindings,
   getOpengrepScanTask,
   interruptCodeqlScanTask,
+  interruptJoernScanTask,
   interruptOpengrepScanTask,
   resetCodeqlProjectBuildPlan,
   updateCodeqlFindingStatus,
+  updateJoernFindingStatus,
   updateOpengrepFindingStatus,
   type CodeqlExplorationProgressEvent,
   type OpengrepFinding,
@@ -67,16 +72,21 @@ export function useStaticAnalysisData({
   hasEnabledEngine,
   opengrepTaskId,
   codeqlTaskId,
+  joernTaskId,
 }: {
   hasEnabledEngine: boolean;
   opengrepTaskId: string;
   codeqlTaskId?: string;
+  joernTaskId?: string;
 }) {
   const [opengrepTask, setOpengrepTask] = useState<OpengrepScanTask | null>(null);
   const [codeqlTask, setCodeqlTask] = useState<OpengrepScanTask | null>(null);
+  const [joernTask, setJoernTask] = useState<OpengrepScanTask | null>(null);
   const [opengrepFindings, setOpengrepFindings] = useState<OpengrepFinding[]>([]);
   const [codeqlFindings, setCodeqlFindings] = useState<OpengrepFinding[]>([]);
+  const [joernFindings, setJoernFindings] = useState<OpengrepFinding[]>([]);
   const [codeqlProgress, setCodeqlProgress] = useState<OpengrepScanProgress | null>(null);
+  const [joernProgress, setJoernProgress] = useState<OpengrepScanProgress | null>(null);
   const [loadingInitial, setLoadingInitial] = useState(true);
   const [loadingTask, setLoadingTask] = useState(false);
   const [loadingFindings, setLoadingFindings] = useState(false);
@@ -89,6 +99,8 @@ export function useStaticAnalysisData({
   const opengrepCompletionResultsRefreshRef = useRef<string | null>(null);
   const codeqlSilentRefreshRef = useRef(false);
   const codeqlCompletionResultsRefreshRef = useRef<string | null>(null);
+  const joernSilentRefreshRef = useRef(false);
+  const joernCompletionResultsRefreshRef = useRef<string | null>(null);
 
   const loadOpengrepTask = useCallback(async (silent = false) => {
     if (!opengrepTaskId) {
@@ -132,6 +144,27 @@ export function useStaticAnalysisData({
     }
   }, [codeqlTaskId]);
 
+  const loadJoernTask = useCallback(async (silent = false) => {
+    if (!joernTaskId) {
+      setJoernTask(null);
+      return null;
+    }
+    try {
+      if (!silent) setLoadingTask(true);
+      const task = await getJoernScanTask(joernTaskId);
+      setJoernTask(task);
+      return task;
+    } catch {
+      setJoernTask(null);
+      if (!silent) {
+        toast.error("加载 Joern 任务失败");
+      }
+      return null;
+    } finally {
+      if (!silent) setLoadingTask(false);
+    }
+  }, [joernTaskId]);
+
   const loadCodeqlProgress = useCallback(async (silent = false) => {
     if (!codeqlTaskId) {
       setCodeqlProgress(null);
@@ -149,6 +182,24 @@ export function useStaticAnalysisData({
       if (!silent) setLoadingTask(false);
     }
   }, [codeqlTaskId]);
+
+  const loadJoernProgress = useCallback(async (silent = false) => {
+    if (!joernTaskId) {
+      setJoernProgress(null);
+      return null;
+    }
+    try {
+      if (!silent) setLoadingTask(true);
+      const progress = await getJoernScanProgress(joernTaskId, true);
+      setJoernProgress(progress);
+      return progress;
+    } catch {
+      setJoernProgress(null);
+      return null;
+    } finally {
+      if (!silent) setLoadingTask(false);
+    }
+  }, [joernTaskId]);
 
   const loadOpengrepFindings = useCallback(async (silent = false, expectedTotal?: number | null) => {
     if (!opengrepTaskId) {
@@ -196,6 +247,34 @@ export function useStaticAnalysisData({
     }
   }, [codeqlTaskId]);
 
+  const loadJoernFindings = useCallback(async (silent = false, expectedTotal?: number | null) => {
+    if (!joernTaskId) {
+      setJoernFindings([]);
+      return;
+    }
+    try {
+      if (!silent) setLoadingFindings(true);
+      setJoernFindings(
+        await fetchFindingBatches(
+          ({ skip, limit }) =>
+            getJoernScanFindings({
+              taskId: joernTaskId,
+              skip,
+              limit,
+            }),
+          expectedTotal,
+        ),
+      );
+    } catch {
+      setJoernFindings([]);
+      if (!silent) {
+        toast.error("加载 Joern 漏洞失败");
+      }
+    } finally {
+      if (!silent) setLoadingFindings(false);
+    }
+  }, [joernTaskId]);
+
   const refreshAll = useCallback(async (silent = false) => {
     if (!hasEnabledEngine) {
       setLoadingInitial(false);
@@ -205,10 +284,13 @@ export function useStaticAnalysisData({
     try {
       const nextOpengrepTask = await loadOpengrepTask(silent);
       const nextCodeqlTask = await loadCodeqlTask(silent);
+      const nextJoernTask = await loadJoernTask(silent);
       await Promise.all([
         loadOpengrepFindings(silent, nextOpengrepTask?.total_findings),
         loadCodeqlFindings(silent, nextCodeqlTask?.total_findings),
+        loadJoernFindings(silent, nextJoernTask?.total_findings),
         loadCodeqlProgress(silent),
+        loadJoernProgress(silent),
       ]);
     } finally {
       if (!silent) setLoadingInitial(false);
@@ -220,6 +302,9 @@ export function useStaticAnalysisData({
     loadCodeqlFindings,
     loadCodeqlTask,
     loadCodeqlProgress,
+    loadJoernFindings,
+    loadJoernTask,
+    loadJoernProgress,
   ]);
 
   const refreshOpengrepSilently = useCallback(async () => {
@@ -272,6 +357,32 @@ export function useStaticAnalysisData({
     loadCodeqlTask,
   ]);
 
+  const refreshJoernSilently = useCallback(async () => {
+    if (!joernTaskId || joernSilentRefreshRef.current) return;
+    joernSilentRefreshRef.current = true;
+    try {
+      const nextJoernTask = await loadJoernTask(true);
+      await loadJoernProgress(true);
+      if (
+        shouldRefreshStaticAnalysisResultsAfterCompletion({
+          taskId: joernTaskId,
+          status: nextJoernTask?.status,
+          refreshedTaskId: joernCompletionResultsRefreshRef.current,
+        })
+      ) {
+        joernCompletionResultsRefreshRef.current = joernTaskId;
+        await loadJoernFindings(true, nextJoernTask?.total_findings);
+      }
+    } finally {
+      joernSilentRefreshRef.current = false;
+    }
+  }, [
+    joernTaskId,
+    loadJoernFindings,
+    loadJoernProgress,
+    loadJoernTask,
+  ]);
+
   const handleInterrupt = useCallback(async () => {
     if (!interruptTarget) return;
     setInterrupting(true);
@@ -282,6 +393,9 @@ export function useStaticAnalysisData({
       } else if (interruptTarget === "codeql" && codeqlTaskId) {
         await interruptCodeqlScanTask(codeqlTaskId);
         toast.success("CodeQL 任务已中止");
+      } else if (interruptTarget === "joern" && joernTaskId) {
+        await interruptJoernScanTask(joernTaskId);
+        toast.success("Joern 任务已中止");
       }
       await refreshAll(true);
     } catch {
@@ -293,6 +407,7 @@ export function useStaticAnalysisData({
   }, [
     interruptTarget,
     codeqlTaskId,
+    joernTaskId,
     opengrepTaskId,
     refreshAll,
   ]);
@@ -341,6 +456,16 @@ export function useStaticAnalysisData({
             finding.id === row.id ? { ...finding, status: nextStatus } : finding,
           ),
         );
+      } else if (row.engine === "joern") {
+        await updateJoernFindingStatus({
+          findingId: row.id,
+          status: nextStatus,
+        });
+        setJoernFindings((prev) =>
+          prev.map((finding) =>
+            finding.id === row.id ? { ...finding, status: nextStatus } : finding,
+          ),
+        );
       }
     } catch {
       toast.error("更新状态失败");
@@ -373,13 +498,26 @@ export function useStaticAnalysisData({
     return () => clearInterval(timer);
   }, [codeqlTask?.status, codeqlTaskId, refreshCodeqlSilently]);
 
+  useEffect(() => {
+    if (!joernTaskId || !isStaticAnalysisPollableStatus(joernTask?.status)) {
+      return;
+    }
+    const timer = setInterval(() => {
+      void refreshJoernSilently();
+    }, 5000);
+    return () => clearInterval(timer);
+  }, [joernTask?.status, joernTaskId, refreshJoernSilently]);
+
   return {
     opengrepTask,
     codeqlTask,
+    joernTask,
     codeqlProgress,
+    joernProgress,
     codeqlExplorationEvents: (codeqlProgress?.events ?? []) as CodeqlExplorationProgressEvent[],
     opengrepFindings,
     codeqlFindings,
+    joernFindings,
     loadingInitial,
     loadingTask,
     loadingFindings,
@@ -397,6 +535,9 @@ export function useStaticAnalysisData({
     ),
     canInterruptCodeql: Boolean(
       codeqlTaskId && isStaticAnalysisInterruptibleStatus(codeqlTask?.status),
+    ),
+    canInterruptJoern: Boolean(
+      joernTaskId && isStaticAnalysisInterruptibleStatus(joernTask?.status),
     ),
     canResetCodeqlBuildPlan: Boolean(codeqlTask?.project_id),
   };

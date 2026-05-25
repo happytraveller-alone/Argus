@@ -9,7 +9,7 @@ import {
 	type NormalizedSeverity,
 } from "@/shared/utils/staticAnalysisSeverity";
 
-export type Engine = "opengrep" | "codeql";
+export type Engine = "opengrep" | "codeql" | "joern";
 export type OpengrepSandboxMode =
   | "dockerfile_container"
   | "a3s_box";
@@ -133,20 +133,23 @@ export function countCodeqlReasoningRounds(
 export function resolveStaticAnalysisDetailTaskIds(input: {
   taskId: string;
   searchParams: URLSearchParams;
-}): { opengrepTaskId: string; codeqlTaskId: string } {
+}): { opengrepTaskId: string; codeqlTaskId: string; joernTaskId: string } {
   const explicitOpengrepTaskId = input.searchParams.get("opengrepTaskId")?.trim() || "";
   const explicitCodeqlTaskId = input.searchParams.get("codeqlTaskId")?.trim() || "";
+  const explicitJoernTaskId = input.searchParams.get("joernTaskId")?.trim() || "";
 
-  if (explicitOpengrepTaskId || explicitCodeqlTaskId) {
+  if (explicitOpengrepTaskId || explicitCodeqlTaskId || explicitJoernTaskId) {
     return {
       opengrepTaskId: explicitOpengrepTaskId,
       codeqlTaskId: explicitCodeqlTaskId,
+      joernTaskId: explicitJoernTaskId,
     };
   }
 
   return {
     opengrepTaskId: input.taskId,
     codeqlTaskId: "",
+    joernTaskId: "",
   };
 }
 
@@ -168,12 +171,14 @@ export function resolveStaticAnalysisProjectNameFallback(input: {
 function isStaticAnalysisBootstrapPending(input: {
   opengrepTask: StaticAnalysisSummaryTaskLike | null;
   codeqlTask: StaticAnalysisSummaryTaskLike | null;
+  joernTask: StaticAnalysisSummaryTaskLike | null;
   enabledEngines: Engine[];
   loadingInitial?: boolean;
 }): boolean {
   const tasksByEngine: Record<Engine, StaticAnalysisSummaryTaskLike | null> = {
     opengrep: input.opengrepTask,
     codeql: input.codeqlTask,
+    joern: input.joernTask,
   };
   const hasAnyLoadedTask = Object.values(tasksByEngine).some(Boolean);
   const loadedEnabledEngineCount = input.enabledEngines.filter((engine) =>
@@ -395,7 +400,8 @@ function normalizeStaticAnalysisStatus(status?: string | null): string {
 
 function getEngineLabel(engine: Engine): string {
   if (engine === "opengrep") return "Opengrep";
-  return "CodeQL";
+  if (engine === "codeql") return "CodeQL";
+  return "Joern";
 }
 
 function stringifyTimelineValue(value: unknown): string | null {
@@ -591,21 +597,25 @@ export function getStaticAnalysisTaskDisplayDurationMs(
 export function getStaticAnalysisTotalDisplayDurationMs(input: {
   opengrepTask: StaticAnalysisSummaryTaskLike | null;
   codeqlTask: StaticAnalysisSummaryTaskLike | null;
+  joernTask?: StaticAnalysisSummaryTaskLike | null;
   nowMs?: number;
 }): number {
   return (
     getStaticAnalysisTaskDisplayDurationMs(input.opengrepTask, input.nowMs) +
-    getStaticAnalysisTaskDisplayDurationMs(input.codeqlTask, input.nowMs)
+    getStaticAnalysisTaskDisplayDurationMs(input.codeqlTask, input.nowMs) +
+    getStaticAnalysisTaskDisplayDurationMs(input.joernTask ?? null, input.nowMs)
   );
 }
 
 export function buildStaticAnalysisTaskStatusSummary(input: {
   opengrepTask: StaticAnalysisSummaryTaskLike | null;
   codeqlTask: StaticAnalysisSummaryTaskLike | null;
+  joernTask?: StaticAnalysisSummaryTaskLike | null;
 }): StaticAnalysisTaskStatusSummary {
   const engineEntries = [
     { engine: "opengrep" as const, task: input.opengrepTask },
     { engine: "codeql" as const, task: input.codeqlTask },
+    { engine: "joern" as const, task: input.joernTask ?? null },
   ].filter(
     (entry): entry is { engine: Engine; task: StaticAnalysisSummaryTaskLike } =>
       Boolean(entry.task),
@@ -616,6 +626,7 @@ export function buildStaticAnalysisTaskStatusSummary(input: {
       ? resolveStaticScanGroupStatus({
           opengrepTask: input.opengrepTask ?? undefined,
           codeqlTask: input.codeqlTask ?? undefined,
+          joernTask: input.joernTask ?? undefined,
         })
       : "failed";
 
@@ -682,9 +693,10 @@ export function buildStaticAnalysisTaskStatusSummary(input: {
 export function buildStaticAnalysisProgressSummary(input: {
   opengrepTask: StaticAnalysisProgressTaskLike | null;
   codeqlTask: StaticAnalysisProgressTaskLike | null;
+  joernTask?: StaticAnalysisProgressTaskLike | null;
   nowMs?: number;
 }): StaticAnalysisProgressSummary {
-  const tasks = [input.opengrepTask, input.codeqlTask].filter(
+  const tasks = [input.opengrepTask, input.codeqlTask, input.joernTask ?? null].filter(
     Boolean,
   ) as StaticAnalysisProgressTaskLike[];
   if (tasks.length === 0) {
@@ -701,6 +713,7 @@ export function buildStaticAnalysisProgressSummary(input: {
   const statusSummary = buildStaticAnalysisTaskStatusSummary({
     opengrepTask: input.opengrepTask,
     codeqlTask: input.codeqlTask,
+    joernTask: input.joernTask ?? null,
   });
 
   return {
@@ -718,12 +731,16 @@ export function buildStaticAnalysisProgressSummary(input: {
 export function buildStaticAnalysisHeaderSummary(input: {
   opengrepTask: StaticAnalysisSummaryTaskLike | null;
   codeqlTask: StaticAnalysisSummaryTaskLike | null;
+  joernTask?: StaticAnalysisSummaryTaskLike | null;
   enabledEngines: Engine[];
   loadingInitial?: boolean;
   nowMs?: number;
   fallbackProjectName?: string | null;
 }): StaticAnalysisHeaderSummary {
-  const isBootstrapping = isStaticAnalysisBootstrapPending(input);
+  const isBootstrapping = isStaticAnalysisBootstrapPending({
+    ...input,
+    joernTask: input.joernTask ?? null,
+  });
   const statusSummary = isBootstrapping
     ? {
         aggregateStatus: "pending" as const,
@@ -732,26 +749,31 @@ export function buildStaticAnalysisHeaderSummary(input: {
     : buildStaticAnalysisTaskStatusSummary({
         opengrepTask: input.opengrepTask,
         codeqlTask: input.codeqlTask,
+        joernTask: input.joernTask ?? null,
       });
   const progressSummary = isBootstrapping
     ? { progressPercent: 0 }
     : buildStaticAnalysisProgressSummary({
         opengrepTask: input.opengrepTask,
         codeqlTask: input.codeqlTask,
+        joernTask: input.joernTask ?? null,
         nowMs: input.nowMs,
       });
   const totalScanDurationMs = getStaticAnalysisTotalDisplayDurationMs({
     opengrepTask: input.opengrepTask,
     codeqlTask: input.codeqlTask,
+    joernTask: input.joernTask ?? null,
     nowMs: input.nowMs,
   });
   const totalFindings =
     toStaticAnalysisSafeMetric(input.opengrepTask?.total_findings) +
-    toStaticAnalysisSafeMetric(input.codeqlTask?.total_findings);
+    toStaticAnalysisSafeMetric(input.codeqlTask?.total_findings) +
+    toStaticAnalysisSafeMetric(input.joernTask?.total_findings);
   const projectName =
     String(
       input.opengrepTask?.project_name ||
         input.codeqlTask?.project_name ||
+        input.joernTask?.project_name ||
         input.fallbackProjectName ||
         "-",
     ).trim() || "-";
@@ -763,6 +785,8 @@ export function buildStaticAnalysisHeaderSummary(input: {
           input.opengrepTask.opengrep_sandbox ||
             input.opengrepTask.requested_opengrep_sandbox,
         )
+      : input.joernTask
+        ? "Joern CPG 方案"
       : null,
     statusLabel: statusSummary.aggregateLabel,
     progressPercent: progressSummary.progressPercent,
@@ -788,9 +812,11 @@ export function buildUnifiedFindingRows(input: {
   opengrepTaskId: string;
   codeqlFindings?: MinimalOpengrepFinding[];
   codeqlTaskId?: string;
+  joernFindings?: MinimalOpengrepFinding[];
+  joernTaskId?: string;
 }): UnifiedFindingRow[] {
   const buildRowsForEngine = (
-    engine: "opengrep" | "codeql",
+    engine: Engine,
     findings: MinimalOpengrepFinding[],
     fallbackTaskId: string,
   ): UnifiedFindingRow[] => findings.flatMap((finding) => {
@@ -815,6 +841,7 @@ export function buildUnifiedFindingRows(input: {
   return [
     ...buildRowsForEngine("opengrep", input.opengrepFindings, input.opengrepTaskId),
     ...buildRowsForEngine("codeql", input.codeqlFindings ?? [], input.codeqlTaskId ?? ""),
+    ...buildRowsForEngine("joern", input.joernFindings ?? [], input.joernTaskId ?? ""),
   ];
 }
 

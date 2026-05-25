@@ -1,6 +1,7 @@
 export const SCAN_ENGINE_TABS = [
   "opengrep",
   "codeql",
+  "joern",
 ] as const;
 
 export type ScanEngineTab = (typeof SCAN_ENGINE_TABS)[number];
@@ -16,6 +17,10 @@ export const SCAN_ENGINE_SELECTOR_OPTIONS = [
     label: "CodeQL",
     value: "codeql" as const,
   },
+  {
+    label: "Joern",
+    value: "joern" as const,
+  },
 ];
 
 export function isScanEngineTab(value: string): value is ScanEngineTab {
@@ -28,6 +33,8 @@ export function getScanEngineDisplayName(value: ScanEngineTab): string {
       return "Opengrep";
     case "codeql":
       return "CodeQL";
+    case "joern":
+      return "Joern";
   }
 }
 

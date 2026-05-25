@@ -199,6 +199,14 @@ fn language_test_zip_bytes(language: &str) -> Vec<u8> {
                 writer.start_file("main.go", options).unwrap();
                 writer.write_all(b"package main\nfunc main() {}\n").unwrap();
             }
+            "c" => {
+                writer.start_file("src/bplist.c", options).unwrap();
+                writer
+                    .write_all(
+                        b"void parse_string_node(char *dst, const char *src) { while (*src) { *dst++ = *src++; } }\n",
+                    )
+                    .unwrap();
+            }
             other => panic!("unsupported language fixture: {other}"),
         }
         writer.finish().unwrap();
@@ -378,6 +386,78 @@ esac
     script_path
 }
 
+fn fake_joern_podman_script(temp_dir: &tempfile::TempDir) -> PathBuf {
+    let script_path = temp_dir.path().join("fake-joern-podman.sh");
+    let script = r#"#!/bin/sh
+set -eu
+log_file="${FAKE_PODMAN_LOG:?}"
+cmd="${1:-}"
+shift || true
+printf '%s|%s\n' "$cmd" "$*" >> "$log_file"
+case "$cmd" in
+  info)
+    printf 'true\n'
+    ;;
+  create)
+    printf 'fake-joern-container\n'
+    ;;
+  start)
+    create_args="$(grep '^create|' "$log_file" | tail -n 1 | cut -d'|' -f2-)"
+    set -- $create_args
+    output_host_root=""
+    while [ "$#" -gt 0 ]; do
+      case "$1" in
+        -v)
+          shift
+          volume="${1:-}"
+          host_root="${volume%%:*}"
+          rest="${volume#*:}"
+          container_root="${rest%%:*}"
+          if [ "$container_root" = "/scan/output" ]; then
+            output_host_root="$host_root"
+          fi
+          ;;
+      esac
+      shift || true
+    done
+    if [ -z "$output_host_root" ]; then
+      printf 'missing /scan/output mount\n' >&2
+      exit 71
+    fi
+    mkdir -p "$output_host_root"
+    printf '{"status":"scan_completed","scanner":"joern","schema_version":"argus.joern.v1"}\n' > "$output_host_root/summary.json"
+    printf '{"schema_version":"argus.joern.graph-proof.v1","files":["src/bplist.c"],"functions":["parse_string_node"]}\n' > "$output_host_root/graph-proof.json"
+    printf '{"schema_version":"argus.joern.findings.v1","engine":"joern","findings":[]}\n' > "$output_host_root/findings.json"
+    printf 'fake joern stdout\n'
+    ;;
+  inspect)
+    printf 'false\n'
+    ;;
+  wait)
+    printf '0\n'
+    ;;
+  logs)
+    if [ "${1:-}" = "--stdout" ]; then
+      printf 'fake joern stdout\n'
+      exit 0
+    fi
+    if [ "${1:-}" = "--stderr" ]; then
+      printf 'fake joern stderr\n'
+      exit 0
+    fi
+    ;;
+  rm)
+    printf 'removed\n'
+    ;;
+esac
+"#;
+    fs::write(&script_path, script).expect("write fake joern podman script");
+    let mut permissions = fs::metadata(&script_path).unwrap().permissions();
+    permissions.set_mode(0o755);
+    fs::set_permissions(&script_path, permissions).unwrap();
+    script_path
+}
+
 fn fake_opengrep_scan_script(temp_dir: &tempfile::TempDir) -> PathBuf {
     let script_path = temp_dir.path().join("opengrep-scan");
     let script = r#"#!/bin/sh
@@ -526,6 +606,197 @@ async fn static_task_api_binds_project_name_from_backend_project_record() {
             .and_then(|item| item["project_name"].as_str()),
         Some("Backend Static Project")
     );
+}
+
+#[tokio::test]
+async fn static_task_api_rejects_unknown_engine_without_opengrep_fallback() {
+    let config = isolated_test_config("static-unknown-engine-rejected");
+    let state = AppState::from_config(config)
+        .await
+        .expect("state should build");
+    let app = build_router(state.clone(), ShutdownGate::default());
+    let project_id = create_project_with_name(&app, "unknown engine project").await;
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/static-tasks/tasks")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "engine": "semgrep",
+                        "project_id": project_id,
+                        "target_path": "."
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let payload: Value =
+        serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
+    assert!(payload["error"]
+        .as_str()
+        .unwrap_or_default()
+        .contains("supported engines: opengrep, codeql, joern"));
+
+    let snapshot = task_state::load_snapshot(&state)
+        .await
+        .expect("snapshot should load");
+    assert!(
+        snapshot.static_tasks.is_empty(),
+        "unknown engines must not create an OpenGrep task"
+    );
+}
+
+#[tokio::test]
+async fn joern_static_task_routes_are_engine_scoped_and_do_not_fall_through_to_opengrep() {
+    let _env_lock = ENV_LOCK.lock().await;
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let fake_podman = fake_joern_podman_script(&temp_dir);
+    let fake_podman_log = temp_dir.path().join("fake-joern-podman.log");
+    let scan_root = temp_dir.path().join("scan-root");
+    fs::create_dir_all(&scan_root).expect("mkdir scan root");
+
+    let _podman_bin = EnvVarGuard::set("Argus_PODMAN_BIN", fake_podman.to_str().unwrap());
+    let _podman_log = EnvVarGuard::set("FAKE_PODMAN_LOG", fake_podman_log.to_str().unwrap());
+    let _workspace_root = EnvVarGuard::set("SCAN_WORKSPACE_ROOT", scan_root.to_str().unwrap());
+    let _workspace_volume = EnvVarGuard::set("SCAN_WORKSPACE_VOLUME", scan_root.to_str().unwrap());
+
+    let mut config = isolated_test_config("joern-route-skeleton");
+    config.scanner_joern_image = "ghcr.io/joernio/joern:test".to_string();
+    let state = AppState::from_config(config)
+        .await
+        .expect("state should build");
+    let app = build_router(state.clone(), ShutdownGate::default());
+    let project_id = create_project_with_name(&app, "joern route skeleton project").await;
+
+    fs::create_dir_all(&*state.config.zip_storage_path).expect("mkdir zip root");
+    fs::write(
+        state
+            .config
+            .zip_storage_path
+            .join(format!("{project_id}.zip")),
+        language_test_zip_bytes("c"),
+    )
+    .expect("write c project zip");
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/static-tasks/joern/tasks")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "project_id": project_id,
+                        "target_path": "."
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let payload: Value =
+        serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
+    assert_eq!(payload["engine"].as_str(), Some("joern"));
+    let task_id = payload["id"].as_str().expect("task id").to_string();
+
+    let record = wait_static_task(&state, &task_id).await;
+    assert_eq!(record.engine, "joern");
+    assert_eq!(record.status, "completed", "{:?}", record.error_message);
+    assert_eq!(record.extra["engine"], "joern");
+    assert_eq!(record.extra["executor"], "runner_spec_podman");
+    assert_eq!(record.total_findings, 0);
+    assert!(record.files_scanned >= 1);
+
+    let joern_get = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::GET)
+                .uri(format!("/api/v1/static-tasks/joern/tasks/{task_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(joern_get.status(), StatusCode::OK);
+    let joern_payload: Value =
+        serde_json::from_slice(&to_bytes(joern_get.into_body(), usize::MAX).await.unwrap())
+            .unwrap();
+    assert_eq!(joern_payload["id"].as_str(), Some(task_id.as_str()));
+    assert_eq!(joern_payload["engine"].as_str(), Some("joern"));
+
+    let opengrep_get = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::GET)
+                .uri(format!("/api/v1/static-tasks/tasks/{task_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(opengrep_get.status(), StatusCode::NOT_FOUND);
+
+    let joern_list = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::GET)
+                .uri("/api/v1/static-tasks/joern/tasks?limit=10")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(joern_list.status(), StatusCode::OK);
+    let joern_list_payload: Value =
+        serde_json::from_slice(&to_bytes(joern_list.into_body(), usize::MAX).await.unwrap())
+            .unwrap();
+    assert_eq!(joern_list_payload.as_array().unwrap().len(), 1);
+    assert_eq!(joern_list_payload[0]["engine"].as_str(), Some("joern"));
+
+    let opengrep_list = app
+        .oneshot(
+            Request::builder()
+                .method(Method::GET)
+                .uri("/api/v1/static-tasks/tasks?limit=10")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(opengrep_list.status(), StatusCode::OK);
+    let opengrep_list_payload: Value = serde_json::from_slice(
+        &to_bytes(opengrep_list.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert!(
+        opengrep_list_payload.as_array().unwrap().is_empty(),
+        "Joern route must not create or list OpenGrep tasks"
+    );
+
+    let podman_logged = fs::read_to_string(fake_podman_log).expect("fake podman log");
+    assert!(podman_logged.contains("info|--format {{.Host.Security.Rootless}}"));
+    assert!(podman_logged.contains("create|"));
+    assert!(podman_logged.contains("--network none"));
+    assert!(podman_logged.contains(":/scan/source:ro"));
+    assert!(podman_logged.contains(":/scan/joern-queries:ro"));
+    assert!(podman_logged.contains(":/scan/output:rw"));
+    assert!(podman_logged.contains("ghcr.io/joernio/joern:test /bin/sh"));
+    assert!(podman_logged.contains("/scan/workspace/argus-joern-wrapper.sh"));
 }
 
 #[tokio::test]

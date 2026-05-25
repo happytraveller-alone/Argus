@@ -273,7 +273,9 @@ fn collect_rule_asset_paths(root: &Path) -> Result<Vec<PathBuf>> {
             .components()
             .next()
             .and_then(|part| part.as_os_str().to_str());
-        if matches!(top, Some("rules_opengrep" | "rules_codeql")) && seen.insert(relative.clone()) {
+        if matches!(top, Some("rules_opengrep" | "rules_codeql" | "rules_joern"))
+            && seen.insert(relative.clone())
+        {
             out.push(relative);
         }
     }
@@ -310,6 +312,7 @@ fn classify_rule_asset(relative: &Path) -> Result<(&'static str, &'static str)> 
     match top {
         "rules_opengrep" => Ok(("opengrep", "internal_rule")),
         "rules_codeql" => Ok(("codeql", "internal_query_pack")),
+        "rules_joern" => Ok(("joern", "internal_query")),
         _ => Err(anyhow!(
             "unsupported rule asset root: {}",
             relative.display()

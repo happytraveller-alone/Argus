@@ -80,6 +80,20 @@ test("buildCreateProjectStaticTaskRoute preserves codeql engine route params", (
   );
 });
 
+test("buildCreateProjectStaticTaskRoute preserves joern engine route params", () => {
+  const params = new URLSearchParams();
+  params.set("joernTaskId", "jn-1");
+  params.set("engine", "joern");
+
+  assert.equal(
+    buildCreateProjectStaticTaskRoute({
+      primaryTaskId: "task-joern",
+      params,
+    }),
+    "/static-analysis/task-joern?joernTaskId=jn-1&engine=joern",
+  );
+});
+
 test("extractCreateProjectScanApiErrorMessage falls back to error.message", () => {
   assert.equal(
     extractCreateProjectScanApiErrorMessage(new Error("请求失败")),

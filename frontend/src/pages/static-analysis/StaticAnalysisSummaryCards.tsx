@@ -19,6 +19,7 @@ import {
 interface StaticAnalysisSummaryCardsProps {
   opengrepTask: OpengrepScanTask | null;
   codeqlTask: OpengrepScanTask | null;
+  joernTask?: OpengrepScanTask | null;
   enabledEngines: Engine[];
   loadingInitial?: boolean;
 }
@@ -32,17 +33,19 @@ const SUMMARY_VALUE_BADGE_CLASSNAME =
 export const StaticAnalysisSummaryCards = memo(function StaticAnalysisSummaryCards({
   opengrepTask,
   codeqlTask,
+  joernTask = null,
   enabledEngines,
   loadingInitial = false,
 }: StaticAnalysisSummaryCardsProps) {
-  const hasAnyLoadedTask = Boolean(opengrepTask || codeqlTask);
+  const hasAnyLoadedTask = Boolean(opengrepTask || codeqlTask || joernTask);
   const loadedEnabledEngineCount = useMemo(
     () =>
       enabledEngines.filter((engine) => {
         if (engine === "opengrep") return Boolean(opengrepTask);
-        return Boolean(codeqlTask);
+        if (engine === "codeql") return Boolean(codeqlTask);
+        return Boolean(joernTask);
       }).length,
-    [codeqlTask, enabledEngines, opengrepTask],
+    [codeqlTask, enabledEngines, joernTask, opengrepTask],
   );
   const isBootstrapping =
     loadingInitial &&
@@ -50,10 +53,10 @@ export const StaticAnalysisSummaryCards = memo(function StaticAnalysisSummaryCar
     (!hasAnyLoadedTask || loadedEnabledEngineCount < enabledEngines.length);
   const shouldTickClock = useMemo(
     () =>
-        [opengrepTask, codeqlTask].some((task) =>
+        [opengrepTask, codeqlTask, joernTask].some((task) =>
           isStaticAnalysisPollableStatus(task?.status),
         ),
-    [codeqlTask, opengrepTask],
+    [codeqlTask, joernTask, opengrepTask],
   );
   const nowMs = useTaskClock({ enabled: shouldTickClock, intervalMs: 1000 });
 
@@ -73,9 +76,10 @@ export const StaticAnalysisSummaryCards = memo(function StaticAnalysisSummaryCar
       return buildStaticAnalysisTaskStatusSummary({
         opengrepTask,
         codeqlTask,
+        joernTask,
       });
     },
-    [codeqlTask, isBootstrapping, opengrepTask],
+    [codeqlTask, isBootstrapping, joernTask, opengrepTask],
   );
 
   const totalScanDurationMs = useMemo(
@@ -83,16 +87,18 @@ export const StaticAnalysisSummaryCards = memo(function StaticAnalysisSummaryCar
       getStaticAnalysisTotalDisplayDurationMs({
         opengrepTask,
         codeqlTask,
+        joernTask,
         nowMs,
       }),
-    [codeqlTask, nowMs, opengrepTask],
+    [codeqlTask, joernTask, nowMs, opengrepTask],
   );
 
   const totalFindings = useMemo(
     () =>
       toStaticAnalysisSafeMetric(opengrepTask?.total_findings) +
-      toStaticAnalysisSafeMetric(codeqlTask?.total_findings),
-    [codeqlTask?.total_findings, opengrepTask?.total_findings],
+      toStaticAnalysisSafeMetric(codeqlTask?.total_findings) +
+      toStaticAnalysisSafeMetric(joernTask?.total_findings),
+    [codeqlTask?.total_findings, joernTask?.total_findings, opengrepTask?.total_findings],
   );
 
   const timeoutOnlyFailure = useMemo(

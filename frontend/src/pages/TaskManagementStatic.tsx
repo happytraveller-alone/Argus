@@ -13,6 +13,7 @@ import { useTaskClock } from "@/features/tasks/hooks/useTaskClock";
 import {
 	deleteStaticScanTask,
 	interruptCodeqlScanTask,
+	interruptJoernScanTask,
 	interruptOpengrepScanTask,
 } from "@/shared/api/opengrep";
 import {
@@ -85,6 +86,8 @@ export default function TaskManagementStatic() {
 		try {
 			if (activity.cancelTarget.engine === "codeql") {
 				await interruptCodeqlScanTask(activity.cancelTarget.taskId);
+			} else if (activity.cancelTarget.engine === "joern") {
+				await interruptJoernScanTask(activity.cancelTarget.taskId);
 			} else {
 				await interruptOpengrepScanTask(activity.cancelTarget.taskId);
 			}

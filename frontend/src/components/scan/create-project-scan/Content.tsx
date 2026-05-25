@@ -53,6 +53,8 @@ export default function CreateProjectScanDialogContent({
 	setOpengrepSandbox,
 	codeqlEnabled,
 	setCodeqlEnabled,
+	joernEnabled,
+	setJoernEnabled,
 	showReturnButton,
 	onReturn,
 	primaryCreateLabel,
@@ -97,6 +99,8 @@ export default function CreateProjectScanDialogContent({
 	setOpengrepSandbox: (mode: OpengrepSandboxMode) => void;
 	codeqlEnabled: boolean;
 	setCodeqlEnabled: (enabled: boolean) => void;
+	joernEnabled: boolean;
+	setJoernEnabled: (enabled: boolean) => void;
 	showReturnButton: boolean;
 	onReturn?: () => void;
 	primaryCreateLabel: string;
@@ -123,6 +127,12 @@ export default function CreateProjectScanDialogContent({
 			title: "CodeQL",
 			checked: codeqlEnabled,
 			setChecked: setCodeqlEnabled,
+		},
+		{
+			key: "joern",
+			title: "Joern 图扫描",
+			checked: joernEnabled,
+			setChecked: setJoernEnabled,
 		},
 	];
 

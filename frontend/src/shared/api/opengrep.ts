@@ -4,6 +4,10 @@
  */
 
 import { apiClient } from "@/shared/api/serverClient";
+import {
+    getStaticAnalysisTaskBasePath,
+    type StaticAnalysisEngine,
+} from "@/shared/api/staticAnalysisEngines";
 
 export const DEFAULT_OPENGREP_RULES_LIMIT = 10;
 export const ALL_OPENGREP_RULES_LIMIT = 10_000;
@@ -341,7 +345,7 @@ export async function updateOpengrepRule(
     return response.data;
 }
 
-export type StaticScanEngine = "opengrep" | "codeql";
+export type StaticScanEngine = StaticAnalysisEngine;
 export type OpengrepSandboxMode = "dockerfile_container" | "a3s_box";
 
 export interface OpengrepScanTask {
@@ -476,6 +480,15 @@ export async function createCodeqlScanTask(params: {
     return response.data;
 }
 
+export async function createJoernScanTask(params: {
+    project_id: string;
+    name?: string;
+    target_path?: string;
+}): Promise<OpengrepScanTask> {
+    const response = await apiClient.post(`/static-tasks/joern/tasks`, params);
+    return response.data;
+}
+
 export async function getOpengrepScanTask(
     taskId: string,
 ): Promise<OpengrepScanTask> {
@@ -487,6 +500,13 @@ export async function getCodeqlScanTask(
     taskId: string,
 ): Promise<OpengrepScanTask> {
     const response = await apiClient.get(`/static-tasks/codeql/tasks/${taskId}`);
+    return response.data;
+}
+
+export async function getJoernScanTask(
+    taskId: string,
+): Promise<OpengrepScanTask> {
+    const response = await apiClient.get(`/static-tasks/joern/tasks/${taskId}`);
     return response.data;
 }
 
@@ -506,12 +526,20 @@ export async function interruptCodeqlScanTask(
     return response.data;
 }
 
+export async function interruptJoernScanTask(
+    taskId: string,
+): Promise<{ message: string; task_id: string; status: string }> {
+    const response = await apiClient.post(
+        `/static-tasks/joern/tasks/${taskId}/interrupt`,
+    );
+    return response.data;
+}
+
 export async function deleteStaticScanTask(
     engine: StaticScanEngine,
     taskId: string,
 ): Promise<{ message: string; task_id: string }> {
-    const basePath =
-        engine === "codeql" ? "/static-tasks/codeql/tasks" : "/static-tasks/tasks";
+    const basePath = getStaticTaskBasePath(engine);
     const response = await apiClient.delete(`${basePath}/${taskId}`);
     return response.data;
 }
@@ -541,6 +569,19 @@ export async function getCodeqlScanProgress(
 ): Promise<OpengrepScanProgress> {
     const response = await apiClient.get(
         `/static-tasks/codeql/tasks/${taskId}/progress`,
+        {
+            params: { include_logs: includeLogs },
+        },
+    );
+    return response.data;
+}
+
+export async function getJoernScanProgress(
+    taskId: string,
+    includeLogs: boolean = false,
+): Promise<OpengrepScanProgress> {
+    const response = await apiClient.get(
+        `/static-tasks/joern/tasks/${taskId}/progress`,
         {
             params: { include_logs: includeLogs },
         },
@@ -596,6 +637,25 @@ export async function getCodeqlScanFindings(params: {
     const query = staticFindingsQuery(params);
     const response = await apiClient.get(
         `/static-tasks/codeql/tasks/${params.taskId}/findings${query ? `?${query}` : ""}`,
+    );
+    const findings = Array.isArray(response.data) ? response.data : [];
+    return findings.map((item) => ({
+        ...item,
+        confidence: normalizeConfidence(item?.confidence),
+    }));
+}
+
+export async function getJoernScanFindings(params: {
+    taskId: string;
+    severity?: string;
+    confidence?: string;
+    status?: string;
+    skip?: number;
+    limit?: number;
+}): Promise<OpengrepFinding[]> {
+    const query = staticFindingsQuery(params);
+    const response = await apiClient.get(
+        `/static-tasks/joern/tasks/${params.taskId}/findings${query ? `?${query}` : ""}`,
     );
     const findings = Array.isArray(response.data) ? response.data : [];
     return findings.map((item) => ({
@@ -666,6 +726,41 @@ export async function getCodeqlFindingContext(params: {
     return response.data;
 }
 
+export async function getJoernScanFinding(params: {
+    taskId: string;
+    findingId: string;
+}): Promise<OpengrepFinding> {
+    const response = await apiClient.get(
+        `/static-tasks/joern/tasks/${params.taskId}/findings/${params.findingId}`,
+    );
+    return {
+        ...response.data,
+        confidence: normalizeConfidence(response.data?.confidence),
+    };
+}
+
+export async function getJoernFindingContext(params: {
+    taskId: string;
+    findingId: string;
+    before?: number;
+    after?: number;
+}): Promise<OpengrepFindingContext> {
+    const response = await apiClient.get(
+        `/static-tasks/joern/tasks/${params.taskId}/findings/${params.findingId}/context`,
+        {
+            params: {
+                before: params.before ?? 5,
+                after: params.after ?? 5,
+            },
+        },
+    );
+    return response.data;
+}
+
+function getStaticTaskBasePath(engine: StaticScanEngine): string {
+    return getStaticAnalysisTaskBasePath(engine);
+}
+
 export async function getStaticScanTasks(
     engine: StaticScanEngine,
     params?: {
@@ -681,8 +776,7 @@ export async function getStaticScanTasks(
     if (params?.limit !== undefined)
         searchParams.set("limit", String(params.limit));
     const query = searchParams.toString();
-    const basePath =
-        engine === "codeql" ? "/static-tasks/codeql/tasks" : "/static-tasks/tasks";
+    const basePath = getStaticTaskBasePath(engine);
     const response = await apiClient.get(
         `${basePath}${query ? `?${query}` : ""}`,
     );
@@ -705,6 +799,14 @@ export async function getCodeqlScanTasks(params?: {
     return getStaticScanTasks("codeql", params);
 }
 
+export async function getJoernScanTasks(params?: {
+    projectId?: string;
+    skip?: number;
+    limit?: number;
+}): Promise<OpengrepScanTask[]> {
+    return getStaticScanTasks("joern", params);
+}
+
 export async function updateOpengrepFindingStatus(params: {
     findingId: string;
     status: "open" | "verified" | "false_positive";
@@ -723,6 +825,18 @@ export async function updateCodeqlFindingStatus(params: {
 }): Promise<{ message: string; finding_id: string; status: string }> {
     const response = await apiClient.post(
         `/static-tasks/codeql/findings/${params.findingId}/status`,
+        undefined,
+        { params: { status: params.status } },
+    );
+    return response.data;
+}
+
+export async function updateJoernFindingStatus(params: {
+    findingId: string;
+    status: "open" | "verified" | "false_positive";
+}): Promise<{ message: string; finding_id: string; status: string }> {
+    const response = await apiClient.post(
+        `/static-tasks/joern/findings/${params.findingId}/status`,
         undefined,
         { params: { status: params.status } },
     );

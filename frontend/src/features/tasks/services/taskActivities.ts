@@ -2,8 +2,10 @@ import type { AgentTask } from "@/shared/api/agentTasks";
 import {
 	getOpengrepScanTasks,
 	getCodeqlScanTasks,
+	getJoernScanTasks,
 	type OpengrepScanTask,
 } from "@/shared/api/opengrep";
+import type { StaticAnalysisEngine } from "@/shared/api/staticAnalysisEngines";
 import type { Project } from "@/shared/types";
 import {
 	INTERRUPTED_STATUSES,
@@ -29,8 +31,7 @@ export type TaskActivityKind = "rule_scan" | "intelligent_audit";
 export type TaskActivitySourceMode = "static" | "intelligent";
 export type TaskActivityCancelTarget =
 	| { mode: "intelligent"; taskId: string }
-	| { mode: "static"; engine: "opengrep"; taskId: string }
-	| { mode: "static"; engine: "codeql"; taskId: string };
+	| { mode: "static"; engine: StaticAnalysisEngine; taskId: string };
 
 export const INTELLIGENT_TASK_NAME_MARKER = "[INTELLIGENT]";
 
@@ -232,6 +233,7 @@ export function getSeverityCountTotal(counts: SeverityCounts): number {
 function toRuleScanActivities(
 	opengrepTasks: OpengrepScanTask[],
 	codeqlTasks: OpengrepScanTask[],
+	joernTasks: OpengrepScanTask[],
 	resolveProjectName: (projectId: string) => string,
 ): TaskActivityItem[] {
 	const visibleOpengrepTasks = opengrepTasks.filter(
@@ -240,21 +242,26 @@ function toRuleScanActivities(
 	const groups = buildStaticScanGroups({
 		opengrepTasks: visibleOpengrepTasks,
 		codeqlTasks,
+		joernTasks,
 	});
 
 	return groups
 		.map((group): TaskActivityItem | null => {
 		const opengrepTask = group.opengrepTask;
 		const codeqlTask = group.codeqlTask;
-		const primaryTask = opengrepTask ?? codeqlTask;
+		const joernTask = group.joernTask;
+		const primaryTask = opengrepTask ?? codeqlTask ?? joernTask;
 		if (!primaryTask) {
 			return null;
 		}
 
-		const isCodeqlOnly = !opengrepTask && Boolean(codeqlTask);
+		const activeTasks = [opengrepTask, codeqlTask, joernTask].filter(Boolean);
+		const isCodeqlOnly = !opengrepTask && Boolean(codeqlTask) && !joernTask;
+		const isJoernOnly = !opengrepTask && !codeqlTask && Boolean(joernTask);
 		const engineLabel = [
 			opengrepTask ? "Opengrep" : null,
-			codeqlTask ? "Codeql" : null,
+			codeqlTask ? "CodeQL" : null,
+			joernTask ? "Joern" : null,
 		]
 			.filter(Boolean)
 			.join(" / ");
@@ -268,8 +275,16 @@ function toRuleScanActivities(
 			params.set("codeqlTaskId", codeqlTask.id);
 			params.set("engine", "codeql");
 		}
+		if (joernTask) {
+			params.set("joernTaskId", joernTask.id);
+			params.set("engine", "joern");
+		}
 
-		const durationCandidates = [opengrepTask?.scan_duration_ms, codeqlTask?.scan_duration_ms];
+		const durationCandidates = [
+			opengrepTask?.scan_duration_ms,
+			codeqlTask?.scan_duration_ms,
+			joernTask?.scan_duration_ms,
+		];
 		const durationMs = durationCandidates.reduce<number | null>((total, value) => {
 			if (
 				typeof value !== "number" ||
@@ -281,15 +296,17 @@ function toRuleScanActivities(
 			return (total ?? 0) + value;
 		}, null);
 
-		const staticFindingStats = buildOpengrepSeverityCounts(isCodeqlOnly ? codeqlTask : opengrepTask);
+		const staticFindingStats = mergeSeverityCounts(
+			...activeTasks.map((task) => buildOpengrepSeverityCounts(task)),
+		);
 
-		const candidateStatuses = [opengrepTask, codeqlTask]
+		const candidateStatuses = [opengrepTask, codeqlTask, joernTask]
 			.map((task) => normalizeStatus(task?.status))
 			.filter(Boolean);
 		const hasRunningStatus = candidateStatuses.some(
 			(status) => status === "running" || status === "pending",
 		);
-		const latestUpdatedAt = [opengrepTask, codeqlTask].reduce<string | null>((latest, task) => {
+		const latestUpdatedAt = [opengrepTask, codeqlTask, joernTask].reduce<string | null>((latest, task) => {
 			const current = task?.updated_at || null;
 			if (!current) return latest;
 			if (!latest) return current;
@@ -316,6 +333,8 @@ function toRuleScanActivities(
 				: `/static-analysis/${primaryTask.id}?${params.toString()}`,
 			cancelTarget: isCodeqlOnly
 				? { mode: "static", engine: "codeql", taskId: primaryTask.id }
+				: isJoernOnly
+					? { mode: "static", engine: "joern", taskId: primaryTask.id }
 				: { mode: "static", engine: "opengrep", taskId: primaryTask.id },
 		};
 		return item;
@@ -327,15 +346,18 @@ export async function fetchTaskActivities(
 	projects: Project[],
 	limit = 100,
 ): Promise<TaskActivityItem[]> {
-	const [opengrepTasksResult, codeqlTasksResult] = await Promise.allSettled([
+	const [opengrepTasksResult, codeqlTasksResult, joernTasksResult] = await Promise.allSettled([
 		getOpengrepScanTasks({ limit }),
 		getCodeqlScanTasks({ limit }),
+		getJoernScanTasks({ limit }),
 	]);
 
 	const opengrepTasks =
 		opengrepTasksResult.status === "fulfilled" ? opengrepTasksResult.value : [];
 	const codeqlTasks =
 		codeqlTasksResult.status === "fulfilled" ? codeqlTasksResult.value : [];
+	const joernTasks =
+		joernTasksResult.status === "fulfilled" ? joernTasksResult.value : [];
 
 	const projectNameMap = mapProjectNames(projects);
 	const resolveProjectName = (projectId: string) =>
@@ -344,6 +366,7 @@ export async function fetchTaskActivities(
 	const staticActivities = toRuleScanActivities(
 		opengrepTasks,
 		codeqlTasks,
+		joernTasks,
 		resolveProjectName,
 	);
 

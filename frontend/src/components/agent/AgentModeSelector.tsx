@@ -22,11 +22,13 @@ export type ScanMode = "static" | "agent";
 
 export type StaticTool =
   | "opengrep"
-  | "codeql";
+  | "codeql"
+  | "joern";
 
 export interface StaticToolSelection {
   opengrep: boolean;
   codeql: boolean;
+  joern: boolean;
 }
 
 interface AgentModeSelectorProps {
@@ -53,6 +55,7 @@ export default function AgentModeSelector({
   const resolvedTools: StaticToolSelection = staticTools || {
     opengrep: true,
     codeql: false,
+    joern: false,
   };
 
   const updateStaticTool = (tool: StaticTool, checked: boolean) => {
@@ -73,6 +76,7 @@ export default function AgentModeSelector({
   }> = [
       { key: "opengrep", label: "规则扫描" },
       { key: "codeql", label: "CodeQL 语义扫描" },
+      { key: "joern", label: "Joern 图扫描" },
     ];
 
   return (

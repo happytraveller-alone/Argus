@@ -44,6 +44,39 @@ fn compose_exposes_a3s_box_opengrep_image_override() {
 }
 
 #[test]
+fn compose_exposes_joern_runner_image_and_resource_controls() {
+    for (name, compose) in [
+        ("docker-compose.yml", ROOT_COMPOSE),
+        (
+            "scripts/release-templates/docker-compose.release-slim.yml",
+            RELEASE_COMPOSE,
+        ),
+    ] {
+        assert!(
+            compose.contains(
+                "SCANNER_JOERN_IMAGE: ${SCANNER_JOERN_IMAGE:-ghcr.io/joernio/joern:nightly}"
+            ),
+            "{name} must expose the Joern runner image override"
+        );
+        for key in [
+            "JOERN_SCAN_TIMEOUT_SECONDS",
+            "JOERN_RESULTS_JSON_LIMIT_BYTES",
+            "JOERN_STDOUT_LIMIT_BYTES",
+            "JOERN_STDERR_LIMIT_BYTES",
+            "JOERN_RUNNER_MEMORY_LIMIT_MB",
+            "JOERN_RUNNER_CPU_LIMIT",
+            "JOERN_RUNNER_PIDS_LIMIT",
+            "JOERN_NETWORK_DISABLED",
+        ] {
+            assert!(
+                compose.contains(key),
+                "{name} must pass Joern config env {key} to the backend"
+            );
+        }
+    }
+}
+
+#[test]
 fn backend_images_download_a3s_box_v203_binary_package_for_target_arch() {
     for (name, dockerfile) in [
         ("docker/backend.Dockerfile", BACKEND_DOCKERFILE),
