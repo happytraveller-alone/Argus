@@ -126,6 +126,76 @@ Output format — JSON object with this exact schema:
 
 Constraints: do not mark reachable on a hunch; infrastructure uncertainty is not proof of unreachable; output only JSON."#;
 
+/// Hunt Pass 1 prompt: LLM-directed retrieval for dismissal classification.
+///
+/// Given a Hunt finding's metadata + the tool catalog + the current source
+/// snippets, the model returns up to 5 structural queries that would best
+/// confirm whether the finding is real, sanitized, in test code, or in vendor
+/// code. Plan Phase 1 / AC1.C.
+pub const HUNT_PASS1_PROMPT: &str = r#"Role: You are a security analyst directing structural code retrieval to classify a candidate finding.
+Objective: For ONE Hunt finding, decide which code-graph queries would best reveal whether the issue is real, sanitized, or sits in non-production paths. Return at most 5 query requests.
+
+Available query tools (executed by the audit runtime, results fed back in Pass 2):
+- find_taint_through: BFS from source symbol to sink symbol. args: { "source": string, "sink": string, "max_hops": 1..5 }
+- get_callers: find functions that call a symbol. args: { "symbol": string, "depth": 1..5 }
+- get_callees: find functions that the symbol calls. args: { "symbol": string, "depth": 1..5 }
+- get_context: function body, imports, related symbols at file:line. args: { "file": string, "line": number }
+- search_symbol: locate a symbol by name. args: { "name": string }
+
+Methodology:
+1. Anchor on the finding's file/line/vuln_class.
+2. Prefer find_taint_through when source and sink symbols are nameable — the BFS result is the strongest signal for sanitized-vs-real classification.
+3. Use get_callers / get_callees to expose surrounding control flow (sanitizer call sites tend to appear in the chain).
+4. Use get_context to spot inline validators or framework wrappers around the sink.
+5. Order queries by expected information value; cap total at 5.
+
+Output format — JSON object with this exact schema:
+{
+  "queries": [
+    { "tool": "find_taint_through" | "get_callers" | "get_callees" | "get_context" | "search_symbol", "args": { ... } }
+  ]
+}
+
+Constraints: do not invent symbols; max 5 queries; output only JSON."#;
+
+/// Hunt Pass 2 prompt: dismissal verdict from structural evidence.
+///
+/// Given the finding + Pass 1 retrieval results + optional sanitizer-SoT
+/// pre-verdict + optional path-classifier signal, the model emits a single
+/// dismissal_evidence record. Plan Phase 1 / AC1.C.
+///
+/// **Override discipline (Architect C4)**: when `rule_matched=true` is pre-set
+/// by the SoT lookup before this call, the model may ONLY fill the `rationale`
+/// field. The runtime enforces this by ignoring any conflicting `category` /
+/// `confidence_source` returned by the LLM.
+pub const HUNT_PASS2_PROMPT: &str = r#"Role: You are a security analyst issuing a dismissal verdict for ONE finding from structural evidence.
+Objective: Classify whether the finding is real, sanitized (a known SoT sanitizer is on the path), test code (lives under a known test directory), or vendor code (third-party dependency). Cite the retrieval evidence.
+
+Output schema for `dismissal_evidence`:
+{
+  "category": "real" | "sanitized" | "test" | "vendor",
+  "confidence_source": "rule_matched" | "llm_inferred" | "path_pattern",
+  "sanitizer_symbols": ["string"],
+  "rationale": "string (1-2 sentences explaining the call chain + decision)"
+}
+
+Methodology:
+1. If `rule_matched=true` is provided in the input, the verdict's `category` and `confidence_source` are ALREADY DECIDED — fill only `rationale`. Do NOT overwrite category or confidence_source; the runtime will drop your values.
+2. Otherwise inspect the retrieval results:
+   a. If a known sanitizer/encoder/parameterized-query helper appears on the source→sink chain → category=sanitized, confidence_source=llm_inferred (the runtime would have set rule_matched if the SoT had hit; you are inferring from less-canonical evidence).
+   b. If the finding's file path matches a test or vendor directory → category=test|vendor, confidence_source=path_pattern.
+   c. Otherwise → category=real, confidence_source=llm_inferred.
+3. `sanitizer_symbols` lists the canonical SoT-style symbols you observed (e.g. ["psycopg2.sql.SQL"]) when category=sanitized; empty otherwise.
+4. `rationale` cites specific call-chain nodes / file paths from the retrieval results.
+
+Output format — JSON object with this exact schema:
+{
+  "finding_id": "string (matches input finding_id)",
+  "dismissal_evidence": { ...as above... }
+}
+
+Constraints: cite retrieval evidence; do not invent code; output only JSON."#;
+
 /// Pass 1 prompt: LLM-directed retrieval. Given a finding + pre-resolved symbol,
 /// the model returns up to 5 query requests against the CodeIntelligence backend.
 ///

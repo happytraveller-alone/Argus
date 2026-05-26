@@ -32,13 +32,16 @@ use crate::{
     llm_rule,
     runtime::{
         a3s_box_runner,
+        intelligent::code_intel::{
+            cache::CodeGraphCache, codegraph_client::CodeGraphClient, CodeIntelligence,
+        },
         runner::{
             self, ContainerRuntime, RunnerMount, RunnerMountPlan, RunnerSpec, SCANNER_MOUNT_PATH,
         },
         shutdown::ShutdownGate,
     },
     scan::{codeql, joern, opengrep, scope_filters},
-    state::AppState,
+    state::{AppState, StoredProjectArchive},
 };
 
 static OPENGREP_RESOURCE_SCHEDULER: LazyLock<OpengrepResourceScheduler> =
@@ -1749,11 +1752,55 @@ async fn run_codeql_scan_inner(
     options: CodeqlTaskOptions,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let started_at = std::time::Instant::now();
-    let language = options
-        .languages
-        .first()
-        .cloned()
-        .unwrap_or("cpp".to_string());
+
+    // ── AC3 codegraph init (Plan §AC1.D + Step 1.6) ──────────────────────────
+    // Run BEFORE the existing CodeQL flow so its 30s timeout never overlaps
+    // the build container lifecycle (no race). Best-effort: failure falls
+    // through to the original 6-pattern probe with a degraded badge.
+    update_scan_progress(
+        state,
+        task_id,
+        2.0,
+        "codegraph_handoff",
+        "initialising codegraph for CodeQL language identification",
+    )
+    .await;
+    let codegraph_handoff = try_init_codegraph_for_codeql_with_events(state, task_id, project_id)
+        .await;
+    let language = match (options.languages.first(), codegraph_handoff.as_ref()) {
+        (Some(lang), _) if !lang.trim().is_empty() => lang.clone(),
+        (_, Some(handoff)) => handoff
+            .primary_language
+            .clone()
+            .unwrap_or_else(|| "cpp".to_string()),
+        _ => "cpp".to_string(),
+    };
+    let lang_signal_missing = options.languages.is_empty()
+        || matches!(options.languages.first(), Some(l) if l.trim().is_empty());
+    let codegraph_lang_missing = codegraph_handoff
+        .as_ref()
+        .and_then(|h| h.primary_language.as_deref())
+        .is_none();
+    if lang_signal_missing && codegraph_lang_missing {
+        tracing::warn!(
+            target: "argus::codeql",
+            task_id = %task_id,
+            "language_fallback_to_cpp: no codegraph or LLM language signal — falling back to cpp"
+        );
+        push_exploration_event(
+            state,
+            task_id,
+            "language_fallback_to_cpp",
+            "codegraph_handoff",
+            3.0,
+            None,
+            json!({
+                "reason": "no_codegraph_or_llm_signal",
+                "fallback_language": "cpp",
+            }),
+        )
+        .await;
+    }
 
     update_scan_progress(
         state,
@@ -1809,7 +1856,7 @@ async fn run_codeql_scan_inner(
             .allow_network
             .unwrap_or(state.config.codeql_allow_network_during_build);
 
-        let plan = run_codeql_compile_exploration(
+        let mut plan = run_codeql_compile_exploration(
             state,
             task_id,
             project_id,
@@ -1821,6 +1868,13 @@ async fn run_codeql_scan_inner(
             allow_network,
         )
         .await?;
+        // Inject codegraph handoff into the build plan's evidence_json so the
+        // downstream consumer (CodeQL build plan persistence + frontend) can
+        // see the primary language + vendor paths that codegraph discovered.
+        // See AC1.E.
+        if let Some(handoff) = codegraph_handoff.as_ref() {
+            attach_codegraph_handoff_to_plan(&mut plan, handoff);
+        }
 
         update_scan_progress(
             state,
@@ -1857,6 +1911,7 @@ async fn run_codeql_scan_inner(
             dependency_fingerprint: rec.dependency_fingerprint.clone(),
             status: rec.status.clone(),
             evidence_json: rec.evidence_json.clone(),
+            language_fallback_used: false,
         }
     };
 
@@ -1920,6 +1975,260 @@ async fn run_codeql_scan_inner(
     let _ = tokio::fs::remove_dir_all(&workspace_dir).await;
 
     Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// AC3 codegraph handoff (Plan §AC1.D + Step 1.6 + 1.7 + 1.8)
+// ---------------------------------------------------------------------------
+
+/// Lightweight structure carrying the slice of codegraph state we hand off to
+/// the CodeQL flow. Persisted into the build plan's `evidence_json` so
+/// downstream consumers (build plan record + frontend) can see what codegraph
+/// observed.
+#[derive(Debug, Clone)]
+struct CodegraphHandoff {
+    primary_language: Option<String>,
+    languages_indexed: Vec<String>,
+    vendor_paths: Vec<String>,
+}
+
+impl CodegraphHandoff {
+    fn to_evidence_json(&self) -> Value {
+        json!({
+            "primary_language": self.primary_language,
+            "languages_indexed": self.languages_indexed,
+            "vendor_paths": self.vendor_paths,
+        })
+    }
+}
+
+/// RAII guard wrapping a `CodeGraphClient`. On drop, detaches a tokio task
+/// that calls `shutdown()` — mirrors `audit_pipeline/mod.rs:294-301`. Outside
+/// a Tokio runtime context the Drop is a no-op (the underlying PodmanSession
+/// is itself a fallback guard).
+struct CodegraphHandoffGuard {
+    client: Option<Arc<CodeGraphClient>>,
+}
+
+impl Drop for CodegraphHandoffGuard {
+    fn drop(&mut self) {
+        if let Some(client) = self.client.take() {
+            // Detach shutdown so Drop never blocks. The PodmanSession's own
+            // Drop is the final safety net for cancellation paths.
+            tokio::spawn(async move {
+                if let Err(err) = client.shutdown().await {
+                    tracing::warn!(
+                        target: "argus::codeql",
+                        error = %err,
+                        "codegraph handoff shutdown failed"
+                    );
+                }
+            });
+        }
+    }
+}
+
+/// Best-effort init of codegraph for CodeQL handoff. Wraps the actual init in
+/// `tokio::time::timeout(30s)` and pushes exploration events on success /
+/// failure. Returns `Some(CodegraphHandoff)` on success, `None` on every
+/// failure path (timeout / no archive / codegraph error).
+///
+/// **No `select!`** — the timeout is a straight `tokio::time::timeout().await`
+/// to avoid race windows around the build container (Critic R7 fix).
+async fn try_init_codegraph_for_codeql_with_events(
+    state: &AppState,
+    task_id: &str,
+    project_id: &str,
+) -> Option<CodegraphHandoff> {
+    let archive_meta: StoredProjectArchive = match projects::get_project(state, project_id).await {
+        Ok(Some(project)) => match project.archive {
+            Some(a) => a,
+            None => {
+                push_exploration_event(
+                    state,
+                    task_id,
+                    "codegraph_init_skipped_no_archive",
+                    "codegraph_handoff",
+                    2.5,
+                    None,
+                    json!({"reason": "no_archive"}),
+                )
+                .await;
+                set_codegraph_unavailable_flag(state, task_id, "no_archive").await;
+                return None;
+            }
+        },
+        Ok(None) | Err(_) => {
+            set_codegraph_unavailable_flag(state, task_id, "project_lookup_failed").await;
+            return None;
+        }
+    };
+    let sandbox_image = state.config.scanner_codeql_image.clone();
+    let init_fut = try_init_codegraph_for_codeql(&archive_meta, &sandbox_image);
+    match tokio::time::timeout(std::time::Duration::from_secs(30), init_fut).await {
+        Ok(Ok(handoff)) => {
+            push_exploration_event(
+                state,
+                task_id,
+                "codegraph_init_completed_for_codeql",
+                "codegraph_handoff",
+                4.0,
+                None,
+                json!({
+                    "primary_language": handoff.primary_language,
+                    "languages_indexed": handoff.languages_indexed,
+                    "vendor_paths_count": handoff.vendor_paths.len(),
+                }),
+            )
+            .await;
+            Some(handoff)
+        }
+        Ok(Err(err)) => {
+            tracing::warn!(
+                target: "argus::codeql",
+                task_id = %task_id,
+                error = %err,
+                "codegraph_init_failed_for_codeql"
+            );
+            push_exploration_event(
+                state,
+                task_id,
+                "codegraph_init_failed_for_codeql",
+                "codegraph_handoff",
+                3.0,
+                None,
+                json!({"error": err.to_string()}),
+            )
+            .await;
+            set_codegraph_unavailable_flag(state, task_id, &err.to_string()).await;
+            None
+        }
+        Err(_elapsed) => {
+            tracing::warn!(
+                target: "argus::codeql",
+                task_id = %task_id,
+                "codegraph_init_failed_for_codeql: 30s timeout"
+            );
+            push_exploration_event(
+                state,
+                task_id,
+                "codegraph_init_failed_for_codeql",
+                "codegraph_handoff",
+                3.0,
+                None,
+                json!({"error": "timeout_30s"}),
+            )
+            .await;
+            set_codegraph_unavailable_flag(state, task_id, "timeout_30s").await;
+            None
+        }
+    }
+}
+
+/// Inner init: spin up CodeGraphClient (cache-aware via CodeGraphClient::init),
+/// then derive primary_language + vendor_paths from the index. Drops the
+/// client (which detaches shutdown via the RAII guard) before returning the
+/// handoff. We do NOT keep the codegraph client alive across the build
+/// container lifecycle — the handoff is a one-shot summary.
+async fn try_init_codegraph_for_codeql(
+    archive_meta: &StoredProjectArchive,
+    sandbox_image: &str,
+) -> anyhow::Result<CodegraphHandoff> {
+    let cache = Arc::new(CodeGraphCache::new()?);
+    let archive_path = std::path::Path::new(&archive_meta.storage_path);
+    let client = CodeGraphClient::init(
+        archive_path,
+        &archive_meta.original_filename,
+        archive_meta.sha256.clone(),
+        sandbox_image,
+        cache,
+    )
+    .await?;
+    let client = Arc::new(client);
+    // Wrap in RAII guard so any early return / panic still detaches shutdown.
+    let guard = CodegraphHandoffGuard {
+        client: Some(Arc::clone(&client)),
+    };
+
+    let languages_indexed = client.languages_indexed();
+    // Pick the first indexed language as primary. Codegraph orders by
+    // detection frequency in `detect_languages` so this is the dominant
+    // language. CodeQL's normalize_language will canonicalise.
+    let primary_language = languages_indexed.first().cloned();
+
+    // Vendor path discovery: query codegraph for files under the canonical
+    // vendor directory prefixes and bucket them by top-level segment. We avoid
+    // adding a new trait surface (the plan explicitly prohibits a
+    // dependency_graph trait method in v0.1) by using `search_symbol` with
+    // vendor-style names.
+    let vendor_paths = derive_vendor_paths_from_codegraph(client.as_ref()).await;
+
+    drop(guard);
+    Ok(CodegraphHandoff {
+        primary_language,
+        languages_indexed,
+        vendor_paths,
+    })
+}
+
+/// Best-effort vendor-path discovery. Walks `search_symbol("vendor")` /
+/// `"third_party"` / `"node_modules"` results, extracts the leading directory
+/// component, and dedupes. Errors are swallowed (returns Vec::new()) — vendor
+/// reduction is an optimisation, not a correctness requirement.
+async fn derive_vendor_paths_from_codegraph(client: &CodeGraphClient) -> Vec<String> {
+    let mut out: BTreeMap<String, ()> = BTreeMap::new();
+    for hint in ["vendor", "third_party", "node_modules"] {
+        let Ok(matches) = client.search_symbol(hint).await else {
+            continue;
+        };
+        for m in matches {
+            // m.file may look like `vendor/lib/foo.go` — extract the leading
+            // segment when it matches one of the known vendor roots.
+            if let Some(top) = m.file.split('/').next() {
+                if matches!(top, "vendor" | "third_party" | "node_modules") {
+                    out.insert(format!("{top}/"), ());
+                }
+            }
+        }
+    }
+    out.into_keys().collect()
+}
+
+/// Persist the `codegraph_unavailable: true` flag (plus the reason) into the
+/// static task record's `extra` field so the frontend can render the degraded
+/// badge without a schema migration.
+async fn set_codegraph_unavailable_flag(state: &AppState, task_id: &str, reason: &str) {
+    let Ok(mut snapshot) = task_state::load_snapshot(state).await else {
+        return;
+    };
+    if let Some(record) = snapshot.static_tasks.get_mut(task_id) {
+        // record.extra is free-form Value — merge in the flag.
+        if !record.extra.is_object() {
+            record.extra = json!({});
+        }
+        if let Value::Object(map) = &mut record.extra {
+            map.insert("codegraph_unavailable".to_string(), json!(true));
+            map.insert(
+                "codegraph_unavailable_reason".to_string(),
+                json!(reason),
+            );
+        }
+    }
+    let _ = task_state::save_snapshot(state, &snapshot).await;
+}
+
+/// Stamp the codegraph handoff onto the build plan's `evidence_json` so the
+/// downstream build-plan record + the frontend get a stable structural view.
+fn attach_codegraph_handoff_to_plan(
+    plan: &mut crate::scan::codeql::CompileSandboxPlan,
+    handoff: &CodegraphHandoff,
+) {
+    if !plan.evidence_json.is_object() {
+        plan.evidence_json = json!({});
+    }
+    if let Value::Object(map) = &mut plan.evidence_json {
+        map.insert("codegraph_handoff".to_string(), handoff.to_evidence_json());
+    }
 }
 
 async fn extract_archive_to_dir(
@@ -2115,6 +2424,7 @@ async fn run_codeql_compile_exploration(
             dependency_fingerprint: String::new(),
             status: "accepted".to_string(),
             evidence_json: serde_json::json!({"source": "exploration_no_llm"}),
+            language_fallback_used: false,
         };
         drop(guard);
         return Ok(plan);
@@ -2317,6 +2627,7 @@ async fn run_codeql_compile_exploration(
             dependency_fingerprint: String::new(),
             status: "accepted".to_string(),
             evidence_json: serde_json::json!({"source": "exploration_fallback"}),
+            language_fallback_used: false,
         }
     });
 

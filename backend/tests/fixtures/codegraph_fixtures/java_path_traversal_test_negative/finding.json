@@ -1,0 +1,16 @@
+{
+  "finding_id": "HUNT-JV-PT-TEST-001",
+  "file": "src/test/java/com/example/Controller.java",
+  "line_start": 17,
+  "line_end": 19,
+  "vuln_class": "path_traversal",
+  "severity": "high",
+  "description": "Path-traversal-shaped finding in a test-source tree. Mirror of java_path_traversal/ but located under src/test/java/com/example/ — non-production, non-actionable. The audit pipeline must classify as test via the path_pattern channel.",
+  "evidence": "FileService.readFile(name)",
+  "expected_reachable": false,
+  "expected_call_chain": null,
+  "expected_classification": "test",
+  "expected_confidence_source": "path_pattern",
+  "expected_path_pattern": "src/test/java/",
+  "expected_dismissal_rationale": "caller resides in src/test/java/ — non-production test code"
+}

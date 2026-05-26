@@ -11,17 +11,20 @@ its own reasoning under controlled, ground-truthed inputs.
 
 ## Fixtures
 
-| Fixture | Language | Pattern | Reachable? |
-|---------|----------|---------|------------|
-| `python_sqli/` | Python (Flask) | SQL injection across 3 files | Yes |
-| `java_path_traversal/` | Java (Spring) | Path traversal across 2 files | Yes |
-| `go_ssrf/` | Go | SSRF across 2 files | Yes |
-| `ts_proto_pollution/` | TypeScript (Express) | Prototype pollution across 2 files | Yes |
-| `python_sanitized_negative/` | Python | Same shape as `python_sqli` BUT properly parameterized | No |
+| Fixture | Language | Pattern | Reachable? | Classification |
+|---------|----------|---------|------------|----------------|
+| `python_sqli/` | Python (Flask) | SQL injection across 3 files | Yes | real |
+| `java_path_traversal/` | Java (Spring) | Path traversal across 2 files | Yes | real |
+| `python_sqli_sanitized_negative/` | Python | `psycopg2.sql.SQL` parameterized variant of `python_sqli/` | No | sanitized (rule_matched) |
+| `java_path_traversal_test_negative/` | Java | Identical shape to `java_path_traversal/`, located under `src/test/java/` | No | test (path_pattern) |
 
-The negative fixture (`python_sanitized_negative`) is critical for AC1
-precision: codegraph-backed Trace must not over-flag a sanitized chain as
-reachable. The other four exercise recall on real cross-file taint flows.
+The two negative fixtures are critical for AC1 precision: the audit pipeline
+must NOT over-flag a sanitized chain or test-source code as actionable. The
+two positive fixtures exercise recall on real cross-file taint flows.
+
+Phase 2 / v0.2 (deferred) adds:
+- `python_sqli_vendor_negative/` (vendored copy under `vendor/`)
+- `go_ssrf/` or `ts_proto_pollution/` (third real-label fixture)
 
 ## Layout per fixture
 
@@ -48,8 +51,12 @@ Each fixture's `finding.json` carries:
 | `expected_confidence_source` (Phase 0) | `"rule_matched" \| "llm_inferred" \| "path_pattern"` | ground-truth provenance — which evidence channel SHOULD produce the verdict |
 | `expected_path_pattern` (Phase 0) | string \| null | matched glob fragment when `confidence_source == "path_pattern"`, else `null` |
 
-Phase 0 adds the last three fields. Additional fields (`expected_sanitizer_symbols`,
-`expected_dismissal_rationale`) will land in Phase 1 alongside SoT and Hunt Pass 2.
+Phase 0 added the last three fields. Phase 1 / v0.1 adds:
+
+| Field | Type | Purpose |
+|-------|------|---------|
+| `expected_sanitizer_symbols` (Phase 1) | string[] | canonical SoT entries the audit pipeline must surface in `dismissal_evidence.sanitizer_symbols` (only meaningful when `expected_confidence_source == "rule_matched"`) |
+| `expected_dismissal_rationale` (Phase 1) | string \| null | non-binding human-readable rationale for the dismissal (test harnesses may assert substring match) |
 
 ## Provenance
 

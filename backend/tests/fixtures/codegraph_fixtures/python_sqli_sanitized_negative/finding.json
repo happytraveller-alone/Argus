@@ -1,0 +1,17 @@
+{
+  "finding_id": "HUNT-PY-SQLI-SAN-001",
+  "file": "db.py",
+  "line_start": 12,
+  "line_end": 14,
+  "vuln_class": "sql_injection",
+  "severity": "high",
+  "description": "User-controlled value flows from request through parse_request and build_query into a parameterized psycopg2 query at run_query. The SoT entry psycopg2.sql.SQL classifies this as safely sanitized.",
+  "evidence": "pg_sql.SQL(\"SELECT * FROM users WHERE id = {}\").format(pg_sql.Placeholder())",
+  "expected_reachable": false,
+  "expected_call_chain": ["handle_lookup", "parse_request", "build_query", "run_query"],
+  "expected_classification": "sanitized",
+  "expected_confidence_source": "rule_matched",
+  "expected_sanitizer_symbols": ["psycopg2.sql.SQL"],
+  "expected_dismissal_rationale": "parameterized via psycopg2.sql.SQL",
+  "expected_path_pattern": null
+}

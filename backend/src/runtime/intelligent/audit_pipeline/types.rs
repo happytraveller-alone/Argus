@@ -114,10 +114,13 @@ pub enum ConfidenceSource {
 ///   - `confidence_source`: provenance (Phase 0 always `PathPattern`)
 ///   - `path_pattern`: the matched glob fragment (e.g. `"tests/"`, `"vendor/"`)
 ///
-/// Phase 1 will add `sanitizer_symbols: Vec<String>` and `rationale: Option<String>`
-/// additively (Hunt Pass 2 prompt extension). `#[serde(default)]` on the wrapping
-/// `Option<DismissalEvidence>` keeps deserialization back-compatible for legacy
-/// findings missing the field.
+/// Phase 1 (Hunt 2-pass) additively adds:
+///   - `sanitizer_symbols`: canonical SoT symbols observed on the call chain
+///     (only populated when `confidence_source == RuleMatched`).
+///   - `rationale`: 1-2 sentence explanation from Hunt Pass 2.
+///
+/// Both fields are `#[serde(default)]`-defaulted so Phase 0 records (and
+/// legacy producers) deserialize unchanged.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DismissalEvidence {
@@ -125,6 +128,10 @@ pub struct DismissalEvidence {
     pub confidence_source: ConfidenceSource,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub path_pattern: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub sanitizer_symbols: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rationale: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -388,6 +395,8 @@ mod tests {
                 category: DismissalCategory::Test,
                 confidence_source: ConfidenceSource::PathPattern,
                 path_pattern: Some("tests/".to_string()),
+                sanitizer_symbols: Vec::new(),
+                rationale: None,
             }),
             ..Default::default()
         };

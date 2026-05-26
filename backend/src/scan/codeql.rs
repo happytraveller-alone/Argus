@@ -69,6 +69,11 @@ pub struct CompileSandboxPlan {
     pub dependency_fingerprint: String,
     pub status: String,
     pub evidence_json: Value,
+    /// Plan §AC1.E: `true` when the parsed plan fell back to `cpp` because
+    /// neither the LLM payload nor the codegraph handoff supplied a language.
+    /// Persisted into `evidence_json` so the audit trail is complete.
+    #[serde(default)]
+    pub language_fallback_used: bool,
 }
 
 pub async fn load_query_assets(state: &AppState) -> Result<Vec<ScanRuleAsset>> {
@@ -164,12 +169,16 @@ fn extract_json_from_llm_response(raw: &str) -> Result<&str> {
 pub fn parse_compile_sandbox_plan(plan_text: &str) -> Result<CompileSandboxPlan> {
     let json_str = extract_json_from_llm_response(plan_text)?;
     let payload = serde_json::from_str::<Value>(json_str)?;
-    let language = normalize_language(
-        payload
-            .get("language")
-            .and_then(Value::as_str)
-            .unwrap_or("cpp"),
-    );
+    // Plan §AC1.E — remove the silent cpp fallback. Resolution order:
+    //   1. `payload.language` if present and non-empty
+    //   2. `payload.evidence_json.codegraph_handoff.primary_language` if present
+    //      (codegraph identified the primary indexed language)
+    //   3. `cpp` last-resort fallback. We emit a `language_fallback_to_cpp`
+    //      warn trace AND set `language_fallback_used: true` on the parsed
+    //      plan so downstream (event sink + persistence) can see the
+    //      degradation.
+    let (language, language_fallback_used) = resolve_language_from_payload(&payload);
+    let language = normalize_language(&language);
     let commands = payload
         .get("commands")
         .and_then(Value::as_array)
@@ -247,7 +256,38 @@ pub fn parse_compile_sandbox_plan(plan_text: &str) -> Result<CompileSandboxPlan>
             .cloned()
             .or_else(|| payload.get("evidence").cloned())
             .unwrap_or_else(|| json!({})),
+        language_fallback_used,
     })
+}
+
+/// Resolve the build plan's language from the LLM payload, preferring
+/// (1) explicit `language` field → (2) `evidence_json.codegraph_handoff.primary_language` →
+/// (3) `cpp` last-resort fallback (with a warn trace).
+///
+/// Returns the resolved language and a `language_fallback_used` boolean which
+/// is `true` only when path (3) fires.
+fn resolve_language_from_payload(payload: &Value) -> (String, bool) {
+    if let Some(lang) = payload.get("language").and_then(Value::as_str) {
+        if !lang.trim().is_empty() {
+            return (lang.to_string(), false);
+        }
+    }
+    if let Some(handoff_lang) = payload
+        .get("evidence_json")
+        .or_else(|| payload.get("evidence"))
+        .and_then(|ev| ev.get("codegraph_handoff"))
+        .and_then(|h| h.get("primary_language"))
+        .and_then(Value::as_str)
+    {
+        if !handoff_lang.trim().is_empty() {
+            return (handoff_lang.to_string(), false);
+        }
+    }
+    tracing::warn!(
+        target: "argus::codeql",
+        "language_fallback_to_cpp: no codegraph or LLM language signal — falling back to cpp"
+    );
+    ("cpp".to_string(), true)
 }
 
 pub fn compile_sandbox_plan_to_build_plan(plan: &CompileSandboxPlan) -> CodeqlBuildPlan {
@@ -1103,6 +1143,90 @@ mod tests {
         assert!(!denied.valid);
         assert!(denied.reason.unwrap().contains("denied token"));
         assert!(!validate_build_command("npm install", "../outside").valid);
+    }
+
+    /// Plan §AC1.E: language resolution prefers the LLM payload's explicit
+    /// `language` field; missing/empty falls through to the codegraph handoff;
+    /// only when both are absent does the resolver fall back to `cpp` AND
+    /// emit the `language_fallback_used: true` marker.
+    #[test]
+    fn resolve_language_prefers_explicit_then_codegraph_then_cpp() {
+        // Path 1: explicit language present.
+        let (lang, fb) = resolve_language_from_payload(&json!({"language": "python"}));
+        assert_eq!(lang, "python");
+        assert!(!fb);
+
+        // Path 2: empty explicit + codegraph handoff present.
+        let (lang, fb) = resolve_language_from_payload(&json!({
+            "language": "",
+            "evidence_json": {
+                "codegraph_handoff": {"primary_language": "java"}
+            }
+        }));
+        assert_eq!(lang, "java");
+        assert!(!fb);
+
+        // Path 2 with absent `language` key + codegraph handoff present.
+        let (lang, fb) = resolve_language_from_payload(&json!({
+            "evidence_json": {
+                "codegraph_handoff": {"primary_language": "typescript"}
+            }
+        }));
+        assert_eq!(lang, "typescript");
+        assert!(!fb);
+
+        // Path 3: no language anywhere → cpp + language_fallback_used.
+        let (lang, fb) = resolve_language_from_payload(&json!({}));
+        assert_eq!(lang, "cpp");
+        assert!(fb);
+    }
+
+    /// AC1.E: a parsed plan without a `language` field or codegraph handoff
+    /// must surface `language_fallback_used: true` on the parsed plan.
+    #[test]
+    fn parse_compile_sandbox_plan_emits_language_fallback_flag_on_missing_language() {
+        let plan = parse_compile_sandbox_plan(
+            r#"{
+              "target_path":".",
+              "build_mode":"manual",
+              "commands":["make -j2"],
+              "working_directory":".",
+              "allow_network":false,
+              "source_fingerprint":"sha256:source",
+              "dependency_fingerprint":"sha256:deps",
+              "status":"accepted",
+              "evidence_json":{"capture_validation":{"database_create":"completed","extractor":"cpp","captured_files":["main.c"]}}
+            }"#,
+        )
+        .expect("parse");
+        assert!(plan.language_fallback_used, "must mark fallback");
+        assert_eq!(plan.language, "cpp", "last-resort fallback is cpp");
+    }
+
+    /// AC1.E: when the LLM payload omits `language` but the codegraph handoff
+    /// supplied `primary_language`, the parsed plan picks it up without
+    /// firing the fallback marker.
+    #[test]
+    fn parse_compile_sandbox_plan_reads_codegraph_handoff_language() {
+        let plan = parse_compile_sandbox_plan(
+            r#"{
+              "target_path":".",
+              "build_mode":"manual",
+              "commands":["mvn -B package"],
+              "working_directory":".",
+              "allow_network":false,
+              "source_fingerprint":"sha256:source",
+              "dependency_fingerprint":"sha256:deps",
+              "status":"accepted",
+              "evidence_json":{
+                "codegraph_handoff":{"primary_language":"java"},
+                "capture_validation":{"database_create":"completed","extractor":"java","captured_files":["Main.java"]}
+              }
+            }"#,
+        )
+        .expect("parse");
+        assert_eq!(plan.language, "java");
+        assert!(!plan.language_fallback_used, "no fallback when handoff supplied language");
     }
 
     #[test]

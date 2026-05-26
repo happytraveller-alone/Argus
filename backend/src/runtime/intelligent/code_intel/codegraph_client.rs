@@ -26,7 +26,17 @@ use crate::runtime::intelligent::agent_runner::podman::PodmanSession;
 use super::cache::CodeGraphCache;
 use super::protocol::{CgCalleesResponse, CgCallEdge, CgCallersResponse, CgFileEntry, CgNode, CgQueryItem};
 use super::staging::{self, StagingDir};
-use super::{CallChain, CallNode, CodeContext, CodeIntelligence, SymbolMatch};
+use super::{
+    CallChain, CallNode, CodeContext, CodeIntelligence, SymbolMatch, TaintNode, TaintSearchResult,
+};
+
+/// BFS hard cap on `max_hops` for [`CodeGraphClient::find_taint_through`].
+/// Beyond 5 the cross-product of caller/callee lookups makes Pass 2 unstable.
+const MAX_HOPS_HARD_CAP: u32 = 5;
+
+/// Hard cap on total CLI invocations during one taint search. At ~5s/query this
+/// keeps worst-case wall time under ~2.5 minutes regardless of `max_hops`.
+const CLI_INVOCATION_HARD_CAP: usize = 30;
 
 /// Max caller/callee depth and call-chain hop count exposed to callers.
 const MAX_DEPTH: u32 = 5;
@@ -276,7 +286,7 @@ impl CodeIntelligence for CodeGraphClient {
         max_hops: u32,
     ) -> Result<Vec<CallChain>> {
         self.ready_check()?;
-        let max_hops = max_hops.min(MAX_DEPTH).max(1);
+        let max_hops = max_hops.clamp(1, MAX_DEPTH);
 
         let Some(start) = self.resolve_symbol_at(from_file, from_line).await? else {
             return Ok(Vec::new());
@@ -310,6 +320,20 @@ impl CodeIntelligence for CodeGraphClient {
             }
         }
         Ok(vec![CallChain { nodes, truncated }])
+    }
+
+    async fn find_taint_through(
+        &self,
+        source: &str,
+        sink: &str,
+        max_hops: u32,
+    ) -> Result<TaintSearchResult> {
+        self.ready_check()?;
+        // Adapt &self.get_callees into the closure the pure BFS expects.
+        bfs_taint_search(source, sink, max_hops, |sym| async move {
+            self.get_callees(&sym, 1).await
+        })
+        .await
     }
 
     fn languages_indexed(&self) -> Vec<String> {
@@ -442,6 +466,148 @@ fn truncate_for_err(s: &str) -> String {
 // Tests
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// BFS taint search — pure (testable) core
+// ---------------------------------------------------------------------------
+
+/// Pure BFS taint search core, parameterised over an async `get_callees` provider.
+///
+/// Same contract as [`CodeGraphClient::find_taint_through`] but the get_callees
+/// step is supplied by the caller (so unit tests can inject a fixed graph
+/// without spinning up codegraph). Live impl threads `client.get_callees` here.
+async fn bfs_taint_search<F, Fut>(
+    source: &str,
+    sink: &str,
+    max_hops: u32,
+    mut get_callees_fn: F,
+) -> Result<TaintSearchResult>
+where
+    F: FnMut(String) -> Fut,
+    Fut: std::future::Future<Output = Result<Vec<CallNode>>>,
+{
+    use std::collections::{HashMap, HashSet, VecDeque};
+
+    let max_hops = max_hops.clamp(1, MAX_HOPS_HARD_CAP);
+    if source.is_empty() || sink.is_empty() {
+        return Ok(TaintSearchResult {
+            nodes: Vec::new(),
+            truncated: true,
+            sink_reached: false,
+        });
+    }
+    if source == sink {
+        return Ok(TaintSearchResult {
+            nodes: vec![TaintNode {
+                symbol: source.to_string(),
+                file: String::new(),
+                line: 0,
+                hop_index: 0,
+            }],
+            truncated: false,
+            sink_reached: true,
+        });
+    }
+
+    let mut frontier: VecDeque<(CallNode, u32)> = VecDeque::new();
+    let mut visited: HashSet<String> = HashSet::new();
+    let mut parent: HashMap<String, CallNode> = HashMap::new();
+    let mut cli_invocations: usize = 0;
+    let mut truncated = false;
+
+    let source_seed = CallNode {
+        symbol: source.to_string(),
+        file: String::new(),
+        line: 0,
+        language: String::new(),
+        depth: 0,
+    };
+    frontier.push_back((source_seed, 0));
+    visited.insert(source.to_string());
+
+    let mut sink_node: Option<CallNode> = None;
+    'bfs: while let Some((current, depth)) = frontier.pop_front() {
+        if depth >= max_hops {
+            truncated = true;
+            continue;
+        }
+        if cli_invocations >= CLI_INVOCATION_HARD_CAP {
+            truncated = true;
+            break 'bfs;
+        }
+        cli_invocations += 1;
+        let callees = match get_callees_fn(current.symbol.clone()).await {
+            Ok(v) => v,
+            Err(err) => {
+                warn!(
+                    symbol = %current.symbol,
+                    depth,
+                    error = %err,
+                    "get_callees failed mid taint search; truncating"
+                );
+                truncated = true;
+                continue;
+            }
+        };
+        for next in callees {
+            if visited.contains(&next.symbol) {
+                continue;
+            }
+            visited.insert(next.symbol.clone());
+            parent.insert(next.symbol.clone(), current.clone());
+
+            if next.symbol == sink {
+                sink_node = Some(next);
+                break 'bfs;
+            }
+            frontier.push_back((next, depth + 1));
+        }
+    }
+
+    if let Some(end) = sink_node {
+        let mut path: Vec<CallNode> = vec![end.clone()];
+        let mut cursor = end.symbol.clone();
+        while let Some(prev) = parent.get(&cursor) {
+            path.push(prev.clone());
+            if prev.symbol == source {
+                break;
+            }
+            cursor = prev.symbol.clone();
+        }
+        path.reverse();
+        let nodes: Vec<TaintNode> = path
+            .into_iter()
+            .enumerate()
+            .map(|(i, n)| TaintNode {
+                symbol: n.symbol,
+                file: n.file,
+                line: n.line,
+                hop_index: i as u32,
+            })
+            .collect();
+        return Ok(TaintSearchResult {
+            nodes,
+            truncated: false,
+            sink_reached: true,
+        });
+    }
+
+    if truncated {
+        warn!(
+            target: "argus::code_intel",
+            source = %source,
+            sink = %sink,
+            max_hops,
+            cli_invocations,
+            "taint_search_truncated"
+        );
+    }
+    Ok(TaintSearchResult {
+        nodes: Vec::new(),
+        truncated,
+        sink_reached: false,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -525,13 +691,106 @@ mod tests {
         assert_eq!(s.symbol, "bare");
     }
 
-    #[test]
-    fn build_index_dir_respects_env() {
-        std::env::set_var("ARGUS_DATA_DIR", "/var/argus");
-        let p = build_index_dir("abc123");
-        assert_eq!(p, PathBuf::from("/var/argus/codegraph_indexes/abc123"));
-        std::env::remove_var("ARGUS_DATA_DIR");
-        let p2 = build_index_dir("abc123");
-        assert_eq!(p2, PathBuf::from("/tmp/codegraph_indexes/abc123"));
+    // `build_index_dir` reads ARGUS_DATA_DIR via std::env which is process-wide.
+    // Per Phase 0 commit 95550989, env-mutating tests cause races with parallel
+    // runner::tests::execute_* tests that also probe the same data dir. The
+    // function's path-suffix component is already covered indirectly via cache
+    // layout tests; an explicit env-mutating test for the root prefix is
+    // intentionally omitted.
+
+    // -----------------------------------------------------------------------
+    // BFS taint search tests (`find_taint_through` core).
+    // -----------------------------------------------------------------------
+
+    fn cn(sym: &str, file: &str, line: u32) -> CallNode {
+        CallNode {
+            symbol: sym.to_string(),
+            file: file.to_string(),
+            line,
+            language: "test".to_string(),
+            depth: 0,
+        }
+    }
+
+    /// Build a closure that returns canned callees from a static map.
+    fn graph_provider(
+        graph: std::collections::HashMap<&'static str, Vec<CallNode>>,
+    ) -> impl FnMut(String) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Vec<CallNode>>> + Send>>
+    {
+        move |sym: String| {
+            let v = graph.get(sym.as_str()).cloned().unwrap_or_default();
+            Box::pin(async move { Ok(v) })
+        }
+    }
+
+    #[tokio::test]
+    async fn bfs_finds_sink_with_monotonic_hop_index() {
+        // src → mid → sink
+        let mut g = std::collections::HashMap::new();
+        g.insert("src", vec![cn("mid", "a.rs", 10)]);
+        g.insert("mid", vec![cn("sink", "b.rs", 20)]);
+        g.insert("sink", vec![]);
+        let result = bfs_taint_search("src", "sink", 3, graph_provider(g))
+            .await
+            .expect("bfs");
+        assert!(result.sink_reached, "should reach sink: {result:?}");
+        assert!(!result.truncated);
+        let symbols: Vec<&str> = result.nodes.iter().map(|n| n.symbol.as_str()).collect();
+        assert_eq!(symbols, vec!["src", "mid", "sink"]);
+        let hop_indices: Vec<u32> = result.nodes.iter().map(|n| n.hop_index).collect();
+        assert_eq!(hop_indices, vec![0, 1, 2], "hop_index must be monotonic");
+    }
+
+    #[tokio::test]
+    async fn bfs_max_hops_one_with_no_direct_edge_truncates() {
+        // src → mid → sink; max_hops = 1 cannot reach sink (needs 2 hops).
+        let mut g = std::collections::HashMap::new();
+        g.insert("src", vec![cn("mid", "a.rs", 1)]);
+        g.insert("mid", vec![cn("sink", "b.rs", 2)]);
+        let result = bfs_taint_search("src", "sink", 1, graph_provider(g))
+            .await
+            .expect("bfs");
+        assert!(!result.sink_reached, "max_hops=1 cannot reach sink: {result:?}");
+        assert!(result.truncated, "truncated must be set when hop cap blocks search");
+        assert!(result.nodes.is_empty(), "no path returned on truncation");
+    }
+
+    #[tokio::test]
+    async fn bfs_cycle_does_not_infinite_loop() {
+        // src → a → b → a (cycle), sink is reachable only via straight path → not reached.
+        let mut g = std::collections::HashMap::new();
+        g.insert("src", vec![cn("a", "x.rs", 1)]);
+        g.insert("a", vec![cn("b", "x.rs", 2)]);
+        g.insert("b", vec![cn("a", "x.rs", 1)]); // cycle back to a
+        let result = bfs_taint_search("src", "sink", 5, graph_provider(g))
+            .await
+            .expect("bfs");
+        assert!(!result.sink_reached, "sink unreachable in this graph");
+        // Sink not reached; visited set prevented infinite loop. Either
+        // truncated (hop cap reached against cycle) or simply finished —
+        // both acceptable: the load-bearing assertion is that we returned.
+    }
+
+    #[tokio::test]
+    async fn bfs_source_equals_sink_short_circuits() {
+        let g = std::collections::HashMap::new();
+        let result = bfs_taint_search("same", "same", 5, graph_provider(g))
+            .await
+            .expect("bfs");
+        assert!(result.sink_reached);
+        assert!(!result.truncated);
+        assert_eq!(result.nodes.len(), 1);
+        assert_eq!(result.nodes[0].symbol, "same");
+        assert_eq!(result.nodes[0].hop_index, 0);
+    }
+
+    #[tokio::test]
+    async fn bfs_empty_source_or_sink_returns_truncated_unreachable() {
+        let g = std::collections::HashMap::new();
+        let result = bfs_taint_search("", "sink", 3, graph_provider(g))
+            .await
+            .expect("bfs");
+        assert!(!result.sink_reached);
+        assert!(result.truncated);
     }
 }
