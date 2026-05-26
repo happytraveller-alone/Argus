@@ -274,12 +274,10 @@ async fn two_pass_for_finding(
         AuditStage::Trace,
         &pass1_prompt,
         &ctx.llm_config,
+        events,
     )
     .await
-    .map(|result| {
-        events.emit(result.invocation.attempt_event.clone());
-        result.payload
-    })
+    .map(|result| result.payload)
     .map_err(|err| anyhow::anyhow!("trace pass1 invoke failed: {err}"))?;
 
     let mut queries = retrieval.queries;
@@ -329,12 +327,10 @@ async fn two_pass_for_finding(
         AuditStage::Trace,
         &pass2_prompt,
         &ctx.llm_config,
+        events,
     )
     .await
-    .map(|result| {
-        events.emit(result.invocation.attempt_event.clone());
-        result.payload
-    })
+    .map(|result| result.payload)
     .map_err(|err| anyhow::anyhow!("trace pass2 invoke failed: {err}"))?;
     if verdict.finding_id.is_empty() {
         verdict.finding_id = finding_id.clone();
@@ -495,12 +491,9 @@ async fn single_pass_for_finding(
         prompt.push_str(amp);
     }
     let output =
-        invoke_json::<TraceOutput>(&*ctx.invoker, AuditStage::Trace, &prompt, &ctx.llm_config)
-            .await
-            .map(|result| {
-                events.emit(result.invocation.attempt_event);
-                result.payload
-            })?;
+        invoke_json::<TraceOutput>(&*ctx.invoker, AuditStage::Trace, &prompt, &ctx.llm_config, events)
+            .await?
+            .payload;
     let trace = output
         .traces
         .into_iter()

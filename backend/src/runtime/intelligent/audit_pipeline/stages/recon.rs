@@ -34,12 +34,9 @@ pub async fn run(
     if let Some(amp) = amplification {
         prompt.push_str(amp);
     }
-    let mut output = invoke_json::<ReconOutput>(&*ctx.invoker, stage, &prompt, &ctx.llm_config)
-        .await
-        .map(|result| {
-            events.emit(result.invocation.attempt_event);
-            result.payload
-        })?;
+    let mut output = invoke_json::<ReconOutput>(&*ctx.invoker, stage, &prompt, &ctx.llm_config, events)
+        .await?
+        .payload;
     if output.initial_tasks.is_empty() {
         output = fallback_recon(&ctx.entries);
     }

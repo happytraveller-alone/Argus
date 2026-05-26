@@ -546,6 +546,14 @@ export default function AgentAuditDetail() {
 									const redactedError = data?.redacted_error;
 									const isLlm = ev.kind === "llm_attempt";
 									const isAgent = ev.kind === "agent_started" || ev.kind === "agent_completed";
+									const promptPreview = data?.promptPreview;
+									const responsePreview = data?.responsePreview;
+									const rawBodyPreview = data?.rawBodyPreview;
+									const httpStatus = data?.httpStatus;
+									const attemptsCount = data?.attempts;
+									const promptChars = data?.promptChars;
+									const responseChars = data?.responseChars;
+									const stageLabel = data?.stage;
 									return (
 										<div key={idx} className="flex items-start gap-3 border-b border-border/30 px-2 py-2.5 last:border-b-0">
 											<div className="flex flex-col items-center">
@@ -575,16 +583,47 @@ export default function AgentAuditDetail() {
 													<p className="mt-0.5 text-xs text-foreground/80">{ev.message}</p>
 												)}
 												{isLlm && data && (
-													<div className="mt-1.5 space-y-1 rounded border border-violet-500/20 bg-violet-500/5 px-2.5 py-1.5">
+													<div className="mt-1.5 space-y-1.5 rounded border border-violet-500/20 bg-violet-500/5 px-2.5 py-1.5">
 														<div className="flex flex-wrap gap-x-4 gap-y-0.5 text-[11px]">
+															{stageLabel ? (
+																<span className="text-muted-foreground">阶段: <span className="text-violet-200">{String(stageLabel)}</span></span>
+															) : null}
 															<span className="text-muted-foreground">模型: <span className="text-violet-200">{String(data.model || "-")}</span></span>
 															<span className="text-muted-foreground">提供商: <span className="text-violet-200">{String(data.provider || "-")}</span></span>
 															<span className="text-muted-foreground">状态: <span className={data.success ? "text-emerald-300" : "text-rose-300"}>{data.success ? "成功" : "失败"}</span></span>
+															{attemptsCount != null ? (
+																<span className="text-muted-foreground">HTTP尝试: <span className="text-violet-200">{String(attemptsCount)}</span></span>
+															) : null}
+															{httpStatus != null ? (
+																<span className="text-muted-foreground">HTTP状态: <span className={Number(httpStatus) >= 200 && Number(httpStatus) < 300 ? "text-emerald-300" : "text-rose-300"}>{String(httpStatus)}</span></span>
+															) : null}
 														</div>
 														<div className="flex flex-wrap gap-x-4 gap-y-0.5 text-[11px]">
 															<span className="text-muted-foreground">开始: <span className="text-foreground/70">{String(data.started || "-")}</span></span>
 															<span className="text-muted-foreground">完成: <span className="text-foreground/70">{String(data.completed || "-")}</span></span>
 														</div>
+														{promptPreview ? (
+															<details className="rounded border border-violet-500/15 bg-violet-500/5 px-2 py-1">
+																<summary className="cursor-pointer text-[11px] text-violet-300/90">
+																	请求摘要{promptChars != null ? ` (${String(promptChars)} 字符)` : ""}
+																</summary>
+																<pre className="mt-1 max-h-60 overflow-auto whitespace-pre-wrap break-words text-[10.5px] text-foreground/80">{String(promptPreview)}</pre>
+															</details>
+														) : null}
+														{responsePreview ? (
+															<details className="rounded border border-violet-500/15 bg-violet-500/5 px-2 py-1">
+																<summary className="cursor-pointer text-[11px] text-violet-300/90">
+																	响应摘要{responseChars != null ? ` (${String(responseChars)} 字符)` : ""}
+																</summary>
+																<pre className="mt-1 max-h-60 overflow-auto whitespace-pre-wrap break-words text-[10.5px] text-foreground/80">{String(responsePreview)}</pre>
+															</details>
+														) : null}
+														{rawBodyPreview ? (
+															<details className="rounded border border-rose-500/20 bg-rose-500/5 px-2 py-1" open={Boolean(redactedError)}>
+																<summary className="cursor-pointer text-[11px] text-rose-300/90">原始响应体（用于诊断解析错误）</summary>
+																<pre className="mt-1 max-h-60 overflow-auto whitespace-pre-wrap break-words text-[10.5px] text-foreground/80">{String(rawBodyPreview)}</pre>
+															</details>
+														) : null}
 														{redactedError ? (
 															<p className="text-[11px] text-rose-300">错误: {String(redactedError)}</p>
 														) : null}

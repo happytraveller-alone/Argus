@@ -26,12 +26,9 @@ pub async fn run(
         prompt.push_str(amp);
     }
     let mut output =
-        invoke_json::<ValidationOutput>(&*ctx.invoker, stage, &prompt, &ctx.llm_config)
-            .await
-            .map(|result| {
-                events.emit(result.invocation.attempt_event);
-                result.payload
-            })?;
+        invoke_json::<ValidationOutput>(&*ctx.invoker, stage, &prompt, &ctx.llm_config, events)
+            .await?
+            .payload;
     if output.findings.is_empty() {
         output.findings = hunt
             .findings

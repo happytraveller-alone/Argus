@@ -10,6 +10,50 @@ use crate::runtime::intelligent::{
 /// Maximum number of HTTP attempts (1 initial + 2 retries = 3 total).
 const MAX_HTTP_ATTEMPTS: u32 = 3;
 
+/// Hard upper bound on bytes copied out of the HTTP body for diagnostics.
+/// Beyond this we truncate and append an ellipsis marker. Keeps memory and
+/// log volume bounded when the gateway returns a multi-megabyte HTML error page.
+const RAW_BODY_PREVIEW_BYTES: usize = 2048;
+
+/// Hard upper bound on chars copied from the prompt sent to the LLM. The
+/// event log shows just enough to identify which call is which without
+/// embedding the entire payload (which may include source code).
+const PROMPT_PREVIEW_CHARS: usize = 480;
+
+/// Hard upper bound on chars copied from the LLM-returned content. The full
+/// content is fed back into the audit pipeline; the preview is purely for
+/// human inspection of the time log.
+const RESPONSE_PREVIEW_CHARS: usize = 800;
+
+/// Build a truncated preview of a text payload that is safe to embed in an
+/// event-log JSON object. Indicates truncation with a trailing marker so a
+/// human reading the log knows the string is not the full content.
+fn build_text_preview(text: &str, max_chars: usize) -> String {
+    let total = text.chars().count();
+    if total <= max_chars {
+        return text.to_string();
+    }
+    let head: String = text.chars().take(max_chars).collect();
+    format!("{head}…[truncated {} chars]", total - max_chars)
+}
+
+/// Build a truncated preview of raw response bytes. The gateway response is
+/// expected to be UTF-8 JSON but on failure may be anything (HTML, binary,
+/// partial bytes), so we render via lossy UTF-8 conversion.
+fn build_body_preview(body: &[u8]) -> String {
+    let head = if body.len() <= RAW_BODY_PREVIEW_BYTES {
+        body
+    } else {
+        &body[..RAW_BODY_PREVIEW_BYTES]
+    };
+    let text = String::from_utf8_lossy(head).to_string();
+    if body.len() > RAW_BODY_PREVIEW_BYTES {
+        format!("{text}…[truncated {} bytes]", body.len() - RAW_BODY_PREVIEW_BYTES)
+    } else {
+        text
+    }
+}
+
 /// Compute wait duration for a transient HTTP error.
 ///
 /// Honors the `Retry-After` header when present (parsed as seconds).
@@ -36,6 +80,13 @@ pub struct IntelligentLlmInvocation {
 pub struct IntelligentLlmInvocationError {
     pub stage: &'static str,
     pub redacted_message: String,
+    /// `llm_attempt` event carrying prompt/response/raw-body previews and
+    /// HTTP status. Emitted by the pipeline layer (`invoke_json`) so the
+    /// failure attempt surfaces in the task event log alongside the
+    /// audit_pipeline_failed marker that comes from `task.rs`. Without this,
+    /// the user only sees the opaque `[llm_request] ...` string and has no
+    /// way to inspect what the gateway actually returned.
+    pub attempt_event: IntelligentTaskEvent,
 }
 
 impl std::fmt::Display for IntelligentLlmInvocationError {
@@ -45,6 +96,25 @@ impl std::fmt::Display for IntelligentLlmInvocationError {
 }
 
 impl std::error::Error for IntelligentLlmInvocationError {}
+
+/// Outcome of a single end-to-end LLM HTTP exchange. Returned by the inner
+/// provider-specific methods so `invoke()` can build a single rich
+/// `llm_attempt` event regardless of provider or success/failure status.
+struct AttemptOutcome {
+    /// Extracted text content. Empty when `error` is set.
+    content: String,
+    /// Truncated UTF-8 preview of the raw HTTP response body, populated
+    /// whenever bytes were read (success or decode-failure). Lets the
+    /// time-log show exactly what the upstream gateway returned when the
+    /// body was not parseable as the expected JSON shape.
+    raw_body_preview: Option<String>,
+    /// HTTP status code of the final attempt (last retry).
+    http_status: Option<u16>,
+    /// Total HTTP attempts made (1..=MAX_HTTP_ATTEMPTS).
+    attempts: u32,
+    /// Redacted error description when the call did not yield usable content.
+    error: Option<String>,
+}
 
 #[async_trait]
 pub trait IntelligentLlmInvoker {
@@ -113,7 +183,7 @@ impl IntelligentLlmInvoker for HttpIntelligentLlmInvoker {
         let started_at = now_rfc3339();
         let timeout = std::time::Duration::from_millis(config.timeout_ms.max(1) as u64);
 
-        let result = match config.provider {
+        let outcome = match config.provider {
             IntelligentLlmProvider::OpenAiCompatible => {
                 self.invoke_openai(prompt, config, timeout).await
             }
@@ -123,64 +193,77 @@ impl IntelligentLlmInvoker for HttpIntelligentLlmInvoker {
         };
 
         let finished_at = now_rfc3339();
+        build_invocation_result(prompt, config, &started_at, &finished_at, outcome)
+    }
+}
 
-        match result {
-            Ok(content) => {
-                if content.trim().is_empty() {
-                    let attempt_event = IntelligentTaskEvent::new("llm_attempt").with_data(json!({
-                        "provider": format!("{:?}", config.provider),
-                        "model": config.model,
-                        "fingerprint": config.llm_fingerprint_for_log(),
-                        "started": started_at,
-                        "completed": finished_at,
-                        "success": false,
-                        "redacted_error": "LLM returned empty response",
-                    }));
-                    return Err(IntelligentLlmInvocationError {
-                        stage: "llm_request",
-                        redacted_message: attempt_event
-                            .data
-                            .as_ref()
-                            .and_then(|d| d["redacted_error"].as_str())
-                            .unwrap_or("LLM returned empty response")
-                            .to_string(),
-                    });
-                }
-                let attempt_event = IntelligentTaskEvent::new("llm_attempt").with_data(json!({
-                    "provider": format!("{:?}", config.provider),
-                    "model": config.model,
-                    "fingerprint": config.llm_fingerprint_for_log(),
-                    "started": started_at,
-                    "completed": finished_at,
-                    "success": true,
-                }));
-                Ok(IntelligentLlmInvocation {
-                    content,
-                    finished_at,
-                    attempt_event,
-                })
-            }
-            Err(redacted_message) => {
-                let attempt_event = IntelligentTaskEvent::new("llm_attempt").with_data(json!({
-                    "provider": format!("{:?}", config.provider),
-                    "model": config.model,
-                    "fingerprint": config.llm_fingerprint_for_log(),
-                    "started": started_at,
-                    "completed": finished_at,
-                    "success": false,
-                    "redacted_error": redacted_message,
-                }));
-                Err(IntelligentLlmInvocationError {
-                    stage: "llm_request",
-                    redacted_message: attempt_event
-                        .data
-                        .as_ref()
-                        .and_then(|d| d["redacted_error"].as_str())
-                        .unwrap_or("unknown")
-                        .to_string(),
-                })
-            }
-        }
+/// Translate the raw provider outcome into the public Result the trait
+/// returns, building the rich `llm_attempt` event in a single place so both
+/// providers share the same shape. The event is always populated — on
+/// failure it is moved into the error so the pipeline layer can emit it.
+fn build_invocation_result(
+    prompt: &str,
+    config: &IntelligentLlmConfig,
+    started_at: &str,
+    finished_at: &str,
+    outcome: AttemptOutcome,
+) -> Result<IntelligentLlmInvocation, IntelligentLlmInvocationError> {
+    let content_is_empty = outcome.content.trim().is_empty();
+    let success = outcome.error.is_none() && !content_is_empty;
+
+    let prompt_chars = prompt.chars().count();
+    let prompt_preview = redact_for_logging(
+        &build_text_preview(prompt, PROMPT_PREVIEW_CHARS),
+        config,
+    );
+
+    let mut data = json!({
+        "provider": format!("{:?}", config.provider),
+        "model": config.model,
+        "fingerprint": config.llm_fingerprint_for_log(),
+        "started": started_at,
+        "completed": finished_at,
+        "success": success,
+        "attempts": outcome.attempts,
+        "promptChars": prompt_chars,
+        "promptPreview": prompt_preview,
+    });
+
+    if let Some(status) = outcome.http_status {
+        data["httpStatus"] = json!(status);
+    }
+    if let Some(raw) = outcome.raw_body_preview.as_deref() {
+        data["rawBodyPreview"] = json!(redact_for_logging(raw, config));
+    }
+
+    if success {
+        let response_chars = outcome.content.chars().count();
+        let response_preview = redact_for_logging(
+            &build_text_preview(&outcome.content, RESPONSE_PREVIEW_CHARS),
+            config,
+        );
+        data["responseChars"] = json!(response_chars);
+        data["responsePreview"] = json!(response_preview);
+
+        let attempt_event = IntelligentTaskEvent::new("llm_attempt").with_data(data);
+        Ok(IntelligentLlmInvocation {
+            content: outcome.content,
+            finished_at: finished_at.to_string(),
+            attempt_event,
+        })
+    } else {
+        let error_text = outcome
+            .error
+            .unwrap_or_else(|| "LLM returned empty response".to_string());
+        let redacted_message = redact_for_logging(&error_text, config);
+        data["redacted_error"] = json!(redacted_message.clone());
+
+        let attempt_event = IntelligentTaskEvent::new("llm_attempt").with_data(data);
+        Err(IntelligentLlmInvocationError {
+            stage: "llm_request",
+            redacted_message,
+            attempt_event,
+        })
     }
 }
 
@@ -190,9 +273,19 @@ impl HttpIntelligentLlmInvoker {
         prompt: &str,
         config: &IntelligentLlmConfig,
         timeout: std::time::Duration,
-    ) -> Result<String, String> {
-        let url = build_endpoint_url(&config.base_url, "chat/completions")
-            .map_err(|e| redact_for_logging(&e, config))?;
+    ) -> AttemptOutcome {
+        let url = match build_endpoint_url(&config.base_url, "chat/completions") {
+            Ok(u) => u,
+            Err(e) => {
+                return AttemptOutcome {
+                    content: String::new(),
+                    raw_body_preview: None,
+                    http_status: None,
+                    attempts: 0,
+                    error: Some(redact_for_logging(&e, config)),
+                };
+            }
+        };
 
         let body = json!({
             "model": config.model,
@@ -203,8 +296,11 @@ impl HttpIntelligentLlmInvoker {
         });
 
         let mut last_err = String::new();
+        let mut last_status: Option<u16> = None;
+        let mut attempts: u32 = 0;
         for attempt in 0..MAX_HTTP_ATTEMPTS {
-            let response = self
+            attempts = attempt + 1;
+            let response = match self
                 .client
                 .post(url.clone())
                 .timeout(timeout)
@@ -212,9 +308,21 @@ impl HttpIntelligentLlmInvoker {
                 .json(&body)
                 .send()
                 .await
-                .map_err(|e| redact_for_logging(&e.to_string(), config))?;
+            {
+                Ok(r) => r,
+                Err(e) => {
+                    return AttemptOutcome {
+                        content: String::new(),
+                        raw_body_preview: None,
+                        http_status: last_status,
+                        attempts,
+                        error: Some(redact_for_logging(&e.to_string(), config)),
+                    };
+                }
+            };
 
             let status = response.status();
+            last_status = Some(status.as_u16());
             if is_retryable_status(status) {
                 let retry_after = response
                     .headers()
@@ -233,23 +341,79 @@ impl HttpIntelligentLlmInvoker {
                 continue;
             }
 
+            // Read raw bytes first so we can show the gateway response in
+            // event logs when JSON decoding fails. `response.json()` swallows
+            // the body before yielding its opaque "error decoding response
+            // body" message — the actual root cause (HTML error page, empty
+            // body, partial chunk, content-type mismatch) becomes invisible.
+            let bytes = match response.bytes().await {
+                Ok(b) => b,
+                Err(e) => {
+                    return AttemptOutcome {
+                        content: String::new(),
+                        raw_body_preview: None,
+                        http_status: last_status,
+                        attempts,
+                        error: Some(redact_for_logging(
+                            &format!("HTTP body read failed: {e}"),
+                            config,
+                        )),
+                    };
+                }
+            };
+
+            let raw_preview = build_body_preview(&bytes);
+
             if !status.is_success() {
-                return Err(format!("HTTP {status}"));
+                return AttemptOutcome {
+                    content: String::new(),
+                    raw_body_preview: Some(raw_preview),
+                    http_status: last_status,
+                    attempts,
+                    error: Some(format!("HTTP {status}")),
+                };
             }
 
-            let json: serde_json::Value = response
-                .json()
-                .await
-                .map_err(|e| redact_for_logging(&e.to_string(), config))?;
+            let json: serde_json::Value = match serde_json::from_slice(&bytes) {
+                Ok(v) => v,
+                Err(e) => {
+                    return AttemptOutcome {
+                        content: String::new(),
+                        raw_body_preview: Some(raw_preview),
+                        http_status: last_status,
+                        attempts,
+                        error: Some(redact_for_logging(
+                            &format!("error decoding response body: {e}"),
+                            config,
+                        )),
+                    };
+                }
+            };
 
             let content = json["choices"][0]["message"]["content"]
                 .as_str()
                 .unwrap_or("")
                 .to_string();
-            return Ok(content);
+            return AttemptOutcome {
+                content,
+                raw_body_preview: Some(raw_preview),
+                http_status: last_status,
+                attempts,
+                error: None,
+            };
         }
 
-        Err(last_err)
+        AttemptOutcome {
+            content: String::new(),
+            raw_body_preview: None,
+            http_status: last_status,
+            attempts,
+            error: Some(if last_err.is_empty() {
+                "exhausted HTTP retries".to_string()
+            } else {
+                last_err
+            }),
+        }
     }
 
     async fn invoke_anthropic(
@@ -257,9 +421,19 @@ impl HttpIntelligentLlmInvoker {
         prompt: &str,
         config: &IntelligentLlmConfig,
         timeout: std::time::Duration,
-    ) -> Result<String, String> {
-        let url = build_endpoint_url(&config.base_url, "messages")
-            .map_err(|e| redact_for_logging(&e, config))?;
+    ) -> AttemptOutcome {
+        let url = match build_endpoint_url(&config.base_url, "messages") {
+            Ok(u) => u,
+            Err(e) => {
+                return AttemptOutcome {
+                    content: String::new(),
+                    raw_body_preview: None,
+                    http_status: None,
+                    attempts: 0,
+                    error: Some(redact_for_logging(&e, config)),
+                };
+            }
+        };
 
         let body = json!({
             "model": config.model,
@@ -269,9 +443,12 @@ impl HttpIntelligentLlmInvoker {
         });
 
         let mut last_err = String::new();
+        let mut last_status: Option<u16> = None;
+        let mut attempts: u32 = 0;
         let mut response_opt: Option<reqwest::Response> = None;
         for attempt in 0..MAX_HTTP_ATTEMPTS {
-            let response = self
+            attempts = attempt + 1;
+            let response = match self
                 .client
                 .post(url.clone())
                 .timeout(timeout)
@@ -280,9 +457,21 @@ impl HttpIntelligentLlmInvoker {
                 .json(&body)
                 .send()
                 .await
-                .map_err(|e| redact_for_logging(&e.to_string(), config))?;
+            {
+                Ok(r) => r,
+                Err(e) => {
+                    return AttemptOutcome {
+                        content: String::new(),
+                        raw_body_preview: None,
+                        http_status: last_status,
+                        attempts,
+                        error: Some(redact_for_logging(&e.to_string(), config)),
+                    };
+                }
+            };
 
             let status = response.status();
+            last_status = Some(status.as_u16());
             if is_retryable_status(status) {
                 let retry_after = response
                     .headers()
@@ -301,23 +490,71 @@ impl HttpIntelligentLlmInvoker {
                 continue;
             }
 
-            if !status.is_success() {
-                return Err(format!("HTTP {status}"));
-            }
-
             response_opt = Some(response);
             break;
         }
 
         let final_response = match response_opt {
             Some(r) => r,
-            None => return Err(last_err),
+            None => {
+                return AttemptOutcome {
+                    content: String::new(),
+                    raw_body_preview: None,
+                    http_status: last_status,
+                    attempts,
+                    error: Some(if last_err.is_empty() {
+                        "exhausted HTTP retries".to_string()
+                    } else {
+                        last_err
+                    }),
+                };
+            }
         };
 
-        let json: serde_json::Value = final_response
-            .json()
-            .await
-            .map_err(|e| redact_for_logging(&e.to_string(), config))?;
+        let bytes = match final_response.bytes().await {
+            Ok(b) => b,
+            Err(e) => {
+                return AttemptOutcome {
+                    content: String::new(),
+                    raw_body_preview: None,
+                    http_status: last_status,
+                    attempts,
+                    error: Some(redact_for_logging(
+                        &format!("HTTP body read failed: {e}"),
+                        config,
+                    )),
+                };
+            }
+        };
+        let raw_preview = build_body_preview(&bytes);
+
+        if let Some(status) = last_status {
+            if !(200..300).contains(&status) {
+                return AttemptOutcome {
+                    content: String::new(),
+                    raw_body_preview: Some(raw_preview),
+                    http_status: last_status,
+                    attempts,
+                    error: Some(format!("HTTP {status}")),
+                };
+            }
+        }
+
+        let json: serde_json::Value = match serde_json::from_slice(&bytes) {
+            Ok(v) => v,
+            Err(e) => {
+                return AttemptOutcome {
+                    content: String::new(),
+                    raw_body_preview: Some(raw_preview),
+                    http_status: last_status,
+                    attempts,
+                    error: Some(redact_for_logging(
+                        &format!("error decoding response body: {e}"),
+                        config,
+                    )),
+                };
+            }
+        };
 
         let content_array = json.get("content").and_then(|c| c.as_array());
 
@@ -368,7 +605,13 @@ impl HttpIntelligentLlmInvoker {
             text_content
         };
 
-        Ok(content)
+        AttemptOutcome {
+            content,
+            raw_body_preview: Some(raw_preview),
+            http_status: last_status,
+            attempts,
+            error: None,
+        }
     }
 }
 

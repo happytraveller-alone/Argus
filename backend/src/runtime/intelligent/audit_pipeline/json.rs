@@ -1,11 +1,45 @@
 use serde::de::DeserializeOwned;
+use serde_json::json;
 
 use crate::runtime::intelligent::{
     config::IntelligentLlmConfig,
     llm::{IntelligentLlmInvocation, IntelligentLlmInvocationError, IntelligentLlmInvoker},
+    types::IntelligentTaskEvent,
 };
 
-use super::context::AuditStage;
+use super::context::{AuditStage, PipelineEventSink};
+
+/// Tag an `llm_attempt` event with the pipeline stage that issued the call
+/// (and an optional sub-phase such as `repair`). Without the tag the event
+/// log shows the LLM exchange in isolation; with it, operators can trace
+/// which stage failed when multiple stages run in close succession.
+fn annotate_with_stage(event: &mut IntelligentTaskEvent, stage: AuditStage, phase: Option<&str>) {
+    let data = event.data.get_or_insert_with(|| json!({}));
+    if let Some(obj) = data.as_object_mut() {
+        let stage_label = match phase {
+            Some(p) => format!("{}:{}", stage.as_str(), p),
+            None => stage.as_str().to_string(),
+        };
+        obj.insert("stage".to_string(), json!(stage_label));
+    }
+}
+
+/// Emit a stage-tagged `llm_attempt` event from a successful invocation.
+fn emit_success(events: &PipelineEventSink, stage: AuditStage, phase: Option<&str>, invocation: &IntelligentLlmInvocation) {
+    let mut event = invocation.attempt_event.clone();
+    annotate_with_stage(&mut event, stage, phase);
+    events.emit(event);
+}
+
+/// Emit a stage-tagged `llm_attempt` event from a failed invocation. This is
+/// the critical surface that, prior to this refactor, dropped the failure
+/// attempt on the floor — leaving the audit time log with `audit_pipeline_failed`
+/// but no preceding context for what the gateway actually returned.
+fn emit_failure(events: &PipelineEventSink, stage: AuditStage, phase: Option<&str>, err: &IntelligentLlmInvocationError) {
+    let mut event = err.attempt_event.clone();
+    annotate_with_stage(&mut event, stage, phase);
+    events.emit(event);
+}
 
 #[derive(Debug)]
 pub enum StageInvokeError {
@@ -31,19 +65,30 @@ pub struct StageInvokeResult<T> {
     pub repair_used: bool,
 }
 
+/// Invoke the LLM expecting a JSON payload, with one repair attempt on parse
+/// failure. Emits a stage-tagged `llm_attempt` event for every invocation —
+/// success, failure, primary, and repair — so the audit time log reflects the
+/// complete LLM interaction trail.
 pub async fn invoke_json<T>(
     invoker: &(dyn IntelligentLlmInvoker + Send + Sync),
     stage: AuditStage,
     prompt: &str,
     config: &IntelligentLlmConfig,
+    events: &PipelineEventSink,
 ) -> Result<StageInvokeResult<T>, StageInvokeError>
 where
     T: DeserializeOwned,
 {
-    let invocation = invoker
-        .invoke(prompt, config)
-        .await
-        .map_err(StageInvokeError::Llm)?;
+    let invocation = match invoker.invoke(prompt, config).await {
+        Ok(inv) => {
+            emit_success(events, stage, None, &inv);
+            inv
+        }
+        Err(err) => {
+            emit_failure(events, stage, None, &err);
+            return Err(StageInvokeError::Llm(err));
+        }
+    };
     match parse_json::<T>(&invocation.content) {
         Ok(payload) => Ok(StageInvokeResult {
             payload,
@@ -52,10 +97,16 @@ where
         }),
         Err(first_error) => {
             let repair_prompt = build_repair_prompt(stage, &first_error, &invocation.content);
-            let repair_invocation = invoker
-                .invoke(&repair_prompt, config)
-                .await
-                .map_err(StageInvokeError::Llm)?;
+            let repair_invocation = match invoker.invoke(&repair_prompt, config).await {
+                Ok(inv) => {
+                    emit_success(events, stage, Some("repair"), &inv);
+                    inv
+                }
+                Err(err) => {
+                    emit_failure(events, stage, Some("repair"), &err);
+                    return Err(StageInvokeError::Llm(err));
+                }
+            };
             let payload =
                 parse_json::<T>(&repair_invocation.content).map_err(StageInvokeError::Json)?;
             Ok(StageInvokeResult {

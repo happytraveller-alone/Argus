@@ -108,12 +108,9 @@ pub async fn run(
                     .await?;
                 serde_json::from_value(result.payload)?
             } else {
-                invoke_json::<HuntOutput>(&*ctx.invoker, stage, &prompt, &ctx.llm_config)
-                    .await
-                    .map(|result| {
-                        events.emit(result.invocation.attempt_event);
-                        result.payload
-                    })?
+                invoke_json::<HuntOutput>(&*ctx.invoker, stage, &prompt, &ctx.llm_config, &events)
+                    .await?
+                    .payload
             };
             for finding in &mut output.findings {
                 if finding.task_id.is_none() {
@@ -370,13 +367,11 @@ async fn enrich_dismissal_two_pass(
         AuditStage::Hunt,
         &pass1_prompt,
         &ctx.llm_config,
+        events,
     )
     .await
     {
-        Ok(result) => {
-            events.emit(result.invocation.attempt_event.clone());
-            result.payload
-        }
+        Ok(result) => result.payload,
         Err(err) => {
             tracing::warn!(finding_id = %finding_id, error = %err, "hunt pass1 invoke failed");
             emit_fallback(events, &finding_id, "two_pass_error");
@@ -520,13 +515,11 @@ async fn enrich_dismissal_two_pass(
         AuditStage::Hunt,
         &pass2_prompt,
         &ctx.llm_config,
+        events,
     )
     .await
     {
-        Ok(result) => {
-            events.emit(result.invocation.attempt_event.clone());
-            result.payload
-        }
+        Ok(result) => result.payload,
         Err(err) => {
             tracing::warn!(finding_id = %finding_id, error = %err, "hunt pass2 invoke failed");
             emit_fallback(events, &finding_id, "two_pass_error");
@@ -836,6 +829,7 @@ mod stub {
                 Err(msg) => Err(IntelligentLlmInvocationError {
                     stage: "llm_request",
                     redacted_message: msg,
+                    attempt_event: IntelligentTaskEvent::new("llm_attempt"),
                 }),
             }
         }
