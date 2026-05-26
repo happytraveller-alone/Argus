@@ -1,0 +1,15 @@
+{
+  "rule_id": "joern-c-unsafe-gets",
+  "cwe": ["CWE-120"],
+  "cve": [],
+  "severity": "HIGH",
+  "confidence": "MEDIUM",
+  "file_path": "joern-c-unsafe-gets/positive.c",
+  "function": "f",
+  "start_line": 6,
+  "end_line": 6,
+  "evidence": {
+    "call": "gets",
+    "code": "gets(buf)"
+  }
+}

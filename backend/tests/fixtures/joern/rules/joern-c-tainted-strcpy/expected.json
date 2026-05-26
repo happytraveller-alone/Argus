@@ -1,0 +1,15 @@
+{
+  "rule_id": "joern-c-tainted-strcpy",
+  "cwe": ["CWE-120"],
+  "cve": [],
+  "severity": "HIGH",
+  "confidence": "HIGH",
+  "file_path": "joern-c-tainted-strcpy/positive.c",
+  "function": "f",
+  "start_line": 8,
+  "end_line": 8,
+  "evidence": {
+    "call": "strcpy",
+    "code": "strcpy(buf, src)"
+  }
+}

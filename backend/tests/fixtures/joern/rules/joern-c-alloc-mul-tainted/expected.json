@@ -1,0 +1,15 @@
+{
+  "rule_id": "joern-c-alloc-mul-tainted",
+  "cwe": ["CWE-190", "CWE-680"],
+  "cve": [],
+  "severity": "HIGH",
+  "confidence": "MEDIUM",
+  "file_path": "joern-c-alloc-mul-tainted/positive.c",
+  "function": "f",
+  "start_line": 8,
+  "end_line": 8,
+  "evidence": {
+    "call": "malloc",
+    "code": "malloc(n * sizeof(int))"
+  }
+}

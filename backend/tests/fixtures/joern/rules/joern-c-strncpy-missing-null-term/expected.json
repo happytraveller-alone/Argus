@@ -1,0 +1,15 @@
+{
+  "rule_id": "joern-c-strncpy-missing-null-term",
+  "cwe": ["CWE-170"],
+  "cve": [],
+  "severity": "MEDIUM",
+  "confidence": "MEDIUM",
+  "file_path": "joern-c-strncpy-missing-null-term/positive.c",
+  "function": "f",
+  "start_line": 6,
+  "end_line": 6,
+  "evidence": {
+    "call": "strncpy",
+    "code": "strncpy(buf, src, sizeof(buf))"
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "rule_id": "joern-c-strlen-int-truncation",
+  "cwe": ["CWE-190", "CWE-192"],
+  "cve": [],
+  "severity": "MEDIUM",
+  "confidence": "HIGH",
+  "file_path": "joern-c-strlen-int-truncation/positive.c",
+  "function": "f",
+  "start_line": 6,
+  "end_line": 6,
+  "evidence": {
+    "call": "strlen",
+    "code": "n = strlen(s)"
+  }
+}

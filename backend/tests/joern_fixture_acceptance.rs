@@ -14,6 +14,19 @@ const BPLIST_SOURCE: &[u8] = include_bytes!("fixtures/joern/libplist-cve-2017-64
 const QUERY_ASSET: &str =
     include_str!("../assets/scan_rule_assets/rules_joern/c/argus-joern-scan.sc");
 
+const EXPECTED_JOERN_ASSET_PATHS: [&str; 10] = [
+    "rules_joern/c/argus-joern-scan.sc",
+    "rules_joern/c/lib/common.sc",
+    "rules_joern/c/lib/unsafe_gets.sc",
+    "rules_joern/c/lib/tainted_strcpy.sc",
+    "rules_joern/c/lib/tainted_memcpy.sc",
+    "rules_joern/c/lib/tainted_sprintf_buffer.sc",
+    "rules_joern/c/lib/strncpy_missing_null_term.sc",
+    "rules_joern/c/lib/alloc_mul_tainted.sc",
+    "rules_joern/c/lib/strlen_int_truncation.sc",
+    "rules_joern/c/lib/signed_left_shift.sc",
+];
+
 fn manifest() -> Value {
     serde_json::from_str(MANIFEST_TEXT).expect("manifest JSON")
 }
@@ -93,9 +106,12 @@ async fn libplist_fixture_expected_output_maps_to_cve_static_finding() {
         parsed.graph_proof["functions"][0],
         payload["expected"]["function"]
     );
-    assert_eq!(parsed.findings.len(), 1);
-    let finding = &parsed.findings[0];
-    let finding_payload = &finding.payload;
+    let target = parsed.findings.iter().find(|f| {
+        f.payload.get("rule").and_then(|r| r.get("id"))
+            .and_then(|v| v.as_str()) == Some("joern-c-tainted-memcpy")
+            && f.payload.get("start_line").and_then(|v| v.as_u64()) == Some(288)
+    }).expect("expected joern-c-tainted-memcpy finding at line 288");
+    let finding_payload = &target.payload;
     assert_eq!(finding_payload["engine"], "joern");
     assert_eq!(
         finding_payload["rule"]["id"],
@@ -125,17 +141,46 @@ async fn joern_rule_asset_is_bundled_and_targets_libplist_cve() {
         .into_iter()
         .filter(|asset| asset.engine == "joern")
         .collect();
+
+    // Filter to only .sc assets (UPSTREAM_PIN.toml is not a query asset)
+    let scala_assets: Vec<_> = joern_assets
+        .iter()
+        .filter(|a| a.asset_path.ends_with(".sc"))
+        .collect();
     assert_eq!(
-        joern_assets.len(),
-        1,
-        "first pass should bundle exactly one Joern query"
+        scala_assets.len(),
+        EXPECTED_JOERN_ASSET_PATHS.len(),
+        "expected {} .sc joern assets (orchestrator + common + 8 modules), found {}",
+        EXPECTED_JOERN_ASSET_PATHS.len(),
+        scala_assets.len()
     );
-    let asset = &joern_assets[0];
-    assert_eq!(asset.source_kind, "internal_query");
-    assert_eq!(asset.asset_path, "rules_joern/c/argus-joern-scan.sc");
-    assert!(asset.content.contains("parse_string_node"));
-    assert!(asset.content.contains("CVE-2017-6439"));
-    assert!(asset.content.contains("CWE-120"));
+    let asset_paths: std::collections::HashSet<&str> =
+        scala_assets.iter().map(|a| a.asset_path.as_str()).collect();
+    for expected in &EXPECTED_JOERN_ASSET_PATHS {
+        assert!(asset_paths.contains(expected), "missing joern asset {}", expected);
+    }
+
+    let orchestrator = scala_assets
+        .iter()
+        .find(|a| a.asset_path == "rules_joern/c/argus-joern-scan.sc")
+        .expect("orchestrator asset missing");
+    assert!(
+        orchestrator.content.contains("import $file.lib.tainted_memcpy"),
+        "orchestrator missing import of tainted_memcpy module"
+    );
+    assert!(
+        orchestrator.content.contains("common.tagCves"),
+        "orchestrator missing CVE post-filter application"
+    );
+    let common_sc = scala_assets
+        .iter()
+        .find(|a| a.asset_path == "rules_joern/c/lib/common.sc")
+        .expect("common.sc asset missing");
+    assert!(
+        common_sc.content.contains("CVE-2017-6439"),
+        "common.sc knownCves map missing libplist CVE entry"
+    );
+
     assert!(QUERY_ASSET.contains("graph-proof"));
     let materialized = joern::materialize_rule_assets(temp.path(), joern_assets)
         .await

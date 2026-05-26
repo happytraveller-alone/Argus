@@ -1,0 +1,15 @@
+{
+  "rule_id": "joern-c-tainted-sprintf-buffer",
+  "cwe": ["CWE-120"],
+  "cve": [],
+  "severity": "HIGH",
+  "confidence": "HIGH",
+  "file_path": "joern-c-tainted-sprintf-buffer/positive.c",
+  "function": "f",
+  "start_line": 8,
+  "end_line": 8,
+  "evidence": {
+    "call": "sprintf",
+    "code": "sprintf(buf, \"%s\", u)"
+  }
+}

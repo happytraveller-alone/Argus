@@ -1,0 +1,4 @@
+# Pinned at Phase 2 Gate 2 execution. Until then, drift CI step (V9) fails closed.
+joern_querydb_sha = "TBD_AT_GATE_2"
+image_tag = "ghcr.nju.edu.cn/joernio/joern:nightly"
+pinned_at = "TBD_AT_GATE_2"

@@ -98,15 +98,11 @@ impl CodeGraphClient {
         let staging_dir = Arc::new(staging);
 
         // 2. Host-side index dir (writable bind mount target).
+        //    Previous runs may have left a container-owned codegraph.db here
+        //    that the backend cannot overwrite (mode 0644, other UID → open for
+        //    write fails with EACCES). Wipe the dir before reuse.
         let index_host_path = build_index_dir(&archive_sha256);
-        tokio::fs::create_dir_all(&index_host_path)
-            .await
-            .with_context(|| format!("create index dir {}", index_host_path.display()))?;
-        // Bind-mounted writable target: the codegraph container runs as a
-        // non-root UID and the in-container UID often does not map to the host
-        // UID owning this dir (backend-in-container + Podman-on-host). Widen
-        // perms on the directory so the `cp` step inside the container can
-        // write `codegraph.db` regardless of UID mapping.
+        ensure_clean_dir(&index_host_path).await?;
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
@@ -418,6 +414,60 @@ impl CodeGraphClient {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+/// Ensure `dir` exists and is empty.
+///
+/// Previous codegraph runs may leave container-owned files (e.g. `codegraph.db`
+/// with mode 0644) that the backend cannot `open(…O_TRUNC…)` to overwrite. We
+/// delete the entire directory tree first — `unlink()` only requires `wx` on
+/// the parent, and the parent is backend-owned with mode 0o777. Falls back to
+/// `podman unshare rm -rf` for stubborn cross-UID leftovers, then recreates the
+/// (empty) directory.
+async fn ensure_clean_dir(dir: &Path) -> Result<()> {
+    if dir.exists() {
+        // Attempt 1: normal removal (works for backend-owned files).
+        if let Err(e) = tokio::fs::remove_dir_all(dir).await {
+            // Attempt 2: podman unshare (cross-UID container leftovers).
+            let path = dir.to_path_buf();
+            let unshared = tokio::task::spawn_blocking(move || -> bool {
+                #[cfg(unix)]
+                {
+                    try_podman_unshare_rm(&path)
+                }
+                #[cfg(not(unix))]
+                false
+            })
+            .await
+            .unwrap_or(false);
+            if unshared {
+                debug!(path = %dir.display(), "index dir cleaned via podman unshare");
+            } else {
+                // Non-fatal on warm path (cache.try_load will fail, fall through
+                // to cold init). Log and continue.
+                debug!(path = %dir.display(), error = %e, "could not clean index dir; will retry cold init");
+                return Ok(());
+            }
+        }
+    }
+    tokio::fs::create_dir_all(dir)
+        .await
+        .with_context(|| format!("create index dir {}", dir.display()))?;
+    Ok(())
+}
+
+/// See [`staging::try_podman_unshare_rm`] — same logic for index dir cleanup.
+#[cfg(unix)]
+fn try_podman_unshare_rm(path: &Path) -> bool {
+    use std::process::Command;
+    match Command::new("podman")
+        .args(["unshare", "rm", "-rf"])
+        .arg(path)
+        .output()
+    {
+        Ok(output) if output.status.success() => true,
+        _ => false,
+    }
+}
 
 fn codegraph_data_root() -> PathBuf {
     std::env::var(ARGUS_CODEGRAPH_DATA_DIR_ENV)
