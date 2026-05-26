@@ -13,6 +13,7 @@ type ApiSurface = Pick<
 	| "getProjects"
 	| "createProject"
 	| "createProjectWithZip"
+	| "getProjectCodegraphIndex"
 	| "deleteProject"
 	| "updateProject"
 >;
@@ -74,6 +75,10 @@ export function createApiProjectsPageDataSource(
 				createProjectWithZip: (nextInput, nextFile) =>
 					apiSurface.createProjectWithZip(nextInput, nextFile),
 			});
+		},
+
+		async getProjectCodegraphIndex(projectId: string) {
+			return apiSurface.getProjectCodegraphIndex(projectId);
 		},
 
 		async deleteProject(projectId) {

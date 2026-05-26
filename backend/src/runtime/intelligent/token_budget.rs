@@ -72,7 +72,11 @@ impl TokenBudget {
         };
         let new_used = used_counter.fetch_add(tokens, Ordering::Relaxed) + tokens;
         if new_used > cap {
-            Err(BudgetExceeded { pass, used: new_used, cap })
+            Err(BudgetExceeded {
+                pass,
+                used: new_used,
+                cap,
+            })
         } else {
             Ok(())
         }

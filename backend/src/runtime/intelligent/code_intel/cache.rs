@@ -4,7 +4,7 @@
 //! advisory POSIX flock so concurrent scans of the same archive cannot corrupt
 //! the cache entry.
 //!
-//! # Layout under `{root}/`
+//! # Layout under `{codegraph_data_root()}/cache/`
 //! ```text
 //! {sha}.lock             — advisory flock file (shared=read, exclusive=write)
 //! {sha}.tmp.{pid}/       — in-progress write staging directory
@@ -24,6 +24,21 @@ use anyhow::{Context, Result};
 // std::os::unix::fs::FileExt name collision introduced in Rust 1.89.
 use tokio::task::spawn_blocking;
 
+fn codegraph_data_root() -> PathBuf {
+    std::env::var("ARGUS_CODEGRAPH_DATA_DIR")
+        .ok()
+        .map(|value| PathBuf::from(value.trim()))
+        .filter(|value| !value.as_os_str().is_empty())
+        .unwrap_or_else(|| {
+            std::env::var("SCAN_WORKSPACE_ROOT")
+                .ok()
+                .map(|value| PathBuf::from(value.trim()))
+                .filter(|value| !value.as_os_str().is_empty())
+                .unwrap_or_else(|| PathBuf::from("/tmp/argus-codegraph"))
+                .join("codegraph")
+        })
+}
+
 /// Concurrent-safe cache of codegraph SQLite indexes, keyed by archive SHA256.
 pub struct CodeGraphCache {
     root: PathBuf,
@@ -32,12 +47,11 @@ pub struct CodeGraphCache {
 impl CodeGraphCache {
     /// Create a new cache handle, ensuring the root directory exists.
     ///
-    /// Cache root is `${ARGUS_DATA_DIR}/codegraph_cache/` when the env var is set,
-    /// otherwise `/tmp/codegraph_cache/`.
+    /// Cache root is `${ARGUS_CODEGRAPH_DATA_DIR}/cache/` when explicitly set;
+    /// otherwise it defaults under `${SCAN_WORKSPACE_ROOT}/codegraph/cache/` so
+    /// host Podman can bind-mount it from backend-container deployments.
     pub fn new() -> Result<Self> {
-        let base = std::env::var("ARGUS_DATA_DIR")
-            .unwrap_or_else(|_| "/tmp".to_string());
-        let root = PathBuf::from(base).join("codegraph_cache");
+        let root = codegraph_data_root().join("cache");
         std::fs::create_dir_all(&root)
             .with_context(|| format!("create cache root {}", root.display()))?;
         Ok(Self { root })
@@ -136,8 +150,9 @@ impl CodeGraphCache {
             }
 
             // Atomic rename tmp → final.
-            std::fs::rename(&tmp_dir, &final_dir)
-                .with_context(|| format!("rename {} → {}", tmp_dir.display(), final_dir.display()))?;
+            std::fs::rename(&tmp_dir, &final_dir).with_context(|| {
+                format!("rename {} → {}", tmp_dir.display(), final_dir.display())
+            })?;
 
             fs2::FileExt::unlock(&lock_file).ok();
             Ok(())

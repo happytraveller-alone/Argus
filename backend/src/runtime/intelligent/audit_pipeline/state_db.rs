@@ -117,9 +117,10 @@ impl AuditStateDb {
     }
 
     pub fn get_pending_tasks(&self, run_id: &str) -> Vec<Value> {
-        let mut stmt = match self.conn.prepare(
-            "SELECT raw_json FROM tasks WHERE run_id=?1 AND status='pending'",
-        ) {
+        let mut stmt = match self
+            .conn
+            .prepare("SELECT raw_json FROM tasks WHERE run_id=?1 AND status='pending'")
+        {
             Ok(s) => s,
             Err(_) => return vec![],
         };
@@ -155,7 +156,10 @@ impl AuditStateDb {
         stage: &str,
         task_id: &str,
     ) -> Result<()> {
-        let finding_id = finding_json["finding_id"].as_str().unwrap_or("").to_string();
+        let finding_id = finding_json["finding_id"]
+            .as_str()
+            .unwrap_or("")
+            .to_string();
         let raw = serde_json::to_string(finding_json)?;
         self.conn.execute(
             "INSERT OR IGNORE INTO findings (run_id, finding_id, task_id, stage, raw_json, validation_status)
@@ -178,12 +182,7 @@ impl AuditStateDb {
         Ok(())
     }
 
-    pub fn set_finding_group(
-        &self,
-        run_id: &str,
-        finding_id: &str,
-        group_id: &str,
-    ) -> Result<()> {
+    pub fn set_finding_group(&self, run_id: &str, finding_id: &str, group_id: &str) -> Result<()> {
         self.conn.execute(
             "UPDATE findings SET group_id=?1 WHERE run_id=?2 AND finding_id=?3",
             params![group_id, run_id, finding_id],

@@ -1,6 +1,9 @@
 use anyhow::Result;
 
-use crate::{db::scan_rule_assets, state::{AppState, ScanRuleAsset}};
+use crate::{
+    db::scan_rule_assets,
+    state::{AppState, ScanRuleAsset},
+};
 
 const CODEQL_ENGINE: &str = "codeql";
 const CODEQL_RULE_SOURCE_KINDS: &[&str] = &["internal_query_pack"];

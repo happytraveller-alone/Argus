@@ -72,7 +72,7 @@ RUN mkdir -p /workspace && chown auditor:auditor /workspace
 RUN mkdir -p /tmp/poc && chown auditor:auditor /tmp/poc
 
 # Codegraph mount points (per ralplan-codegraph-integration v3.2):
-#   /codegraph/src     - bind-mounted host-extracted source, read-only
+#   /codegraph/src     - bind-mounted host-extracted staging source, writable while indexing
 #   /codegraph/index   - bind-mounted host writable index dir (where codegraph writes .codegraph/)
 #   /codegraph/cache_in - bind-mounted host cache dir, read-only (pre-built index for cache hits)
 RUN mkdir -p /codegraph/src /codegraph/index /codegraph/cache_in && \

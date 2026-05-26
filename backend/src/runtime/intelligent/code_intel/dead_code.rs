@@ -151,11 +151,7 @@ fn detect_python(lines: &[&str], target_idx: usize) -> Option<&'static str> {
 fn is_python_if_false_header(stripped: &str) -> bool {
     // Accept "if False:" / "if 0:" optionally followed by whitespace + comment.
     // Trailing colon required.
-    let without_comment = stripped
-        .split('#')
-        .next()
-        .unwrap_or("")
-        .trim_end();
+    let without_comment = stripped.split('#').next().unwrap_or("").trim_end();
     without_comment == "if False:" || without_comment == "if 0:"
 }
 
@@ -475,10 +471,7 @@ fn handler() {
     execute(q);
 }
 ";
-        assert_eq!(
-            detect_dead_code(src, 3, "rust"),
-            Some("unreachable_call")
-        );
+        assert_eq!(detect_dead_code(src, 3, "rust"), Some("unreachable_call"));
     }
 
     #[test]
@@ -520,7 +513,10 @@ function handler(input: string) {
     }
 }
 ";
-        assert_eq!(detect_dead_code(src, 3, "typescript"), Some("if_false_branch"));
+        assert_eq!(
+            detect_dead_code(src, 3, "typescript"),
+            Some("if_false_branch")
+        );
     }
 
     #[test]
@@ -533,7 +529,10 @@ function handler(input: string) {
     }
 }
 ";
-        assert_eq!(detect_dead_code(src, 3, "typescript"), Some("if_false_branch"));
+        assert_eq!(
+            detect_dead_code(src, 3, "typescript"),
+            Some("if_false_branch")
+        );
     }
 
     #[test]

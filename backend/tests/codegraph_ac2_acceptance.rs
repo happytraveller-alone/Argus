@@ -143,7 +143,10 @@ fn deterministic_dismissal_for(case: &FixtureCase) -> Option<DismissalEvidence> 
             if let Some(evidence) = case.finding.get("evidence").and_then(Value::as_str) {
                 // Tokenise on common code separators.
                 for token in evidence.split(|c: char| {
-                    matches!(c, ' ' | '(' | ')' | ',' | '"' | '\'' | '`' | '[' | ']' | '\n')
+                    matches!(
+                        c,
+                        ' ' | '(' | ')' | ',' | '"' | '\'' | '`' | '[' | ']' | '\n'
+                    )
                 }) {
                     if token.is_empty() {
                         continue;
@@ -226,7 +229,15 @@ fn ac2_acceptance_real_recall_sanitized_test_classification() {
     let vendor = load_fixture("python_sqli_vendor_negative");
     let dead = load_fixture("python_sqli_dead_code_negative");
 
-    let fixtures = [&real_python, &real_java, &real_ts, &san, &test, &vendor, &dead];
+    let fixtures = [
+        &real_python,
+        &real_java,
+        &real_ts,
+        &san,
+        &test,
+        &vendor,
+        &dead,
+    ];
     let mut real_recall_count = 0usize;
     let mut sanitized_correct_count = 0usize;
     let mut test_correct_count = 0usize;
@@ -369,10 +380,7 @@ fn ac2_acceptance_real_recall_sanitized_test_classification() {
         "v0.3.b dead_code precision must be 1/1"
     );
     // N=4 negative: floor(0.2 × 4) = 0 → no flip allowed (FPR still 0).
-    assert_eq!(
-        fpr_count, 0,
-        "FPR ≤20% on N=4 = 0/4 flips; got {fpr_count}"
-    );
+    assert_eq!(fpr_count, 0, "FPR ≤20% on N=4 = 0/4 flips; got {fpr_count}");
 }
 
 /// AC1.G schema completeness: each negative fixture's finding.json declares
@@ -400,7 +408,10 @@ fn ac2_acceptance_fixture_schemas_parse_cleanly() {
         let source = expected_confidence_source(&case);
         if classification != "real" {
             assert!(
-                matches!(source, Some("rule_matched" | "path_pattern" | "llm_inferred")),
+                matches!(
+                    source,
+                    Some("rule_matched" | "path_pattern" | "llm_inferred")
+                ),
                 "negative fixture {name}: missing or invalid expected_confidence_source"
             );
         }

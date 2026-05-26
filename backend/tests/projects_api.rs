@@ -177,6 +177,8 @@ async fn project_crud_and_zip_routes_work_end_to_end() {
             .unwrap()
             > 0
     );
+    assert_eq!(project_json["codegraph_index"]["status"], "pending");
+    assert_eq!(project_json["codegraph_index"]["progress"], 20);
     assert!(project_json.get("owner_id").is_none());
 
     let archive_response = reloaded_app
@@ -214,6 +216,28 @@ async fn project_crud_and_zip_routes_work_end_to_end() {
         .as_str()
         .unwrap()
         .contains("languages"));
+
+    let codegraph_response = reloaded_app
+        .clone()
+        .oneshot(
+            Request::get(format!("/api/v1/projects/{project_id}/codegraph-index"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(codegraph_response.status(), StatusCode::OK);
+    let codegraph_json: Value = serde_json::from_slice(
+        &to_bytes(codegraph_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(codegraph_json["status"], "pending");
+    assert_eq!(
+        codegraph_json["message"],
+        "源码包已导入，等待建立 codegraph 索引"
+    );
 
     let delete_response = reloaded_app
         .oneshot(

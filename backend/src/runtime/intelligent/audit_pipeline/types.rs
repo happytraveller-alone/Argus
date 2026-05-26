@@ -333,7 +333,10 @@ impl PipelineOutputs {
                     validation_status: Some(validated.validation_status.clone()),
                     reachable: trace.map(|trace| trace.reachable),
                     trace_summary: trace.map(|trace| trace.rationale.clone()),
-                    poc_result: finding.poc_result.as_ref().map(|p| serde_json::to_value(p).unwrap_or_default()),
+                    poc_result: finding
+                        .poc_result
+                        .as_ref()
+                        .map(|p| serde_json::to_value(p).unwrap_or_default()),
                 }
             })
             .collect()
@@ -360,8 +363,8 @@ mod tests {
             "evidence": "format!(\"SELECT * FROM users WHERE id = {}\", input)"
         }"#;
 
-        let finding: AuditFinding = serde_json::from_str(legacy_json)
-            .expect("legacy AuditFinding JSON must deserialize");
+        let finding: AuditFinding =
+            serde_json::from_str(legacy_json).expect("legacy AuditFinding JSON must deserialize");
         assert_eq!(finding.finding_id, "legacy-001");
         assert!(
             finding.dismissal_evidence.is_none(),

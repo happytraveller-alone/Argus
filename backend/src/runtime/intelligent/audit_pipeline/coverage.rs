@@ -47,18 +47,25 @@ impl CoverageMatrix {
         for task in &recon.initial_tasks {
             // A task belongs to a subsystem if any of its target_files starts with the subsystem path
             for sub in &recon.subsystems {
-                let matches = task.target_files.iter().any(|f| {
-                    f.starts_with(&sub.path) || sub.path == "/" || sub.path.is_empty()
-                });
+                let matches = task
+                    .target_files
+                    .iter()
+                    .any(|f| f.starts_with(&sub.path) || sub.path == "/" || sub.path.is_empty());
                 if matches {
-                    if let Some(cell) = cells.get_mut(&(sub.name.clone(), task.attack_class.clone())) {
+                    if let Some(cell) =
+                        cells.get_mut(&(sub.name.clone(), task.attack_class.clone()))
+                    {
                         cell.tasks_dispatched += 1;
                     }
                 }
             }
         }
 
-        Self { cells, subsystems, attack_classes }
+        Self {
+            cells,
+            subsystems,
+            attack_classes,
+        }
     }
 
     pub fn update_with_findings(&mut self, findings: &[ValidatedFinding]) {
@@ -69,9 +76,8 @@ impl CoverageMatrix {
 
             for sub in &self.subsystems {
                 // Match subsystem: check if file path starts with subsystem name or is contained
-                let sub_matches = file.contains(sub.as_str())
-                    || sub == "project_archive"
-                    || sub.is_empty();
+                let sub_matches =
+                    file.contains(sub.as_str()) || sub == "project_archive" || sub.is_empty();
                 if sub_matches {
                     if let Some(cell) = self.cells.get_mut(&(sub.clone(), vuln_class.clone())) {
                         cell.findings_total += 1;
@@ -91,7 +97,10 @@ impl CoverageMatrix {
                     || sub == "project_archive"
                     || sub.is_empty();
                 if matches {
-                    if let Some(cell) = self.cells.get_mut(&(sub.clone(), task.attack_class.clone())) {
+                    if let Some(cell) = self
+                        .cells
+                        .get_mut(&(sub.clone(), task.attack_class.clone()))
+                    {
                         cell.tasks_dispatched += 1;
                     }
                 }

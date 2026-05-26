@@ -52,8 +52,10 @@ export interface BatchCreateZipProjectsProgressEvent {
 	total: number;
 	fileName: string;
 	projectName: string;
-	status: "creating" | "success" | "failed";
+	status: "importing" | "indexing" | "success" | "failed";
 	message?: string;
+	completedSteps?: number;
+	totalSteps?: number;
 	project?: Project;
 }
 
@@ -103,13 +105,29 @@ export async function createZipProjectsWorkflow(
 	const successes: Project[] = [];
 	const failures: BatchCreateZipProjectsFailure[] = [];
 
+	const totalSteps = Math.max(items.length * 2, 1);
+
 	for (const [index, item] of items.entries()) {
 		onProgress?.({
 			index,
 			total: items.length,
 			fileName: item.file.name,
 			projectName: item.projectName,
-			status: "creating",
+			status: "importing",
+			message: "导入项目",
+			completedSteps: index * 2,
+			totalSteps,
+		});
+
+		onProgress?.({
+			index,
+			total: items.length,
+			fileName: item.file.name,
+			projectName: item.projectName,
+			status: "indexing",
+			message: "建立 codegraph 索引",
+			completedSteps: index * 2 + 1,
+			totalSteps,
 		});
 
 		try {
@@ -128,6 +146,9 @@ export async function createZipProjectsWorkflow(
 				fileName: item.file.name,
 				projectName: item.projectName,
 				status: "success",
+				message: buildCodegraphCompletionMessage(project),
+				completedSteps: Math.min(index * 2 + 2, totalSteps),
+				totalSteps,
 				project,
 			});
 		} catch (error) {
@@ -145,6 +166,8 @@ export async function createZipProjectsWorkflow(
 				projectName: item.projectName,
 				status: "failed",
 				message,
+				completedSteps: Math.min(index * 2 + 2, totalSteps),
+				totalSteps,
 			});
 		}
 	}
@@ -156,4 +179,20 @@ export async function createZipProjectsWorkflow(
 		successes,
 		failures,
 	};
+}
+
+function buildCodegraphCompletionMessage(project: Project): string {
+	const state = project.codegraph_index;
+	if (!state) {
+		return "项目已创建";
+	}
+	if (state.status === "ready") {
+		return state.languages_indexed?.length
+			? `codegraph 索引已建立 · ${state.languages_indexed.join(", ")}`
+			: "codegraph 索引已建立";
+	}
+	if (state.status === "failed") {
+		return state.message || "codegraph 索引建立失败，智能扫描会降级继续";
+	}
+	return state.message || "项目已创建";
 }

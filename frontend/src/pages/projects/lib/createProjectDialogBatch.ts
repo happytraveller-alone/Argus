@@ -1,6 +1,11 @@
 import { stripArchiveSuffix } from "../constants";
 
-export type ZipBatchItemStatus = "idle" | "creating" | "success" | "failed";
+export type ZipBatchItemStatus =
+	| "idle"
+	| "importing"
+	| "indexing"
+	| "success"
+	| "failed";
 
 export interface ZipBatchItem {
 	id: string;
@@ -11,6 +16,7 @@ export interface ZipBatchItem {
 	editableName: string;
 	status: ZipBatchItemStatus;
 	errorMessage?: string;
+	stageMessage?: string;
 }
 
 export interface ZipBatchFileRejection {

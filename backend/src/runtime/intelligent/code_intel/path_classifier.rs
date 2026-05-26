@@ -48,12 +48,7 @@ const TEST_PATH_PREFIXES: &[&str] = &["src/test/java"];
 
 /// Filename-glob test patterns. Matched only against the last path component
 /// (the file name). `*` is a wildcard standing in for any non-empty span.
-const TEST_FILENAME_GLOBS: &[&str] = &[
-    "*_test.*",
-    "*.test.ts",
-    "*.test.js",
-    "*_spec.rb",
-];
+const TEST_FILENAME_GLOBS: &[&str] = &["*_test.*", "*.test.ts", "*.test.js", "*_spec.rb"];
 
 /// Classify a file path into one of [`PathCategory::Test`],
 /// [`PathCategory::Vendor`], or [`PathCategory::RealCode`].
@@ -86,7 +81,10 @@ pub fn classify_path(path: &Path) -> (PathCategory, Option<String>) {
     // Multi-segment test prefix (e.g. src/test/java/...).
     for prefix in TEST_PATH_PREFIXES {
         let needle: Vec<&str> = prefix.split('/').collect();
-        if components.windows(needle.len()).any(|w| w == needle.as_slice()) {
+        if components
+            .windows(needle.len())
+            .any(|w| w == needle.as_slice())
+        {
             return (PathCategory::Test, Some(format!("{prefix}/")));
         }
     }

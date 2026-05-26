@@ -14,10 +14,20 @@ pub enum LlmProtocol {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum AgentTool {
-    Read { path: String },
-    Grep { pattern: String, path: Option<String> },
-    Glob { pattern: String },
-    Exec { command: String, timeout_ms: Option<u64> },
+    Read {
+        path: String,
+    },
+    Grep {
+        pattern: String,
+        path: Option<String>,
+    },
+    Glob {
+        pattern: String,
+    },
+    Exec {
+        command: String,
+        timeout_ms: Option<u64>,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

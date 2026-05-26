@@ -47,6 +47,8 @@ pub struct AppConfig {
     pub scanner_opengrep_image: String,
     pub scanner_opengrep_a3s_box_image: String,
     pub scanner_codeql_image: String,
+    pub audit_sandbox_image: String,
+    pub codegraph_preindex_enabled: bool,
     pub scanner_joern_image: String,
     pub codeql_threads: usize,
     pub codeql_ram_mb: u64,
@@ -204,6 +206,9 @@ impl AppConfig {
                 .unwrap_or_else(|| "argus/opengrep-runner:latest".to_string()),
             scanner_codeql_image: env::var("SCANNER_CODEQL_IMAGE")
                 .unwrap_or_else(|_| "localhost/argus/codeql-runner:latest".to_string()),
+            audit_sandbox_image: env::var("AUDIT_SANDBOX_IMAGE")
+                .unwrap_or_else(|_| "argus/audit-sandbox:latest".to_string()),
+            codegraph_preindex_enabled: parse_bool_env("ARGUS_CODEGRAPH_PREINDEX_ENABLED", true),
             scanner_joern_image: env::var("SCANNER_JOERN_IMAGE")
                 .unwrap_or_else(|_| crate::scan::joern::DEFAULT_JOERN_IMAGE.to_string()),
             codeql_threads: parse_usize_env("CODEQL_THREADS", 0),
@@ -320,6 +325,8 @@ impl AppConfig {
             scanner_opengrep_image: "argus/opengrep-runner:test".to_string(),
             scanner_opengrep_a3s_box_image: "argus/opengrep-runner:test".to_string(),
             scanner_codeql_image: "argus/codeql-runner:test".to_string(),
+            audit_sandbox_image: "argus/audit-sandbox:test".to_string(),
+            codegraph_preindex_enabled: false,
             scanner_joern_image: "ghcr.nju.edu.cn/joernio/joern:nightly".to_string(),
             codeql_threads: 0,
             codeql_ram_mb: 6144,

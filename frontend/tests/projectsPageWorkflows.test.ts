@@ -126,7 +126,18 @@ test("createZipProjectsWorkflow processes files sequentially and returns summary
 	assert.deepEqual(result.failures, []);
 	assert.deepEqual(
 		progress.map((event) => `${event.status}:${event.projectName}`),
-		["creating:Alpha", "success:Alpha", "creating:Beta", "success:Beta"],
+		[
+			"importing:Alpha",
+			"indexing:Alpha",
+			"success:Alpha",
+			"importing:Beta",
+			"indexing:Beta",
+			"success:Beta",
+		],
+	);
+	assert.deepEqual(
+		progress.map((event) => event.completedSteps),
+		[0, 1, 2, 2, 3, 4],
 	);
 });
 
@@ -186,11 +197,14 @@ test("createZipProjectsWorkflow continues after item failure and records failure
 	assert.deepEqual(
 		progress.map((event) => `${event.status}:${event.projectName}`),
 		[
-			"creating:Alpha",
+			"importing:Alpha",
+			"indexing:Alpha",
 			"success:Alpha",
-			"creating:Broken",
+			"importing:Broken",
+			"indexing:Broken",
 			"failed:Broken",
-			"creating:Gamma",
+			"importing:Gamma",
+			"indexing:Gamma",
 			"success:Gamma",
 		],
 	);

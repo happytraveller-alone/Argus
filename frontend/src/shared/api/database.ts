@@ -5,6 +5,7 @@ import type {
   Project,
   ProjectMember,
   CreateProjectForm,
+  ProjectCodegraphIndex,
   StaticScanOverviewResponse,
   ProjectDescriptionGenerateResponse,
   DashboardSnapshotResponse,
@@ -617,6 +618,11 @@ export const api = {
     const res = await apiClient.post("/projects/create-with-zip", formData, {
       headers: { "Content-Type": "multipart/form-data" },
     });
+    return res.data;
+  },
+
+  async getProjectCodegraphIndex(projectId: string): Promise<ProjectCodegraphIndex> {
+    const res = await apiClient.get(`/projects/${projectId}/codegraph-index`);
     return res.data;
   },
 

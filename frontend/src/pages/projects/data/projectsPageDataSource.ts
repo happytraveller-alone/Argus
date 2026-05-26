@@ -1,9 +1,10 @@
-import type { CreateProjectForm, Project } from "@/shared/types";
+import type { CreateProjectForm, Project, ProjectCodegraphIndex } from "@/shared/types";
 
 export interface ProjectsPageDataSource {
 	listProjects(): Promise<Project[]>;
 	createProject(input: CreateProjectForm): Promise<Project>;
 	createZipProject(input: CreateProjectForm, file: File): Promise<Project>;
+	getProjectCodegraphIndex(projectId: string): Promise<ProjectCodegraphIndex>;
 	deleteProject(projectId: string): Promise<void>;
 	updateProject(
 		projectId: string,

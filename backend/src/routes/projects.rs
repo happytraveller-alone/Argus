@@ -29,6 +29,9 @@ use crate::{
     db::{intelligent_task_state, projects, task_state},
     error::ApiError,
     project_file_cache::{ProjectFileCacheEntry, ProjectFileCacheSet},
+    runtime::intelligent::codegraph_preindex::{
+        prebuild_project_index, read_codegraph_state, write_codegraph_state, CodegraphIndexState,
+    },
     state::{AppState, StoredProject, StoredProjectArchive},
 };
 
@@ -104,6 +107,7 @@ pub struct ProjectResponse {
     pub is_active: bool,
     pub created_at: String,
     pub updated_at: String,
+    pub codegraph_index: ProjectCodegraphIndexResponse,
     pub management_metrics: Option<ProjectManagementMetricsResponse>,
 }
 
@@ -121,6 +125,17 @@ pub struct ZipFileMetaResponse {
     pub original_filename: Option<String>,
     pub file_size: Option<i64>,
     pub uploaded_at: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ProjectCodegraphIndexResponse {
+    pub status: String,
+    pub progress: u8,
+    pub message: String,
+    pub archive_sha256: Option<String>,
+    pub languages_indexed: Vec<String>,
+    pub updated_at: Option<String>,
+    pub error: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -196,6 +211,7 @@ pub fn router() -> Router<AppState> {
             post(generate_project_description_preview),
         )
         .route("/info/{id}", get(get_project_info))
+        .route("/{id}/codegraph-index", get(get_project_codegraph_index))
         .route("/{id}/files", get(get_project_files))
         .route("/{id}/files-tree", get(get_project_files_tree))
         .route("/{id}/files/{*file_path}", get(get_project_file_content))
@@ -375,6 +391,16 @@ pub async fn get_project_info(
     }))
 }
 
+pub async fn get_project_codegraph_index(
+    State(state): State<AppState>,
+    AxumPath(project_id): AxumPath<String>,
+) -> Result<Json<ProjectCodegraphIndexResponse>, ApiError> {
+    let project = require_project(&state, &project_id).await?;
+    Ok(Json(to_codegraph_index_response(read_codegraph_state(
+        &project.language_info,
+    ))))
+}
+
 pub async fn create_project_with_zip(
     State(state): State<AppState>,
     multipart: Multipart,
@@ -401,6 +427,7 @@ pub async fn create_project_with_zip(
         .await
         .map_err(internal_error)?;
     sync_python_project_mirror(&state, &project).await?;
+    spawn_codegraph_preindex_if_enabled(state.clone(), project.id.clone());
     Ok(Json(to_project_response(&project, true, None)))
 }
 
@@ -436,6 +463,7 @@ pub async fn upload_project_zip(
         .await
         .map_err(internal_error)?;
     sync_python_project_mirror(&state, &project).await?;
+    spawn_codegraph_preindex_if_enabled(state.clone(), project.id.clone());
 
     Ok(Json(ArchiveUploadResponse {
         message: "文件上传成功（已由 Rust 网关接管）".to_string(),
@@ -465,7 +493,12 @@ pub async fn delete_project_zip(
     let mut project = project;
     project.archive = None;
     project.language_info = empty_language_info_string();
-    project.info_status = "pending".to_string();
+    write_codegraph_state(
+        &mut project.language_info,
+        crate::runtime::intelligent::codegraph_preindex::empty_codegraph_state(),
+    )
+    .map_err(internal_error)?;
+    project.info_status = "completed".to_string();
     project.updated_at = now_rfc3339();
     let project = projects::update_project(&state, project)
         .await
@@ -528,8 +561,11 @@ pub async fn generate_project_description_for_project(
         .await
         .map_err(|error| ApiError::NotFound(format!("archive not found: {error}")))?;
     let analyzed = analyze_archive(&archive.original_filename, &bytes)?;
+    let previous_codegraph_state = read_codegraph_state(&project.language_info);
     project.description = build_description(&project.name, &analyzed.languages);
     project.language_info = analyzed.language_info_string.clone();
+    write_codegraph_state(&mut project.language_info, previous_codegraph_state)
+        .map_err(internal_error)?;
     project.info_status = "completed".to_string();
     project.updated_at = now_rfc3339();
     let project = projects::update_project(&state, project)
@@ -1390,14 +1426,130 @@ async fn apply_archive_to_project(
     }
     let analyzed = analyze_archive(&file_name, &file_bytes)?;
     let archive = persist_archive(state, &project.id, &file_name, &file_bytes).await?;
+    let archive_sha256 = archive.sha256.clone();
     project.archive = Some(archive);
     project.description = build_description(&project.name, &analyzed.languages);
     project.programming_languages_json = serde_json::to_string(&analyzed.languages)
         .map_err(|error| ApiError::Internal(error.to_string()))?;
     project.language_info = analyzed.language_info_string;
+    write_codegraph_state(
+        &mut project.language_info,
+        CodegraphIndexState::pending(archive_sha256, now_rfc3339()),
+    )
+    .map_err(internal_error)?;
     project.info_status = "completed".to_string();
     project.updated_at = now_rfc3339();
     Ok(analyzed.languages)
+}
+
+fn spawn_codegraph_preindex_if_enabled(state: AppState, project_id: String) {
+    if !state.config.codegraph_preindex_enabled {
+        return;
+    }
+    tokio::spawn(async move {
+        if let Err(error) = run_codegraph_preindex_for_project(state, project_id.clone()).await {
+            tracing::warn!(project_id = %project_id, error = %error, "project codegraph preindex task failed");
+        }
+    });
+}
+
+async fn run_codegraph_preindex_for_project(
+    state: AppState,
+    project_id: String,
+) -> Result<(), ApiError> {
+    let project = require_project(&state, &project_id).await?;
+    let archive = project
+        .archive
+        .clone()
+        .ok_or_else(|| ApiError::NotFound("archive not found".to_string()))?;
+    let archive_sha256 = archive.sha256.clone();
+
+    update_project_codegraph_state_for_archive(
+        &state,
+        &project_id,
+        &archive_sha256,
+        CodegraphIndexState::indexing(archive_sha256.clone(), now_rfc3339()),
+    )
+    .await?;
+
+    let result = prebuild_project_index(&archive, &state.config.audit_sandbox_image).await;
+
+    match result {
+        Ok(languages) => {
+            update_project_codegraph_state_for_archive(
+                &state,
+                &project_id,
+                &archive_sha256,
+                CodegraphIndexState::ready(archive_sha256.clone(), languages, now_rfc3339()),
+            )
+            .await?;
+        }
+        Err(error) => {
+            let error_chain = format_error_chain(error.as_ref());
+            update_project_codegraph_state_for_archive(
+                &state,
+                &project_id,
+                &archive_sha256,
+                CodegraphIndexState::failed(archive_sha256.clone(), error_chain, now_rfc3339()),
+            )
+            .await?;
+        }
+    }
+
+    Ok(())
+}
+
+async fn update_project_codegraph_state_for_archive(
+    state: &AppState,
+    project_id: &str,
+    expected_archive_sha256: &str,
+    next_state: CodegraphIndexState,
+) -> Result<(), ApiError> {
+    let mut project = require_project(state, project_id).await?;
+    let archive = project
+        .archive
+        .as_ref()
+        .ok_or_else(|| ApiError::NotFound("archive not found".to_string()))?;
+    if archive.sha256 != expected_archive_sha256 {
+        tracing::info!(
+            project_id = %project_id,
+            expected_archive_sha256,
+            current_archive_sha256 = %archive.sha256,
+            "skip stale codegraph preindex state update because project archive changed"
+        );
+        return Ok(());
+    }
+    write_codegraph_state(&mut project.language_info, next_state.clone())
+        .map_err(internal_error)?;
+    project.info_status = "completed".to_string();
+    project.updated_at = now_rfc3339();
+    let project = projects::update_project(state, project)
+        .await
+        .map_err(internal_error)?;
+    sync_python_project_mirror(state, &project).await?;
+    Ok(())
+}
+
+fn to_codegraph_index_response(state: CodegraphIndexState) -> ProjectCodegraphIndexResponse {
+    ProjectCodegraphIndexResponse {
+        status: state.status.as_str().to_string(),
+        progress: state.progress,
+        message: state.message,
+        archive_sha256: state.archive_sha256,
+        languages_indexed: state.languages_indexed,
+        updated_at: state.updated_at,
+        error: state.error,
+    }
+}
+
+fn format_error_chain(error: &(dyn std::error::Error + 'static)) -> String {
+    let mut messages = vec![error.to_string()];
+    let mut current = error.source();
+    while let Some(source) = current {
+        messages.push(source.to_string());
+        current = source.source();
+    }
+    messages.join(": ")
 }
 
 async fn persist_archive(
@@ -1587,6 +1739,7 @@ fn to_project_response(
         is_active: project.is_active,
         created_at: project.created_at.clone(),
         updated_at: project.updated_at.clone(),
+        codegraph_index: to_codegraph_index_response(read_codegraph_state(&project.language_info)),
         management_metrics: include_metrics.then(|| build_metrics(project, task_snapshot)),
     }
 }

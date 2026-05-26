@@ -253,6 +253,7 @@ test("projects view model renders archive size and zero stats when metrics pendi
 	assert.equal(viewModel.rows[0].vulnerabilityStats.low, 0);
 	assert.equal(viewModel.rows[0].aiVerifiedStats.total, 0);
 	assert.equal(viewModel.rows[0].aiVerifiedStats.high, 0);
+	assert.equal(viewModel.rows[0].codegraphIndexStatus.label, "未导入索引");
 });
 
 test("projects view model exposes metrics when ready", async () => {
@@ -312,6 +313,7 @@ test("projects view model exposes metrics when ready", async () => {
 	assert.equal(row.aiVerifiedStats.total, 10);
 	assert.equal(row.aiVerifiedStats.medium, 3);
 	assert.equal(row.metricsStatus, "ready");
+	assert.equal(row.codegraphIndexStatus.label, "未导入索引");
 });
 
 test("projects view model exposes vulnerability stats and browse guards", async () => {

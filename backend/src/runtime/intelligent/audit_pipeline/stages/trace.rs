@@ -31,7 +31,7 @@ use super::super::{
     json::invoke_json,
     prompts::{TRACE_PASS1_PROMPT, TRACE_PASS2_PROMPT},
     stage_prompt,
-    types::{DedupeOutput, TraceOutput, TraceResult, ValidationOutput, ValidatedFinding},
+    types::{DedupeOutput, TraceOutput, TraceResult, ValidatedFinding, ValidationOutput},
 };
 
 /// Base token budget per finding for the two-pass flow. Used to construct a
@@ -142,7 +142,10 @@ async fn run_finding(
         }
     };
     let indexed = intel.languages_indexed();
-    if !indexed.iter().any(|entry| entry.eq_ignore_ascii_case(&lang)) {
+    if !indexed
+        .iter()
+        .any(|entry| entry.eq_ignore_ascii_case(&lang))
+    {
         emit_fallback(events, &finding_id, "language_unsupported");
         ctx.partial_analysis.store(true, Ordering::Relaxed);
         return single_pass_for_finding(ctx, validated, events).await;
@@ -165,11 +168,13 @@ async fn run_finding(
         return single_pass_for_finding(ctx, validated, events).await;
     }
 
-    events.emit(IntelligentTaskEvent::new("trace_two_pass_started").with_data(json!({
-        "findingId": finding_id,
-        "file": finding.file,
-        "lineStart": finding.line_start,
-    })));
+    events.emit(
+        IntelligentTaskEvent::new("trace_two_pass_started").with_data(json!({
+            "findingId": finding_id,
+            "file": finding.file,
+            "lineStart": finding.line_start,
+        })),
+    );
 
     let budget = TokenBudget::new(BASE_BUDGET_PER_FINDING);
     let fell_back = Arc::new(AtomicBool::new(false));
@@ -259,10 +264,12 @@ async fn two_pass_for_finding(
 
     let mut queries = retrieval.queries;
     queries.truncate(MAX_QUERIES_PER_FINDING);
-    events.emit(IntelligentTaskEvent::new("trace_pass1_queries").with_data(json!({
-        "findingId": finding_id,
-        "queryCount": queries.len(),
-    })));
+    events.emit(
+        IntelligentTaskEvent::new("trace_pass1_queries").with_data(json!({
+            "findingId": finding_id,
+            "queryCount": queries.len(),
+        })),
+    );
 
     // ── Dispatch queries ───────────────────────────────────────────────────────
     let mut results: Vec<Value> = Vec::with_capacity(queries.len());
@@ -312,11 +319,13 @@ async fn two_pass_for_finding(
         verdict.finding_id = finding_id.clone();
     }
 
-    events.emit(IntelligentTaskEvent::new("trace_pass2_completed").with_data(json!({
-        "findingId": finding_id,
-        "reachable": verdict.reachable,
-        "confidence": verdict.confidence,
-    })));
+    events.emit(
+        IntelligentTaskEvent::new("trace_pass2_completed").with_data(json!({
+            "findingId": finding_id,
+            "reachable": verdict.reachable,
+            "confidence": verdict.confidence,
+        })),
+    );
 
     Ok(verdict)
 }
@@ -343,12 +352,14 @@ async fn check_budget(
         Ok(()) => Ok(None),
         Err(BudgetExceeded { pass, used, cap }) => {
             let finding_id = &validated.finding.finding_id;
-            events.emit(IntelligentTaskEvent::new("token_budget_exceeded").with_data(json!({
-                "findingId": finding_id,
-                "pass": format!("{pass:?}"),
-                "used": used,
-                "cap": cap,
-            })));
+            events.emit(
+                IntelligentTaskEvent::new("token_budget_exceeded").with_data(json!({
+                    "findingId": finding_id,
+                    "pass": format!("{pass:?}"),
+                    "used": used,
+                    "cap": cap,
+                })),
+            );
             emit_fallback(events, finding_id, "budget_exceeded");
             fell_back.store(true, Ordering::Relaxed);
             ctx.partial_analysis.store(true, Ordering::Relaxed);
@@ -377,9 +388,21 @@ async fn dispatch_query(intel: &dyn CodeIntelligence, query: &QueryRequest) -> V
             .unwrap_or(default)
     };
     match query.tool.as_str() {
-        "get_callers" => to_value(intel.get_callers(&arg_str("symbol"), arg_u32("depth", 2)).await),
-        "get_callees" => to_value(intel.get_callees(&arg_str("symbol"), arg_u32("depth", 2)).await),
-        "get_context" => to_value(intel.get_context(&arg_str("file"), arg_u32("line", 1)).await),
+        "get_callers" => to_value(
+            intel
+                .get_callers(&arg_str("symbol"), arg_u32("depth", 2))
+                .await,
+        ),
+        "get_callees" => to_value(
+            intel
+                .get_callees(&arg_str("symbol"), arg_u32("depth", 2))
+                .await,
+        ),
+        "get_context" => to_value(
+            intel
+                .get_context(&arg_str("file"), arg_u32("line", 1))
+                .await,
+        ),
         "search_symbol" => to_value(intel.search_symbol(&arg_str("name")).await),
         "get_call_chain" => to_value(
             intel
@@ -399,8 +422,9 @@ async fn dispatch_query(intel: &dyn CodeIntelligence, query: &QueryRequest) -> V
 
 fn to_value<T: serde::Serialize>(result: anyhow::Result<T>) -> Value {
     match result {
-        Ok(value) => serde_json::to_value(value)
-            .unwrap_or_else(|err| json!({"error": err.to_string()})),
+        Ok(value) => {
+            serde_json::to_value(value).unwrap_or_else(|err| json!({"error": err.to_string()}))
+        }
         Err(err) => json!({"error": err.to_string()}),
     }
 }
@@ -433,17 +457,13 @@ async fn single_pass_for_finding(
         "requiredOutput": {"traces": [{"findingId":"string","reachable":true,"confidence":0.0,"rationale":"string"}]}
     });
     let prompt = stage_prompt(AuditStage::Trace, &payload);
-    let output = invoke_json::<TraceOutput>(
-        &*ctx.invoker,
-        AuditStage::Trace,
-        &prompt,
-        &ctx.llm_config,
-    )
-    .await
-    .map(|result| {
-        events.emit(result.invocation.attempt_event);
-        result.payload
-    })?;
+    let output =
+        invoke_json::<TraceOutput>(&*ctx.invoker, AuditStage::Trace, &prompt, &ctx.llm_config)
+            .await
+            .map(|result| {
+                events.emit(result.invocation.attempt_event);
+                result.payload
+            })?;
     let trace = output
         .traces
         .into_iter()
@@ -478,10 +498,12 @@ async fn single_pass_for_id(
 }
 
 fn emit_fallback(events: &PipelineEventSink, finding_id: &str, reason: &str) {
-    events.emit(IntelligentTaskEvent::new("trace_fallback").with_data(json!({
-        "findingId": finding_id,
-        "reason": reason,
-    })));
+    events.emit(
+        IntelligentTaskEvent::new("trace_fallback").with_data(json!({
+            "findingId": finding_id,
+            "reason": reason,
+        })),
+    );
 }
 
 /// LLM Pass 1 output: a list of structural query requests.
@@ -562,12 +584,30 @@ mod tests {
 
     #[test]
     fn extension_mapping_covers_common_languages() {
-        assert_eq!(map_extension_to_language("src/lib.rs").as_deref(), Some("rust"));
-        assert_eq!(map_extension_to_language("app/main.py").as_deref(), Some("python"));
-        assert_eq!(map_extension_to_language("ui/Button.tsx").as_deref(), Some("tsx"));
-        assert_eq!(map_extension_to_language("ui/util.ts").as_deref(), Some("typescript"));
-        assert_eq!(map_extension_to_language("server.go").as_deref(), Some("go"));
-        assert_eq!(map_extension_to_language("Main.java").as_deref(), Some("java"));
+        assert_eq!(
+            map_extension_to_language("src/lib.rs").as_deref(),
+            Some("rust")
+        );
+        assert_eq!(
+            map_extension_to_language("app/main.py").as_deref(),
+            Some("python")
+        );
+        assert_eq!(
+            map_extension_to_language("ui/Button.tsx").as_deref(),
+            Some("tsx")
+        );
+        assert_eq!(
+            map_extension_to_language("ui/util.ts").as_deref(),
+            Some("typescript")
+        );
+        assert_eq!(
+            map_extension_to_language("server.go").as_deref(),
+            Some("go")
+        );
+        assert_eq!(
+            map_extension_to_language("Main.java").as_deref(),
+            Some("java")
+        );
         assert_eq!(map_extension_to_language("a.cpp").as_deref(), Some("cpp"));
         assert_eq!(map_extension_to_language("a.c").as_deref(), Some("c"));
         assert_eq!(map_extension_to_language("README.md"), None);

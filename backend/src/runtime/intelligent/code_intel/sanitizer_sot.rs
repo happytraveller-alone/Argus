@@ -31,24 +31,24 @@
 ///   - Dotted paths (e.g. `psycopg2.sql.SQL`) match by prefix (covers
 ///     `psycopg2.sql.SQL("...")` and `psycopg2.sql.SQL.format`).
 pub const PYTHON_SANITIZERS: &[&str] = &[
-    "psycopg2.sql.SQL",            // OWASP SQLi Cheat Sheet: psycopg2 parameterized composition
-    "psycopg2.sql.Identifier",     // OWASP SQLi Cheat Sheet: safe identifier quoting
-    "psycopg2.sql.Literal",        // OWASP SQLi Cheat Sheet: safe literal binding
-    "sqlalchemy.text",             // SQLAlchemy: parameterized text() with :bindparams
-    "sqlalchemy.bindparam",        // SQLAlchemy: explicit bind parameter
-    "sqlite3.Cursor.execute",      // Python stdlib sqlite3: ? placeholder binding
+    "psycopg2.sql.SQL", // OWASP SQLi Cheat Sheet: psycopg2 parameterized composition
+    "psycopg2.sql.Identifier", // OWASP SQLi Cheat Sheet: safe identifier quoting
+    "psycopg2.sql.Literal", // OWASP SQLi Cheat Sheet: safe literal binding
+    "sqlalchemy.text",  // SQLAlchemy: parameterized text() with :bindparams
+    "sqlalchemy.bindparam", // SQLAlchemy: explicit bind parameter
+    "sqlite3.Cursor.execute", // Python stdlib sqlite3: ? placeholder binding
     "django.db.models.QuerySet.raw", // Django ORM: params= safe form (sanitizer at call site)
-    "html.escape",                 // Python stdlib html: HTML entity escaping
-    "markupsafe.escape",           // Jinja/Flask: HTML escape via Markup
-    "urllib.parse.quote",          // Python stdlib: URL encoding
-    "urllib.parse.quote_plus",     // Python stdlib: URL form encoding
-    "shlex.quote",                 // Python stdlib: shell-safe quoting (CWE-78 sanitizer)
-    "bleach.clean",                // OWASP HTML sanitizer (Mozilla bleach)
-    "secrets.compare_digest",      // Python stdlib: constant-time comparison
+    "html.escape",      // Python stdlib html: HTML entity escaping
+    "markupsafe.escape", // Jinja/Flask: HTML escape via Markup
+    "urllib.parse.quote", // Python stdlib: URL encoding
+    "urllib.parse.quote_plus", // Python stdlib: URL form encoding
+    "shlex.quote",      // Python stdlib: shell-safe quoting (CWE-78 sanitizer)
+    "bleach.clean",     // OWASP HTML sanitizer (Mozilla bleach)
+    "secrets.compare_digest", // Python stdlib: constant-time comparison
     "werkzeug.utils.secure_filename", // OWASP Path-Traversal Cheat Sheet
-    "os.path.realpath",            // Python stdlib: canonicalization for path traversal defense
-    "pathlib.Path.resolve",        // Python stdlib pathlib: canonical path resolution
-    "json.dumps",                  // Python stdlib: structured JSON output (escapes quotes)
+    "os.path.realpath", // Python stdlib: canonicalization for path traversal defense
+    "pathlib.Path.resolve", // Python stdlib pathlib: canonical path resolution
+    "json.dumps",       // Python stdlib: structured JSON output (escapes quotes)
 ];
 
 /// Java sanitizers / encoders / parameterized-query helpers.
@@ -57,25 +57,25 @@ pub const PYTHON_SANITIZERS: &[&str] = &[
 /// fully-qualified `java.sql.PreparedStatement` and a bare `PreparedStatement`
 /// both hit.
 pub const JAVA_SANITIZERS: &[&str] = &[
-    "PreparedStatement",                       // OWASP Java SQLi Cheat Sheet: java.sql.PreparedStatement bind params
-    "NamedParameterJdbcTemplate",              // Spring JdbcTemplate: named-parameter binding
-    "JdbcTemplate.queryForObject",             // Spring JdbcTemplate: parameterized variant
-    "CriteriaBuilder",                         // JPA Criteria API: type-safe parameterization
-    "TypedQuery.setParameter",                 // JPA setParameter — bound parameter binding
-    "EntityManager.createNamedQuery",          // JPA named query (compile-time bound)
-    "OWASP.ESAPI.encoder",                     // OWASP ESAPI Encoder facade
-    "ESAPI.encoder",                           // OWASP ESAPI Encoder facade (short form)
-    "Encode.forHtml",                          // OWASP Java Encoder forHtml (HTML context)
-    "Encode.forJavaScript",                    // OWASP Java Encoder forJavaScript
-    "Encode.forUriComponent",                  // OWASP Java Encoder forUriComponent
-    "HtmlUtils.htmlEscape",                    // Spring web HtmlUtils HTML escape
-    "StringEscapeUtils.escapeHtml4",           // Apache Commons Text HTML entity escape
-    "StringEscapeUtils.escapeXml11",           // Apache Commons Text XML escape
-    "URLEncoder.encode",                       // Java stdlib java.net.URLEncoder
-    "Files.createTempFile",                    // java.nio.file: safe temp file creation (no symlink racing)
-    "MessageDigest.isEqual",                   // java.security: constant-time digest comparison
-    "Path.normalize",                          // java.nio.file: canonicalization for path-traversal defense
-    "Paths.get",                               // java.nio.file paths constructor (precondition for normalize)
+    "PreparedStatement", // OWASP Java SQLi Cheat Sheet: java.sql.PreparedStatement bind params
+    "NamedParameterJdbcTemplate", // Spring JdbcTemplate: named-parameter binding
+    "JdbcTemplate.queryForObject", // Spring JdbcTemplate: parameterized variant
+    "CriteriaBuilder",   // JPA Criteria API: type-safe parameterization
+    "TypedQuery.setParameter", // JPA setParameter — bound parameter binding
+    "EntityManager.createNamedQuery", // JPA named query (compile-time bound)
+    "OWASP.ESAPI.encoder", // OWASP ESAPI Encoder facade
+    "ESAPI.encoder",     // OWASP ESAPI Encoder facade (short form)
+    "Encode.forHtml",    // OWASP Java Encoder forHtml (HTML context)
+    "Encode.forJavaScript", // OWASP Java Encoder forJavaScript
+    "Encode.forUriComponent", // OWASP Java Encoder forUriComponent
+    "HtmlUtils.htmlEscape", // Spring web HtmlUtils HTML escape
+    "StringEscapeUtils.escapeHtml4", // Apache Commons Text HTML entity escape
+    "StringEscapeUtils.escapeXml11", // Apache Commons Text XML escape
+    "URLEncoder.encode", // Java stdlib java.net.URLEncoder
+    "Files.createTempFile", // java.nio.file: safe temp file creation (no symlink racing)
+    "MessageDigest.isEqual", // java.security: constant-time digest comparison
+    "Path.normalize",    // java.nio.file: canonicalization for path-traversal defense
+    "Paths.get",         // java.nio.file paths constructor (precondition for normalize)
 ];
 
 /// TypeScript / JavaScript sanitizers / encoders / parameterized-query helpers.
@@ -83,25 +83,25 @@ pub const JAVA_SANITIZERS: &[&str] = &[
 /// Dotted paths cover library-style entries (`mysql.escape`); bare identifiers
 /// match by suffix (e.g. `escape`).
 pub const TYPESCRIPT_SANITIZERS: &[&str] = &[
-    "DOMPurify.sanitize",          // OWASP XSS Cheat Sheet: DOMPurify HTML sanitizer
-    "sanitize-html",               // OWASP HTML sanitizer (sanitize-html npm)
-    "validator.escape",            // validator.js HTML entity escape
-    "validator.isURL",              // validator.js URL whitelist validation
-    "validator.isEmail",            // validator.js email whitelist validation
-    "lodash.escape",               // Lodash _.escape (HTML entity escape)
-    "he.encode",                   // he library: HTML entity encoder
-    "encodeURIComponent",          // ECMAScript stdlib: URI component encoding
-    "encodeURI",                   // ECMAScript stdlib: URI encoding
-    "mysql.escape",                // mysql/mysql2 npm: parameterized escape helper
-    "mysql.escapeId",              // mysql/mysql2 npm: identifier escape
-    "pg.Pool.query",               // node-postgres parameterized query ($1, $2 placeholders)
-    "knex.raw",                    // Knex.js: parameterized raw with bindings
-    "sequelize.literal",           // Sequelize literal helper (used with bind params)
-    "express-validator.body",      // express-validator: middleware-level validation
-    "express-validator.check",     // express-validator: middleware-level validation
-    "path.resolve",                // Node.js stdlib path: canonicalization
-    "path.normalize",              // Node.js stdlib path: canonicalization
-    "crypto.timingSafeEqual",      // Node.js stdlib crypto: constant-time comparison
+    "DOMPurify.sanitize",      // OWASP XSS Cheat Sheet: DOMPurify HTML sanitizer
+    "sanitize-html",           // OWASP HTML sanitizer (sanitize-html npm)
+    "validator.escape",        // validator.js HTML entity escape
+    "validator.isURL",         // validator.js URL whitelist validation
+    "validator.isEmail",       // validator.js email whitelist validation
+    "lodash.escape",           // Lodash _.escape (HTML entity escape)
+    "he.encode",               // he library: HTML entity encoder
+    "encodeURIComponent",      // ECMAScript stdlib: URI component encoding
+    "encodeURI",               // ECMAScript stdlib: URI encoding
+    "mysql.escape",            // mysql/mysql2 npm: parameterized escape helper
+    "mysql.escapeId",          // mysql/mysql2 npm: identifier escape
+    "pg.Pool.query",           // node-postgres parameterized query ($1, $2 placeholders)
+    "knex.raw",                // Knex.js: parameterized raw with bindings
+    "sequelize.literal",       // Sequelize literal helper (used with bind params)
+    "express-validator.body",  // express-validator: middleware-level validation
+    "express-validator.check", // express-validator: middleware-level validation
+    "path.resolve",            // Node.js stdlib path: canonicalization
+    "path.normalize",          // Node.js stdlib path: canonicalization
+    "crypto.timingSafeEqual",  // Node.js stdlib crypto: constant-time comparison
 ];
 
 /// Go sanitizers / encoders / parameterized-query helpers.
@@ -118,25 +118,25 @@ pub const TYPESCRIPT_SANITIZERS: &[&str] = &[
 ///     §13 Database Security.
 ///   - `golang.org/x/crypto/bcrypt` — OWASP Password Storage Cheat Sheet.
 pub const GO_SANITIZERS: &[&str] = &[
-    "html.EscapeString",                  // Go stdlib html: HTML entity escape
-    "template.HTMLEscapeString",          // Go stdlib html/template: HTML escape
-    "template.JSEscapeString",            // Go stdlib html/template: JS-context escape
-    "template.URLQueryEscaper",           // Go stdlib html/template: URL query escape
-    "url.QueryEscape",                    // Go stdlib net/url: URL form encoding
-    "url.PathEscape",                     // Go stdlib net/url: URL path component encoding
-    "sql.DB.Prepare",                     // Go stdlib database/sql: prepared statement
-    "sql.Tx.Prepare",                     // Go stdlib database/sql: prepared statement in tx
-    "sql.Stmt.Exec",                      // Go stdlib database/sql: parameterized exec ($1, ?)
-    "sql.Stmt.Query",                     // Go stdlib database/sql: parameterized query
-    "filepath.Clean",                     // Go stdlib path/filepath: canonicalize (CWE-22 defense)
-    "filepath.Rel",                       // Go stdlib path/filepath: relative-path containment check
-    "strconv.Quote",                      // Go stdlib strconv: Go-syntax safe quoting
-    "subtle.ConstantTimeCompare",         // Go stdlib crypto/subtle: constant-time comparison
-    "regexp.QuoteMeta",                   // Go stdlib regexp: meta-character escape (CWE-625)
-    "bcrypt.GenerateFromPassword",        // golang.org/x/crypto/bcrypt: OWASP password storage
-    "argon2.IDKey",                       // golang.org/x/crypto/argon2: OWASP password storage
-    "bluemonday.UGCPolicy",               // OWASP HTML sanitizer (bluemonday) — user-content policy
-    "bluemonday.StrictPolicy",            // OWASP HTML sanitizer (bluemonday) — strict policy
+    "html.EscapeString",           // Go stdlib html: HTML entity escape
+    "template.HTMLEscapeString",   // Go stdlib html/template: HTML escape
+    "template.JSEscapeString",     // Go stdlib html/template: JS-context escape
+    "template.URLQueryEscaper",    // Go stdlib html/template: URL query escape
+    "url.QueryEscape",             // Go stdlib net/url: URL form encoding
+    "url.PathEscape",              // Go stdlib net/url: URL path component encoding
+    "sql.DB.Prepare",              // Go stdlib database/sql: prepared statement
+    "sql.Tx.Prepare",              // Go stdlib database/sql: prepared statement in tx
+    "sql.Stmt.Exec",               // Go stdlib database/sql: parameterized exec ($1, ?)
+    "sql.Stmt.Query",              // Go stdlib database/sql: parameterized query
+    "filepath.Clean",              // Go stdlib path/filepath: canonicalize (CWE-22 defense)
+    "filepath.Rel",                // Go stdlib path/filepath: relative-path containment check
+    "strconv.Quote",               // Go stdlib strconv: Go-syntax safe quoting
+    "subtle.ConstantTimeCompare",  // Go stdlib crypto/subtle: constant-time comparison
+    "regexp.QuoteMeta",            // Go stdlib regexp: meta-character escape (CWE-625)
+    "bcrypt.GenerateFromPassword", // golang.org/x/crypto/bcrypt: OWASP password storage
+    "argon2.IDKey",                // golang.org/x/crypto/argon2: OWASP password storage
+    "bluemonday.UGCPolicy",        // OWASP HTML sanitizer (bluemonday) — user-content policy
+    "bluemonday.StrictPolicy",     // OWASP HTML sanitizer (bluemonday) — strict policy
 ];
 
 /// Rust sanitizers / encoders / parameterized-query helpers.
@@ -165,21 +165,21 @@ pub const GO_SANITIZERS: &[&str] = &[
 ///   - `docs.rs/subtle`: constant-time equality (`subtle::ConstantTimeEq`).
 ///   - Rust stdlib `Path::canonicalize` — canonicalization for path-traversal defense.
 pub const RUST_SANITIZERS: &[&str] = &[
-    "sqlx::query!",                       // sqlx compile-time parameterized macro
-    "sqlx::query_as!",                    // sqlx compile-time parameterized + typed macro
-    "sqlx::query_scalar!",                // sqlx compile-time parameterized scalar macro
-    "sqlx::query",                        // sqlx runtime parameterized builder (bind() chain)
-    "tokio_postgres::Client::query",      // tokio-postgres parameterized query
-    "tokio_postgres::Statement",          // tokio-postgres prepared statement (parameterized)
-    "htmlescape::encode_minimal",         // htmlescape crate: HTML entity escape
-    "v_htmlescape::escape",               // v_htmlescape crate: HTML escape
-    "askama::filters::e",                 // askama template engine: HTML auto-escape filter
-    "urlencoding::encode",                // urlencoding crate: URL component encoding
-    "regex::escape",                      // regex crate: regex meta-character escape
-    "argon2::Argon2",                     // argon2 crate: OWASP password storage
-    "bcrypt::hash",                       // bcrypt crate: OWASP password storage
-    "subtle::ConstantTimeEq",             // subtle crate: constant-time equality
-    "Path::canonicalize",                 // Rust stdlib std::path::Path: canonicalization (CWE-22)
+    "sqlx::query!",                  // sqlx compile-time parameterized macro
+    "sqlx::query_as!",               // sqlx compile-time parameterized + typed macro
+    "sqlx::query_scalar!",           // sqlx compile-time parameterized scalar macro
+    "sqlx::query",                   // sqlx runtime parameterized builder (bind() chain)
+    "tokio_postgres::Client::query", // tokio-postgres parameterized query
+    "tokio_postgres::Statement",     // tokio-postgres prepared statement (parameterized)
+    "htmlescape::encode_minimal",    // htmlescape crate: HTML entity escape
+    "v_htmlescape::escape",          // v_htmlescape crate: HTML escape
+    "askama::filters::e",            // askama template engine: HTML auto-escape filter
+    "urlencoding::encode",           // urlencoding crate: URL component encoding
+    "regex::escape",                 // regex crate: regex meta-character escape
+    "argon2::Argon2",                // argon2 crate: OWASP password storage
+    "bcrypt::hash",                  // bcrypt crate: OWASP password storage
+    "subtle::ConstantTimeEq",        // subtle crate: constant-time equality
+    "Path::canonicalize",            // Rust stdlib std::path::Path: canonicalization (CWE-22)
 ];
 
 /// Look up a symbol against the SoT array for the given language. Returns the
@@ -318,10 +318,7 @@ mod tests {
     #[test]
     fn unknown_language_returns_none() {
         // Plan: language-unknown returns None.
-        assert_eq!(
-            lookup_sanitizer("haskell", "PreparedStatement"),
-            None
-        );
+        assert_eq!(lookup_sanitizer("haskell", "PreparedStatement"), None);
         assert_eq!(lookup_sanitizer("", "anything"), None);
     }
 

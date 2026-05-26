@@ -104,6 +104,52 @@ function buildAiVerifiedStats(metrics?: ProjectManagementMetrics | null) {
 	});
 }
 
+
+function buildCodegraphIndexStatus(project: Project) {
+	const state = project.codegraph_index;
+	const normalized = String(state?.status || "empty")
+		.trim()
+		.toLowerCase();
+	if (normalized === "ready") {
+		return {
+			label: "索引就绪",
+			message: state?.message || null,
+			progress: 100,
+			tone: "ready" as const,
+		};
+	}
+	if (normalized === "failed") {
+		return {
+			label: "索引失败",
+			message: state?.error || state?.message || null,
+			progress: 100,
+			tone: "failed" as const,
+		};
+	}
+	if (normalized === "indexing") {
+		return {
+			label: "建索引中",
+			message: state?.message || null,
+			progress: state?.progress ?? 65,
+			tone: "pending" as const,
+		};
+	}
+	if (normalized === "pending") {
+		return {
+			label: "等待索引",
+			message: state?.message || null,
+			progress: state?.progress ?? 20,
+			tone: "pending" as const,
+		};
+	}
+	return {
+		label: "未导入索引",
+		message: state?.message || null,
+		progress: state?.progress ?? 0,
+		tone: "idle" as const,
+	};
+}
+
 function getMetricsStatusMessage(metrics?: ProjectManagementMetrics | null) {
 	if (!metrics || metrics.status === "pending") {
 		return "指标同步中...";
@@ -168,6 +214,7 @@ export function buildProjectsPageViewModel(
 				executionStats: buildExecutionStats(metrics),
 				metricsStatus,
 				metricsStatusMessage,
+				codegraphIndexStatus: buildCodegraphIndexStatus(project),
 				actions: {
 					canCreateScan: true,
 					canBrowseCode: project.source_type === "zip",

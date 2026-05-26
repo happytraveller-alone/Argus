@@ -6,7 +6,9 @@ use async_trait::async_trait;
 use serde_json::json;
 use tracing::info_span;
 
-use super::{AgentRunConfig, AgentRunResult, AgentRunner, AgentToolDef, LlmProtocol, ToolResult, TokenUsage};
+use super::{
+    AgentRunConfig, AgentRunResult, AgentRunner, AgentToolDef, LlmProtocol, TokenUsage, ToolResult,
+};
 
 #[async_trait]
 pub trait ToolExecutor: Send + Sync {
@@ -53,11 +55,13 @@ impl LlmAgentRunner {
     ) -> serde_json::Value {
         let tool_defs: Vec<serde_json::Value> = tools
             .iter()
-            .map(|t| json!({
-                "name": t.name,
-                "description": t.description,
-                "input_schema": t.input_schema,
-            }))
+            .map(|t| {
+                json!({
+                    "name": t.name,
+                    "description": t.description,
+                    "input_schema": t.input_schema,
+                })
+            })
             .collect();
         json!({
             "model": model,
@@ -76,14 +80,16 @@ impl LlmAgentRunner {
     ) -> serde_json::Value {
         let tool_defs: Vec<serde_json::Value> = tools
             .iter()
-            .map(|t| json!({
-                "type": "function",
-                "function": {
-                    "name": t.name,
-                    "description": t.description,
-                    "parameters": t.input_schema,
-                },
-            }))
+            .map(|t| {
+                json!({
+                    "type": "function",
+                    "function": {
+                        "name": t.name,
+                        "description": t.description,
+                        "parameters": t.input_schema,
+                    },
+                })
+            })
             .collect();
         json!({
             "model": model,
@@ -103,7 +109,10 @@ impl LlmAgentRunner {
         let mut attempt = 0u32;
         loop {
             let resp = tokio::time::timeout(turn_timeout, async {
-                let mut req = self.client.post(url).header("content-type", "application/json");
+                let mut req = self
+                    .client
+                    .post(url)
+                    .header("content-type", "application/json");
                 req = match self.protocol {
                     LlmProtocol::AnthropicCompatible => req
                         .header("x-api-key", &self.api_key)
@@ -119,7 +128,10 @@ impl LlmAgentRunner {
 
             let status = resp.status();
             if status.is_success() {
-                return resp.json::<serde_json::Value>().await.context("parse response");
+                return resp
+                    .json::<serde_json::Value>()
+                    .await
+                    .context("parse response");
             }
             let retry_eligible = status.as_u16() == 429 || status.is_server_error();
             if retry_eligible && attempt < max_retries {
@@ -251,7 +263,10 @@ impl LlmAgentRunner {
             }
             "tool_calls" => {
                 messages.push(message.clone());
-                let tool_calls = message["tool_calls"].as_array().cloned().unwrap_or_default();
+                let tool_calls = message["tool_calls"]
+                    .as_array()
+                    .cloned()
+                    .unwrap_or_default();
                 for tc in &tool_calls {
                     let tool_call_id = tc["id"].as_str().unwrap_or("").to_string();
                     let tool_name = tc["function"]["name"].as_str().unwrap_or("").to_string();

@@ -67,7 +67,8 @@ function getStatusBadgeVariant(status: ZipBatchItemStatus) {
             return "default";
         case "failed":
             return "destructive";
-        case "creating":
+        case "importing":
+        case "indexing":
             return "secondary";
         default:
             return "outline";
@@ -80,8 +81,10 @@ function getStatusLabel(status: ZipBatchItemStatus) {
             return "已创建";
         case "failed":
             return "失败";
-        case "creating":
-            return "创建中";
+        case "importing":
+            return "导入中";
+        case "indexing":
+            return "建索引";
         default:
             return "待创建";
     }
@@ -103,6 +106,7 @@ export default function CreateProjectDialog({
         completed: 0,
         total: 0,
         currentProjectName: "",
+        currentStage: "",
     });
     const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -117,6 +121,7 @@ export default function CreateProjectDialog({
                 completed: 0,
                 total: 0,
                 currentProjectName: "",
+                currentStage: "",
             });
             setForm(createEmptyProjectForm());
         }
@@ -196,8 +201,9 @@ export default function CreateProjectDialog({
         setUploading(true);
         setUploadProgress({
             completed: 0,
-            total: submittedItems.length,
+            total: Math.max(submittedItems.length * 2, 1),
             currentProjectName: submittedItems[0]?.editableName || "",
+            currentStage: "准备导入",
         });
 
         try {
@@ -221,36 +227,37 @@ export default function CreateProjectDialog({
                             item.id === targetId
                                 ? {
                                       ...item,
-                                      status:
-                                          event.status === "creating"
-                                              ? "creating"
-                                              : event.status,
+                                      status: event.status,
                                       errorMessage:
                                           event.status === "failed"
                                               ? event.message
                                               : undefined,
+                                      stageMessage:
+                                          event.status === "failed"
+                                              ? undefined
+                                              : event.message,
                                   }
                                 : item,
                         ),
                     );
                     setUploadProgress({
                         completed:
-                            event.status === "creating"
-                                ? event.index
-                                : Math.min(
-                                      event.index + 1,
-                                      submittedItems.length,
-                                  ),
-                        total: submittedItems.length,
+                            event.completedSteps ??
+                            (event.status === "importing"
+                                ? event.index * 2
+                                : Math.min(event.index * 2 + 2, submittedItems.length * 2)),
+                        total: event.totalSteps ?? Math.max(submittedItems.length * 2, 1),
                         currentProjectName: event.projectName,
+                        currentStage: event.message || getStatusLabel(event.status),
                     });
                 },
             );
             setUploadSummary(result);
             setUploadProgress({
-                completed: result.total,
-                total: result.total,
+                completed: Math.max(result.total * 2, 1),
+                total: Math.max(result.total * 2, 1),
                 currentProjectName: "",
+                currentStage: "",
             });
         } catch {
             toast.error("批量创建项目失败");
@@ -370,7 +377,7 @@ export default function CreateProjectDialog({
                                         </span>
                                         <span>
                                             {uploading
-                                                ? `处理中: ${uploadProgress.currentProjectName || "准备中"}`
+                                                ? `处理中: ${uploadProgress.currentProjectName || "准备中"}${uploadProgress.currentStage ? ` · ${uploadProgress.currentStage}` : ""}`
                                                 : isUploadComplete
                                                   ? `完成: 成功 ${uploadSummary?.successCount || 0} / 失败 ${uploadSummary?.failureCount || 0}`
                                                   : "提交前可逐项修改项目名"}
@@ -406,7 +413,10 @@ export default function CreateProjectDialog({
                                                                     className="text-[10px]"
                                                                 >
                                                                     {item.status ===
-                                                                    "creating" ? (
+                                                                    "importing" ? (
+                                                                        <Loader2 className="w-3 h-3 animate-spin" />
+                                                                    ) : item.status ===
+                                                                      "indexing" ? (
                                                                         <Loader2 className="w-3 h-3 animate-spin" />
                                                                     ) : item.status ===
                                                                       "success" ? (
@@ -471,6 +481,13 @@ export default function CreateProjectDialog({
                                                                         }
                                                                     </p>
                                                                 ) : null}
+                                                                {item.stageMessage ? (
+                                                                    <p className="text-xs font-mono text-muted-foreground">
+                                                                        {
+                                                                            item.stageMessage
+                                                                        }
+                                                                    </p>
+                                                                ) : null}
                                                             </div>
                                                         </div>
                                                         <Button
@@ -504,7 +521,7 @@ export default function CreateProjectDialog({
                                     <div className="flex items-center justify-between text-xs font-mono text-muted-foreground">
                                         <span>
                                             {uploading
-                                                ? "批量创建进行中..."
+                                                ? `批量创建进行中${uploadProgress.currentStage ? ` · ${uploadProgress.currentStage}` : ""}`
                                                 : "批量创建已完成"}
                                         </span>
                                         <span className="text-primary">

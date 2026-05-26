@@ -1226,7 +1226,10 @@ mod tests {
         )
         .expect("parse");
         assert_eq!(plan.language, "java");
-        assert!(!plan.language_fallback_used, "no fallback when handoff supplied language");
+        assert!(
+            !plan.language_fallback_used,
+            "no fallback when handoff supplied language"
+        );
     }
 
     #[test]

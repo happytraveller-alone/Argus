@@ -11,6 +11,21 @@ type ProjectsPaginationModule =
 type ProjectsTableModule =
 	typeof import("../src/pages/projects/components/ProjectsTable.tsx");
 
+
+const READY_CODEGRAPH_STATUS = {
+	label: "索引就绪",
+	message: "codegraph 索引已建立",
+	progress: 100,
+	tone: "ready" as const,
+};
+
+const PENDING_CODEGRAPH_STATUS = {
+	label: "等待索引",
+	message: "源码包已导入，等待建立 codegraph 索引",
+	progress: 20,
+	tone: "pending" as const,
+};
+
 async function importOrFail<TModule = Record<string, unknown>>(
 	relativePath: string,
 ): Promise<TModule> {
@@ -80,6 +95,7 @@ test("ProjectsTable renders hover metric popovers without nested trigger frames"
 					executionStats: { completed: 2, running: 1 },
 					metricsStatus: "ready",
 					metricsStatusMessage: null,
+					codegraphIndexStatus: READY_CODEGRAPH_STATUS,
 					actions: {
 						canDelete: true,
 						canCreateScan: true,
@@ -114,6 +130,7 @@ test("ProjectsTable renders hover metric popovers without nested trigger frames"
 					executionStats: { completed: 0, running: 0 },
 					metricsStatus: "pending",
 					metricsStatusMessage: "指标同步中...",
+					codegraphIndexStatus: PENDING_CODEGRAPH_STATUS,
 					actions: {
 						canDelete: true,
 						canCreateScan: true,
@@ -187,7 +204,9 @@ test("ProjectsTable renders hover metric popovers without nested trigger frames"
 	assert.match(markup, /border-r-2 border-border\/90/);
 	assert.match(markup, /border-l-2 border-border\/95/);
 	assert.match(markup, /text-\[14px\] font-semibold uppercase/);
-	assert.match(markup, /mx-auto block max-w-\[180px\] truncate text-center text-\[16px\] font-semibold/);
+	assert.match(markup, /block max-w-full truncate text-center text-\[16px\] font-semibold/);
+	assert.match(markup, /索引就绪/);
+	assert.match(markup, /等待索引/);
 	assert.match(markup, /text-center text-\[16px\] text-muted-foreground/);
 	assert.match(markup, /justify-center gap-2 text-\[16px\]/);
 	assert.ok(markup.indexOf("查看详情") < markup.indexOf("代码浏览"));
@@ -229,6 +248,7 @@ test("ProjectsTable hides zero-count vulnerability severities and shows empty pl
 					executionStats: { completed: 0, running: 0 },
 					metricsStatus: "ready",
 					metricsStatusMessage: null,
+					codegraphIndexStatus: READY_CODEGRAPH_STATUS,
 					actions: {
 						canDelete: true,
 						canCreateScan: true,
@@ -263,6 +283,7 @@ test("ProjectsTable hides zero-count vulnerability severities and shows empty pl
 					executionStats: { completed: 0, running: 0 },
 					metricsStatus: "ready",
 					metricsStatusMessage: null,
+					codegraphIndexStatus: READY_CODEGRAPH_STATUS,
 					actions: {
 						canDelete: true,
 						canCreateScan: true,
@@ -318,6 +339,7 @@ test("ProjectsTable keeps metric popovers but removes the old outer trigger fram
 					executionStats: { completed: 1, running: 0 },
 					metricsStatus: "ready",
 					metricsStatusMessage: null,
+					codegraphIndexStatus: READY_CODEGRAPH_STATUS,
 					actions: {
 						canDelete: true,
 						canCreateScan: true,

@@ -86,6 +86,12 @@ const METRIC_POPOVER_ITEM_CLASSNAME =
   "rounded-2xl border border-border/70 bg-muted/20 px-3 py-2";
 const METRIC_POPOVER_ITEM_LABEL_CLASSNAME =
   "mb-2 block text-[12px] font-medium tracking-[0.08em] text-muted-foreground";
+const CODEGRAPH_INDEX_TONE_CLASSNAMES = {
+  idle: "border-border bg-muted/20 text-muted-foreground",
+  pending: "border-cyan-500/30 bg-cyan-500/10 text-cyan-100",
+  ready: "border-emerald-500/30 bg-emerald-500/10 text-emerald-100",
+  failed: "border-rose-500/35 bg-rose-500/10 text-rose-100",
+} as const;
 
 type MetricGroupKey = "vulnerabilities" | "ai-verified";
 
@@ -275,14 +281,22 @@ function buildColumns(
         cellClassName: `${BODY_CELL_CLASSNAME} ${DIVIDER_CELL_CLASSNAME} text-center`,
       },
       cell: ({ row }) => (
-        <Link
-          to={row.original.detailPath}
-          state={row.original.detailState}
-          title={row.original.name}
-          className="mx-auto block max-w-[180px] truncate text-center text-[16px] font-semibold text-foreground transition-colors hover:text-primary"
-        >
-          {row.original.name}
-        </Link>
+        <div className="mx-auto flex max-w-[220px] flex-col items-center gap-1.5">
+          <Link
+            to={row.original.detailPath}
+            state={row.original.detailState}
+            title={row.original.name}
+            className="block max-w-full truncate text-center text-[16px] font-semibold text-foreground transition-colors hover:text-primary"
+          >
+            {row.original.name}
+          </Link>
+          <span
+            className={`inline-flex max-w-full items-center rounded-full border px-2 py-0.5 text-[10px] leading-none ${CODEGRAPH_INDEX_TONE_CLASSNAMES[row.original.codegraphIndexStatus.tone]}`}
+            title={row.original.codegraphIndexStatus.message ?? undefined}
+          >
+            {row.original.codegraphIndexStatus.label}
+          </span>
+        </div>
       ),
     },
     {

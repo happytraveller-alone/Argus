@@ -273,7 +273,7 @@ export default function AgentAuditDetail() {
 	const sseUrl = taskId
 		? `${getApiBaseUrl()}/intelligent-tasks/${taskId}/stream`
 		: "";
-	const { events: sseEvents, isComplete: sseComplete } = useSseStream(sseUrl, {
+	const { events: sseEvents } = useSseStream(sseUrl, {
 		enabled: Boolean(taskId) && !taskTerminal,
 	});
 
@@ -543,6 +543,7 @@ export default function AgentAuditDetail() {
 							) : (
 								eventLog.map((ev, idx) => {
 									const data = ev.data && typeof ev.data === "object" ? (ev.data as Record<string, unknown>) : null;
+									const redactedError = data?.redacted_error;
 									const isLlm = ev.kind === "llm_attempt";
 									const isAgent = ev.kind === "agent_started" || ev.kind === "agent_completed";
 									return (
@@ -584,9 +585,9 @@ export default function AgentAuditDetail() {
 															<span className="text-muted-foreground">开始: <span className="text-foreground/70">{String(data.started || "-")}</span></span>
 															<span className="text-muted-foreground">完成: <span className="text-foreground/70">{String(data.completed || "-")}</span></span>
 														</div>
-														{data.redacted_error && (
-															<p className="text-[11px] text-rose-300">错误: {String(data.redacted_error)}</p>
-														)}
+														{redactedError ? (
+															<p className="text-[11px] text-rose-300">错误: {String(redactedError)}</p>
+														) : null}
 													</div>
 												)}
 												{isAgent && data && (

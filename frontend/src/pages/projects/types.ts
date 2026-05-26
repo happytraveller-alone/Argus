@@ -37,6 +37,12 @@ export interface ProjectsPageRowViewModel {
 	};
 	metricsStatus: ProjectMetricsStatus | "pending";
 	metricsStatusMessage: string | null;
+	codegraphIndexStatus: {
+		label: string;
+		message: string | null;
+		progress: number;
+		tone: "idle" | "pending" | "ready" | "failed";
+	};
 	actions: {
 		canCreateScan: boolean;
 		canBrowseCode: boolean;

@@ -53,8 +53,8 @@ fn ac3_acceptance_language_identification_three_languages() {
                 }
             }
         });
-        let plan = parse_compile_sandbox_plan(&payload.to_string())
-            .expect("parse with codegraph handoff");
+        let plan =
+            parse_compile_sandbox_plan(&payload.to_string()).expect("parse with codegraph handoff");
         assert_eq!(
             plan.language, expected_plan_lang,
             "language must be {expected_plan_lang} (normalized from handoff {lang}), got {}",

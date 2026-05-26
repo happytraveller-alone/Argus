@@ -1,19 +1,13 @@
 use std::{
     fmt,
-    sync::{
-        atomic::AtomicBool,
-        Arc,
-    },
+    sync::{atomic::AtomicBool, Arc},
 };
 
 use serde_json::json;
 
 use crate::runtime::intelligent::{
-    agent_runner::AgentRunner,
-    code_intel::CodeIntelligence,
-    config::IntelligentLlmConfig,
-    llm::IntelligentLlmInvoker,
-    types::IntelligentTaskEvent,
+    agent_runner::AgentRunner, code_intel::CodeIntelligence, config::IntelligentLlmConfig,
+    llm::IntelligentLlmInvoker, types::IntelligentTaskEvent,
 };
 
 use super::repo::{ArchiveEntry, ProjectArchive};
@@ -118,9 +112,18 @@ impl PipelineEventSink {
     /// Create a new sink. Returns the sink and a receiver that drains all emitted events.
     pub fn new(
         broadcast_tx: tokio::sync::broadcast::Sender<IntelligentTaskEvent>,
-    ) -> (Self, tokio::sync::mpsc::UnboundedReceiver<IntelligentTaskEvent>) {
+    ) -> (
+        Self,
+        tokio::sync::mpsc::UnboundedReceiver<IntelligentTaskEvent>,
+    ) {
         let (collect_tx, collect_rx) = tokio::sync::mpsc::unbounded_channel();
-        (Self { broadcast_tx, collect_tx }, collect_rx)
+        (
+            Self {
+                broadcast_tx,
+                collect_tx,
+            },
+            collect_rx,
+        )
     }
 
     pub fn emit(&self, event: IntelligentTaskEvent) {

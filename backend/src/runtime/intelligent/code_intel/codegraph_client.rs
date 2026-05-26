@@ -24,7 +24,9 @@ use tracing::{debug, warn};
 use crate::runtime::intelligent::agent_runner::podman::PodmanSession;
 
 use super::cache::CodeGraphCache;
-use super::protocol::{CgCalleesResponse, CgCallEdge, CgCallersResponse, CgFileEntry, CgNode, CgQueryItem};
+use super::protocol::{
+    CgCallEdge, CgCalleesResponse, CgCallersResponse, CgFileEntry, CgNode, CgQueryItem,
+};
 use super::staging::{self, StagingDir};
 use super::{
     CallChain, CallNode, CodeContext, CodeIntelligence, SymbolMatch, TaintNode, TaintSearchResult,
@@ -50,6 +52,10 @@ const INIT_TIMEOUT_MS: u64 = 60_000;
 const CONTAINER_SRC: &str = "/codegraph/src";
 /// Path inside the container where the writable index dir is bind-mounted.
 const CONTAINER_INDEX: &str = "/codegraph/index";
+/// Codegraph data root override for deployments with an explicit host-visible path.
+const ARGUS_CODEGRAPH_DATA_DIR_ENV: &str = "ARGUS_CODEGRAPH_DATA_DIR";
+/// Shared workspace root used by scanner runners and visible to host Podman.
+const SCAN_WORKSPACE_ROOT_ENV: &str = "SCAN_WORKSPACE_ROOT";
 
 /// CodeIntelligence backed by `@colbymchenry/codegraph` inside a PodmanSession.
 pub struct CodeGraphClient {
@@ -143,7 +149,10 @@ impl CodeGraphClient {
                 .await
                 .context("codegraph index copy exec failed")?;
             if cp_code != 0 {
-                bail!("codegraph index copy exit {cp_code}: {}", truncate_for_err(&cp_stderr));
+                bail!(
+                    "codegraph index copy exit {cp_code}: {}",
+                    truncate_for_err(&cp_stderr)
+                );
             }
 
             // Commit to the host-side cache (best-effort — log on failure).
@@ -170,6 +179,21 @@ impl CodeGraphClient {
         })
     }
 
+    /// Build or refresh the archive's persistent codegraph cache and then stop
+    /// the temporary query container. Project import uses this to pre-warm the
+    /// index so later intelligent scans avoid the cold `codegraph init` path.
+    pub async fn ensure_index_cached(
+        archive_path: &Path,
+        archive_name: &str,
+        archive_sha256: String,
+        image: &str,
+        cache: Arc<CodeGraphCache>,
+    ) -> Result<Vec<String>> {
+        let client = Self::init(archive_path, archive_name, archive_sha256, image, cache).await?;
+        let languages = client.languages_indexed();
+        client.shutdown().await?;
+        Ok(languages)
+    }
 }
 
 #[async_trait]
@@ -269,9 +293,7 @@ impl CodeIntelligence for CodeGraphClient {
 
     async fn resolve_symbol_at(&self, file: &str, line: u32) -> Result<Option<SymbolMatch>> {
         self.ready_check()?;
-        let cmd = format!(
-            "codegraph query '*' --path {CONTAINER_SRC} -j -l 200",
-        );
+        let cmd = format!("codegraph query '*' --path {CONTAINER_SRC} -j -l 200",);
         let items: Vec<CgQueryItem> = run_json(&self.session, &cmd).await?;
         Ok(items
             .into_iter()
@@ -369,14 +391,27 @@ impl CodeGraphClient {
 // Helpers
 // ---------------------------------------------------------------------------
 
+fn codegraph_data_root() -> PathBuf {
+    std::env::var(ARGUS_CODEGRAPH_DATA_DIR_ENV)
+        .ok()
+        .map(|value| PathBuf::from(value.trim()))
+        .filter(|value| !value.as_os_str().is_empty())
+        .unwrap_or_else(|| {
+            std::env::var(SCAN_WORKSPACE_ROOT_ENV)
+                .ok()
+                .map(|value| PathBuf::from(value.trim()))
+                .filter(|value| !value.as_os_str().is_empty())
+                .unwrap_or_else(|| PathBuf::from("/tmp/argus-codegraph"))
+                .join("codegraph")
+        })
+}
+
 fn build_index_dir(sha: &str) -> PathBuf {
-    let base = std::env::var("ARGUS_DATA_DIR").unwrap_or_else(|_| "/tmp".to_string());
-    PathBuf::from(base).join("codegraph_indexes").join(sha)
+    codegraph_data_root().join("indexes").join(sha)
 }
 
 fn cache_root_path() -> PathBuf {
-    let base = std::env::var("ARGUS_DATA_DIR").unwrap_or_else(|_| "/tmp".to_string());
-    PathBuf::from(base).join("codegraph_cache")
+    codegraph_data_root().join("cache")
 }
 
 fn staging_path_str(staging: &StagingDir) -> Result<&str> {
@@ -387,7 +422,8 @@ fn staging_path_str(staging: &StagingDir) -> Result<&str> {
 }
 
 fn path_str(p: &Path) -> Result<&str> {
-    p.to_str().ok_or_else(|| anyhow!("path is not valid UTF-8: {}", p.display()))
+    p.to_str()
+        .ok_or_else(|| anyhow!("path is not valid UTF-8: {}", p.display()))
 }
 
 /// Single-quote escape for shell-passed arguments.
@@ -396,10 +432,7 @@ fn sh_quote(s: &str) -> String {
 }
 
 /// Execute a codegraph CLI command inside the container and parse stdout as JSON.
-async fn run_json<T: serde::de::DeserializeOwned>(
-    session: &PodmanSession,
-    cmd: &str,
-) -> Result<T> {
+async fn run_json<T: serde::de::DeserializeOwned>(session: &PodmanSession, cmd: &str) -> Result<T> {
     let (stdout, stderr, code) = session
         .exec_command(cmd, QUERY_TIMEOUT_MS)
         .await
@@ -445,7 +478,11 @@ fn call_edge_to_node(edge: CgCallEdge, depth: u32) -> CallNode {
 
 fn node_to_symbol(node: CgNode) -> SymbolMatch {
     SymbolMatch {
-        symbol: if node.qualified_name.is_empty() { node.name } else { node.qualified_name },
+        symbol: if node.qualified_name.is_empty() {
+            node.name
+        } else {
+            node.qualified_name
+        },
         file: node.file_path,
         line: node.start_line,
         language: node.language,
@@ -454,7 +491,11 @@ fn node_to_symbol(node: CgNode) -> SymbolMatch {
 }
 
 fn range_contains(node: &CgNode, line: u32) -> bool {
-    let end = if node.end_line == 0 { node.start_line } else { node.end_line };
+    let end = if node.end_line == 0 {
+        node.start_line
+    } else {
+        node.end_line
+    };
     node.start_line <= line && line <= end
 }
 
@@ -611,6 +652,38 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::{LazyLock, Mutex};
+
+    static TEST_ENV_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
+
+    struct EnvVarGuard {
+        key: &'static str,
+        previous: Option<String>,
+    }
+
+    impl EnvVarGuard {
+        fn set(key: &'static str, value: &str) -> Self {
+            let previous = std::env::var(key).ok();
+            std::env::set_var(key, value);
+            Self { key, previous }
+        }
+
+        fn remove(key: &'static str) -> Self {
+            let previous = std::env::var(key).ok();
+            std::env::remove_var(key);
+            Self { key, previous }
+        }
+    }
+
+    impl Drop for EnvVarGuard {
+        fn drop(&mut self) {
+            if let Some(value) = &self.previous {
+                std::env::set_var(self.key, value);
+            } else {
+                std::env::remove_var(self.key);
+            }
+        }
+    }
 
     fn make_node(file: &str, sl: u32, el: u32) -> CgNode {
         CgNode {
@@ -691,12 +764,41 @@ mod tests {
         assert_eq!(s.symbol, "bare");
     }
 
-    // `build_index_dir` reads ARGUS_DATA_DIR via std::env which is process-wide.
-    // Per Phase 0 commit 95550989, env-mutating tests cause races with parallel
-    // runner::tests::execute_* tests that also probe the same data dir. The
-    // function's path-suffix component is already covered indirectly via cache
-    // layout tests; an explicit env-mutating test for the root prefix is
-    // intentionally omitted.
+    #[test]
+    fn codegraph_data_root_defaults_to_shared_scan_workspace() {
+        let _lock = TEST_ENV_LOCK.lock().expect("env lock");
+        let scan_root = tempfile::tempdir().expect("scan root");
+        let _override_guard = EnvVarGuard::remove(ARGUS_CODEGRAPH_DATA_DIR_ENV);
+        let _scan_guard =
+            EnvVarGuard::set(SCAN_WORKSPACE_ROOT_ENV, scan_root.path().to_str().unwrap());
+
+        assert_eq!(codegraph_data_root(), scan_root.path().join("codegraph"));
+        assert_eq!(
+            build_index_dir("abc"),
+            scan_root.path().join("codegraph/indexes/abc")
+        );
+        assert_eq!(cache_root_path(), scan_root.path().join("codegraph/cache"));
+    }
+
+    #[test]
+    fn codegraph_data_root_allows_explicit_host_visible_override() {
+        let _lock = TEST_ENV_LOCK.lock().expect("env lock");
+        let override_root = tempfile::tempdir().expect("override root");
+        let scan_root = tempfile::tempdir().expect("scan root");
+        let _override_guard = EnvVarGuard::set(
+            ARGUS_CODEGRAPH_DATA_DIR_ENV,
+            override_root.path().to_str().unwrap(),
+        );
+        let _scan_guard =
+            EnvVarGuard::set(SCAN_WORKSPACE_ROOT_ENV, scan_root.path().to_str().unwrap());
+
+        assert_eq!(codegraph_data_root(), override_root.path());
+        assert_eq!(
+            build_index_dir("abc"),
+            override_root.path().join("indexes/abc")
+        );
+        assert_eq!(cache_root_path(), override_root.path().join("cache"));
+    }
 
     // -----------------------------------------------------------------------
     // BFS taint search tests (`find_taint_through` core).
@@ -715,8 +817,11 @@ mod tests {
     /// Build a closure that returns canned callees from a static map.
     fn graph_provider(
         graph: std::collections::HashMap<&'static str, Vec<CallNode>>,
-    ) -> impl FnMut(String) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Vec<CallNode>>> + Send>>
-    {
+    ) -> impl FnMut(
+        String,
+    ) -> std::pin::Pin<
+        Box<dyn std::future::Future<Output = Result<Vec<CallNode>>> + Send>,
+    > {
         move |sym: String| {
             let v = graph.get(sym.as_str()).cloned().unwrap_or_default();
             Box::pin(async move { Ok(v) })
@@ -750,8 +855,14 @@ mod tests {
         let result = bfs_taint_search("src", "sink", 1, graph_provider(g))
             .await
             .expect("bfs");
-        assert!(!result.sink_reached, "max_hops=1 cannot reach sink: {result:?}");
-        assert!(result.truncated, "truncated must be set when hop cap blocks search");
+        assert!(
+            !result.sink_reached,
+            "max_hops=1 cannot reach sink: {result:?}"
+        );
+        assert!(
+            result.truncated,
+            "truncated must be set when hop cap blocks search"
+        );
         assert!(result.nodes.is_empty(), "no path returned on truncation");
     }
 

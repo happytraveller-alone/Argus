@@ -1765,8 +1765,8 @@ async fn run_codeql_scan_inner(
         "initialising codegraph for CodeQL language identification",
     )
     .await;
-    let codegraph_handoff = try_init_codegraph_for_codeql_with_events(state, task_id, project_id)
-        .await;
+    let codegraph_handoff =
+        try_init_codegraph_for_codeql_with_events(state, task_id, project_id).await;
     let language = match (options.languages.first(), codegraph_handoff.as_ref()) {
         (Some(lang), _) if !lang.trim().is_empty() => lang.clone(),
         (_, Some(handoff)) => handoff
@@ -2208,10 +2208,7 @@ async fn set_codegraph_unavailable_flag(state: &AppState, task_id: &str, reason:
         }
         if let Value::Object(map) = &mut record.extra {
             map.insert("codegraph_unavailable".to_string(), json!(true));
-            map.insert(
-                "codegraph_unavailable_reason".to_string(),
-                json!(reason),
-            );
+            map.insert("codegraph_unavailable_reason".to_string(), json!(reason));
         }
     }
     let _ = task_state::save_snapshot(state, &snapshot).await;

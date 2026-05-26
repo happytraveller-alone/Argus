@@ -52,6 +52,44 @@ function pinToProjectBrowserHash() {
 	);
 }
 
+function isCodegraphIndexTerminal(status?: string | null) {
+	const normalized = String(status || "")
+		.trim()
+		.toLowerCase();
+	return (
+		normalized === "ready" ||
+		normalized === "failed" ||
+		normalized === "empty"
+	);
+}
+
+async function waitForProjectCodegraphIndex(
+	projectId: string,
+	dataSource: ProjectsPageProps["dataSource"],
+	onProgress?: (event: BatchCreateZipProjectsProgressEvent) => void,
+	baseEvent?: Omit<BatchCreateZipProjectsProgressEvent, "status" | "message">,
+) {
+	let lastState: Awaited<
+		ReturnType<ProjectsPageProps["dataSource"]["getProjectCodegraphIndex"]>
+	> | null = null;
+	for (let attempt = 0; attempt < 30; attempt += 1) {
+		const state = await dataSource.getProjectCodegraphIndex(projectId);
+		lastState = state;
+		if (baseEvent) {
+			onProgress?.({
+				...baseEvent,
+				status: "indexing",
+				message: state.message || "建立 codegraph 索引",
+			});
+		}
+		if (isCodegraphIndexTerminal(state.status)) {
+			return state;
+		}
+		await new Promise((resolve) => setTimeout(resolve, 1000));
+	}
+	return lastState;
+}
+
 async function logUserAction(action: string, payload: Record<string, unknown>) {
 	const loggerModule = await import("@/shared/utils/logger");
 	loggerModule.logger.logUserAction(action, payload);
@@ -250,8 +288,34 @@ export default function ProjectsPage({
 		const result = await createZipProjectsWorkflow({
 			items,
 			sharedInput,
-			createZipProject: (input, file) =>
-				dataSource.createZipProject(input, file),
+			createZipProject: async (input, file) => {
+				const project = await dataSource.createZipProject(input, file);
+				const itemIndex = Math.max(
+					items.findIndex((item) => item.projectName === input.name),
+					0,
+				);
+				const totalSteps = Math.max(items.length * 2, 1);
+				const indexState = await waitForProjectCodegraphIndex(
+					project.id,
+					dataSource,
+					onProgress,
+					{
+						index: itemIndex,
+						total: items.length,
+						fileName: file.name,
+						projectName: input.name,
+						completedSteps: itemIndex * 2 + 1,
+						totalSteps,
+						project,
+					},
+				);
+				return indexState
+					? {
+							...project,
+							codegraph_index: indexState,
+						}
+					: project;
+			},
 			onProgress,
 		});
 

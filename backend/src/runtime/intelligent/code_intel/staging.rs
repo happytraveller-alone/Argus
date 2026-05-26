@@ -3,7 +3,7 @@
 //! Extracts uploaded project archives into a hash-keyed directory that can be
 //! bind-mounted read-only into the codegraph container.
 //!
-//! Layout: `${ARGUS_DATA_DIR:-/tmp}/codegraph_staging/{archive_sha256}/src/`
+//! Layout: `${ARGUS_CODEGRAPH_DATA_DIR:-${SCAN_WORKSPACE_ROOT}/codegraph}/staging/{archive_sha256}/src/`
 
 use std::path::{Path, PathBuf};
 
@@ -83,11 +83,23 @@ pub async fn prepare(
 // Helpers
 // ---------------------------------------------------------------------------
 
+fn codegraph_data_root() -> PathBuf {
+    std::env::var("ARGUS_CODEGRAPH_DATA_DIR")
+        .ok()
+        .map(|value| PathBuf::from(value.trim()))
+        .filter(|value| !value.as_os_str().is_empty())
+        .unwrap_or_else(|| {
+            std::env::var("SCAN_WORKSPACE_ROOT")
+                .ok()
+                .map(|value| PathBuf::from(value.trim()))
+                .filter(|value| !value.as_os_str().is_empty())
+                .unwrap_or_else(|| PathBuf::from("/tmp/argus-codegraph"))
+                .join("codegraph")
+        })
+}
+
 fn build_staging_root(sha: &str) -> PathBuf {
-    let data_dir = std::env::var("ARGUS_DATA_DIR").unwrap_or_else(|_| "/tmp".to_owned());
-    PathBuf::from(data_dir)
-        .join("codegraph_staging")
-        .join(sha)
+    codegraph_data_root().join("staging").join(sha)
 }
 
 /// Removes the wrapped path from disk when dropped.
@@ -139,9 +151,9 @@ mod tests {
         let zip = make_test_zip();
         let sha = "deadbeef1234";
 
-        // Override ARGUS_DATA_DIR to a temp dir so we don't pollute /tmp.
+        // Override ARGUS_CODEGRAPH_DATA_DIR to a temp dir so we don't pollute /tmp.
         let base = tempfile::tempdir().expect("tempdir");
-        std::env::set_var("ARGUS_DATA_DIR", base.path());
+        std::env::set_var("ARGUS_CODEGRAPH_DATA_DIR", base.path());
 
         let staging = prepare(zip.path(), "test.zip", sha)
             .await
@@ -165,7 +177,7 @@ mod tests {
         let sha = "cafebabe5678";
 
         let base = tempfile::tempdir().expect("tempdir");
-        std::env::set_var("ARGUS_DATA_DIR", base.path());
+        std::env::set_var("ARGUS_CODEGRAPH_DATA_DIR", base.path());
 
         // First call — extracts.
         let s1 = prepare(zip.path(), "test.zip", sha).await.expect("first");
@@ -183,7 +195,10 @@ mod tests {
         let s2 = prepare(zip.path(), "test.zip", sha).await.expect("second");
         // Must re-use existing path (no re-extraction wipes marker).
         assert_eq!(s2.root, src_dir);
-        assert!(s2.root.join("marker.txt").exists(), "idempotent: should not re-extract");
+        assert!(
+            s2.root.join("marker.txt").exists(),
+            "idempotent: should not re-extract"
+        );
         assert_eq!(root1, src_dir);
     }
 }

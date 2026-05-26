@@ -44,8 +44,7 @@ use super::super::{
     repo::source_snippets,
     stage_prompt,
     types::{
-        AuditFinding, ConfidenceSource, DismissalCategory, DismissalEvidence, HuntOutput,
-        HuntTask,
+        AuditFinding, ConfidenceSource, DismissalCategory, DismissalEvidence, HuntOutput, HuntTask,
     },
 };
 
@@ -267,7 +266,10 @@ async fn enrich_dismissal_two_pass(
         }
     };
     let indexed = intel.languages_indexed();
-    if !indexed.iter().any(|entry| entry.eq_ignore_ascii_case(&lang)) {
+    if !indexed
+        .iter()
+        .any(|entry| entry.eq_ignore_ascii_case(&lang))
+    {
         emit_fallback(events, &finding_id, "language_not_indexed");
         ctx.partial_analysis.store(true, Ordering::SeqCst);
         return Ok(());
@@ -576,11 +578,7 @@ async fn dispatch_query(intel: &dyn CodeIntelligence, query: &QueryRequest) -> V
     match query.tool.as_str() {
         "find_taint_through" => to_value(
             intel
-                .find_taint_through(
-                    &arg_str("source"),
-                    &arg_str("sink"),
-                    arg_u32("max_hops", 3),
-                )
+                .find_taint_through(&arg_str("source"), &arg_str("sink"), arg_u32("max_hops", 3))
                 .await,
         ),
         "get_callers" => to_value(
@@ -593,7 +591,11 @@ async fn dispatch_query(intel: &dyn CodeIntelligence, query: &QueryRequest) -> V
                 .get_callees(&arg_str("symbol"), arg_u32("depth", 2))
                 .await,
         ),
-        "get_context" => to_value(intel.get_context(&arg_str("file"), arg_u32("line", 1)).await),
+        "get_context" => to_value(
+            intel
+                .get_context(&arg_str("file"), arg_u32("line", 1))
+                .await,
+        ),
         "search_symbol" => to_value(intel.search_symbol(&arg_str("name")).await),
         other => {
             tracing::warn!(tool = %other, "hunt pass1 requested unknown tool; skipping");
@@ -678,9 +680,7 @@ fn apply_pass2_verdict(
         None => {
             // No pre-set verdict — accept the LLM's full verdict.
             finding.dismissal_evidence = Some(DismissalEvidence {
-                category: llm_evidence
-                    .category
-                    .unwrap_or(DismissalCategory::Real),
+                category: llm_evidence.category.unwrap_or(DismissalCategory::Real),
                 confidence_source: llm_evidence
                     .confidence_source
                     .unwrap_or(ConfidenceSource::LlmInferred),
@@ -909,7 +909,10 @@ mod tests {
         assert_eq!(evidence.category, DismissalCategory::Test);
         assert_eq!(evidence.confidence_source, ConfidenceSource::PathPattern);
         assert_eq!(evidence.path_pattern.as_deref(), Some("tests/"));
-        assert_eq!(evidence.rationale.as_deref(), Some("caller lives in tests/"));
+        assert_eq!(
+            evidence.rationale.as_deref(),
+            Some("caller lives in tests/")
+        );
     }
 
     /// No pre-set verdict + LLM verdict → LLM verdict applied fully.

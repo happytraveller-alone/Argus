@@ -59,6 +59,17 @@ export interface ProjectManagementMetrics {
   updated_at?: string;
 }
 
+
+export interface ProjectCodegraphIndex {
+  status: "empty" | "pending" | "indexing" | "ready" | "failed" | string;
+  progress: number;
+  message: string;
+  archive_sha256?: string | null;
+  languages_indexed: string[];
+  updated_at?: string | null;
+  error?: string | null;
+}
+
 export interface Project {
   id: string;
   name: string;
@@ -71,6 +82,7 @@ export interface Project {
   is_active: boolean;
   created_at: string;
   updated_at: string;
+  codegraph_index?: ProjectCodegraphIndex | null;
   management_metrics?: ProjectManagementMetrics | null;
 }
 

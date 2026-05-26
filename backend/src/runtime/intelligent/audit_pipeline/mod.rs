@@ -168,15 +168,18 @@ pub async fn run_pipeline_with_config(
             Err(err) => {
                 ctx.partial_analysis
                     .store(true, std::sync::atomic::Ordering::Relaxed);
+                let error_chain = format_anyhow_error_chain(&err);
                 event_sink.emit(
                     IntelligentTaskEvent::new("codegraph_init_failed").with_data(json!({
                         "archiveSha256": archive_meta.sha256,
                         "error": err.to_string(),
+                        "errorChain": error_chain,
                     })),
                 );
                 tracing::warn!(
                     archive_sha256 = %archive_meta.sha256,
                     error = %err,
+                    error_chain = %error_chain,
                     "codegraph init failed; scan continuing in degraded mode"
                 );
                 None
@@ -195,94 +198,94 @@ pub async fn run_pipeline_with_config(
         let mut outputs = PipelineOutputs::default();
         outputs.recon = stages::recon::run(&ctx, &event_sink).await?;
 
-    // ── Phase 2: hunt → validate → gapfill loop ───────────────────────────────
-    let mut hunt_tasks = outputs.recon.initial_tasks.clone();
-    outputs.hunt =
-        stages::hunt::run(&ctx, &hunt_tasks, config.hunt_concurrency, &event_sink).await?;
-    outputs.validate = stages::validate::run(&ctx, &outputs.hunt, &event_sink).await?;
-
-    for gap_iter in 0..config.gapfill_iterations {
-        // Budget check (best-effort).
-        if let Some(budget) = config.max_tokens_budget {
-            if _token_counter.load(Ordering::Relaxed) >= budget {
-                event_sink.emit(
-                    IntelligentTaskEvent::new("budget_exceeded").with_data(json!({
-                        "phase": "gapfill_loop",
-                        "iteration": gap_iter,
-                    })),
-                );
-                break;
-            }
-        }
-
-        outputs.gapfill =
-            stages::gapfill::run(&ctx, &outputs.recon, &outputs.validate, &event_sink).await?;
-
-        if outputs.gapfill.new_tasks.is_empty() {
-            break;
-        }
-
-        event_sink.emit(
-            IntelligentTaskEvent::new("gapfill_tasks_added").with_data(json!({
-                "iteration": gap_iter,
-                "newTaskCount": outputs.gapfill.new_tasks.len(),
-            })),
-        );
-
-        hunt_tasks = outputs.gapfill.new_tasks.clone();
-        let gap_hunt =
+        // ── Phase 2: hunt → validate → gapfill loop ───────────────────────────────
+        let mut hunt_tasks = outputs.recon.initial_tasks.clone();
+        outputs.hunt =
             stages::hunt::run(&ctx, &hunt_tasks, config.hunt_concurrency, &event_sink).await?;
-
-        // Merge new findings into the accumulated hunt output.
-        outputs.hunt.findings.extend(gap_hunt.findings);
         outputs.validate = stages::validate::run(&ctx, &outputs.hunt, &event_sink).await?;
-    }
 
-    // ── Phase 3: dedupe → trace ───────────────────────────────────────────────
-    outputs.dedupe = stages::dedupe::run(&ctx, &outputs.validate, &event_sink).await?;
-    outputs.trace =
-        stages::trace::run(&ctx, &outputs.dedupe, &outputs.validate, &event_sink).await?;
+        for gap_iter in 0..config.gapfill_iterations {
+            // Budget check (best-effort).
+            if let Some(budget) = config.max_tokens_budget {
+                if _token_counter.load(Ordering::Relaxed) >= budget {
+                    event_sink.emit(IntelligentTaskEvent::new("budget_exceeded").with_data(
+                        json!({
+                            "phase": "gapfill_loop",
+                            "iteration": gap_iter,
+                        }),
+                    ));
+                    break;
+                }
+            }
 
-    // ── Phase 4: feedback → hunt → validate → dedupe → trace loop ────────────
-    for fb_iter in 0..config.feedback_iterations {
-        if let Some(budget) = config.max_tokens_budget {
-            if _token_counter.load(Ordering::Relaxed) >= budget {
-                event_sink.emit(
-                    IntelligentTaskEvent::new("budget_exceeded").with_data(json!({
-                        "phase": "feedback_loop",
-                        "iteration": fb_iter,
-                    })),
-                );
+            outputs.gapfill =
+                stages::gapfill::run(&ctx, &outputs.recon, &outputs.validate, &event_sink).await?;
+
+            if outputs.gapfill.new_tasks.is_empty() {
                 break;
             }
+
+            event_sink.emit(
+                IntelligentTaskEvent::new("gapfill_tasks_added").with_data(json!({
+                    "iteration": gap_iter,
+                    "newTaskCount": outputs.gapfill.new_tasks.len(),
+                })),
+            );
+
+            hunt_tasks = outputs.gapfill.new_tasks.clone();
+            let gap_hunt =
+                stages::hunt::run(&ctx, &hunt_tasks, config.hunt_concurrency, &event_sink).await?;
+
+            // Merge new findings into the accumulated hunt output.
+            outputs.hunt.findings.extend(gap_hunt.findings);
+            outputs.validate = stages::validate::run(&ctx, &outputs.hunt, &event_sink).await?;
         }
 
-        outputs.feedback = stages::feedback::run(&ctx, &outputs.trace, &event_sink).await?;
-
-        if outputs.feedback.new_tasks.is_empty() {
-            break;
-        }
-
-        event_sink.emit(
-            IntelligentTaskEvent::new("feedback_tasks_added").with_data(json!({
-                "iteration": fb_iter,
-                "newTaskCount": outputs.feedback.new_tasks.len(),
-            })),
-        );
-
-        let fb_hunt = stages::hunt::run(
-            &ctx,
-            &outputs.feedback.new_tasks,
-            config.hunt_concurrency,
-            &event_sink,
-        )
-        .await?;
-        outputs.hunt.findings.extend(fb_hunt.findings);
-        outputs.validate = stages::validate::run(&ctx, &outputs.hunt, &event_sink).await?;
+        // ── Phase 3: dedupe → trace ───────────────────────────────────────────────
         outputs.dedupe = stages::dedupe::run(&ctx, &outputs.validate, &event_sink).await?;
         outputs.trace =
-        stages::trace::run(&ctx, &outputs.dedupe, &outputs.validate, &event_sink).await?;
-    }
+            stages::trace::run(&ctx, &outputs.dedupe, &outputs.validate, &event_sink).await?;
+
+        // ── Phase 4: feedback → hunt → validate → dedupe → trace loop ────────────
+        for fb_iter in 0..config.feedback_iterations {
+            if let Some(budget) = config.max_tokens_budget {
+                if _token_counter.load(Ordering::Relaxed) >= budget {
+                    event_sink.emit(IntelligentTaskEvent::new("budget_exceeded").with_data(
+                        json!({
+                            "phase": "feedback_loop",
+                            "iteration": fb_iter,
+                        }),
+                    ));
+                    break;
+                }
+            }
+
+            outputs.feedback = stages::feedback::run(&ctx, &outputs.trace, &event_sink).await?;
+
+            if outputs.feedback.new_tasks.is_empty() {
+                break;
+            }
+
+            event_sink.emit(
+                IntelligentTaskEvent::new("feedback_tasks_added").with_data(json!({
+                    "iteration": fb_iter,
+                    "newTaskCount": outputs.feedback.new_tasks.len(),
+                })),
+            );
+
+            let fb_hunt = stages::hunt::run(
+                &ctx,
+                &outputs.feedback.new_tasks,
+                config.hunt_concurrency,
+                &event_sink,
+            )
+            .await?;
+            outputs.hunt.findings.extend(fb_hunt.findings);
+            outputs.validate = stages::validate::run(&ctx, &outputs.hunt, &event_sink).await?;
+            outputs.dedupe = stages::dedupe::run(&ctx, &outputs.validate, &event_sink).await?;
+            outputs.trace =
+                stages::trace::run(&ctx, &outputs.dedupe, &outputs.validate, &event_sink).await?;
+        }
 
         // ── Phase 5: report ───────────────────────────────────────────
         outputs.report = stages::report::run(&ctx, &outputs, &event_sink).await?;
@@ -343,6 +346,35 @@ async fn try_init_code_intel(
         cache,
     )
     .await
+}
+
+fn format_anyhow_error_chain(error: &anyhow::Error) -> String {
+    error
+        .chain()
+        .map(ToString::to_string)
+        .collect::<Vec<_>>()
+        .join(": ")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn format_anyhow_error_chain_preserves_context_sources() {
+        let error = std::fs::read_to_string("/definitely/missing/codegraph.db")
+            .context("cache.try_load failed")
+            .context("CodeGraphClient::init failed")
+            .unwrap_err();
+
+        let chain = format_anyhow_error_chain(&error);
+        assert!(chain.contains("CodeGraphClient::init failed"), "{chain}");
+        assert!(chain.contains("cache.try_load failed"), "{chain}");
+        assert!(
+            chain.contains("No such file") || chain.contains("os error"),
+            "{chain}"
+        );
+    }
 }
 
 #[must_use]

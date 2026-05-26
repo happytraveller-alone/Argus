@@ -263,7 +263,11 @@ impl HttpIntelligentLlmInvoker {
                     .filter(|item| item.get("type").and_then(|t| t.as_str()) == Some("text"))
                     .find_map(|item| {
                         let t = item.get("text").and_then(|t| t.as_str()).unwrap_or("");
-                        if t.trim().is_empty() { None } else { Some(t.to_string()) }
+                        if t.trim().is_empty() {
+                            None
+                        } else {
+                            Some(t.to_string())
+                        }
                     })
             })
             .unwrap_or_default();
@@ -273,7 +277,9 @@ impl HttpIntelligentLlmInvoker {
             let tool_content = content_array
                 .and_then(|arr| {
                     arr.iter()
-                        .filter(|item| item.get("type").and_then(|t| t.as_str()) == Some("tool_use"))
+                        .filter(|item| {
+                            item.get("type").and_then(|t| t.as_str()) == Some("tool_use")
+                        })
                         .find_map(|item| {
                             let input = item.get("input")?;
                             if input.is_object() || input.is_array() {

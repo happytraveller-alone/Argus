@@ -136,6 +136,7 @@ services:
       CUBE_VM_MEMORY_MB: "${CUBE_VM_MEMORY_MB:-8192}"
       CUBE_VM_CPUS: "${CUBE_VM_CPUS:-4}"
       SCAN_WORKSPACE_ROOT: ${SCAN_WORKSPACE_ROOT:-/tmp/Argus/scans}
+      ARGUS_CODEGRAPH_DATA_DIR: ${ARGUS_CODEGRAPH_DATA_DIR:-/tmp/Argus/scans/codegraph}
       SCAN_WORKSPACE_VOLUME: ${SCAN_WORKSPACE_VOLUME:-Argus_scan_workspace}
       RUNNER_PREFLIGHT_ENABLED: "${RUNNER_PREFLIGHT_ENABLED:-true}"
       RUNNER_PREFLIGHT_STRICT: "${RUNNER_PREFLIGHT_STRICT:-true}"
@@ -153,6 +154,8 @@ services:
       BACKEND_PYPI_INDEX_CANDIDATES: ${BACKEND_PYPI_INDEX_CANDIDATES:-https://mirrors.aliyun.com/pypi/simple/,https://pypi.tuna.tsinghua.edu.cn/simple,https://pypi.mirrors.ustc.edu.cn/simple/,https://mirrors.cloud.tencent.com/pypi/simple/,https://mirrors.huaweicloud.com/repository/pypi/simple/,https://mirrors.bfsu.edu.cn/pypi/web/simple/,https://pypi.org/simple}
       SCANNER_OPENGREP_IMAGE: ${SCANNER_OPENGREP_IMAGE:-argus/opengrep-runner-local:latest}
       SCANNER_CODEQL_IMAGE: ${SCANNER_CODEQL_IMAGE:-localhost/argus/codeql-runner:latest}
+      AUDIT_SANDBOX_IMAGE: ${AUDIT_SANDBOX_IMAGE:-argus/audit-sandbox:latest}
+      ARGUS_CODEGRAPH_PREINDEX_ENABLED: "${ARGUS_CODEGRAPH_PREINDEX_ENABLED:-true}"
       SCANNER_JOERN_IMAGE: ${SCANNER_JOERN_IMAGE:-ghcr.nju.edu.cn/joernio/joern:nightly}
       SCANNER_OPENGREP_A3S_BOX_IMAGE: ${SCANNER_OPENGREP_A3S_BOX_IMAGE:-${SCANNER_OPENGREP_IMAGE:-argus/opengrep-runner-local:latest}}
       CODEQL_LLM_ALLOW_SOURCE_SNIPPETS: "${CODEQL_LLM_ALLOW_SOURCE_SNIPPETS:-true}"

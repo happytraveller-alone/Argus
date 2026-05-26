@@ -1319,6 +1319,7 @@ podman_run_backend() {
     -e "Argus_PODMAN_BIN=podman" \
     -e "CONTAINER_HOST=unix://${PODMAN_CONTAINER_SOCKET}" \
     -e "SCAN_WORKSPACE_ROOT=$scan_workspace_host" \
+    -e "ARGUS_CODEGRAPH_DATA_DIR=$scan_workspace_host/codegraph" \
     -e "RUNNER_PREFLIGHT_STRICT=${RUNNER_PREFLIGHT_STRICT:-false}" \
     -e "CONTAINER_CLI=podman" \
     -e "SCANNER_CODEQL_IMAGE=$(codeql_runner_image_ref)" \
