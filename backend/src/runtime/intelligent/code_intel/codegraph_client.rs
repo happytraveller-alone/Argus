@@ -168,6 +168,21 @@ impl CodeGraphClient {
                 );
             }
 
+            // codegraph init wrote `.codegraph/` into the staging tree.
+            // Those files are owned by the container's UID — the host
+            // side cannot delete them. Remove them here while the
+            // container is still running (its UID owns the files).
+            let cleanup = format!("rm -rf {CONTAINER_SRC}/.codegraph");
+            match session.exec_command(&cleanup, 5_000).await {
+                Ok((_, _, 0)) => {}
+                Ok((_, stderr, code)) => {
+                    debug!(code, stderr = %truncate_for_err(&stderr), "rm .codegraph/ non-zero exit");
+                }
+                Err(e) => {
+                    debug!(error = %e, "rm .codegraph/ exec failed");
+                }
+            }
+
             // Commit to the host-side cache (best-effort — log on failure).
             let host_db = index_host_path.join("codegraph.db");
             if let Err(e) = cache.commit(&archive_sha256, &host_db).await {
@@ -515,10 +530,6 @@ fn range_contains(node: &CgNode, line: u32) -> bool {
 fn truncate_for_err(s: &str) -> String {
     s.chars().take(400).collect()
 }
-
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
 // BFS taint search — pure (testable) core

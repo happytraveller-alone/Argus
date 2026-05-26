@@ -108,7 +108,7 @@ impl PodmanSession {
 
     pub async fn destroy(&self) -> Result<()> {
         Command::new("podman")
-            .args(["rm", "-f", &self.container_id])
+            .args(["rm", "-f", "-t", "0", &self.container_id])
             .output()
             .await
             .context("podman rm failed")?;

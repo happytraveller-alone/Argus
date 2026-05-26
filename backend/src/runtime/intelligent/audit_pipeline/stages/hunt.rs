@@ -136,7 +136,13 @@ pub async fn run(
     while let Some(result) = join_set.join_next().await {
         match result {
             Ok(Ok(task_findings)) => findings.extend(task_findings),
-            Ok(Err(err)) => return Err(err),
+            Ok(Err(err)) => {
+                tracing::warn!(error = %err, "hunt task failed; skipping task findings");
+                events.emit(
+                    IntelligentTaskEvent::new("hunt_task_failed")
+                        .with_data(json!({"error": err.to_string()})),
+                );
+            }
             Err(join_err) => return Err(anyhow::anyhow!("hunt task panicked: {join_err}")),
         }
     }
@@ -184,16 +190,32 @@ fn normalize_finding(
     _target_files: &[String],
     path_verdict: Option<&DismissalEvidence>,
 ) {
+    // Line number sanity.
     if finding.line_start == 0 {
         finding.line_start = 1;
     }
-    if finding.line_end < finding.line_start {
+    if finding.line_end == 0 || finding.line_end < finding.line_start {
         finding.line_end = finding.line_start;
     }
+
+    // Severity: empty → "medium".
     if finding.severity.trim().is_empty() {
         finding.severity = "medium".to_string();
     }
 
+    // Confidence: missing/zero → 0.5.
+    if finding.confidence.map(|c| c == 0.0).unwrap_or(true) {
+        finding.confidence = Some(0.5);
+    }
+
+    // Language backfill: if the LLM omitted language or left it blank,
+    // derive it from the file extension (AC1.2).
+    if finding.language.trim().is_empty() {
+        finding.language = map_extension_to_language(&finding.file)
+            .unwrap_or_default();
+    }
+
+    // Path-pattern dismissal verdict (Phase 0 / AC0.F).
     if finding.dismissal_evidence.is_none() {
         if let Some(verdict) = path_verdict {
             finding.dismissal_evidence = Some(verdict.clone());
@@ -745,6 +767,72 @@ pub struct HuntPass2DismissalEvidence {
     pub rationale: Option<String>,
 }
 
+/// Test-only re-export: calls `normalize_finding` with no targets and no
+/// path verdict, exercising only the field-backfill logic.
+#[cfg(test)]
+pub fn normalize_finding_for_test(finding: &mut AuditFinding) {
+    normalize_finding(finding, &[], None);
+}
+
+// ---------------------------------------------------------------------------
+// AC2.4 test infrastructure — stub invoker
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod stub {
+    use async_trait::async_trait;
+    use std::sync::{Arc, Mutex};
+
+    use crate::runtime::intelligent::llm::{
+        IntelligentLlmInvocation, IntelligentLlmInvocationError, IntelligentLlmInvoker,
+    };
+    use crate::runtime::intelligent::{
+        config::IntelligentLlmConfig,
+        types::{now_rfc3339, IntelligentTaskEvent},
+    };
+
+    /// A stub invoker whose responses are pre-queued.
+    /// Each call pops the front of the queue: `Ok(content)` or `Err(msg)`.
+    pub struct QueuedStubInvoker {
+        pub queue: Arc<Mutex<std::collections::VecDeque<Result<String, String>>>>,
+    }
+
+    impl QueuedStubInvoker {
+        pub fn new(responses: Vec<Result<String, String>>) -> Self {
+            Self {
+                queue: Arc::new(Mutex::new(responses.into_iter().collect())),
+            }
+        }
+    }
+
+    #[async_trait]
+    impl IntelligentLlmInvoker for QueuedStubInvoker {
+        async fn invoke(
+            &self,
+            _prompt: &str,
+            _config: &IntelligentLlmConfig,
+        ) -> Result<IntelligentLlmInvocation, IntelligentLlmInvocationError> {
+            let entry = self
+                .queue
+                .lock()
+                .unwrap()
+                .pop_front()
+                .unwrap_or(Err("queue empty".to_string()));
+            match entry {
+                Ok(content) => Ok(IntelligentLlmInvocation {
+                    content,
+                    finished_at: now_rfc3339(),
+                    attempt_event: IntelligentTaskEvent::new("llm_attempt"),
+                }),
+                Err(msg) => Err(IntelligentLlmInvocationError {
+                    stage: "llm_request",
+                    redacted_message: msg,
+                }),
+            }
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -752,6 +840,95 @@ pub struct HuntPass2DismissalEvidence {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use super::stub::QueuedStubInvoker;
+    use crate::runtime::intelligent::audit_pipeline::{
+        context::{AuditRunContext, PipelineEventSink},
+        repo::ProjectArchive,
+        types::HuntTask,
+    };
+    use crate::runtime::intelligent::config::{IntelligentLlmConfig, IntelligentLlmProvider};
+    use std::sync::Arc;
+    use tokio::sync::broadcast;
+
+    fn make_test_llm_config() -> IntelligentLlmConfig {
+        IntelligentLlmConfig {
+            row_id: "test".to_string(),
+            provider: IntelligentLlmProvider::OpenAiCompatible,
+            model: "gpt-test".to_string(),
+            base_url: reqwest::Url::parse("https://api.example.com/v1/").unwrap(),
+            api_key: "sk-test".to_string(),
+            fingerprint: "sha256:test".to_string(),
+            timeout_ms: 5000,
+            temperature: 0.0,
+            max_tokens_per_call: 128,
+            first_token_timeout_seconds: 5,
+            stream_timeout_seconds: 10,
+            custom_header_names: vec![],
+            auth_kind: "openai_compatible_bearer",
+        }
+    }
+
+    fn make_test_sink() -> PipelineEventSink {
+        let (broadcast_tx, _) = broadcast::channel(64);
+        PipelineEventSink::new(broadcast_tx).0
+    }
+
+    fn make_hunt_task(id: &str) -> HuntTask {
+        HuntTask {
+            task_id: id.to_string(),
+            target_files: vec!["src/dummy.rs".to_string()],
+            ..Default::default()
+        }
+    }
+
+    /// AC2.4: when one hunt task fails, the stage returns Ok with findings
+    /// from the remaining successful tasks.
+    #[tokio::test]
+    async fn hunt_run_tolerates_single_task_failure() {
+        // 3 tasks: task-ok-a succeeds (1 finding), task-fail errors, task-ok-b succeeds (1 finding).
+        // invoke_json calls invoker.invoke() once per task (no repair needed since JSON is valid).
+        let ok_response_a = r#"{"findings":[{"findingId":"f-a","file":"src/a.rs","lineStart":10,"lineEnd":10,"vulnClass":"sqli","severity":"high","description":"desc-a","evidence":"ev-a","confidence":0.8}]}"#;
+        let ok_response_b = r#"{"findings":[{"findingId":"f-b","file":"src/b.rs","lineStart":20,"lineEnd":20,"vulnClass":"xss","severity":"medium","description":"desc-b","evidence":"ev-b","confidence":0.7}]}"#;
+
+        let invoker = Arc::new(QueuedStubInvoker::new(vec![
+            Ok(ok_response_a.to_string()),
+            Err("HTTP 429 rate limited".to_string()),
+            Ok(ok_response_b.to_string()),
+        ]));
+
+        let archive = ProjectArchive::new("/nonexistent", "test.zip");
+        let ctx = AuditRunContext::new(
+            "task-test".to_string(),
+            "proj-test".to_string(),
+            "Test Project".to_string(),
+            archive,
+            vec![],
+            make_test_llm_config(),
+            invoker,
+        );
+
+        let tasks = vec![
+            make_hunt_task("task-ok-a"),
+            make_hunt_task("task-fail"),
+            make_hunt_task("task-ok-b"),
+        ];
+
+        let sink = make_test_sink();
+        let result = run(&ctx, &tasks, 3, &sink).await;
+
+        assert!(result.is_ok(), "hunt run must return Ok even when one task fails: {result:?}");
+        let output = result.unwrap();
+        // Should have findings from both successful tasks.
+        assert_eq!(
+            output.findings.len(),
+            2,
+            "expected 2 findings from 2 successful tasks, got {}",
+            output.findings.len()
+        );
+        let ids: Vec<&str> = output.findings.iter().map(|f| f.finding_id.as_str()).collect();
+        assert!(ids.contains(&"f-a"), "missing finding f-a");
+        assert!(ids.contains(&"f-b"), "missing finding f-b");
+    }
 
     fn base_finding() -> AuditFinding {
         AuditFinding {

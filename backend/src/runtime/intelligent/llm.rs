@@ -7,6 +7,24 @@ use crate::runtime::intelligent::{
     types::{now_rfc3339, IntelligentTaskEvent},
 };
 
+/// Maximum number of HTTP attempts (1 initial + 2 retries = 3 total).
+const MAX_HTTP_ATTEMPTS: u32 = 3;
+
+/// Compute wait duration for a transient HTTP error.
+///
+/// Honors the `Retry-After` header when present (parsed as seconds).
+/// Falls back to exponential back-off: 1 s, 2 s, 4 s, … (1 << attempt).
+fn compute_retry_wait(attempt: u32, retry_after_secs: Option<u64>) -> std::time::Duration {
+    let secs = retry_after_secs.unwrap_or(1u64 << attempt);
+    std::time::Duration::from_secs(secs)
+}
+
+/// Return `true` when the HTTP status warrants a retry (rate-limited or
+/// transient server error).
+fn is_retryable_status(status: reqwest::StatusCode) -> bool {
+    status.as_u16() == 429 || status.is_server_error()
+}
+
 #[derive(Clone, Debug)]
 pub struct IntelligentLlmInvocation {
     pub content: String,
@@ -55,17 +73,11 @@ fn build_endpoint_url(base_url: &Url, endpoint: &str) -> Result<Url, String> {
 }
 
 /// Redact sensitive values from a string before it enters logs or event records.
-/// Replaces the api_key and any value associated with known sensitive header names.
+/// Replaces the api_key with `***`.
 pub fn redact_for_logging(raw: &str, config: &IntelligentLlmConfig) -> String {
     let mut result = raw.to_string();
     if !config.api_key.is_empty() {
         result = result.replace(&config.api_key, "***");
-    }
-    // Also redact common patterns
-    for pattern in &["Authorization", "x-api-key", "Bearer "] {
-        // We only redact values that might have leaked — not the header names themselves.
-        // Since we never log header values, this is belt-and-suspenders.
-        let _ = pattern; // header names are safe to log; values are not logged at all
     }
     result
 }
@@ -190,31 +202,54 @@ impl HttpIntelligentLlmInvoker {
             "stream": false,
         });
 
-        let response = self
-            .client
-            .post(url)
-            .timeout(timeout)
-            .bearer_auth(&config.api_key)
-            .json(&body)
-            .send()
-            .await
-            .map_err(|e| redact_for_logging(&e.to_string(), config))?;
+        let mut last_err = String::new();
+        for attempt in 0..MAX_HTTP_ATTEMPTS {
+            let response = self
+                .client
+                .post(url.clone())
+                .timeout(timeout)
+                .bearer_auth(&config.api_key)
+                .json(&body)
+                .send()
+                .await
+                .map_err(|e| redact_for_logging(&e.to_string(), config))?;
 
-        if !response.status().is_success() {
             let status = response.status();
-            return Err(format!("HTTP {status}"));
+            if is_retryable_status(status) {
+                let retry_after = response
+                    .headers()
+                    .get("retry-after")
+                    .and_then(|v| v.to_str().ok())
+                    .and_then(|s| s.parse::<u64>().ok());
+                let wait = compute_retry_wait(attempt, retry_after);
+                last_err = format!("HTTP {status}");
+                tracing::warn!(
+                    status = status.as_u16(),
+                    attempt,
+                    wait_secs = wait.as_secs(),
+                    "invoke_openai: retrying after transient error"
+                );
+                tokio::time::sleep(wait).await;
+                continue;
+            }
+
+            if !status.is_success() {
+                return Err(format!("HTTP {status}"));
+            }
+
+            let json: serde_json::Value = response
+                .json()
+                .await
+                .map_err(|e| redact_for_logging(&e.to_string(), config))?;
+
+            let content = json["choices"][0]["message"]["content"]
+                .as_str()
+                .unwrap_or("")
+                .to_string();
+            return Ok(content);
         }
 
-        let json: serde_json::Value = response
-            .json()
-            .await
-            .map_err(|e| redact_for_logging(&e.to_string(), config))?;
-
-        let content = json["choices"][0]["message"]["content"]
-            .as_str()
-            .unwrap_or("")
-            .to_string();
-        Ok(content)
+        Err(last_err)
     }
 
     async fn invoke_anthropic(
@@ -233,23 +268,53 @@ impl HttpIntelligentLlmInvoker {
             "max_tokens": config.max_tokens_per_call,
         });
 
-        let response = self
-            .client
-            .post(url)
-            .timeout(timeout)
-            .header("x-api-key", &config.api_key)
-            .header("anthropic-version", "2023-06-01")
-            .json(&body)
-            .send()
-            .await
-            .map_err(|e| redact_for_logging(&e.to_string(), config))?;
+        let mut last_err = String::new();
+        let mut response_opt: Option<reqwest::Response> = None;
+        for attempt in 0..MAX_HTTP_ATTEMPTS {
+            let response = self
+                .client
+                .post(url.clone())
+                .timeout(timeout)
+                .header("x-api-key", &config.api_key)
+                .header("anthropic-version", "2023-06-01")
+                .json(&body)
+                .send()
+                .await
+                .map_err(|e| redact_for_logging(&e.to_string(), config))?;
 
-        if !response.status().is_success() {
             let status = response.status();
-            return Err(format!("HTTP {status}"));
+            if is_retryable_status(status) {
+                let retry_after = response
+                    .headers()
+                    .get("retry-after")
+                    .and_then(|v| v.to_str().ok())
+                    .and_then(|s| s.parse::<u64>().ok());
+                let wait = compute_retry_wait(attempt, retry_after);
+                last_err = format!("HTTP {status}");
+                tracing::warn!(
+                    status = status.as_u16(),
+                    attempt,
+                    wait_secs = wait.as_secs(),
+                    "invoke_anthropic: retrying after transient error"
+                );
+                tokio::time::sleep(wait).await;
+                continue;
+            }
+
+            if !status.is_success() {
+                return Err(format!("HTTP {status}"));
+            }
+
+            response_opt = Some(response);
+            break;
         }
 
-        let json: serde_json::Value = response
+        let final_response = match response_opt {
+            Some(r) => r,
+            None => return Err(last_err),
+        };
+
+        let json: serde_json::Value = final_response
             .json()
             .await
             .map_err(|e| redact_for_logging(&e.to_string(), config))?;
@@ -339,6 +404,110 @@ mod tests {
             custom_header_names: vec![],
             auth_kind: "openai_compatible_bearer",
         }
+    }
+
+    // ── AC2.1 helpers ──────────────────────────────────────────────────────
+
+    #[test]
+    fn compute_retry_wait_uses_retry_after_header_when_present() {
+        let d = compute_retry_wait(0, Some(30));
+        assert_eq!(d.as_secs(), 30);
+    }
+
+    #[test]
+    fn compute_retry_wait_exponential_backoff_when_no_header() {
+        assert_eq!(compute_retry_wait(0, None).as_secs(), 1); // 1 << 0
+        assert_eq!(compute_retry_wait(1, None).as_secs(), 2); // 1 << 1
+        assert_eq!(compute_retry_wait(2, None).as_secs(), 4); // 1 << 2
+    }
+
+    #[test]
+    fn is_retryable_status_429_and_5xx() {
+        assert!(is_retryable_status(reqwest::StatusCode::TOO_MANY_REQUESTS));
+        assert!(is_retryable_status(reqwest::StatusCode::INTERNAL_SERVER_ERROR));
+        assert!(is_retryable_status(reqwest::StatusCode::SERVICE_UNAVAILABLE));
+        assert!(!is_retryable_status(reqwest::StatusCode::OK));
+        assert!(!is_retryable_status(reqwest::StatusCode::BAD_REQUEST));
+        assert!(!is_retryable_status(reqwest::StatusCode::UNAUTHORIZED));
+    }
+
+    // ── AC2.3 — invoker retry integration tests ───────────────────────────
+
+    /// When the server always returns 429, the invoker exhausts MAX_HTTP_ATTEMPTS
+    /// (3) and returns Err. Verifies the retry loop fires all 3 attempts.
+    #[tokio::test]
+    async fn invoker_exhausts_retries_on_persistent_429() {
+        use httpmock::prelude::*;
+        use reqwest::Url;
+
+        let server = MockServer::start();
+        let mock_429 = server.mock(|when, then| {
+            when.method(POST).path("/v1/chat/completions");
+            then.status(429).header("retry-after", "0");
+        });
+
+        let base_url = Url::parse(&format!("http://{}/v1/", server.address())).unwrap();
+        let config = IntelligentLlmConfig {
+            row_id: "test".to_string(),
+            provider: IntelligentLlmProvider::OpenAiCompatible,
+            model: "gpt-test".to_string(),
+            base_url,
+            api_key: "sk-test".to_string(),
+            fingerprint: "sha256:test".to_string(),
+            timeout_ms: 5000,
+            temperature: 0.0,
+            max_tokens_per_call: 128,
+            first_token_timeout_seconds: 5,
+            stream_timeout_seconds: 10,
+            custom_header_names: vec![],
+            auth_kind: "openai_compatible_bearer",
+        };
+
+        let invoker = HttpIntelligentLlmInvoker::default();
+        let result = invoker.invoke("test prompt", &config).await;
+
+        // All 3 attempts must have been made before giving up.
+        mock_429.assert_calls(MAX_HTTP_ATTEMPTS as usize);
+        assert!(result.is_err(), "expected Err after exhausting retries");
+    }
+
+    /// When the server returns 200 immediately, invoke succeeds on first attempt.
+    #[tokio::test]
+    async fn invoker_succeeds_on_first_200() {
+        use httpmock::prelude::*;
+        use reqwest::Url;
+
+        let server = MockServer::start();
+        let mock_200 = server.mock(|when, then| {
+            when.method(POST).path("/v1/chat/completions");
+            then.status(200)
+                .header("content-type", "application/json")
+                .body(r#"{"choices":[{"message":{"content":"hello"}}]}"#);
+        });
+
+        let base_url = Url::parse(&format!("http://{}/v1/", server.address())).unwrap();
+        let config = IntelligentLlmConfig {
+            row_id: "test".to_string(),
+            provider: IntelligentLlmProvider::OpenAiCompatible,
+            model: "gpt-test".to_string(),
+            base_url,
+            api_key: "sk-test".to_string(),
+            fingerprint: "sha256:test".to_string(),
+            timeout_ms: 5000,
+            temperature: 0.0,
+            max_tokens_per_call: 128,
+            first_token_timeout_seconds: 5,
+            stream_timeout_seconds: 10,
+            custom_header_names: vec![],
+            auth_kind: "openai_compatible_bearer",
+        };
+
+        let invoker = HttpIntelligentLlmInvoker::default();
+        let result = invoker.invoke("test prompt", &config).await;
+
+        mock_200.assert_calls(1);
+        assert!(result.is_ok(), "expected Ok on 200: {result:?}");
+        assert_eq!(result.unwrap().content, "hello");
     }
 
     #[test]

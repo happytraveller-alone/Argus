@@ -145,16 +145,21 @@ pub struct DismissalEvidence {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AuditFinding {
+    #[serde(default)]
     pub finding_id: String,
+    #[serde(default)]
     pub file: String,
     #[serde(default = "default_line")]
     pub line_start: u32,
     #[serde(default = "default_line")]
     pub line_end: u32,
+    #[serde(default)]
     pub vuln_class: String,
+    #[serde(default = "default_severity")]
     pub severity: String,
+    #[serde(default)]
     pub description: String,
-    #[serde(alias = "evidence_snippet")]
+    #[serde(default, alias = "evidence_snippet")]
     pub evidence: String,
     #[serde(default)]
     pub confidence: Option<f64>,
@@ -168,6 +173,8 @@ pub struct AuditFinding {
     pub hedged_language: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub dismissal_evidence: Option<DismissalEvidence>,
+    #[serde(default)]
+    pub language: String,
 }
 
 impl Default for AuditFinding {
@@ -175,10 +182,10 @@ impl Default for AuditFinding {
         Self {
             finding_id: String::new(),
             file: String::new(),
-            line_start: 1,
-            line_end: 1,
+            line_start: default_line(),
+            line_end: default_line(),
             vuln_class: String::new(),
-            severity: "medium".to_string(),
+            severity: default_severity(),
             description: String::new(),
             evidence: String::new(),
             confidence: None,
@@ -187,12 +194,17 @@ impl Default for AuditFinding {
             poc_result: None,
             hedged_language: None,
             dismissal_evidence: None,
+            language: String::new(),
         }
     }
 }
 
 fn default_line() -> u32 {
     1
+}
+
+fn default_severity() -> String {
+    "medium".to_string()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -389,6 +401,63 @@ mod tests {
         assert!(
             !serialized.contains("dismissalEvidence"),
             "dismissal_evidence: None must be omitted, got: {serialized}"
+        );
+    }
+
+    /// AC1 — US-002: `HuntOutput` with a finding missing `language`, `severity`,
+    /// `confidence`, `lineEnd`, and `evidence` MUST deserialize without error,
+    /// and after `normalize_finding` the backfilled values must be sensible.
+    #[test]
+    fn hunt_output_missing_optional_fields_deserializes_and_normalizes() {
+        use crate::runtime::intelligent::audit_pipeline::stages::hunt::normalize_finding_for_test;
+
+        let raw = r#"{
+            "findings": [{
+                "findingId": "ac1-001",
+                "file": "src/plist.c",
+                "lineStart": 42,
+                "vulnClass": "buffer_overflow",
+                "description": "Unchecked memcpy length"
+            }]
+        }"#;
+
+        let mut output: super::HuntOutput =
+            serde_json::from_str(raw).expect("HuntOutput with minimal fields must deserialize");
+
+        assert_eq!(output.findings.len(), 1);
+        let f = &output.findings[0];
+        // Serde defaults applied pre-normalize.
+        assert_eq!(f.finding_id, "ac1-001");
+        assert_eq!(f.severity, "medium", "severity must default to 'medium'");
+        // lineEnd absent → serde default_line() = 1; normalize will fix to lineStart.
+        assert_eq!(f.line_end, 1, "lineEnd absent → serde default 1");
+        assert!(f.confidence.is_none(), "confidence absent = None");
+        assert_eq!(f.evidence, "", "evidence absent = empty string");
+
+        // After normalize_finding the backfill runs.
+        normalize_finding_for_test(&mut output.findings[0]);
+        let f = &output.findings[0];
+        assert_eq!(f.severity, "medium");
+        assert_eq!(f.line_end, 42, "lineEnd backfilled to lineStart=42");
+        assert_eq!(f.confidence, Some(0.5), "confidence backfilled to 0.5");
+
+        // AC1.2 — language backfill from file extension.
+        let raw_c = r#"{
+            "findings": [{
+                "findingId": "ac1-002",
+                "file": "src/parse_string_node.c",
+                "lineStart": 10,
+                "vulnClass": "buffer_overflow",
+                "description": "Unchecked memcpy"
+            }]
+        }"#;
+        let mut output_c: super::HuntOutput =
+            serde_json::from_str(raw_c).expect("C finding must deserialize");
+        assert_eq!(output_c.findings[0].language, "", "language absent → empty before normalize");
+        normalize_finding_for_test(&mut output_c.findings[0]);
+        assert_eq!(
+            output_c.findings[0].language, "c",
+            "language backfilled to 'c' from .c extension"
         );
     }
 

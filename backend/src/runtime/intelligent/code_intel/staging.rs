@@ -47,7 +47,6 @@ pub async fn prepare(
         });
     }
 
-    // Create the src/ directory before extraction.
     tokio::fs::create_dir_all(&src_dir)
         .await
         .with_context(|| format!("failed to create staging dir: {}", src_dir.display()))?;
@@ -68,7 +67,6 @@ pub async fn prepare(
         }
     }
 
-    // Extraction is CPU/IO-heavy; run on the blocking thread pool.
     let archive_path = archive_path.to_owned();
     let archive_name = archive_name.to_owned();
     let src_dir_clone = src_dir.clone();
@@ -125,15 +123,89 @@ struct TempCleanupGuard {
 
 impl Drop for TempCleanupGuard {
     fn drop(&mut self) {
-        if self.path.exists() {
-            if let Err(e) = std::fs::remove_dir_all(&self.path) {
-                // Non-fatal: log and move on; leftover dirs are harmless.
-                tracing::warn!(
-                    path = %self.path.display(),
-                    error = %e,
-                    "failed to clean up staging dir"
-                );
+        if !self.path.exists() {
+            return;
+        }
+        // First attempt — typically succeeds when all files share the backend's UID.
+        if std::fs::remove_dir_all(&self.path).is_ok() {
+            return;
+        }
+        // Codegraph container writes files under a different UID via the
+        // bind-mounted volume; backend can't unlink them on the first pass.
+        // Best-effort: recursively widen perms, then retry.
+        #[cfg(unix)]
+        {
+            let _ = chmod_tree_writable(&self.path);
+        }
+        if std::fs::remove_dir_all(&self.path).is_ok() {
+            return;
+        }
+        // chmod can't help cross-UID files (non-owners can't chmod on Linux).
+        // Last resort: remove through Podman's user namespace where the files
+        // were originally created.
+        #[cfg(unix)]
+        {
+            if try_podman_unshare_rm(&self.path) {
+                return;
             }
+        }
+        // Non-fatal: hash-keyed staging dirs are re-used safely on next
+        // import. Demote to debug so it doesn't drown real warnings.
+        tracing::debug!(
+            path = %self.path.display(),
+            "staging dir cleanup deferred (cross-UID leftovers)"
+        );
+    }
+}
+
+#[cfg(unix)]
+fn chmod_tree_writable(root: &Path) -> std::io::Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+    let meta = std::fs::symlink_metadata(root)?;
+    let mut perms = meta.permissions();
+    perms.set_mode(0o777);
+    let _ = std::fs::set_permissions(root, perms);
+    if meta.is_dir() && !meta.file_type().is_symlink() {
+        if let Ok(entries) = std::fs::read_dir(root) {
+            for entry in entries.flatten() {
+                let _ = chmod_tree_writable(&entry.path());
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Try to remove `path` via `podman unshare rm -rf`.
+///
+/// Files created by the codegraph container on a bind-mounted volume are owned
+/// by the container's mapped UID — the host-side backend cannot chmod or unlink
+/// them. `podman unshare` enters the same user namespace as rootless Podman,
+/// where those UIDs are valid. Returns `true` on success.
+#[cfg(unix)]
+fn try_podman_unshare_rm(path: &Path) -> bool {
+    use std::process::Command;
+    match Command::new("podman")
+        .args(["unshare", "rm", "-rf"])
+        .arg(path)
+        .output()
+    {
+        Ok(output) if output.status.success() => {
+            tracing::debug!(path = %path.display(), "cleaned up staging dir via podman unshare");
+            true
+        }
+        Ok(output) => {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            tracing::debug!(
+                path = %path.display(),
+                code = ?output.status.code(),
+                stderr = %stderr.trim(),
+                "podman unshare rm failed"
+            );
+            false
+        }
+        Err(e) => {
+            tracing::debug!(path = %path.display(), error = %e, "podman unshare not available");
+            false
         }
     }
 }
