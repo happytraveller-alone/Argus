@@ -46,7 +46,7 @@ PODMAN_POSTGRES_IMAGE="${ARGUS_PODMAN_POSTGRES_IMAGE:-${DOCKERHUB_LIBRARY_MIRROR
 PODMAN_REDIS_IMAGE="${ARGUS_PODMAN_REDIS_IMAGE:-${DOCKERHUB_LIBRARY_MIRROR:-m.daocloud.io/docker.io/library}/redis:8.6.2-alpine3.23}"
 PODMAN_TARGETARCH="${ARGUS_PODMAN_TARGETARCH:-amd64}"
 PODMAN_AUDIT_SANDBOX_IMAGE="${ARGUS_PODMAN_AUDIT_SANDBOX_IMAGE:-argus/audit-sandbox:latest}"
-DEFAULT_JOERN_IMAGE="ghcr.io/joernio/joern:nightly"
+DEFAULT_JOERN_IMAGE="ghcr.nju.edu.cn/joernio/joern:nightly"
 PODMAN_CONTAINER_SOCKET="/run/podman/podman.sock"
 PODMAN_SEQUENTIAL_BUILD="${ARGUS_SEQUENTIAL_BUILD:-false}"
 PODMAN_BUILD_LOG_DIR="${TMPDIR:-/tmp}"
@@ -509,6 +509,21 @@ normalize_legacy_opengrep_image_env() {
   esac
 }
 
+normalize_legacy_ghcr_image_env() {
+  local key="$1"
+  local legacy_registry value normalized
+  legacy_registry="ghcr."
+  legacy_registry="${legacy_registry}io"
+  value="$(read_env_value "$key")"
+  case "$value" in
+    "$legacy_registry"/*)
+      normalized="ghcr.nju.edu.cn/${value#${legacy_registry}/}"
+      write_env_key_value "$key" "$normalized"
+      log "Normalized ${key}=${normalized}; legacy GHCR image pulls are routed through ghcr.nju.edu.cn."
+      ;;
+  esac
+}
+
 normalize_legacy_vite_api_target_env() {
   local value backend_port target
   value="$(read_env_value VITE_API_TARGET)"
@@ -574,6 +589,7 @@ ensure_root_env_keys() {
     "Joern scanner image prepared during bootstrap and used by per-task Joern scan containers."
   normalize_legacy_opengrep_image_env "SCANNER_OPENGREP_IMAGE"
   normalize_legacy_opengrep_image_env "SCANNER_OPENGREP_A3S_BOX_IMAGE"
+  normalize_legacy_ghcr_image_env "SCANNER_JOERN_IMAGE"
 }
 
 compose_down() {

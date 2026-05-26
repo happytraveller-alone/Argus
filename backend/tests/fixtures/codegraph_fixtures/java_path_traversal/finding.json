@@ -1,0 +1,12 @@
+{
+  "finding_id": "fixture-java_path_traversal-001",
+  "file": "FileService.java",
+  "line_start": 9,
+  "line_end": 9,
+  "vuln_class": "path_traversal",
+  "severity": "high",
+  "description": "User-controlled path component concatenated onto /data/ without validation; reaches Files.readAllBytes via readFile.",
+  "evidence": "new File(\"/data/\" + name)",
+  "expected_reachable": true,
+  "expected_call_chain": ["serveFile", "readFile"]
+}

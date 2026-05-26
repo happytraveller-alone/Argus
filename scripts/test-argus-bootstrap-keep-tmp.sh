@@ -201,6 +201,20 @@ assert_contains "$default_podman_out" "podman run --rm --network none ghcr.nju.e
 assert_not_contains "$default_podman_out" "docker compose"
 assert_not_contains "$default_podman_out" "/var/run/docker.sock"
 
+legacy_joern_dir="$(new_fixture legacy-joern-image)"
+write_valid_config "$legacy_joern_dir"
+legacy_ghcr_registry="ghcr."
+legacy_ghcr_registry="${legacy_ghcr_registry}io"
+legacy_joern_image="${legacy_ghcr_registry}/joernio/joern:nightly"
+printf '\nSCANNER_JOERN_IMAGE=%s\n' "$legacy_joern_image" >> "$legacy_joern_dir/.env"
+legacy_joern_out="$legacy_joern_dir/legacy-joern.out"
+( cd "$legacy_joern_dir" && ./argus-bootstrap.sh --dry-run --wait-exit -- default ) >"$legacy_joern_out" 2>&1
+assert_contains "$legacy_joern_out" "Normalized SCANNER_JOERN_IMAGE=ghcr.nju.edu.cn/joernio/joern:nightly"
+assert_contains "$legacy_joern_out" "Ensuring Joern scanner image container starts (Podman mode): ghcr.nju.edu.cn/joernio/joern:nightly"
+assert_not_contains "$legacy_joern_out" "$legacy_joern_image"
+assert_contains "$legacy_joern_dir/.env" "SCANNER_JOERN_IMAGE=ghcr.nju.edu.cn/joernio/joern:nightly"
+assert_not_contains "$legacy_joern_dir/.env" "SCANNER_JOERN_IMAGE=$legacy_joern_image"
+
 # Missing root .env exits before Docker cleanup after copying env.example.
 missing_dir="$(new_fixture missing)"
 missing_out="$missing_dir/missing.out"

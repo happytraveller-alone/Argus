@@ -1,0 +1,12 @@
+{
+  "finding_id": "fixture-python_sqli-001",
+  "file": "db.py",
+  "line_start": 7,
+  "line_end": 7,
+  "vuln_class": "sql_injection",
+  "severity": "high",
+  "description": "User-controlled value interpolated into SQL query string; reaches sqlite3 execute() via build_query() and run_query().",
+  "evidence": "f\"SELECT * FROM users WHERE id = {parsed['user_id']}\"",
+  "expected_reachable": true,
+  "expected_call_chain": ["handle_lookup", "parse_request", "build_query", "run_query"]
+}
