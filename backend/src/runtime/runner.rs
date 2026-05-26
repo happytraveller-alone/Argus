@@ -1211,6 +1211,23 @@ esac
         script_path
     }
 
+    /// Minimal valid mount plan for tests that do not assert on mount plan content
+    /// but must satisfy the `podman runner requires an explicit mount plan` guard
+    /// (runner.rs:752, introduced in commit 106a3599).
+    fn minimal_test_mount_plan(workspace_dir: &Path) -> RunnerMountPlan {
+        RunnerMountPlan::new(vec![RunnerMount::read_write(
+            workspace_dir.display().to_string(),
+            "/scan/workspace",
+        )])
+    }
+
+    // Disabled: asserts the legacy Docker rewrite path (`container_runtime: "docker"` in
+    // meta + workspace-path rewrites) that became unreachable after commit 106a3599
+    // collapsed `ContainerRuntime` to a single Podman variant requiring an explicit
+    // mount plan. Coverage for the surviving Podman+mount-plan path lives in
+    // `execute_podman_records_rootless_and_mount_metadata` and
+    // `execute_applies_stdout_stderr_capture_limits`.
+    #[ignore]
     #[test]
     fn execute_passes_mounts_env_and_rewritten_command() {
         let _lock = ENV_LOCK.lock().unwrap();
@@ -1221,7 +1238,7 @@ esac
         let workspace_dir = workspace_root.join("generic/task-1");
         fs::create_dir_all(&workspace_dir).unwrap();
 
-        let _docker_bin = EnvVarGuard::set("Argus_DOCKER_BIN", fake_docker.to_str().unwrap());
+        let _docker_bin = EnvVarGuard::set("Argus_PODMAN_BIN", fake_docker.to_str().unwrap());
         let _docker_log = EnvVarGuard::set("FAKE_DOCKER_LOG", fake_log.to_str().unwrap());
         let _workspace_root =
             EnvVarGuard::set("SCAN_WORKSPACE_ROOT", workspace_root.to_str().unwrap());
@@ -1543,7 +1560,7 @@ esac
         let workspace_dir = workspace_root.join("opengrep/task-success");
         fs::create_dir_all(&workspace_dir).unwrap();
 
-        let _docker_bin = EnvVarGuard::set("Argus_DOCKER_BIN", fake_docker.to_str().unwrap());
+        let _docker_bin = EnvVarGuard::set("Argus_PODMAN_BIN", fake_docker.to_str().unwrap());
         let _docker_log = EnvVarGuard::set("FAKE_DOCKER_LOG", fake_log.to_str().unwrap());
         let _workspace_root =
             EnvVarGuard::set("SCAN_WORKSPACE_ROOT", workspace_root.to_str().unwrap());
@@ -1570,7 +1587,7 @@ esac
             cpu_limit: None,
             pids_limit: None,
             network_disabled: false,
-            mount_plan: None,
+            mount_plan: Some(minimal_test_mount_plan(&workspace_dir)),
         });
 
         assert!(result.success);
@@ -1594,7 +1611,7 @@ esac
         let workspace_dir = workspace_root.join("opengrep/task-failure");
         fs::create_dir_all(&workspace_dir).unwrap();
 
-        let _docker_bin = EnvVarGuard::set("Argus_DOCKER_BIN", fake_docker.to_str().unwrap());
+        let _docker_bin = EnvVarGuard::set("Argus_PODMAN_BIN", fake_docker.to_str().unwrap());
         let _docker_log = EnvVarGuard::set("FAKE_DOCKER_LOG", fake_log.to_str().unwrap());
         let _workspace_root =
             EnvVarGuard::set("SCAN_WORKSPACE_ROOT", workspace_root.to_str().unwrap());
@@ -1622,7 +1639,7 @@ esac
             cpu_limit: None,
             pids_limit: None,
             network_disabled: false,
-            mount_plan: None,
+            mount_plan: Some(minimal_test_mount_plan(&workspace_dir)),
         });
 
         assert!(!result.success);
@@ -1643,7 +1660,7 @@ esac
         let workspace_dir = workspace_root.join("opengrep/task-network");
         fs::create_dir_all(&workspace_dir).unwrap();
 
-        let _docker_bin = EnvVarGuard::set("Argus_DOCKER_BIN", fake_docker.to_str().unwrap());
+        let _docker_bin = EnvVarGuard::set("Argus_PODMAN_BIN", fake_docker.to_str().unwrap());
         let _docker_log = EnvVarGuard::set("FAKE_DOCKER_LOG", fake_log.to_str().unwrap());
         let _workspace_root =
             EnvVarGuard::set("SCAN_WORKSPACE_ROOT", workspace_root.to_str().unwrap());
@@ -1670,7 +1687,7 @@ esac
             cpu_limit: None,
             pids_limit: None,
             network_disabled: true,
-            mount_plan: None,
+            mount_plan: Some(minimal_test_mount_plan(&workspace_dir)),
         });
 
         assert!(result.success);
@@ -1689,7 +1706,7 @@ esac
         fs::create_dir_all(&workspace_dir).unwrap();
         let long_stderr = "fatal stderr line ".repeat(1_200);
 
-        let _docker_bin = EnvVarGuard::set("Argus_DOCKER_BIN", fake_docker.to_str().unwrap());
+        let _docker_bin = EnvVarGuard::set("Argus_PODMAN_BIN", fake_docker.to_str().unwrap());
         let _docker_log = EnvVarGuard::set("FAKE_DOCKER_LOG", fake_log.to_str().unwrap());
         let _workspace_root =
             EnvVarGuard::set("SCAN_WORKSPACE_ROOT", workspace_root.to_str().unwrap());
@@ -1722,7 +1739,7 @@ esac
             cpu_limit: None,
             pids_limit: None,
             network_disabled: false,
-            mount_plan: None,
+            mount_plan: Some(minimal_test_mount_plan(&workspace_dir)),
         });
 
         assert!(!result.success);
@@ -1747,7 +1764,7 @@ esac
         let workspace_dir = workspace_root.join("opengrep/task-1");
         fs::create_dir_all(&workspace_dir).unwrap();
 
-        let _docker_bin = EnvVarGuard::set("Argus_DOCKER_BIN", fake_docker.to_str().unwrap());
+        let _docker_bin = EnvVarGuard::set("Argus_PODMAN_BIN", fake_docker.to_str().unwrap());
         let _docker_log = EnvVarGuard::set("FAKE_DOCKER_LOG", fake_log.to_str().unwrap());
         let _workspace_root =
             EnvVarGuard::set("SCAN_WORKSPACE_ROOT", workspace_root.to_str().unwrap());
@@ -1781,7 +1798,7 @@ esac
             cpu_limit: None,
             pids_limit: None,
             network_disabled: false,
-            mount_plan: None,
+            mount_plan: Some(minimal_test_mount_plan(&workspace_dir)),
         });
 
         assert!(result.success);
@@ -1809,7 +1826,7 @@ esac
         let workspace_root = temp_dir.path().join("scan-root");
         fs::create_dir_all(&workspace_root).unwrap();
 
-        let _docker_bin = EnvVarGuard::set("Argus_DOCKER_BIN", fake_docker.to_str().unwrap());
+        let _docker_bin = EnvVarGuard::set("Argus_PODMAN_BIN", fake_docker.to_str().unwrap());
         let _docker_log = EnvVarGuard::set("FAKE_DOCKER_LOG", fake_log.to_str().unwrap());
         let _workspace_root =
             EnvVarGuard::set("SCAN_WORKSPACE_ROOT", workspace_root.to_str().unwrap());
@@ -1863,7 +1880,7 @@ esac
         let workspace_dir = workspace_root.join("opengrep/task-1");
         fs::create_dir_all(&workspace_dir).unwrap();
 
-        let _docker_bin = EnvVarGuard::set("Argus_DOCKER_BIN", fake_docker.to_str().unwrap());
+        let _docker_bin = EnvVarGuard::set("Argus_PODMAN_BIN", fake_docker.to_str().unwrap());
         let _docker_log = EnvVarGuard::set("FAKE_DOCKER_LOG", fake_log.to_str().unwrap());
         let _workspace_root =
             EnvVarGuard::set("SCAN_WORKSPACE_ROOT", workspace_root.to_str().unwrap());
@@ -1891,7 +1908,7 @@ esac
             cpu_limit: None,
             pids_limit: None,
             network_disabled: false,
-            mount_plan: None,
+            mount_plan: Some(minimal_test_mount_plan(&workspace_dir)),
         });
 
         assert!(result.success);
@@ -1908,7 +1925,7 @@ esac
         let workspace_dir = workspace_root.join("opengrep/task-resource-limits");
         fs::create_dir_all(&workspace_dir).unwrap();
 
-        let _docker_bin = EnvVarGuard::set("Argus_DOCKER_BIN", fake_docker.to_str().unwrap());
+        let _docker_bin = EnvVarGuard::set("Argus_PODMAN_BIN", fake_docker.to_str().unwrap());
         let _docker_log = EnvVarGuard::set("FAKE_DOCKER_LOG", fake_log.to_str().unwrap());
         let _workspace_root =
             EnvVarGuard::set("SCAN_WORKSPACE_ROOT", workspace_root.to_str().unwrap());
@@ -1942,7 +1959,7 @@ esac
             cpu_limit: Some(1.5),
             pids_limit: Some(256),
             network_disabled: false,
-            mount_plan: None,
+            mount_plan: Some(minimal_test_mount_plan(&workspace_dir)),
         });
 
         assert!(result.success);
@@ -1964,7 +1981,7 @@ esac
         let workspace_dir = workspace_root.join("opengrep/task-attached-output");
         fs::create_dir_all(&workspace_dir).unwrap();
 
-        let _docker_bin = EnvVarGuard::set("Argus_DOCKER_BIN", fake_docker.to_str().unwrap());
+        let _docker_bin = EnvVarGuard::set("Argus_PODMAN_BIN", fake_docker.to_str().unwrap());
         let _docker_log = EnvVarGuard::set("FAKE_DOCKER_LOG", fake_log.to_str().unwrap());
         let _workspace_root =
             EnvVarGuard::set("SCAN_WORKSPACE_ROOT", workspace_root.to_str().unwrap());
@@ -1995,7 +2012,7 @@ esac
             cpu_limit: None,
             pids_limit: None,
             network_disabled: false,
-            mount_plan: None,
+            mount_plan: Some(minimal_test_mount_plan(&workspace_dir)),
         });
 
         assert!(result.success);
@@ -2081,7 +2098,7 @@ esac
         fs::create_dir_all(&workspace_dir).unwrap();
         let summary_path = workspace_dir.join("output/scan-summary.json");
 
-        let _docker_bin = EnvVarGuard::set("Argus_DOCKER_BIN", fake_docker.to_str().unwrap());
+        let _docker_bin = EnvVarGuard::set("Argus_PODMAN_BIN", fake_docker.to_str().unwrap());
         let _docker_log = EnvVarGuard::set("FAKE_DOCKER_LOG", fake_log.to_str().unwrap());
         let _workspace_root =
             EnvVarGuard::set("SCAN_WORKSPACE_ROOT", workspace_root.to_str().unwrap());
@@ -2113,7 +2130,7 @@ esac
             cpu_limit: None,
             pids_limit: None,
             network_disabled: false,
-            mount_plan: None,
+            mount_plan: Some(minimal_test_mount_plan(&workspace_dir)),
         });
 
         assert!(result.success);
@@ -2179,7 +2196,7 @@ esac
         fs::create_dir_all(&workspace_dir).unwrap();
         let summary_path = workspace_dir.join("output/scan-summary.json");
 
-        let _docker_bin = EnvVarGuard::set("Argus_DOCKER_BIN", fake_docker.to_str().unwrap());
+        let _docker_bin = EnvVarGuard::set("Argus_PODMAN_BIN", fake_docker.to_str().unwrap());
         let _docker_log = EnvVarGuard::set("FAKE_DOCKER_LOG", fake_log.to_str().unwrap());
         let _workspace_root =
             EnvVarGuard::set("SCAN_WORKSPACE_ROOT", workspace_root.to_str().unwrap());
@@ -2212,7 +2229,7 @@ esac
             cpu_limit: None,
             pids_limit: None,
             network_disabled: false,
-            mount_plan: None,
+            mount_plan: Some(minimal_test_mount_plan(&workspace_dir)),
         });
 
         assert!(!result.success);
@@ -2251,7 +2268,7 @@ esac
         fs::create_dir_all(&workspace_dir).unwrap();
         let summary_path = workspace_dir.join("output/scan-summary.json");
 
-        let _docker_bin = EnvVarGuard::set("Argus_DOCKER_BIN", fake_docker.to_str().unwrap());
+        let _docker_bin = EnvVarGuard::set("Argus_PODMAN_BIN", fake_docker.to_str().unwrap());
         let _docker_log = EnvVarGuard::set("FAKE_DOCKER_LOG", fake_log.to_str().unwrap());
         let _workspace_root =
             EnvVarGuard::set("SCAN_WORKSPACE_ROOT", workspace_root.to_str().unwrap());
@@ -2284,7 +2301,7 @@ esac
             cpu_limit: None,
             pids_limit: None,
             network_disabled: false,
-            mount_plan: None,
+            mount_plan: Some(minimal_test_mount_plan(&workspace_dir)),
         });
 
         assert!(!result.success);
@@ -2292,7 +2309,7 @@ esac
             result
                 .error
                 .as_deref()
-                .is_some_and(|error| error.contains("docker wait timed out after summary gate")),
+                .is_some_and(|error| error.contains("podman wait timed out after summary gate")),
             "{result:?}"
         );
 
@@ -2312,7 +2329,7 @@ esac
         let workspace_dir = workspace_root.join("opengrep/task-missing-summary");
         fs::create_dir_all(&workspace_dir).unwrap();
 
-        let _docker_bin = EnvVarGuard::set("Argus_DOCKER_BIN", fake_docker.to_str().unwrap());
+        let _docker_bin = EnvVarGuard::set("Argus_PODMAN_BIN", fake_docker.to_str().unwrap());
         let _docker_log = EnvVarGuard::set("FAKE_DOCKER_LOG", fake_log.to_str().unwrap());
         let _workspace_root =
             EnvVarGuard::set("SCAN_WORKSPACE_ROOT", workspace_root.to_str().unwrap());
@@ -2340,7 +2357,7 @@ esac
             cpu_limit: None,
             pids_limit: None,
             network_disabled: false,
-            mount_plan: None,
+            mount_plan: Some(minimal_test_mount_plan(&workspace_dir)),
         });
 
         assert!(!result.success);
@@ -2370,7 +2387,7 @@ esac
         let fake_log = temp_dir.path().join("docker.log");
         let fake_docker = fake_docker_script(&temp_dir);
 
-        let _docker_bin = EnvVarGuard::set("Argus_DOCKER_BIN", fake_docker.to_str().unwrap());
+        let _docker_bin = EnvVarGuard::set("Argus_PODMAN_BIN", fake_docker.to_str().unwrap());
         let _docker_log = EnvVarGuard::set("FAKE_DOCKER_LOG", fake_log.to_str().unwrap());
         let _inspect_missing = EnvVarGuard::set("FAKE_INSPECT_MISSING", "1");
 
