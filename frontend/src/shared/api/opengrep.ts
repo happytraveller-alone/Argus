@@ -372,6 +372,41 @@ export interface OpengrepScanTask {
     error_message?: string | null;
     diagnostics_summary?: string | null;
     opengrep_sandbox?: OpengrepSandboxMode | null;
+    /**
+     * Free-form metadata bag persisted on the backend `record.extra` field.
+     * Phase 1 codegraph integration writes `codegraph_unavailable: true` plus a
+     * `codegraph_unavailable_reason` string when the codegraph init fails and
+     * the pipeline falls back to the legacy 6-pattern probe.
+     */
+    extra?: {
+        codegraph_unavailable?: boolean;
+        codegraph_unavailable_reason?: string;
+        [key: string]: unknown;
+    } | null;
+}
+
+/**
+ * Mirror of backend `DismissalCategory` (`audit_pipeline::types::DismissalCategory`).
+ * Serialized as snake_case strings by serde.
+ */
+export type DismissalCategory = "real" | "sanitized" | "test" | "vendor";
+
+/**
+ * Mirror of backend `ConfidenceSource` — records WHICH evidence channel produced
+ * the dismissal verdict.
+ */
+export type ConfidenceSource = "rule_matched" | "llm_inferred" | "path_pattern";
+
+/**
+ * Structured dismissal evidence attached to a finding. Backend serializes with
+ * camelCase keys via `#[serde(rename_all = "camelCase")]`.
+ */
+export interface DismissalEvidence {
+    category: DismissalCategory;
+    confidenceSource: ConfidenceSource;
+    pathPattern?: string | null;
+    sanitizerSymbols?: string[] | null;
+    rationale?: string | null;
 }
 
 export interface OpengrepScanProgressLog {
@@ -425,6 +460,12 @@ export interface OpengrepFinding {
     severity: string;
     status: string;
     confidence?: string | null;
+    /**
+     * Phase 1 codegraph integration writes a structured dismissal verdict on
+     * each finding when the audit pipeline classifies it. Absent for legacy /
+     * unprocessed findings — the UI must render nothing in that case.
+     */
+    dismissalEvidence?: DismissalEvidence | null;
 }
 
 export interface OpengrepFindingContextLine {

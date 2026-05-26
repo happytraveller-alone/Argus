@@ -8,6 +8,11 @@ import {
 	normalizeStaticAnalysisSeverity,
 	type NormalizedSeverity,
 } from "@/shared/utils/staticAnalysisSeverity";
+import type {
+	ConfidenceSource,
+	DismissalCategory,
+	DismissalEvidence,
+} from "@/shared/api/opengrep";
 
 export type Engine = "opengrep" | "codeql" | "joern";
 export type OpengrepSandboxMode =
@@ -19,6 +24,7 @@ export type StatusFilter = "all" | FindingStatus;
 export type ConfidenceFilter = "all" | "HIGH" | "MEDIUM" | "LOW";
 export type SeverityFilter = "all" | NormalizedSeverity;
 export type NormalizedConfidence = "HIGH" | "MEDIUM" | "LOW";
+export type DismissalCategoryFilter = "all" | DismissalCategory;
 
 export interface StaticAnalysisProgressTaskLike {
   id: string;
@@ -38,6 +44,38 @@ export interface StaticAnalysisSummaryTaskLike
   diagnostics_summary?: string | null;
   opengrep_sandbox?: string | null;
   requested_opengrep_sandbox?: string | null;
+  extra?: {
+    codegraph_unavailable?: boolean;
+    codegraph_unavailable_reason?: string;
+    [key: string]: unknown;
+  } | null;
+}
+
+export interface CodegraphDegradedInfo {
+  unavailable: boolean;
+  reason: string | null;
+}
+
+export function resolveCodegraphDegradedInfo(input: {
+  opengrepTask?: StaticAnalysisSummaryTaskLike | null;
+  codeqlTask?: StaticAnalysisSummaryTaskLike | null;
+  joernTask?: StaticAnalysisSummaryTaskLike | null;
+}): CodegraphDegradedInfo {
+  const tasks = [input.opengrepTask, input.codeqlTask, input.joernTask].filter(
+    Boolean,
+  ) as StaticAnalysisSummaryTaskLike[];
+  for (const task of tasks) {
+    const extra = task.extra;
+    if (extra && extra.codegraph_unavailable === true) {
+      const rawReason = extra.codegraph_unavailable_reason;
+      const reason =
+        typeof rawReason === "string" && rawReason.trim()
+          ? rawReason.trim()
+          : null;
+      return { unavailable: true, reason };
+    }
+  }
+  return { unavailable: false, reason: null };
 }
 
 export interface StaticAnalysisProgressSummary {
@@ -204,6 +242,8 @@ export type UnifiedFindingRow = {
   confidence: NormalizedConfidence;
   confidenceScore: number;
   status: string;
+  dismissalCategory: DismissalCategory | null;
+  dismissalEvidence: DismissalEvidence | null;
 };
 
 type MinimalOpengrepFinding = {
@@ -216,6 +256,7 @@ type MinimalOpengrepFinding = {
   status?: string | null;
   rule_name?: string | null;
   rule?: Record<string, unknown> | null;
+  dismissalEvidence?: DismissalEvidence | null;
 };
 
 const SEVERITY_SCORE: Record<NormalizedSeverity, number> = {
@@ -343,6 +384,102 @@ export function getStaticAnalysisFindingStatusLabel(status?: string | null): str
   if (normalized === "verified") return "确报";
   if (normalized === "false_positive") return "误报";
   return "待验证";
+}
+
+const VALID_DISMISSAL_CATEGORIES = new Set<DismissalCategory>([
+  "real",
+  "sanitized",
+  "test",
+  "vendor",
+]);
+
+const VALID_CONFIDENCE_SOURCES = new Set<ConfidenceSource>([
+  "rule_matched",
+  "llm_inferred",
+  "path_pattern",
+]);
+
+function isDismissalCategory(value: unknown): value is DismissalCategory {
+  return typeof value === "string" && VALID_DISMISSAL_CATEGORIES.has(value as DismissalCategory);
+}
+
+function isConfidenceSource(value: unknown): value is ConfidenceSource {
+  return typeof value === "string" && VALID_CONFIDENCE_SOURCES.has(value as ConfidenceSource);
+}
+
+/**
+ * Parse a raw payload (camelCase or snake_case) into a DismissalEvidence struct.
+ * Returns null when the payload is missing the required `category` /
+ * `confidenceSource` fields or when the category enum is unrecognized — callers
+ * should treat null as "legacy / unprocessed finding, render no chip".
+ */
+export function parseDismissalEvidence(
+  raw: unknown,
+): DismissalEvidence | null {
+  if (!raw || typeof raw !== "object") return null;
+  const payload = raw as Record<string, unknown>;
+  const category = payload.category;
+  if (!isDismissalCategory(category)) return null;
+  const confidenceSourceValue =
+    payload.confidenceSource ?? payload.confidence_source;
+  if (!isConfidenceSource(confidenceSourceValue)) return null;
+  const pathPatternValue = payload.pathPattern ?? payload.path_pattern;
+  const pathPattern =
+    typeof pathPatternValue === "string" && pathPatternValue.trim()
+      ? pathPatternValue
+      : null;
+  const sanitizerSymbolsValue =
+    payload.sanitizerSymbols ?? payload.sanitizer_symbols;
+  const sanitizerSymbols = Array.isArray(sanitizerSymbolsValue)
+    ? sanitizerSymbolsValue
+        .map((value) => String(value || "").trim())
+        .filter(Boolean)
+    : null;
+  const rationaleValue = payload.rationale;
+  const rationale =
+    typeof rationaleValue === "string" && rationaleValue.trim()
+      ? rationaleValue
+      : null;
+
+  return {
+    category,
+    confidenceSource: confidenceSourceValue,
+    pathPattern,
+    sanitizerSymbols: sanitizerSymbols && sanitizerSymbols.length > 0 ? sanitizerSymbols : null,
+    rationale,
+  };
+}
+
+export function getStaticAnalysisDismissalCategoryLabel(
+  category: DismissalCategory,
+): string {
+  if (category === "real") return "真实";
+  if (category === "sanitized") return "已净化";
+  if (category === "test") return "测试代码";
+  return "第三方依赖";
+}
+
+export function getStaticAnalysisDismissalCategoryBadgeClass(
+  category: DismissalCategory,
+): string {
+  if (category === "real") {
+    return "bg-rose-500/20 text-rose-300 border-rose-500/30";
+  }
+  if (category === "sanitized") {
+    return "bg-emerald-500/20 text-emerald-300 border-emerald-500/30";
+  }
+  if (category === "test") {
+    return "bg-muted text-muted-foreground border-border";
+  }
+  return "bg-sky-500/20 text-sky-300 border-sky-500/30";
+}
+
+export function getStaticAnalysisConfidenceSourceLabel(
+  source: ConfidenceSource,
+): string {
+  if (source === "rule_matched") return "规则命中";
+  if (source === "llm_inferred") return "LLM 推断";
+  return "路径模式";
 }
 
 export function getStaticAnalysisFindingStatusBadgeClass(status?: string | null): string {
@@ -823,6 +960,7 @@ export function buildUnifiedFindingRows(input: {
     const severity = normalizeStaticAnalysisSeverity(finding.severity);
     if (!severity) return [];
     const confidence = normalizeStaticAnalysisConfidence(finding.confidence);
+    const dismissalEvidence = parseDismissalEvidence(finding.dismissalEvidence);
     return {
       key: `${engine}:${finding.id}`,
       id: finding.id,
@@ -836,6 +974,8 @@ export function buildUnifiedFindingRows(input: {
       confidence,
       confidenceScore: CONFIDENCE_SCORE[confidence],
       status: String(finding.status || "open").trim().toLowerCase(),
+      dismissalCategory: dismissalEvidence?.category ?? null,
+      dismissalEvidence,
     };
   });
   return [
@@ -851,10 +991,13 @@ export function buildStaticAnalysisListState(input: {
   statusFilter: StatusFilter;
   severityFilter: SeverityFilter;
   confidenceFilter: ConfidenceFilter;
+  dismissalCategoryFilter?: DismissalCategoryFilter;
   page: number;
   pageSize?: number;
 }) {
   const pageSize = input.pageSize ?? 10;
+  const dismissalCategoryFilter: DismissalCategoryFilter =
+    input.dismissalCategoryFilter ?? "all";
   const filteredRows = input.rows
     .filter((row) => input.engineFilter === "all" || row.engine === input.engineFilter)
     .filter((row) => input.statusFilter === "all" || row.status === input.statusFilter)
@@ -865,6 +1008,10 @@ export function buildStaticAnalysisListState(input: {
     .filter((row) => {
       if (input.confidenceFilter === "all") return true;
       return row.confidence === input.confidenceFilter;
+    })
+    .filter((row) => {
+      if (dismissalCategoryFilter === "all") return true;
+      return row.dismissalCategory === dismissalCategoryFilter;
     })
     .sort((a, b) => {
       if (a.severityScore !== b.severityScore) {

@@ -44,6 +44,8 @@ const openFinding: UnifiedFindingRow = {
 	confidence: "HIGH",
 	confidenceScore: 3,
 	status: "open",
+	dismissalCategory: null,
+	dismissalEvidence: null,
 };
 
 const verifiedFinding: UnifiedFindingRow = {

@@ -200,6 +200,8 @@ test("buildStaticAnalysisListState filters, sorts and paginates static engine ro
       confidence: "LOW",
       confidenceScore: 1,
       status: "open",
+      dismissalCategory: null,
+      dismissalEvidence: null,
     },
     {
       key: "b",
@@ -214,6 +216,8 @@ test("buildStaticAnalysisListState filters, sorts and paginates static engine ro
       confidence: "HIGH",
       confidenceScore: 3,
       status: "verified",
+      dismissalCategory: null,
+      dismissalEvidence: null,
     },
     {
       key: "c",
@@ -228,6 +232,8 @@ test("buildStaticAnalysisListState filters, sorts and paginates static engine ro
       confidence: "MEDIUM",
       confidenceScore: 2,
       status: "open",
+      dismissalCategory: null,
+      dismissalEvidence: null,
     },
     {
       key: "d",
@@ -242,6 +248,8 @@ test("buildStaticAnalysisListState filters, sorts and paginates static engine ro
       confidence: "HIGH",
       confidenceScore: 3,
       status: "open",
+      dismissalCategory: null,
+      dismissalEvidence: null,
     },
   ] as const;
 

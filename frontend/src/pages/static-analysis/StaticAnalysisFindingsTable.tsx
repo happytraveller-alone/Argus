@@ -16,6 +16,9 @@ import type { FindingStatus, UnifiedFindingRow } from "./viewModel";
 import {
 	getStaticAnalysisConfidenceBadgeClass,
 	getStaticAnalysisConfidenceLabel,
+	getStaticAnalysisConfidenceSourceLabel,
+	getStaticAnalysisDismissalCategoryBadgeClass,
+	getStaticAnalysisDismissalCategoryLabel,
 	getStaticAnalysisFindingStatusBadgeClass,
 	getStaticAnalysisFindingStatusLabel,
 	getStaticAnalysisSeverityBadgeClass,
@@ -201,6 +204,44 @@ export function getColumns(input: {
 					{getStaticAnalysisConfidenceLabel(row.original.confidence)}
 				</Badge>
 			),
+		},
+		{
+			id: "dismissal",
+			accessorFn: (row) => row.dismissalCategory ?? "",
+			header: "判定",
+			enableSorting: false,
+			enableHiding: true,
+			meta: {
+				label: "判定",
+				width: 130,
+				filterVariant: "select",
+				filterOptions: [
+					{ label: "真实", value: "real" },
+					{ label: "已净化", value: "sanitized" },
+					{ label: "测试代码", value: "test" },
+					{ label: "第三方依赖", value: "vendor" },
+				],
+			},
+			cell: ({ row }) => {
+				const evidence = row.original.dismissalEvidence;
+				if (!evidence) {
+					return <span className="text-muted-foreground text-sm">-</span>;
+				}
+				const tooltip = getStaticAnalysisConfidenceSourceLabel(
+					evidence.confidenceSource,
+				);
+				return (
+					<Badge
+						className={getStaticAnalysisDismissalCategoryBadgeClass(
+							evidence.category,
+						)}
+						title={tooltip}
+						data-testid={`dismissal-chip-${evidence.category}`}
+					>
+						{getStaticAnalysisDismissalCategoryLabel(evidence.category)}
+					</Badge>
+				);
+			},
 		},
 		{
 			id: "status",

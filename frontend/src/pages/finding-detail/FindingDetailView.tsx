@@ -6,6 +6,7 @@ import FindingDetailHeaderActions, {
   type FindingDetailCodeBrowserAction,
 } from "./FindingDetailHeaderActions";
 import type {
+  FindingDetailDismissalEvidence,
   FindingDetailFullFileRequest,
   FindingDetailNarrativeSection,
   FindingDetailPageModel,
@@ -71,6 +72,86 @@ function resolveNarrativeSectionClass(section: FindingDetailNarrativeSection): s
   return "rounded-2xl border border-border/70 bg-card px-5 py-5 shadow-sm space-y-4";
 }
 
+function DismissalEvidenceCard({ evidence }: { evidence: FindingDetailDismissalEvidence }) {
+  return (
+    <section
+      className="rounded-2xl border border-border/70 bg-card px-5 py-5 shadow-sm space-y-4"
+      data-testid="dismissal-evidence-panel"
+    >
+      <div>
+        <p className="text-[0.9rem] font-mono uppercase tracking-[0.22em] text-muted-foreground">
+          判定证据
+        </p>
+      </div>
+      <div className="grid gap-3 text-[0.98rem]">
+        <div className="grid gap-2 sm:grid-cols-[144px_minmax(0,1fr)] sm:gap-4">
+          <div className="text-[0.9rem] uppercase tracking-[0.16em] text-muted-foreground">
+            判定类别
+          </div>
+          <div className="text-foreground">{evidence.categoryLabel}</div>
+        </div>
+        <div className="grid gap-2 sm:grid-cols-[144px_minmax(0,1fr)] sm:gap-4">
+          <div className="text-[0.9rem] uppercase tracking-[0.16em] text-muted-foreground">
+            置信来源
+          </div>
+          <div className="text-foreground">{evidence.confidenceSourceLabel}</div>
+        </div>
+        {evidence.pathPattern ? (
+          <div className="grid gap-2 sm:grid-cols-[144px_minmax(0,1fr)] sm:gap-4">
+            <div className="text-[0.9rem] uppercase tracking-[0.16em] text-muted-foreground">
+              路径模式
+            </div>
+            <div className="font-mono text-foreground break-all">
+              {evidence.pathPattern}
+            </div>
+          </div>
+        ) : null}
+        {evidence.sanitizerSymbols.length > 0 ? (
+          <div className="grid gap-2 sm:grid-cols-[144px_minmax(0,1fr)] sm:gap-4">
+            <div className="text-[0.9rem] uppercase tracking-[0.16em] text-muted-foreground">
+              净化符号
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {evidence.sanitizerSymbols.map((chip) =>
+                chip.url ? (
+                  <a
+                    key={chip.symbol}
+                    href={chip.url}
+                    target="_blank"
+                    rel="noreferrer noopener"
+                    className="inline-flex items-center rounded-sm border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 font-mono text-xs text-emerald-200 hover:bg-emerald-500/20"
+                    data-testid="sanitizer-symbol-link"
+                  >
+                    {chip.symbol}
+                  </a>
+                ) : (
+                  <span
+                    key={chip.symbol}
+                    className="inline-flex items-center rounded-sm border border-border bg-muted px-2 py-0.5 font-mono text-xs text-muted-foreground"
+                    data-testid="sanitizer-symbol-plain"
+                  >
+                    {chip.symbol}
+                  </span>
+                ),
+              )}
+            </div>
+          </div>
+        ) : null}
+        {evidence.rationale ? (
+          <div className="grid gap-2 sm:grid-cols-[144px_minmax(0,1fr)] sm:gap-4">
+            <div className="text-[0.9rem] uppercase tracking-[0.16em] text-muted-foreground">
+              说明
+            </div>
+            <p className="text-foreground whitespace-pre-wrap break-words">
+              {evidence.rationale}
+            </p>
+          </div>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
 function NarrativeSectionCard({ section }: { section: FindingDetailNarrativeSection }) {
   return (
     <section className={resolveNarrativeSectionClass(section)}>
@@ -114,6 +195,9 @@ export default function FindingDetailView({
       <div className="min-h-0 flex-1 grid grid-cols-1 xl:grid-cols-[minmax(0,1.02fr)_minmax(0,0.98fr)] gap-4">
         <div className="order-1 xl:order-1 rounded-[24px] border border-border/70 bg-background p-5 min-h-0 flex flex-col gap-4 overflow-y-auto custom-scrollbar shadow-sm">
           <InfoSection title="概览信息" items={model.overviewItems} />
+          {model.dismissalEvidence ? (
+            <DismissalEvidenceCard evidence={model.dismissalEvidence} />
+          ) : null}
           {model.narrativeSections.map((section) => (
             <NarrativeSectionCard key={section.id} section={section} />
           ))}

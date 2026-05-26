@@ -13,6 +13,7 @@ import {
   getStaticAnalysisTotalDisplayDurationMs,
   getStaticAnalysisStatusBadgeClassName,
   isStaticAnalysisPollableStatus,
+  resolveCodegraphDegradedInfo,
   toStaticAnalysisSafeMetric,
 } from "./viewModel";
 
@@ -109,6 +110,16 @@ export const StaticAnalysisSummaryCards = memo(function StaticAnalysisSummaryCar
     [statusSummary.aggregateStatus, statusSummary.failureReasons],
   );
 
+  const codegraphDegraded = useMemo(
+    () =>
+      resolveCodegraphDegradedInfo({
+        opengrepTask,
+        codeqlTask,
+        joernTask,
+      }),
+    [codeqlTask, joernTask, opengrepTask],
+  );
+
   return (
     <div className="space-y-3">
       <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
@@ -145,6 +156,27 @@ export const StaticAnalysisSummaryCards = memo(function StaticAnalysisSummaryCar
           </div>
         </div>
       </div>
+
+      {codegraphDegraded.unavailable ? (
+        <div
+          className="flex items-center gap-2"
+          data-testid="codegraph-degraded-banner"
+        >
+          <Badge
+            className="bg-amber-500/20 text-amber-300 border-amber-500/30"
+            title={
+              codegraphDegraded.reason
+                ? `codegraph 初始化失败（${codegraphDegraded.reason}），已回退至旧版 6-pattern 探针。`
+                : "codegraph 初始化失败，已回退至旧版 6-pattern 探针。"
+            }
+          >
+            降级
+          </Badge>
+          <span className="text-xs text-muted-foreground">
+            codegraph 不可用，已回退至旧版 6-pattern 探针
+          </span>
+        </div>
+      ) : null}
 
       {statusSummary.failureReasons.length > 0 ? (
         <div

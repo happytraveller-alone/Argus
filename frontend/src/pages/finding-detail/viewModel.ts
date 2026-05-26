@@ -2,10 +2,12 @@ import type { FindingNarrativeInput } from "@/pages/AgentAudit/components/findin
 import type { FindingCodeWindowDisplayLine } from "@/pages/AgentAudit/components/FindingCodeWindow";
 import type { AgentFinding } from "@/shared/api/agentTasks";
 import type {
+  DismissalEvidence,
   OpengrepFinding,
   OpengrepFindingContext,
 } from "@/shared/api/opengrep";
 import { resolveCweDisplay } from "@/shared/security/cweCatalog";
+import { sanitizerReferenceUrl } from "@/shared/security/sanitizerReference";
 import type { ProjectSourceType } from "@/shared/types";
 
 const CODE_CONTEXT_PADDING = 3;
@@ -63,6 +65,19 @@ export type FindingDetailNarrativeSection = {
   body?: string | null;
 };
 
+export type FindingDetailSanitizerChip = {
+  symbol: string;
+  url: string | null;
+};
+
+export type FindingDetailDismissalEvidence = {
+  categoryLabel: string;
+  confidenceSourceLabel: string;
+  pathPattern: string | null;
+  sanitizerSymbols: FindingDetailSanitizerChip[];
+  rationale: string | null;
+};
+
 export type FindingDetailPageModel = {
   pageTitle: string;
   codePanelTitle: string;
@@ -71,6 +86,7 @@ export type FindingDetailPageModel = {
   trackingItems: FindingDetailTrackingItem[];
   overviewItems: FindingDetailTrackingItem[];
   codeSections: FindingDetailCodeView[];
+  dismissalEvidence?: FindingDetailDismissalEvidence | null;
   codeBrowserTarget: {
     filePath: string | null;
     line: number | null;
@@ -768,6 +784,44 @@ export function buildAgentFindingCodeViews(finding: AgentFinding): FindingDetail
   ];
 }
 
+const DISMISSAL_CATEGORY_LABELS: Record<DismissalEvidence["category"], string> = {
+  real: "真实",
+  sanitized: "已净化",
+  test: "测试代码",
+  vendor: "第三方依赖",
+};
+
+const CONFIDENCE_SOURCE_LABELS: Record<DismissalEvidence["confidenceSource"], string> = {
+  rule_matched: "规则命中",
+  llm_inferred: "LLM 推断",
+  path_pattern: "路径模式",
+};
+
+export function buildFindingDetailDismissalEvidence(
+  raw: DismissalEvidence | null | undefined,
+): FindingDetailDismissalEvidence | null {
+  if (!raw) return null;
+  const sanitizerSymbols = Array.isArray(raw.sanitizerSymbols)
+    ? raw.sanitizerSymbols
+        .map((symbol) => String(symbol || "").trim())
+        .filter(Boolean)
+        .map((symbol) => ({
+          symbol,
+          url: sanitizerReferenceUrl(symbol),
+        }))
+    : [];
+  const rationale = String(raw.rationale || "").trim();
+  const pathPattern = String(raw.pathPattern || "").trim();
+  return {
+    categoryLabel: DISMISSAL_CATEGORY_LABELS[raw.category] ?? raw.category,
+    confidenceSourceLabel:
+      CONFIDENCE_SOURCE_LABELS[raw.confidenceSource] ?? raw.confidenceSource,
+    pathPattern: pathPattern || null,
+    sanitizerSymbols,
+    rationale: rationale || null,
+  };
+}
+
 function buildBaseModel(params: {
   pageTitle: string;
   codePanelTitle: string;
@@ -777,6 +831,7 @@ function buildBaseModel(params: {
   overviewItems: FindingDetailTrackingItem[];
   codeSections: FindingDetailCodeView[];
   codeBrowserTarget: FindingDetailPageModel["codeBrowserTarget"];
+  dismissalEvidence?: FindingDetailDismissalEvidence | null;
   projectId?: string | null;
   projectSourceType?: ProjectSourceType | null;
   projectName?: string | null;
@@ -795,6 +850,7 @@ function buildBaseModel(params: {
         projectName: params.projectName,
       }),
     ),
+    dismissalEvidence: params.dismissalEvidence ?? null,
     codeBrowserTarget: params.codeBrowserTarget,
   };
 }
@@ -1027,6 +1083,9 @@ function buildStaticFindingDetailModel(params: {
     }),
     codeSections: buildFindingDetailCodeSections(
       buildOpengrepFindingCodeViews(finding, params.context ?? null),
+    ),
+    dismissalEvidence: buildFindingDetailDismissalEvidence(
+      finding.dismissalEvidence,
     ),
     codeBrowserTarget: buildCodeBrowserTarget({
       filePath: finding.resolved_file_path ?? finding.file_path,
