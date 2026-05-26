@@ -519,9 +519,10 @@ export function SystemConfig({
 		setLlmTestResult(null);
 	};
 
-	const persistConfig = async () => {
+	const persistConfig = async (override?: { rows?: LlmConfigRow[] }) => {
 		if (!config) return null;
-		const parseErrorRow = config.llmConfig.rows.find((row) => !parseLlmCustomHeadersInput(row.advanced.llmCustomHeaders).ok);
+		const effectiveRows = override?.rows ?? config.llmConfig.rows;
+		const parseErrorRow = effectiveRows.find((row) => !parseLlmCustomHeadersInput(row.advanced.llmCustomHeaders).ok);
 		if (parseErrorRow) {
 			const message = `第 ${parseErrorRow.priority} 行自定义请求头格式不正确`;
 			toast.error(message);
@@ -530,7 +531,7 @@ export function SystemConfig({
 		setSavingLLM(true);
 		try {
 			const savedConfig = await api.updateUserConfig({
-				llmConfig: { ...config.llmConfig, rows: config.llmConfig.rows.map((row) => ({ ...row, apiKey: row.apiKey.trim() })) },
+				llmConfig: { ...config.llmConfig, rows: effectiveRows.map((row) => ({ ...row, apiKey: row.apiKey.trim() })) },
 				otherConfig: { ...config.rawOtherConfig, maxAnalyzeFiles: config.maxAnalyzeFiles, llmConcurrency: config.llmConcurrency, llmGapMs: config.llmGapMs },
 			});
 			const nextConfig = buildSystemConfigDataFromBackendConfig(savedConfig);
@@ -543,6 +544,16 @@ export function SystemConfig({
 			throw error;
 		} finally {
 			setSavingLLM(false);
+		}
+	};
+
+	const persistRowChange = async (nextRows: LlmConfigRow[]) => {
+		const renumbered = renumberRows(nextRows);
+		updateRows(renumbered);
+		try {
+			await persistConfig({ rows: renumbered });
+		} catch {
+			// persistConfig already surfaced the error toast; keep optimistic UI so user sees what failed
 		}
 	};
 
@@ -626,7 +637,10 @@ export function SystemConfig({
 		if (index < 0 || nextIndex < 0 || nextIndex >= rows.length) return;
 		const nextRows = [...rows];
 		[nextRows[index], nextRows[nextIndex]] = [nextRows[nextIndex], nextRows[index]];
-		updateRows(nextRows);
+		void persistRowChange(nextRows);
+	};
+	const toggleRowEnabled = (row: LlmConfigRow) => {
+		void persistRowChange(rows.map((r) => r.id === row.id ? { ...r, enabled: !r.enabled } : r));
 	};
 
 	if (loading || !config) {
@@ -687,13 +701,13 @@ export function SystemConfig({
 													<TableCell className="px-3 py-3 text-center font-mono text-base break-all border-r border-border/30" title={row.baseUrl}>{row.baseUrl || "--"}</TableCell>
 													<TableCell className="px-3 py-3 text-center font-mono text-base whitespace-nowrap border-r border-border/30" title={row.model}>{row.model || "--"}</TableCell>
 													<TableCell className="px-3 py-3 text-center border-r border-border/30"><div className="flex flex-wrap justify-center gap-1">{status.map((item) => <span key={item} className={cn("rounded border px-2 py-0.5 text-xs whitespace-nowrap", item.includes("失败") || item.includes("缺少") ? "border-rose-500/40 text-rose-300" : item.includes("通过") || item.includes("命中") || item.includes("已配置") ? "border-emerald-500/40 text-emerald-300" : "border-border text-muted-foreground")}>{item}</span>)}</div></TableCell>
-													<TableCell className="px-3 py-3"><div className="flex flex-nowrap gap-1 justify-center"><Button type="button" variant="outline" size="sm" className="cyber-btn-ghost h-8" disabled={savingLLM || testingLLM} onClick={() => handleSaveAndTestRow(row)}>验证</Button><Button type="button" variant="outline" size="sm" className="cyber-btn-ghost h-8" onClick={() => openEditDialog(row)}>编辑</Button><Button type="button" variant="outline" size="sm" className={cn("cyber-btn-ghost h-8", row.enabled ? "border-emerald-500/40 text-emerald-300" : "border-amber-500/40 text-amber-300")} onClick={() => updateRows(rows.map((r) => r.id === row.id ? { ...r, enabled: !r.enabled } : r))}>{row.enabled ? "禁用" : "启用"}</Button><Button type="button" variant="outline" size="sm" className="cyber-btn-ghost h-8 border-rose-500/40 text-rose-300" onClick={() => deleteRow(row)}>删除</Button><Button type="button" variant="outline" size="sm" className="cyber-btn-ghost h-8" disabled={row.priority === 1} onClick={() => moveRow(row, -1)}><ArrowUp className="h-3 w-3" /></Button><Button type="button" variant="outline" size="sm" className="cyber-btn-ghost h-8" disabled={row.priority === rows.length} onClick={() => moveRow(row, 1)}><ArrowDown className="h-3 w-3" /></Button></div></TableCell>
+													<TableCell className="px-3 py-3"><div className="flex flex-nowrap gap-1 justify-center"><Button type="button" variant="outline" size="sm" className="cyber-btn-ghost h-8" disabled={savingLLM || testingLLM} onClick={() => handleSaveAndTestRow(row)}>验证</Button><Button type="button" variant="outline" size="sm" className="cyber-btn-ghost h-8" onClick={() => openEditDialog(row)}>编辑</Button><Button type="button" variant="outline" size="sm" className={cn("cyber-btn-ghost h-8", row.enabled ? "border-emerald-500/40 text-emerald-300" : "border-amber-500/40 text-amber-300")} onClick={() => toggleRowEnabled(row)}>{row.enabled ? "禁用" : "启用"}</Button><Button type="button" variant="outline" size="sm" className="cyber-btn-ghost h-8 border-rose-500/40 text-rose-300" onClick={() => deleteRow(row)}>删除</Button><Button type="button" variant="outline" size="sm" className="cyber-btn-ghost h-8" disabled={row.priority === 1} onClick={() => moveRow(row, -1)}><ArrowUp className="h-3 w-3" /></Button><Button type="button" variant="outline" size="sm" className="cyber-btn-ghost h-8" disabled={row.priority === rows.length} onClick={() => moveRow(row, 1)}><ArrowDown className="h-3 w-3" /></Button></div></TableCell>
 												</TableRow>;
 											})}
 										</TableBody>
 									</Table>
 								</div>
-								{showInlineSaveButtons && <div className="pt-4 border-t border-border border-dashed flex justify-end flex-wrap gap-2"><Button onClick={handleSaveAndTest} disabled={savingLLM || testingLLM || !isConfigured} className="cyber-btn-primary h-10">{savingLLM || testingLLM ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />保存并测试中...</> : <><Save className="w-4 h-4 mr-2" />保存并测试</>}</Button><Button onClick={persistConfig} disabled={savingLLM} variant="outline" className="cyber-btn-ghost h-10"><Save className="w-4 h-4 mr-2" />保存</Button><Button onClick={async () => { if (!window.confirm("确定要重置为默认配置吗？")) return; await api.deleteUserConfig(); await reloadConfig(); setHasChanges(false); }} disabled={savingLLM || testingLLM} variant="ghost" className="cyber-btn-ghost h-10"><RotateCcw className="w-4 h-4 mr-2" />重置</Button></div>}
+								{showInlineSaveButtons && <div className="pt-4 border-t border-border border-dashed flex justify-end flex-wrap gap-2"><Button onClick={handleSaveAndTest} disabled={savingLLM || testingLLM || !isConfigured} className="cyber-btn-primary h-10">{savingLLM || testingLLM ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />保存并测试中...</> : <><Save className="w-4 h-4 mr-2" />保存并测试</>}</Button><Button onClick={() => persistConfig()} disabled={savingLLM} variant="outline" className="cyber-btn-ghost h-10"><Save className="w-4 h-4 mr-2" />保存</Button><Button onClick={async () => { if (!window.confirm("确定要重置为默认配置吗？")) return; await api.deleteUserConfig(); await reloadConfig(); setHasChanges(false); }} disabled={savingLLM || testingLLM} variant="ghost" className="cyber-btn-ghost h-10"><RotateCcw className="w-4 h-4 mr-2" />重置</Button></div>}
 								{llmTestResult && <div className={`p-3 rounded-lg ${llmTestResult.success ? "bg-emerald-500/10 border border-emerald-500/30" : "bg-rose-500/10 border border-rose-500/30"}`}><div className="flex items-center gap-2 text-sm">{llmTestResult.success ? <CheckCircle2 className="h-4 w-4 text-emerald-400" /> : <AlertCircle className="h-4 w-4 text-rose-400" />}<span>{llmTestResult.message}</span></div></div>}
 							</> : null}
 						</div>
@@ -704,7 +718,7 @@ export function SystemConfig({
 					<TabsContent value="analysis" className="space-y-6"><div className="cyber-card p-6 space-y-6"><div className="grid grid-cols-1 md:grid-cols-3 gap-6">{([["maxAnalyzeFiles", "最大分析文件数"], ["llmConcurrency", "LLM 并发数"], ["llmGapMs", "请求间隔 (毫秒)"]] as Array<[keyof Pick<SystemConfigData, "maxAnalyzeFiles" | "llmConcurrency" | "llmGapMs">, string]>).map(([key, label]) => <label key={key} className="space-y-2"><span className="text-xs font-bold text-muted-foreground uppercase">{label}</span><Input type="number" value={config[key]} onChange={(event) => { setConfig((prev) => prev ? { ...prev, [key]: Number(event.target.value) } : prev); setHasChanges(true); }} className="h-10 cyber-input" /></label>)}</div></div></TabsContent>
 				)}
 			</Tabs>
-			{hasChanges && !dialogOpen && showFloatingSaveButton && <div className="fixed bottom-6 right-6 cyber-card p-4 z-50"><Button onClick={persistConfig} className="cyber-btn-primary h-12"><Save className="w-4 h-4 mr-2" /> 保存所有更改</Button></div>}
+			{hasChanges && !dialogOpen && showFloatingSaveButton && <div className="fixed bottom-6 right-6 cyber-card p-4 z-50"><Button onClick={() => persistConfig()} className="cyber-btn-primary h-12"><Save className="w-4 h-4 mr-2" /> 保存所有更改</Button></div>}
 		</div>
 	);
 }

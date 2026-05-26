@@ -25,6 +25,11 @@ export interface IntelligentTaskFinding {
 	severity: string;
 	summary: string;
 	evidence: string;
+	file?: string | null;
+	lineStart?: number | null;
+	lineEnd?: number | null;
+	vulnClass?: string | null;
+	confidence?: number | null;
 	pocResult?: PocResult | null;
 	validationStatus?: string | null;
 	reachable?: boolean | null;
