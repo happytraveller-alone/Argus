@@ -1,7 +1,8 @@
+//> using file common.sc
+
 // tainted_memcpy.sc — rule_id: joern-c-tainted-memcpy, CWE-120/787, severity HIGH
 // Structural: memcpy where size arg is non-literal AND not sizeof-bounded (fires on bplist.c:288).
 // Taint upgrades confidence only; structural path is the primary anchor.
-import $file.common
 import common._
 import io.shiftleft.semanticcpg.language._
 import io.shiftleft.codepropertygraph.generated.Cpg

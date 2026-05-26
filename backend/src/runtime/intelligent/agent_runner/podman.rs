@@ -384,12 +384,14 @@ esac
 impl Drop for PodmanSession {
     fn drop(&mut self) {
         let id = self.container_id.clone();
-        tokio::spawn(async move {
-            let _ = Command::new("podman")
-                .args(["rm", "-f", &id])
-                .output()
-                .await;
-        });
+        // Fire-and-forget synchronous spawn — does not depend on a live tokio
+        // runtime. The child process detaches and podman cleans up the container
+        // even if this process is shutting down.
+        let _ = std::process::Command::new("podman")
+            .args(["rm", "-f", "-t", "0", &id])
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn();
     }
 }
 

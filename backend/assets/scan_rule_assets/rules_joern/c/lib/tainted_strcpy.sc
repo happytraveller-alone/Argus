@@ -1,6 +1,7 @@
+//> using file common.sc
+
 // tainted_strcpy.sc — rule_id: joern-c-tainted-strcpy, CWE-120/787, severity HIGH
 // Detects strcpy() with non-literal src; taint + bounds-check dominator tier confidence.
-import $file.common
 import common._
 import io.shiftleft.semanticcpg.language._
 import io.shiftleft.codepropertygraph.generated.Cpg

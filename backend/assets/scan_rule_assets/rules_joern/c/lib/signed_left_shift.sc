@@ -1,7 +1,8 @@
+//> using file common.sc
+
 // signed_left_shift.sc — rule_id: joern-c-signed-left-shift, CWE-190, severity MEDIUM
 // Verbatim predicate from upstream SignedLeftShift::signedLeftShift (joernio/joern).
 // Detects left-shift on signed integer operands (undefined behavior per C99/C11 §6.5.7).
-import $file.common
 import common._
 import io.shiftleft.semanticcpg.language._
 import io.shiftleft.codepropertygraph.generated.{Cpg, Operators}

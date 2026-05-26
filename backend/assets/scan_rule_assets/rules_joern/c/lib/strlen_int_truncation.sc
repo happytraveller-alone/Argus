@@ -1,7 +1,8 @@
+//> using file common.sc
+
 // strlen_int_truncation.sc — rule_id: joern-c-strlen-int-truncation, CWE-192/190, severity MEDIUM
 // Verbatim predicate from upstream IntegerTruncations::strlenAssignmentTruncations (joernio/joern).
 // Detects strlen() return value assigned to int (narrowing from size_t truncates on 64-bit).
-import $file.common
 import common._
 import io.shiftleft.semanticcpg.language._
 import io.shiftleft.codepropertygraph.generated.Cpg

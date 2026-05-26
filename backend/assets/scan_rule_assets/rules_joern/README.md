@@ -75,7 +75,7 @@ To add a new CVE attribution, append to the `knownCves` map in `c/lib/common.sc`
 ## Adding a new rule
 
 1. Create `c/lib/<rule_name>.sc` exposing `object <rule_name> { def run(cpg: Cpg): Seq[Finding] }`.
-2. Append an `import $file.lib.<rule_name>` + entry in the `modules` Seq inside `c/argus-joern-scan.sc`.
+2. Append a `//> using file lib/<rule_name>.sc` directive (at the top, before any imports) + add `<rule_name>.run` to the `modules` Seq inside `c/argus-joern-scan.sc`. The directive is replpp's include form (Joern uses replpp, not Ammonite).
 3. Add per-rule fixtures under `backend/tests/fixtures/joern/rules/<rule_id>/{positive.c, negative.c, expected.json}`.
 4. Append the new rule_id + asset path to:
    - `EXPECTED_JOERN_ASSET_PATHS` const in `backend/tests/joern_fixture_acceptance.rs`

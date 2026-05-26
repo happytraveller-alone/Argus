@@ -1,6 +1,7 @@
+//> using file common.sc
+
 // alloc_mul_tainted.sc — rule_id: joern-c-alloc-mul-tainted, CWE-190/680, severity HIGH
 // Detects malloc/alloca/realloc/calloc whose size arg is a multiplication with tainted factor.
-import $file.common
 import common._
 import io.shiftleft.semanticcpg.language._
 import io.shiftleft.codepropertygraph.generated.{Cpg, Operators, nodes}

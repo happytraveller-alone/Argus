@@ -190,6 +190,14 @@ pub async fn run_pipeline_with_config(
     // Token budget tracker (approximate — incremented per LLM call attempt event).
     let _token_counter = Arc::new(AtomicU64::new(0));
 
+    // ── CodeGraph lifecycle guard ─────────────────────────────────────────
+    // Wrap the codegraph client so the container is destroyed even if a stage
+    // panics or the task is cancelled. Explicit shutdown on success/error;
+    // label-based blanket `podman rm -f` in Drop catches every other path.
+    let codegraph_guard = CodeGraphCleanupGuard {
+        client: code_intel_client.clone(),
+    };
+
     // Run stages inside an inner async block so cleanup runs even on stage error.
     // The existing `?` operator semantics inside the block produce a Result we
     // inspect AFTER calling shutdown on the code intel client.
@@ -294,19 +302,9 @@ pub async fn run_pipeline_with_config(
     .await;
 
     // ── CodeGraph shutdown (always runs on stage success/error) ──────────────
-    // Per plan §Step 2.6: explicit lifecycle. PodmanSession::Drop is the
-    // safety net for panic AND task cancellation paths — if this function's
-    // future is dropped between init and this point, the inner async block is
-    // dropped first, `code_intel_client` is then dropped, and the PodmanSession
-    // inside it detaches a `tokio::spawn` that calls `podman rm -f` (see
-    // podman.rs:Drop). That spawn requires a live runtime; on full-runtime
-    // shutdown the container may leak — operationally acceptable for MVP given
-    // standalone container cleanup via `podman ps -a --filter label=argus-codegraph`.
-    if let Some(client) = code_intel_client.as_ref() {
-        if let Err(err) = client.shutdown().await {
-            tracing::warn!(error = %err, "codegraph shutdown failed");
-        }
-    }
+    // Explicit shutdown through the guard. On panic or task cancellation the
+    // guard's Drop fires a label-based blanket `podman rm -f` as safety net.
+    codegraph_guard.shutdown().await;
 
     let outputs = stages_result?;
     let findings = outputs.to_task_findings();
@@ -354,6 +352,57 @@ fn format_anyhow_error_chain(error: &anyhow::Error) -> String {
         .map(ToString::to_string)
         .collect::<Vec<_>>()
         .join(": ")
+}
+
+// ── CodeGraph container lifecycle guard ───────────────────────────────────
+
+/// Ensures the codegraph container is destroyed regardless of how the pipeline
+/// exits: normal return, stage error (`?`), panic, or task cancellation.
+///
+/// - `.shutdown().await` calls `CodeGraphClient::shutdown()` for a clean exit.
+/// - `Drop` runs `podman rm -f` on any containers labelled `argus-codegraph` as
+///   a synchronous fire-and-forget safety net (no tokio runtime dependency).
+struct CodeGraphCleanupGuard {
+    client: Option<Arc<CodeGraphClient>>,
+}
+
+impl CodeGraphCleanupGuard {
+    /// Destroy the codegraph container and run label-based blanket cleanup.
+    ///
+    /// Consumes the guard so that `Drop` does not fire a second cleanup.
+    async fn shutdown(mut self) {
+        if let Some(client) = self.client.take() {
+            if let Err(err) = client.shutdown().await {
+                tracing::warn!(error = %err, "codegraph explicit shutdown failed");
+            }
+            // Belt-and-suspenders: also run label-based cleanup to catch any
+            // containers that survived the explicit shutdown above (e.g. podman
+            // rm returned an error but the container is still running).
+            spawn_label_cleanup();
+        }
+    }
+}
+
+impl Drop for CodeGraphCleanupGuard {
+    fn drop(&mut self) {
+        if self.client.is_some() {
+            // Safety net for panics and task cancellation where `shutdown()`
+            // was never called. Fire-and-forget, no runtime dependency.
+            spawn_label_cleanup();
+        }
+    }
+}
+
+/// Fire-and-forget: remove all containers labelled `argus-codegraph`.
+fn spawn_label_cleanup() {
+    let _ = std::process::Command::new("sh")
+        .args([
+            "-c",
+            "podman rm -f $(podman ps -aq --filter label=argus-codegraph) 2>/dev/null",
+        ])
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn();
 }
 
 #[cfg(test)]

@@ -1,6 +1,7 @@
+//> using file common.sc
+
 // strncpy_missing_null_term.sc — rule_id: joern-c-strncpy-missing-null-term, CWE-170, severity MEDIUM
 // Detects strncpy(dest, src, sizeof(dest)) with no null-termination in next 5 block siblings.
-import $file.common
 import common._
 import io.shiftleft.semanticcpg.language._
 import io.shiftleft.codepropertygraph.generated.Cpg

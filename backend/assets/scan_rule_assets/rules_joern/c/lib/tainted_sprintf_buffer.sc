@@ -1,6 +1,7 @@
+//> using file common.sc
+
 // tainted_sprintf_buffer.sc — rule_id: joern-c-tainted-sprintf-buffer, CWE-120, severity HIGH
 // Detects sprintf/vsprintf with literal format string but tainted value arguments (orders >= 3).
-import $file.common
 import common._
 import io.shiftleft.semanticcpg.language._
 import io.shiftleft.codepropertygraph.generated.Cpg

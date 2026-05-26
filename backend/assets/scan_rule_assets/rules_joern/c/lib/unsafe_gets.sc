@@ -1,6 +1,7 @@
+//> using file common.sc
+
 // unsafe_gets.sc — rule_id: joern-c-unsafe-gets, CWE-120, severity HIGH
 // Detects any call to gets() — always unsafe, no bounds checking possible.
-import $file.common
 import common._
 import io.shiftleft.semanticcpg.language._
 import io.shiftleft.codepropertygraph.generated.Cpg

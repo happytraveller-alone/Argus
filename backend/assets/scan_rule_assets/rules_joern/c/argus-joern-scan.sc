@@ -1,19 +1,20 @@
+//> using file lib/common.sc
+//> using file lib/unsafe_gets.sc
+//> using file lib/tainted_strcpy.sc
+//> using file lib/tainted_memcpy.sc
+//> using file lib/tainted_sprintf_buffer.sc
+//> using file lib/strncpy_missing_null_term.sc
+//> using file lib/alloc_mul_tainted.sc
+//> using file lib/strlen_int_truncation.sc
+//> using file lib/signed_left_shift.sc
+
 // argus-joern-scan.sc — thin orchestrator; rule logic lives under c/lib/*.sc
 //
 // Wrapper contract preserved: backend/src/scan/joern.rs passes exactly these 4 params.
 // CPG is loaded once here; modules receive cpg directly via run(cpg).
 // Per-module errors are isolated via Try; a failing module yields empty findings.
 
-import $file.lib.common
 import common._
-import $file.lib.unsafe_gets
-import $file.lib.tainted_strcpy
-import $file.lib.tainted_memcpy
-import $file.lib.tainted_sprintf_buffer
-import $file.lib.strncpy_missing_null_term
-import $file.lib.alloc_mul_tainted
-import $file.lib.strlen_int_truncation
-import $file.lib.signed_left_shift
 import scala.util.Try
 import io.shiftleft.codepropertygraph.generated.Cpg
 
