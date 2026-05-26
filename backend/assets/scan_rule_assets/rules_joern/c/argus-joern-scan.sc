@@ -10,23 +10,49 @@
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Paths}
 
-import io.circe.syntax._
-import io.circe.Json
+def jsonString(value: String): String =
+  "\"" + value.flatMap {
+    case '"' => "\\\""
+    case '\\' => "\\\\"
+    case '\b' => "\\b"
+    case '\f' => "\\f"
+    case '\n' => "\\n"
+    case '\r' => "\\r"
+    case '\t' => "\\t"
+    case char if char.isControl => "\\u%04x".format(char.toInt)
+    case char => char.toString
+  } + "\""
+
+def jsonArray(values: Iterable[String]): String =
+  values.map(jsonString).mkString("[", ",", "]")
+
+def jsonObject(fields: Iterable[(String, String)]): String =
+  fields.map { case (key, value) => s"${jsonString(key)}:$value" }.mkString("{", ",", "}")
+
+def jsonStringField(key: String, value: String): (String, String) =
+  key -> jsonString(value)
+
+def jsonNumberField(key: String, value: Int): (String, String) =
+  key -> value.toString
 
 @main def exec(cpgFile: String, sourceDir: String, graphProofOut: String, findingsOut: String): Unit = {
   importCpg(cpgFile)
 
   val files = cpg.file.name.l.distinct.sorted
   val functions = cpg.method.name.l.distinct.sorted
-  val proof = Json.obj(
-    "schema_version" -> "argus.joern.graph-proof.v1".asJson,
-    "engine" -> "joern".asJson,
-    "source_dir" -> sourceDir.asJson,
-    "files" -> files.asJson,
-    "functions" -> functions.asJson,
-    "queries" -> Json.obj(
-      "file_count" -> files.size.asJson,
-      "function_count" -> functions.size.asJson
+  val proof = jsonObject(
+    Seq(
+      jsonStringField("schema_version", "argus.joern.graph-proof.v1"),
+      jsonStringField("engine", "joern"),
+      jsonStringField("source_dir", sourceDir),
+      "files" -> jsonArray(files),
+      "functions" -> jsonArray(functions),
+      "queries" -> jsonObject(
+        Seq(
+          jsonNumberField("file_count", files.size),
+          jsonNumberField("function_count", functions.size)
+        )
+      )
     )
   )
 
@@ -37,31 +63,37 @@ import io.circe.Json
   val findings = candidateCalls.map { call =>
     val fileName = call.file.name.headOption.getOrElse("")
     val lineNumber = call.lineNumber.getOrElse(1)
-    Json.obj(
-      "id" -> s"libplist-cve-2017-6439-${lineNumber}".asJson,
-      "rule_id" -> "joern-c-buffer-overflow-libplist-cve-2017-6439".asJson,
-      "title" -> "libplist parse_string_node buffer overflow".asJson,
-      "message" -> "Potential buffer overflow pattern in libplist parse_string_node".asJson,
-      "severity" -> "HIGH".asJson,
-      "confidence" -> "HIGH".asJson,
-      "file_path" -> fileName.asJson,
-      "start_line" -> lineNumber.asJson,
-      "end_line" -> lineNumber.asJson,
-      "function" -> "parse_string_node".asJson,
-      "cwe" -> List("CWE-120").asJson,
-      "cve" -> List("CVE-2017-6439").asJson,
-      "evidence" -> Json.obj(
-        "call" -> call.name.asJson,
-        "code" -> call.code.asJson
+    jsonObject(
+      Seq(
+        jsonStringField("id", s"libplist-cve-2017-6439-${lineNumber}"),
+        jsonStringField("rule_id", "joern-c-buffer-overflow-libplist-cve-2017-6439"),
+        jsonStringField("title", "libplist parse_string_node buffer overflow"),
+        jsonStringField("message", "Potential buffer overflow pattern in libplist parse_string_node"),
+        jsonStringField("severity", "HIGH"),
+        jsonStringField("confidence", "HIGH"),
+        jsonStringField("file_path", fileName),
+        jsonNumberField("start_line", lineNumber),
+        jsonNumberField("end_line", lineNumber),
+        jsonStringField("function", "parse_string_node"),
+        "cwe" -> jsonArray(List("CWE-120")),
+        "cve" -> jsonArray(List("CVE-2017-6439")),
+        "evidence" -> jsonObject(
+          Seq(
+            jsonStringField("call", call.name),
+            jsonStringField("code", call.code)
+          )
+        )
       )
     )
   }
-  val findingsDoc = Json.obj(
-    "schema_version" -> "argus.joern.findings.v1".asJson,
-    "engine" -> "joern".asJson,
-    "findings" -> findings.asJson
+  val findingsDoc = jsonObject(
+    Seq(
+      jsonStringField("schema_version", "argus.joern.findings.v1"),
+      jsonStringField("engine", "joern"),
+      "findings" -> findings.mkString("[", ",", "]")
+    )
   )
 
-  Files.write(Paths.get(graphProofOut), proof.noSpaces.getBytes(StandardCharsets.UTF_8))
-  Files.write(Paths.get(findingsOut), findingsDoc.noSpaces.getBytes(StandardCharsets.UTF_8))
+  Files.write(Paths.get(graphProofOut), proof.getBytes(StandardCharsets.UTF_8))
+  Files.write(Paths.get(findingsOut), findingsDoc.getBytes(StandardCharsets.UTF_8))
 }

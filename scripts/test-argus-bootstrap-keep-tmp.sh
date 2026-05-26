@@ -159,10 +159,13 @@ assert_contains "$help_out" "scripts/validate-llm-config.sh --env-file"
 # Podman pre-pulls the Joern scanner image with build base images, and normal
 # readiness polling suppresses transient curl stderr while retaining dry-run
 # command visibility through the stub/dry-run branches.
-assert_contains "$SCRIPT_SRC" 'log "Pre-pulling base/scanner images in parallel..."'
+assert_contains "$SCRIPT_SRC" 'log "Pre-pulling base/scanner images in parallel (including Joern: $joern_image)..."'
 assert_contains "$SCRIPT_SRC" 'log "Dry-run/stub: skipping base/scanner image pre-pull."'
 assert_contains "$SCRIPT_SRC" 'joern_image="$(joern_runner_image_ref)"'
 assert_contains "$SCRIPT_SRC" '"$joern_image"'
+assert_contains "$SCRIPT_SRC" 'log "Base/scanner image pre-pulled: $img"'
+assert_contains "$SCRIPT_SRC" 'log "Warning: failed to pre-pull base/scanner image: $img (builds will pull on demand)."'
+assert_contains "$SCRIPT_SRC" "joern-parse --help | grep -F -- '--output' >/dev/null"
 assert_contains "$SCRIPT_SRC" 'curl -fsS "$BACKEND_HEALTH_URL" >/dev/null 2>&1'
 assert_contains "$SCRIPT_SRC" 'curl -fsS "$url" >/dev/null 2>&1'
 assert_source_order "$SCRIPT_SRC" 'joern_image="$(joern_runner_image_ref)"' 'podman pull "$img"'
@@ -267,6 +270,8 @@ assert_contains "$default_podman_out" "--http-proxy=false"
 assert_contains "$default_podman_out" "OPENGREP_RUNNER_RUNTIME=podman"
 assert_contains "$default_podman_out" "Ensuring Joern scanner image container starts (Podman mode): ghcr.nju.edu.cn/joernio/joern:nightly"
 assert_contains "$default_podman_out" "podman run --rm --network none ghcr.nju.edu.cn/joernio/joern:nightly"
+assert_contains "$default_podman_out" "joern-parse --help | grep -F --"
+assert_contains "$default_podman_out" "--output"
 default_podman_joern_line="$(line_no "$default_podman_out" "Ensuring Joern scanner image container starts (Podman mode)")"
 default_podman_backend_line="$(line_no "$default_podman_out" "podman run -d --name argus-backend")"
 default_podman_backend_wait_line="$(line_no "$default_podman_out" "curl -fsS http://127.0.0.1:18000/health")"

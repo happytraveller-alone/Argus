@@ -64,7 +64,7 @@ pub struct JoernDocsEvidence {
 pub fn docs_evidence() -> JoernDocsEvidence {
     JoernDocsEvidence {
         image_source: "https://github.com/joernio/joern/pkgs/container/joern documents docker pull ghcr.nju.edu.cn/joernio/joern:nightly",
-        parse_command_source: "https://docs.joern.io/export/ documents joern-parse /src/directory before joern-export",
+        parse_command_source: "https://docs.joern.io/frontends/ documents joern-parse /src/directory for CPG generation; current Joern CLI help exposes -o, --output <value>",
         script_output_source: "https://docs.joern.io/interpreter/ documents joern --script with --param and the #> file-output operator",
         scan_result_source: "https://docs.joern.io/scan/ documents Joern Scan generating a CPG, executing queries, and printing Result: score/title/file/line/function",
     }
@@ -126,7 +126,7 @@ LOG_PATH="$OUTPUT_DIR/joern.log"
 mkdir -p "$OUTPUT_DIR"
 : > "$LOG_PATH"
 printf 'Argus Joern wrapper starting\n' >> "$LOG_PATH"
-joern-parse "$SOURCE_DIR" --out "$CPG_PATH" >> "$LOG_PATH" 2>&1
+joern-parse "$SOURCE_DIR" --output "$CPG_PATH" >> "$LOG_PATH" 2>&1
 joern --script "$QUERY_DIR/{query_script}" \
   --param cpgFile="$CPG_PATH" \
   --param sourceDir="$SOURCE_DIR" \
@@ -544,7 +544,7 @@ mod tests {
     fn build_wrapper_script_declares_stable_output_contract_and_docs_are_recorded() {
         let paths = JoernOutputPaths::default();
         let script = build_wrapper_script(&paths);
-        assert!(script.contains("joern-parse \"$SOURCE_DIR\" --out \"$CPG_PATH\""));
+        assert!(script.contains("joern-parse \"$SOURCE_DIR\" --output \"$CPG_PATH\""));
         assert!(script.contains("joern --script \"$QUERY_DIR/c/argus-joern-scan.sc\""));
         assert!(script.contains("graph-proof.json"));
         assert!(script.contains("findings.json"));

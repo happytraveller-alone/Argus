@@ -133,7 +133,7 @@ LOG_PATH="$OUTPUT_DIR/joern.log"
 mkdir -p "$OUTPUT_DIR"
 : > "$LOG_PATH"
 printf 'Argus Joern live verification starting\n' >> "$LOG_PATH"
-joern-parse "$SOURCE_DIR" --out "$CPG_PATH" >> "$LOG_PATH" 2>&1
+joern-parse "$SOURCE_DIR" --output "$CPG_PATH" >> "$LOG_PATH" 2>&1
 joern --script "$QUERY_DIR/c/argus-joern-scan.sc" \
   --param cpgFile="$CPG_PATH" \
   --param sourceDir="$SOURCE_DIR" \

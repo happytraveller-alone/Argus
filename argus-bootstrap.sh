@@ -1146,10 +1146,10 @@ podman_prepull_base_images() {
     log "Dry-run/stub: skipping base/scanner image pre-pull."
     return 0
   fi
-  log "Pre-pulling base/scanner images in parallel..."
   local mirror="${DOCKERHUB_LIBRARY_MIRROR:-m.daocloud.io/docker.io/library}"
   local joern_image
   joern_image="$(joern_runner_image_ref)"
+  log "Pre-pulling base/scanner images in parallel (including Joern: $joern_image)..."
   local -a images=(
     "${mirror}/rust:1.90-slim-bookworm"
     "${mirror}/debian:trixie-slim"
@@ -1158,14 +1158,22 @@ podman_prepull_base_images() {
     "${mirror}/ubuntu:22.04"
     "$joern_image"
   )
-  local -a pull_pids=()
+  local -a pull_pids=() pull_images=()
   for img in "${images[@]}"; do
     podman pull "$img" > /dev/null 2>&1 &
     pull_pids+=($!)
+    pull_images+=("$img")
   done
   local pull_failures=0
-  for pid in "${pull_pids[@]}"; do
-    wait "$pid" || ((pull_failures++))
+  for i in "${!pull_pids[@]}"; do
+    local pid="${pull_pids[$i]}"
+    local img="${pull_images[$i]}"
+    if wait "$pid"; then
+      log "Base/scanner image pre-pulled: $img"
+    else
+      pull_failures=$((pull_failures + 1))
+      log "Warning: failed to pre-pull base/scanner image: $img (builds will pull on demand)."
+    fi
   done
   if [[ "$pull_failures" -gt 0 ]]; then
     log "Warning: $pull_failures base/scanner image(s) failed to pre-pull (builds will pull on demand)."
@@ -1364,14 +1372,24 @@ podman_start_frontend_stack() {
   podman_run_frontend
 }
 
+joern_cli_contract_check() {
+  cat <<'EOF'
+command -v joern >/dev/null &&
+command -v joern-parse >/dev/null &&
+joern-parse --help | grep -F -- '--output' >/dev/null
+EOF
+}
+
 podman_ensure_joern_image_container_starts() {
   local image
   image="$(joern_runner_image_ref)"
   log "Ensuring Joern scanner image container starts (Podman mode): $image"
+  local contract_check
+  contract_check="$(joern_cli_contract_check)"
   if "$DRY_RUN" || is_truthy "$STUB_DOCKER"; then
     run_cmd podman image inspect "$image"
     run_cmd podman pull "$image"
-    run_cmd podman run --rm --network none "$image" /bin/sh -lc 'command -v joern >/dev/null && command -v joern-parse >/dev/null'
+    run_cmd podman run --rm --network none "$image" /bin/sh -lc "$contract_check"
     return 0
   fi
 
@@ -1380,7 +1398,7 @@ podman_ensure_joern_image_container_starts() {
   else
     run_cmd podman pull "$image"
   fi
-  run_cmd podman run --rm --network none "$image" /bin/sh -lc 'command -v joern >/dev/null && command -v joern-parse >/dev/null'
+  run_cmd podman run --rm --network none "$image" /bin/sh -lc "$contract_check"
 }
 
 build_runner_images() {
@@ -1392,17 +1410,20 @@ ensure_joern_image_container_starts() {
   local image
   image="$(joern_runner_image_ref)"
   log "Ensuring backend Podman can start Joern image: $image"
+  local contract_check
+  contract_check="$(joern_cli_contract_check)"
   run_cmd docker compose --project-directory "$ROOT_DIR" --file "$COMPOSE_FILE" --project-name "$PROJECT_NAME" \
     exec -T backend sh -lc '
       set -eu
       image="$1"
+      contract_check="$2"
       if podman image inspect "$image" >/dev/null 2>&1; then
         echo "Joern scanner image already available: $image"
       else
         podman pull "$image"
       fi
-      podman run --rm --network none "$image" /bin/sh -lc '"'"'command -v joern >/dev/null && command -v joern-parse >/dev/null'"'"'
-    ' sh "$image"
+      podman run --rm --network none "$image" /bin/sh -lc "$contract_check"
+    ' sh "$image" "$contract_check"
 }
 
 normalize_opengrep_image_ref_value() {
