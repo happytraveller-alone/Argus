@@ -14,7 +14,7 @@ object alloc_mul_tainted {
     cpg: Cpg,
     call: nodes.Call,
     factors: List[nodes.StoredNode]
-  ): Option[Finding] = {
+  ): Option[RuleFinding] = {
     val literals = factors.collect { case l: nodes.Literal => l }
     val sizeofCalls = factors.collect {
       case c: nodes.Call
@@ -27,7 +27,7 @@ object alloc_mul_tainted {
     }
     val conf = if (tainted) "HIGH" else if (sizeofCalls.nonEmpty) "MEDIUM" else "LOW"
     val line = call.lineNumber.getOrElse(0)
-    Some(Finding(
+    Some(RuleFinding(
       ruleId       = "joern-c-alloc-mul-tainted",
       cwe          = Seq("CWE-190", "CWE-680"),
       cve          = Seq.empty,
@@ -43,7 +43,7 @@ object alloc_mul_tainted {
     ))
   }
 
-  def run(cpg: Cpg): Seq[Finding] = {
+  def run(cpg: Cpg): Seq[RuleFinding] = {
     // malloc/alloca/realloc: size is arg order 1
     val singleArgFindings = cpg.call.name("(?i)(malloc|alloca|realloc)").l.flatMap { allocCall =>
       allocCall.argument.order(1).headOption match {

@@ -72,13 +72,44 @@ pub struct HuntOutput {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", default)]
 pub struct PocResult {
     pub language: String,
     pub exit_code: i32,
     pub stdout: String,
     pub stderr: String,
     pub reproduced: bool,
+}
+
+/// Accept `pocResult` as either:
+///   * a free-form string (current hunt prompt at prompts.rs:58 — LLM returns
+///     the Exec stdout verbatim, e.g. `"Heap buffer overflow triggered..."`), or
+///   * a structured object matching [`PocResult`] (legacy / future PoC runner).
+///
+/// Without this adapter the LLM's string form makes serde fail the entire
+/// `HuntOutput` deserialize → `hunt task failed; skipping task findings` →
+/// the whole audit silently produces zero findings.
+fn deserialize_poc_result<'de, D>(deserializer: D) -> Result<Option<PocResult>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value: Option<serde_json::Value> = Option::deserialize(deserializer)?;
+    match value {
+        None | Some(serde_json::Value::Null) => Ok(None),
+        Some(serde_json::Value::String(s)) => {
+            if s.trim().is_empty() {
+                Ok(None)
+            } else {
+                Ok(Some(PocResult {
+                    stdout: s,
+                    ..PocResult::default()
+                }))
+            }
+        }
+        Some(other) => serde_json::from_value::<PocResult>(other)
+            .map(Some)
+            .map_err(serde::de::Error::custom),
+    }
 }
 
 /// Dismissal classification category for an `AuditFinding`.
@@ -167,7 +198,7 @@ pub struct AuditFinding {
     pub task_id: Option<String>,
     #[serde(default)]
     pub poc_code: Option<String>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_poc_result")]
     pub poc_result: Option<PocResult>,
     #[serde(default)]
     pub hedged_language: Option<bool>,
@@ -459,6 +490,63 @@ mod tests {
             output_c.findings[0].language, "c",
             "language backfilled to 'c' from .c extension"
         );
+    }
+
+    /// Regression: when the hunt LLM returns `pocResult` as a free-form string
+    /// (matching the old prompt schema and what we observed in production:
+    /// `"Heap buffer overflow triggered when…"`), `HuntOutput` MUST still
+    /// deserialize. Pre-fix this raised `invalid type: string ..., expected
+    /// struct PocResult` and the entire hunt task was dropped via
+    /// `hunt task failed; skipping task findings`, producing 0 findings.
+    #[test]
+    fn audit_finding_accepts_poc_result_as_string() {
+        let raw = r#"{
+            "findings": [{
+                "findingId": "regression-001",
+                "file": "src/vm.c",
+                "lineStart": 10,
+                "vulnClass": "out_of_bounds_read",
+                "description": "VM opcode dereferences arbitrary address",
+                "pocResult": "VULNERABILITY CONFIRMED - arbitrary read achievable."
+            }]
+        }"#;
+        let output: HuntOutput =
+            serde_json::from_str(raw).expect("string pocResult must deserialize");
+        let poc = output.findings[0]
+            .poc_result
+            .as_ref()
+            .expect("string pocResult must produce Some(PocResult)");
+        assert_eq!(poc.stdout, "VULNERABILITY CONFIRMED - arbitrary read achievable.");
+        assert_eq!(poc.language, "", "string-form PocResult leaves language empty");
+        assert!(!poc.reproduced, "string-form PocResult does not assert reproduction");
+    }
+
+    /// Regression: when the LLM returns `pocResult` as a *partial* object that
+    /// omits `language` (or any other required field), `HuntOutput` MUST still
+    /// deserialize. Pre-fix this raised `missing field 'language'` and dropped
+    /// the entire hunt task.
+    #[test]
+    fn audit_finding_accepts_poc_result_object_missing_fields() {
+        let raw = r#"{
+            "findings": [{
+                "findingId": "regression-002",
+                "file": "src/heap.c",
+                "lineStart": 99,
+                "vulnClass": "heap_overflow",
+                "description": "Pool overflow",
+                "pocResult": {"stdout": "ok", "reproduced": true}
+            }]
+        }"#;
+        let output: HuntOutput =
+            serde_json::from_str(raw).expect("partial pocResult object must deserialize");
+        let poc = output.findings[0]
+            .poc_result
+            .as_ref()
+            .expect("partial object must produce Some(PocResult)");
+        assert!(poc.reproduced);
+        assert_eq!(poc.stdout, "ok");
+        assert_eq!(poc.language, "", "missing language must default to empty");
+        assert_eq!(poc.exit_code, 0, "missing exit_code must default to 0");
     }
 
     /// Round-trip with Some(DismissalEvidence): field present + snake_case enum tags.

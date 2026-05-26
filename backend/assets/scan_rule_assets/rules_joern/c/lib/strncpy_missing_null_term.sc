@@ -9,7 +9,7 @@ import io.shiftleft.codepropertygraph.generated.Cpg
 object strncpy_missing_null_term {
   private val nullTermPattern = """.*\[.*\]\s*=\s*['"]\\?0['"].*""".r
 
-  def run(cpg: Cpg): Seq[Finding] =
+  def run(cpg: Cpg): Seq[RuleFinding] =
     cpg.call.name("strncpy")
       .where(_.argument.order(3).code(".*sizeof\\s*\\(.*\\).*"))
       .l
@@ -31,7 +31,7 @@ object strncpy_missing_null_term {
       }
       .map { call =>
         val line = call.lineNumber.getOrElse(0)
-        Finding(
+        RuleFinding(
           ruleId       = "joern-c-strncpy-missing-null-term",
           cwe          = Seq("CWE-170"),
           cve          = Seq.empty,

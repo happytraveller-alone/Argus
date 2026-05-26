@@ -8,7 +8,7 @@ import io.shiftleft.semanticcpg.language._
 import io.shiftleft.codepropertygraph.generated.Cpg
 
 object tainted_memcpy {
-  def run(cpg: Cpg): Seq[Finding] =
+  def run(cpg: Cpg): Seq[RuleFinding] =
     cpg.call.name("memcpy")
       .whereNot(_.argument.order(3).isLiteral)
       .whereNot(_.argument.order(3).code(".*sizeof\\s*\\(.*\\).*"))
@@ -23,7 +23,7 @@ object tainted_memcpy {
         val (conf, tsrc) = if (tainted && !bounded) ("HIGH", Some("extern"))
                            else if (tainted || !bounded) ("MEDIUM", if (tainted) Some("extern") else None)
                            else ("LOW", None)
-        Finding(
+        RuleFinding(
           ruleId       = "joern-c-tainted-memcpy",
           cwe          = Seq("CWE-120", "CWE-787"),
           cve          = Seq.empty,

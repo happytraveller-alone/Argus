@@ -7,10 +7,10 @@ import io.shiftleft.semanticcpg.language._
 import io.shiftleft.codepropertygraph.generated.Cpg
 
 object unsafe_gets {
-  def run(cpg: Cpg): Seq[Finding] =
+  def run(cpg: Cpg): Seq[RuleFinding] =
     cpg.method("(?i)gets").callIn.l.map { call =>
       val line = call.lineNumber.getOrElse(0)
-      Finding(
+      RuleFinding(
         ruleId      = "joern-c-unsafe-gets",
         cwe         = Seq("CWE-120"),
         cve         = Seq.empty,

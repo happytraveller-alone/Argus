@@ -21,7 +21,7 @@ import io.shiftleft.codepropertygraph.generated.Cpg
 @main def exec(cpgFile: String, sourceDir: String, graphProofOut: String, findingsOut: String): Unit = {
   importCpg(cpgFile)
 
-  val modules: Seq[Cpg => Seq[Finding]] = Seq(
+  val modules: Seq[Cpg => Seq[RuleFinding]] = Seq(
     unsafe_gets.run,
     tainted_strcpy.run,
     tainted_memcpy.run,

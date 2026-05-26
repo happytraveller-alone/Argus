@@ -7,7 +7,7 @@ import io.shiftleft.semanticcpg.language._
 import io.shiftleft.codepropertygraph.generated.Cpg
 
 object tainted_sprintf_buffer {
-  def run(cpg: Cpg): Seq[Finding] =
+  def run(cpg: Cpg): Seq[RuleFinding] =
     cpg.call.name("(?i)(sprintf|vsprintf)")
       .where(_.argument.order(2).isLiteral)
       .l
@@ -20,7 +20,7 @@ object tainted_sprintf_buffer {
         taintedArg match {
           case None => None
           case Some(_) =>
-            Some(Finding(
+            Some(RuleFinding(
               ruleId       = "joern-c-tainted-sprintf-buffer",
               cwe          = Seq("CWE-120"),
               cve          = Seq.empty,

@@ -8,12 +8,12 @@ import io.shiftleft.semanticcpg.language._
 import io.shiftleft.codepropertygraph.generated.Cpg
 
 object strlen_int_truncation {
-  def run(cpg: Cpg): Seq[Finding] =
+  def run(cpg: Cpg): Seq[RuleFinding] =
     // Upstream predicate (byte-identical): cpg.method.name("(?i)strlen").callIn.inAssignment.target.evalType("(g?)int")
     cpg.method.name("(?i)strlen").callIn.inAssignment.target.evalType("(g?)int").l.map { target =>
       val call = target.inAssignment.astChildren.isCall.name("(?i)strlen").headOption
       val line = target.lineNumber.getOrElse(0)
-      Finding(
+      RuleFinding(
         ruleId       = "joern-c-strlen-int-truncation",
         cwe          = Seq("CWE-192", "CWE-190"),
         cve          = Seq.empty,

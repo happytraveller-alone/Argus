@@ -164,20 +164,15 @@ impl CodeGraphClient {
                 );
             }
 
-            // codegraph init wrote `.codegraph/` into the staging tree.
-            // Those files are owned by the container's UID — the host
-            // side cannot delete them. Remove them here while the
-            // container is still running (its UID owns the files).
-            let cleanup = format!("rm -rf {CONTAINER_SRC}/.codegraph");
-            match session.exec_command(&cleanup, 5_000).await {
-                Ok((_, _, 0)) => {}
-                Ok((_, stderr, code)) => {
-                    debug!(code, stderr = %truncate_for_err(&stderr), "rm .codegraph/ non-zero exit");
-                }
-                Err(e) => {
-                    debug!(error = %e, "rm .codegraph/ exec failed");
-                }
-            }
+            // NOTE: do NOT remove `/codegraph/src/.codegraph` here.
+            // codegraph CLI queries (`codegraph files|callers|callees|query …
+            // --path /codegraph/src`) all resolve the SQLite DB via
+            // `<path>/.codegraph/codegraph.db`. Deleting the marker dir at
+            // init-time was the root cause of post-init
+            // `✗ CodeGraph not initialized in /codegraph/src` errors that
+            // demoted `detect_languages` (and every per-finding code-intel
+            // query) to empty results. Cross-UID cleanup is performed in
+            // [`shutdown`], right before the container is destroyed.
 
             // Commit to the host-side cache (best-effort — log on failure).
             let host_db = index_host_path.join("codegraph.db");
@@ -392,6 +387,22 @@ impl CodeIntelligence for CodeGraphClient {
 
     async fn shutdown(&self) -> Result<()> {
         // Per-query CLI transport — no persistent server to stop (GATE-0 G0.5).
+        // Cross-UID cleanup BEFORE destroying the container: codegraph init may
+        // have written `/codegraph/src/.codegraph/` as a non-host UID (e.g. when
+        // the rootful-in-container fallback runs as user 0). The host-side
+        // `TempCleanupGuard` Drop runs as the backend UID and cannot unlink
+        // those files; deleting them here while the container is still running
+        // ensures the staging dir Drop succeeds.
+        let cleanup = format!("rm -rf {CONTAINER_SRC}/.codegraph");
+        match self.session.exec_command(&cleanup, 5_000).await {
+            Ok((_, _, 0)) => {}
+            Ok((_, stderr, code)) => {
+                debug!(code, stderr = %truncate_for_err(&stderr), "rm .codegraph/ non-zero exit on shutdown");
+            }
+            Err(e) => {
+                debug!(error = %e, "rm .codegraph/ exec failed on shutdown");
+            }
+        }
         // Destroy the container; staging dir cleans itself when the last Arc<StagingDir>
         // drops (Drop on TempCleanupGuard).
         self.session

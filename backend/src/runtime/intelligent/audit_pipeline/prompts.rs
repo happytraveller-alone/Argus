@@ -55,7 +55,7 @@ Output format — JSON object with this exact schema:
       "evidence": "string (exact code snippet or data flow that proves the issue)",
       "confidence": number (0.0 to 1.0),
       "pocCode": "string (optional, PoC exploit code)",
-      "pocResult": "string (optional, output from Exec confirming exploitability)"
+      "pocResult": "OMIT this field — leave it unset. The PoC runner stage will populate it later with a {language,exitCode,stdout,stderr,reproduced} object. If you must include narrative evidence, put it in `evidence` or `description` instead."
     }
   ]
 }

@@ -1,19 +1,27 @@
-// common.sc — shared Finding type, JSON helpers, dataflow gate, CVE map
+// common.sc — shared RuleFinding type, JSON helpers, dataflow gate, CVE map
 // N1: this is the ONLY file permitted to import io.joern.dataflowengineoss.*
-// Wrapped in `object common` so other modules can reference common.Finding etc.
+// Wrapped in `object common` so other modules can reference common.RuleFinding etc.
 // after `//> using file common.sc` directive (replpp include form, not Ammonite $file).
 
 import io.shiftleft.codepropertygraph.generated.{Cpg, nodes}
 import io.shiftleft.semanticcpg.language._
 import io.joern.dataflowengineoss.language._
+import io.joern.dataflowengineoss.queryengine.EngineContext
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Paths}
 import scala.util.Try
 
 object common {
+  // ----- Implicit resolvers exported to rule modules (re-imported via `import common._`).
+  // Both are required by the Joern CPG/dataflow APIs:
+  //   - ICallResolver: required by `.callIn` (verbatim pattern from upstream querydb
+  //     DangerousFunctions.scala, IntegerTruncations.scala, etc.)
+  //   - EngineContext: required by `.reachableBy` (the dataflowengineoss query engine)
+  implicit val resolver: ICallResolver = NoResolve
+  implicit val engineContext: EngineContext = EngineContext()
 
-  // ----- Finding case class -----
-  case class Finding(
+  // ----- RuleFinding case class -----
+  case class RuleFinding(
     ruleId: String,
     cwe: Seq[String],
     cve: Seq[String],
@@ -55,7 +63,7 @@ object common {
       .digest(s.getBytes(StandardCharsets.UTF_8))
       .take(4).map("%02x".format(_)).mkString
 
-  def stableId(f: Finding): String = {
+  def stableId(f: RuleFinding): String = {
     val basename = f.filePath.split("/").lastOption.getOrElse(f.filePath)
     s"${f.ruleId}-$basename-${f.startLine}-${sha8(f.evidenceCode)}"
   }
@@ -90,8 +98,14 @@ object common {
     }.getOrElse(false)
   }
 
-  def isStackBuffer(call: nodes.Call): Boolean =
-    Try(call.argument.order(1).isIdentifier.refsTo.isLocal.nonEmpty).getOrElse(false)
+  def isStackBuffer(call: nodes.Call): Boolean = Try {
+    // refsTo returns Iterator[Declaration]; isLocal is not a member there, so pattern-match
+    // on the materialized list and look for nodes.Local subtype.
+    call.argument.order(1).isIdentifier.refsTo.l.exists {
+      case _: nodes.Local => true
+      case _              => false
+    }
+  }.getOrElse(false)
 
   // ----- Known CVE map [C8] -----
   // Key: (basename, functionName, startLine) → CVE list
@@ -99,7 +113,7 @@ object common {
     ("bplist.c", "parse_string_node", 288) -> Seq("CVE-2017-6439")
   )
 
-  def tagCves(f: Finding): Finding = {
+  def tagCves(f: RuleFinding): RuleFinding = {
     val basename = f.filePath.split("/").lastOption.getOrElse(f.filePath)
     val key = (basename, f.function, f.startLine)
     knownCves.get(key) match {
@@ -109,7 +123,7 @@ object common {
   }
 
   // ----- Output writers -----
-  private def findingToJson(f: Finding): String = jsonObject(
+  private def findingToJson(f: RuleFinding): String = jsonObject(
     Seq(
       "id"         -> jsonString(stableId(f)),
       "rule_id"    -> jsonString(f.ruleId),
@@ -133,7 +147,7 @@ object common {
     )
   )
 
-  def writeFindings(path: String, findings: Seq[Finding], engine: String = "joern"): Unit = {
+  def writeFindings(path: String, findings: Seq[RuleFinding], engine: String = "joern"): Unit = {
     val doc = jsonObject(Seq(
       "schema_version" -> jsonString("argus.joern.findings.v1"),
       "engine"         -> jsonString(engine),

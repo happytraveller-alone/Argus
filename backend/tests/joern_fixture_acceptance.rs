@@ -165,8 +165,9 @@ async fn joern_rule_asset_is_bundled_and_targets_libplist_cve() {
         .find(|a| a.asset_path == "rules_joern/c/argus-joern-scan.sc")
         .expect("orchestrator asset missing");
     assert!(
-        orchestrator.content.contains("import $file.lib.tainted_memcpy"),
-        "orchestrator missing import of tainted_memcpy module"
+        orchestrator.content.contains("//> using file lib/tainted_memcpy.sc")
+            && orchestrator.content.contains("tainted_memcpy.run"),
+        "orchestrator missing replpp include directive or run() reference for tainted_memcpy module"
     );
     assert!(
         orchestrator.content.contains("common.tagCves"),
@@ -181,7 +182,12 @@ async fn joern_rule_asset_is_bundled_and_targets_libplist_cve() {
         "common.sc knownCves map missing libplist CVE entry"
     );
 
-    assert!(QUERY_ASSET.contains("graph-proof"));
+    // graph-proof emission moved to common.sc::writeProof in the v2 refactor;
+    // the orchestrator now calls common.writeProof rather than emitting inline.
+    assert!(
+        common_sc.content.contains("graph-proof"),
+        "common.sc missing graph-proof schema literal"
+    );
     let materialized = joern::materialize_rule_assets(temp.path(), joern_assets)
         .await
         .expect("materialize Joern query assets")
