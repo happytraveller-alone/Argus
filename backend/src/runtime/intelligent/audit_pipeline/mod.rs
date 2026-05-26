@@ -385,11 +385,11 @@ impl CodeGraphCleanupGuard {
 
 impl Drop for CodeGraphCleanupGuard {
     fn drop(&mut self) {
-        if self.client.is_some() {
-            // Safety net for panics and task cancellation where `shutdown()`
-            // was never called. Fire-and-forget, no runtime dependency.
-            spawn_label_cleanup();
-        }
+        // Safety net for panics and task cancellation where `shutdown()`
+        // was never called (or panicked mid-way). Always fire — the label
+        // filter makes the command a no-op when no matching containers exist.
+        // Fire-and-forget, no runtime dependency.
+        spawn_label_cleanup();
     }
 }
 

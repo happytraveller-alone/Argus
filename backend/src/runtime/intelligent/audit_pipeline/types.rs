@@ -112,6 +112,53 @@ where
     }
 }
 
+/// Accept a `String` LLM-output field as either:
+///   * a JSON string (the schema we asked for),
+///   * a number / bool / null (coerce to display form / empty), or
+///   * an object / array (round-trip back to a compact JSON string so the
+///     content survives instead of failing the whole stage).
+///
+/// LLMs occasionally emit structured data in fields that the prompt requested
+/// as strings — e.g. `evidence: {"snippet": "...", "lineRange": [10, 20]}`
+/// or `severity: {"level": "high", "score": 9.8}`. Without this adapter,
+/// serde fails the whole `HuntOutput` deserialize with
+/// `invalid type: map, expected a string`, taking down the entire hunt task
+/// and producing zero findings (see prompts.rs:58 — the hunt prompt explicitly
+/// redirects `pocResult` narrative content into `evidence`/`description`).
+fn deserialize_string_lenient<'de, D>(deserializer: D) -> Result<String, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = serde_json::Value::deserialize(deserializer)?;
+    Ok(match value {
+        serde_json::Value::String(s) => s,
+        serde_json::Value::Null => String::new(),
+        serde_json::Value::Bool(b) => b.to_string(),
+        serde_json::Value::Number(n) => n.to_string(),
+        // Compound types: round-trip through JSON. `to_string` on a Value
+        // that already deserialized cannot fail.
+        other => serde_json::to_string(&other).unwrap_or_default(),
+    })
+}
+
+/// `Option<String>` counterpart to [`deserialize_string_lenient`]. Maps absent
+/// or `null` → `None`; other JSON shapes coerce to `Some(string)`.
+fn deserialize_option_string_lenient<'de, D>(
+    deserializer: D,
+) -> Result<Option<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value: Option<serde_json::Value> = Option::deserialize(deserializer)?;
+    Ok(match value {
+        None | Some(serde_json::Value::Null) => None,
+        Some(serde_json::Value::String(s)) => Some(s),
+        Some(serde_json::Value::Bool(b)) => Some(b.to_string()),
+        Some(serde_json::Value::Number(n)) => Some(n.to_string()),
+        Some(other) => Some(serde_json::to_string(&other).unwrap_or_default()),
+    })
+}
+
 /// Dismissal classification category for an `AuditFinding`.
 ///
 /// Phase 0 scope: written deterministically by `path_classifier` when a finding's
@@ -176,27 +223,31 @@ pub struct DismissalEvidence {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AuditFinding {
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_string_lenient")]
     pub finding_id: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_string_lenient")]
     pub file: String,
     #[serde(default = "default_line")]
     pub line_start: u32,
     #[serde(default = "default_line")]
     pub line_end: u32,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_string_lenient")]
     pub vuln_class: String,
-    #[serde(default = "default_severity")]
+    #[serde(default = "default_severity", deserialize_with = "deserialize_string_lenient")]
     pub severity: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_string_lenient")]
     pub description: String,
-    #[serde(default, alias = "evidence_snippet")]
+    #[serde(
+        default,
+        alias = "evidence_snippet",
+        deserialize_with = "deserialize_string_lenient"
+    )]
     pub evidence: String,
     #[serde(default)]
     pub confidence: Option<f64>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_option_string_lenient")]
     pub task_id: Option<String>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_option_string_lenient")]
     pub poc_code: Option<String>,
     #[serde(default, deserialize_with = "deserialize_poc_result")]
     pub poc_result: Option<PocResult>,
@@ -204,7 +255,7 @@ pub struct AuditFinding {
     pub hedged_language: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub dismissal_evidence: Option<DismissalEvidence>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_string_lenient")]
     pub language: String,
 }
 
@@ -575,6 +626,89 @@ mod tests {
 
         let round_tripped: AuditFinding = serde_json::from_str(&serialized).unwrap();
         assert_eq!(round_tripped.dismissal_evidence, finding.dismissal_evidence);
+    }
+
+    /// Regression: when the hunt LLM emits an object in fields that the
+    /// schema declares as `String` (most commonly `evidence` or `description`
+    /// because prompts.rs:58 redirects `pocResult` narrative content there),
+    /// `HuntOutput` MUST still deserialize. Pre-fix this raised
+    /// `invalid type: map, expected a string` and the entire hunt task was
+    /// dropped via `hunt task failed; skipping task findings`, producing 0
+    /// findings (audit_pipeline_failed at 2026-05-26T09:42:26Z).
+    #[test]
+    fn audit_finding_accepts_object_in_string_fields() {
+        let raw = r#"{
+            "findings": [{
+                "findingId": "regression-003",
+                "file": "src/parser.c",
+                "lineStart": 42,
+                "vulnClass": {"type": "buffer_overflow", "category": "memory"},
+                "severity": {"level": "high", "score": 9.8},
+                "description": {"summary": "OOB write", "details": "memcpy with attacker-controlled len"},
+                "evidence": {"snippet": "memcpy(dst, src, len);", "lineRange": [40, 44]}
+            }]
+        }"#;
+        let output: HuntOutput =
+            serde_json::from_str(raw).expect("object-shaped string fields must deserialize");
+        let f = &output.findings[0];
+        assert_eq!(f.finding_id, "regression-003");
+        // Compound shapes round-trip to compact JSON strings so content survives.
+        assert!(
+            f.vuln_class.contains("buffer_overflow"),
+            "vuln_class object preserved: {}",
+            f.vuln_class
+        );
+        assert!(
+            f.severity.contains("high"),
+            "severity object preserved: {}",
+            f.severity
+        );
+        assert!(
+            f.description.contains("OOB write"),
+            "description object preserved: {}",
+            f.description
+        );
+        assert!(
+            f.evidence.contains("memcpy"),
+            "evidence object preserved: {}",
+            f.evidence
+        );
+    }
+
+    /// Regression: scalar coercion — numbers, bools, and null in string fields
+    /// must not break deserialization either.
+    #[test]
+    fn audit_finding_accepts_scalar_coercion_in_string_fields() {
+        let raw = r#"{
+            "findings": [{
+                "findingId": 42,
+                "file": "src/x.c",
+                "vulnClass": true,
+                "severity": null,
+                "description": 3.14,
+                "evidence": "ok",
+                "taskId": {"nested": "id"},
+                "pocCode": 7
+            }]
+        }"#;
+        let output: HuntOutput =
+            serde_json::from_str(raw).expect("scalar coercion must deserialize");
+        let f = &output.findings[0];
+        assert_eq!(f.finding_id, "42", "number coerces to string");
+        assert_eq!(f.vuln_class, "true", "bool coerces to string");
+        assert_eq!(f.severity, "", "null coerces to empty string");
+        assert_eq!(f.description, "3.14", "float coerces to string");
+        assert_eq!(f.evidence, "ok");
+        assert_eq!(
+            f.task_id.as_deref(),
+            Some(r#"{"nested":"id"}"#),
+            "Option<String> object preserved as JSON"
+        );
+        assert_eq!(
+            f.poc_code.as_deref(),
+            Some("7"),
+            "Option<String> number coerces"
+        );
     }
 }
 

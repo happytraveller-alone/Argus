@@ -521,6 +521,10 @@ fn sh_quote(s: &str) -> String {
 }
 
 /// Execute a codegraph CLI command inside the container and parse stdout as JSON.
+///
+/// Resilient to non-JSON trailing content (e.g. a warning line emitted after
+/// the JSON array). If the first parse fails, the function truncates after the
+/// last `]` (for arrays) or `}` (for objects) and retries once.
 async fn run_json<T: serde::de::DeserializeOwned>(session: &PodmanSession, cmd: &str) -> Result<T> {
     let (stdout, stderr, code) = session
         .exec_command(cmd, QUERY_TIMEOUT_MS)
@@ -532,12 +536,57 @@ async fn run_json<T: serde::de::DeserializeOwned>(session: &PodmanSession, cmd: 
             truncate_for_err(&stderr),
         );
     }
-    serde_json::from_str::<T>(stdout.trim()).with_context(|| {
-        format!(
-            "JSON parse failed for `{cmd}` — first 200 bytes of stdout: {}",
-            stdout.chars().take(200).collect::<String>(),
-        )
-    })
+    let trimmed = stdout.trim();
+    match serde_json::from_str::<T>(trimmed) {
+        Ok(value) => Ok(value),
+        Err(first_err) => {
+            // codegraph CLI may emit non-JSON lines after the JSON value
+            // (e.g. "processed N files"). Try truncating after the last
+            // structural character.
+            let truncated = truncate_json_tail(trimmed);
+            if truncated.len() < trimmed.len() {
+                match serde_json::from_str::<T>(&truncated) {
+                    Ok(value) => {
+                        debug!("JSON parse succeeded after tail truncation for `{cmd}`");
+                        return Ok(value);
+                    }
+                    Err(_) => {}
+                }
+            }
+            Err(first_err).with_context(|| {
+                format!(
+                    "JSON parse failed for `{cmd}` — first 200 bytes of stdout: {}",
+                    trimmed.chars().take(200).collect::<String>(),
+                )
+            })
+        }
+    }
+}
+
+/// Truncate `json` after the last `]` or `}`, whichever comes later.
+/// Returns the original string if no truncation point is found.
+fn truncate_json_tail(json: &str) -> String {
+    let last_bracket = json.rfind(']');
+    let last_brace = json.rfind('}');
+    match (last_bracket, last_brace) {
+        (Some(b), Some(c)) => {
+            let end = b.max(c);
+            let mut s = json[..=end].to_string();
+            s.push('\n');
+            s
+        }
+        (Some(b), None) => {
+            let mut s = json[..=b].to_string();
+            s.push('\n');
+            s
+        }
+        (None, Some(c)) => {
+            let mut s = json[..=c].to_string();
+            s.push('\n');
+            s
+        }
+        (None, None) => json.to_string(),
+    }
 }
 
 async fn detect_languages(session: &PodmanSession) -> Result<Vec<String>> {
