@@ -11,7 +11,11 @@ use super::super::{
     types::{fallback_recon, ReconOutput},
 };
 
-pub async fn run(ctx: &AuditRunContext, events: &PipelineEventSink) -> Result<ReconOutput> {
+pub async fn run(
+    ctx: &AuditRunContext,
+    events: &PipelineEventSink,
+    amplification: Option<&str>,
+) -> Result<ReconOutput> {
     let stage = AuditStage::Recon;
     events.stage_started(stage);
     let target_files = select_representative_files(&ctx.entries, 40);
@@ -26,7 +30,10 @@ pub async fn run(ctx: &AuditRunContext, events: &PipelineEventSink) -> Result<Re
             "initialTasks": [{"taskId":"string","attackClass":"string","scopeHint":"string","targetFiles":["string"],"rationale":"string","priority":1}]
         }
     });
-    let prompt = stage_prompt(stage, &payload);
+    let mut prompt = stage_prompt(stage, &payload);
+    if let Some(amp) = amplification {
+        prompt.push_str(amp);
+    }
     let mut output = invoke_json::<ReconOutput>(&*ctx.invoker, stage, &prompt, &ctx.llm_config)
         .await
         .map(|result| {

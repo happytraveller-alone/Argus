@@ -12,6 +12,7 @@ pub async fn run(
     ctx: &AuditRunContext,
     trace: &TraceOutput,
     events: &PipelineEventSink,
+    amplification: Option<&str>,
 ) -> Result<FeedbackOutput> {
     let stage = AuditStage::Feedback;
     events.stage_started(stage);
@@ -20,13 +21,31 @@ pub async fn run(
         "instruction": "Turn reachable bug patterns into follow-up hunt tasks or reusable patterns.",
         "requiredOutput": {"newTasks": [], "patterns": ["string"]}
     });
-    let prompt = stage_prompt(stage, &payload);
-    let output = invoke_json::<FeedbackOutput>(&*ctx.invoker, stage, &prompt, &ctx.llm_config)
+    let mut prompt = stage_prompt(stage, &payload);
+    if let Some(amp) = amplification {
+        prompt.push_str(amp);
+    }
+    let mut output = invoke_json::<FeedbackOutput>(&*ctx.invoker, stage, &prompt, &ctx.llm_config)
         .await
         .map(|result| {
             events.emit(result.invocation.attempt_event);
             result.payload
         })?;
+
+    // The feedback prompt schema (prompts.rs:293) does not require `task_id`
+    // in new_tasks items, so the LLM legitimately omits it. Downstream
+    // `hunt::run` (stages/hunt.rs:111) uses task_id to backfill
+    // `finding.task_id` — an empty id would orphan every produced finding.
+    // Synthesize stable `hunt-fb-{idx}` ids for empty/whitespace entries.
+    for (idx, task) in output.new_tasks.iter_mut().enumerate() {
+        if task.task_id.trim().is_empty() {
+            task.task_id = format!("hunt-fb-{idx}");
+        }
+        if task.source.trim().is_empty() {
+            task.source = "feedback".to_string();
+        }
+    }
+
     events.stage_completed(
         stage,
         json!({

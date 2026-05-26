@@ -12,6 +12,7 @@ pub async fn run(
     ctx: &AuditRunContext,
     hunt: &HuntOutput,
     events: &PipelineEventSink,
+    amplification: Option<&str>,
 ) -> Result<ValidationOutput> {
     let stage = AuditStage::Validate;
     events.stage_started(stage);
@@ -20,7 +21,10 @@ pub async fn run(
         "instruction": "Adversarially validate findings. Confirm only if evidence supports attacker impact.",
         "requiredOutput": {"findings": [{"findingId":"string","validationStatus":"confirmed|rejected|needs_more_info","validationRationale":"string"}]}
     });
-    let prompt = stage_prompt(stage, &payload);
+    let mut prompt = stage_prompt(stage, &payload);
+    if let Some(amp) = amplification {
+        prompt.push_str(amp);
+    }
     let mut output =
         invoke_json::<ValidationOutput>(&*ctx.invoker, stage, &prompt, &ctx.llm_config)
             .await

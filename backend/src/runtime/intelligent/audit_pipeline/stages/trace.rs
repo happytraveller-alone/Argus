@@ -55,11 +55,18 @@ fn estimate_tokens(text: &str) -> u64 {
 
 /// Run the Trace stage. Builds one `TraceResult` per `DedupeGroup`, choosing
 /// two-pass or single-pass per finding based on availability.
+///
+/// `amplification` is the retry-prompt suffix from the quality-gate wrapper.
+/// It is only applied to the single-pass LLM call (per-finding two-pass flows
+/// receive amplification at the stage retry boundary; they do not need
+/// per-call amplification because each invocation has finding-specific
+/// context that an empty-output retry signal cannot improve).
 pub async fn run(
     ctx: &AuditRunContext,
     dedupe: &DedupeOutput,
     validation: &ValidationOutput,
     events: &PipelineEventSink,
+    amplification: Option<&str>,
 ) -> Result<TraceOutput> {
     let stage = AuditStage::Trace;
     events.stage_started(stage);
@@ -71,6 +78,10 @@ pub async fn run(
         .map(|finding| (finding.finding.finding_id.clone(), finding.clone()))
         .collect();
 
+    // Convert borrowed amplification to owned for per-task cloning into the
+    // 'static futures spawned below.
+    let amplification: Option<String> = amplification.map(str::to_string);
+
     let semaphore = Arc::new(tokio::sync::Semaphore::new(TRACE_CONCURRENCY));
     let mut join_set: JoinSet<Result<TraceResult>> = JoinSet::new();
 
@@ -80,6 +91,7 @@ pub async fn run(
         let ctx = ctx.clone();
         let events = events.clone();
         let sem = Arc::clone(&semaphore);
+        let task_amp = amplification.clone();
 
         join_set.spawn(async move {
             let _permit = sem.acquire().await.expect("semaphore closed");
@@ -91,7 +103,7 @@ pub async fn run(
                     return single_pass_for_id(&ctx, &canonical_id, &events).await;
                 }
             };
-            run_finding(&ctx, &validated, &events).await
+            run_finding(&ctx, &validated, &events, task_amp.as_deref()).await
         });
     }
 
@@ -120,6 +132,7 @@ async fn run_finding(
     ctx: &AuditRunContext,
     validated: &ValidatedFinding,
     events: &PipelineEventSink,
+    amplification: Option<&str>,
 ) -> Result<TraceResult> {
     let finding = &validated.finding;
     let finding_id = finding.finding_id.clone();
@@ -129,7 +142,7 @@ async fn run_finding(
         _ => {
             emit_fallback(events, &finding_id, "no_intel");
             ctx.partial_analysis.store(true, Ordering::Relaxed);
-            return single_pass_for_finding(ctx, validated, events).await;
+            return single_pass_for_finding(ctx, validated, events, amplification).await;
         }
     };
 
@@ -138,7 +151,7 @@ async fn run_finding(
         None => {
             emit_fallback(events, &finding_id, "language_unsupported");
             ctx.partial_analysis.store(true, Ordering::Relaxed);
-            return single_pass_for_finding(ctx, validated, events).await;
+            return single_pass_for_finding(ctx, validated, events, amplification).await;
         }
     };
     let indexed = intel.languages_indexed();
@@ -148,7 +161,7 @@ async fn run_finding(
     {
         emit_fallback(events, &finding_id, "language_unsupported");
         ctx.partial_analysis.store(true, Ordering::Relaxed);
-        return single_pass_for_finding(ctx, validated, events).await;
+        return single_pass_for_finding(ctx, validated, events, amplification).await;
     }
 
     // Pre-resolve symbol — closes the grounding gap (Architect concern #5 in plan).
@@ -165,7 +178,7 @@ async fn run_finding(
     if resolved.is_none() {
         emit_fallback(events, &finding_id, "pre_resolve_failed");
         ctx.partial_analysis.store(true, Ordering::Relaxed);
-        return single_pass_for_finding(ctx, validated, events).await;
+        return single_pass_for_finding(ctx, validated, events, amplification).await;
     }
 
     events.emit(
@@ -186,6 +199,7 @@ async fn run_finding(
         &budget,
         events,
         Arc::clone(&fell_back),
+        amplification,
     )
     .await
     {
@@ -200,13 +214,17 @@ async fn run_finding(
                 emit_fallback(events, &finding_id, "two_pass_error");
             }
             ctx.partial_analysis.store(true, Ordering::Relaxed);
-            single_pass_for_finding(ctx, validated, events).await
+            single_pass_for_finding(ctx, validated, events, amplification).await
         }
     }
 }
 
 /// Execute Pass 1 + dispatch + Pass 2. On `BudgetExceeded` returns Ok with a
 /// fallback `TraceResult` (caller decides whether to substitute single-pass).
+///
+/// `amplification`: only forwarded to `single_pass_for_finding` if budget is
+/// exhausted; Pass 1 and Pass 2 prompts are not amplified because they carry
+/// per-finding evidence that an empty-output retry signal cannot improve.
 #[allow(clippy::too_many_arguments)]
 async fn two_pass_for_finding(
     ctx: &AuditRunContext,
@@ -216,6 +234,7 @@ async fn two_pass_for_finding(
     budget: &TokenBudget,
     events: &PipelineEventSink,
     fell_back: Arc<AtomicBool>,
+    amplification: Option<&str>,
 ) -> Result<TraceResult> {
     let finding = &validated.finding;
     let finding_id = finding.finding_id.clone();
@@ -244,6 +263,7 @@ async fn two_pass_for_finding(
         validated,
         events,
         &fell_back,
+        amplification,
     )
     .await?
     {
@@ -297,6 +317,7 @@ async fn two_pass_for_finding(
         validated,
         events,
         &fell_back,
+        amplification,
     )
     .await?
     {
@@ -339,6 +360,11 @@ fn build_prompt(template: &str, payload: &Value) -> String {
 
 /// Enforce token budget for `pass`. On exceed, emit events, flip flags, run
 /// single-pass and return `Ok(Some(trace))`. On success, return `Ok(None)`.
+///
+/// `amplification` is forwarded into the single-pass fallback so retry-prompt
+/// suffixes from the quality-gate wrapper reach the LLM even on budget
+/// exhaustion paths.
+#[allow(clippy::too_many_arguments)]
 async fn check_budget(
     budget: &TokenBudget,
     pass: Pass,
@@ -347,6 +373,7 @@ async fn check_budget(
     validated: &ValidatedFinding,
     events: &PipelineEventSink,
     fell_back: &Arc<AtomicBool>,
+    amplification: Option<&str>,
 ) -> Result<Option<TraceResult>> {
     match budget.record(pass, tokens) {
         Ok(()) => Ok(None),
@@ -363,7 +390,9 @@ async fn check_budget(
             emit_fallback(events, finding_id, "budget_exceeded");
             fell_back.store(true, Ordering::Relaxed);
             ctx.partial_analysis.store(true, Ordering::Relaxed);
-            Ok(Some(single_pass_for_finding(ctx, validated, events).await?))
+            Ok(Some(
+                single_pass_for_finding(ctx, validated, events, amplification).await?,
+            ))
         }
     }
 }
@@ -431,10 +460,15 @@ fn to_value<T: serde::Serialize>(result: anyhow::Result<T>) -> Value {
 
 /// Single-pass fallback: identical to the pre-integration Trace behavior, but
 /// scoped to ONE finding so concurrent per-finding fallback works correctly.
+///
+/// `amplification` is appended to the prompt when set, so retries from the
+/// quality-gate wrapper carry the "previous attempt empty, please re-emit"
+/// suffix down to the LLM.
 async fn single_pass_for_finding(
     ctx: &AuditRunContext,
     validated: &ValidatedFinding,
     events: &PipelineEventSink,
+    amplification: Option<&str>,
 ) -> Result<TraceResult> {
     let finding = &validated.finding;
     let payload = json!({
@@ -456,7 +490,10 @@ async fn single_pass_for_finding(
         "instruction": "For the canonical finding, decide whether attacker-controlled input can reach the sink. Use unknown/false only with rationale.",
         "requiredOutput": {"traces": [{"findingId":"string","reachable":true,"confidence":0.0,"rationale":"string"}]}
     });
-    let prompt = stage_prompt(AuditStage::Trace, &payload);
+    let mut prompt = stage_prompt(AuditStage::Trace, &payload);
+    if let Some(amp) = amplification {
+        prompt.push_str(amp);
+    }
     let output =
         invoke_json::<TraceOutput>(&*ctx.invoker, AuditStage::Trace, &prompt, &ctx.llm_config)
             .await

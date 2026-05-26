@@ -1386,12 +1386,56 @@ async fn reset_codeql_project_build_plan(
     let reset_count = reset_codeql_build_plan_for_project(&state, &project_id, "cpp")
         .await
         .map_err(internal_error)?;
+
+    // 接力创建新的 CodeQL 任务以兑现 "重置并重新探索" 的语义。
+    // Why: 仅重置 build_plan 不会触发新的 compile exploration —— 该路径只在
+    // create_static_task_for_engine spawn 的后台扫描里被走到。
+    let snapshot = task_state::load_snapshot(&state)
+        .await
+        .map_err(internal_error)?;
+    let prior = snapshot
+        .static_tasks
+        .values()
+        .filter(|r| r.engine == "codeql" && r.project_id == project_id)
+        .max_by(|a, b| a.created_at.cmp(&b.created_at))
+        .cloned();
+    drop(snapshot);
+
+    let new_task_id = if let Some(prior) = prior {
+        let mut payload = json!({
+            "project_id": project_id,
+            "reset_build_plan": true,
+            "name": prior.name,
+            "target_path": prior.target_path,
+        });
+        if let Some(obj) = prior.extra.as_object() {
+            if let Some(v) = obj.get("requested_languages").cloned() {
+                payload["languages"] = v;
+            }
+            if let Some(v) = obj.get("requested_build_mode").cloned() {
+                payload["build_mode"] = v;
+            }
+            if let Some(v) = obj.get("requested_allow_network").cloned() {
+                payload["allow_network"] = v;
+            }
+        }
+        let Json(resp) =
+            create_static_task_for_engine(state.clone(), payload, StaticEngineKind::Codeql)
+                .await?;
+        resp.get("id")
+            .and_then(Value::as_str)
+            .map(String::from)
+    } else {
+        None
+    };
+
     Ok(Json(json!({
         "message": "CodeQL project build plan reset",
         "project_id": project_id,
         "language": "cpp",
         "reset_count": reset_count,
         "manual_editing": false,
+        "task_id": new_task_id,
     })))
 }
 

@@ -587,7 +587,13 @@ export async function deleteStaticScanTask(
 
 export async function resetCodeqlProjectBuildPlan(
     projectId: string,
-): Promise<{ message: string; project_id: string; language: string; reset_count: number }> {
+): Promise<{
+    message: string;
+    project_id: string;
+    language: string;
+    reset_count: number;
+    task_id?: string | null;
+}> {
     const response = await apiClient.post(
         `/static-tasks/codeql/projects/${projectId}/build-plan/reset`,
     );

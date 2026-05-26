@@ -2,6 +2,7 @@ pub mod context;
 pub mod coverage;
 pub mod json;
 pub mod prompts;
+pub mod quality;
 pub mod repo;
 pub mod stages;
 pub mod state_db;
@@ -28,6 +29,7 @@ use crate::{
 
 use self::{
     context::{AuditRunContext, AuditStage, PipelineEventSink},
+    quality::{run_stage_with_retry, GateFailure, StageGatesPolicy},
     repo::ProjectArchive,
     types::PipelineOutputs,
 };
@@ -50,6 +52,10 @@ pub struct AuditPipelineConfig {
     pub max_tokens_budget: Option<u64>,
     /// Podman image for the audit sandbox (tool execution environment).
     pub audit_sandbox_image: String,
+    /// Per-stage output quality gates + retry budgets. Defaults are the
+    /// hard-coded values from the spec; tests may override individual stages.
+    /// See `audit_pipeline::quality` for semantics.
+    pub stage_gates: StageGatesPolicy,
 }
 
 impl Default for AuditPipelineConfig {
@@ -61,6 +67,7 @@ impl Default for AuditPipelineConfig {
             max_tokens_budget: None,
             audit_sandbox_image: std::env::var("AUDIT_SANDBOX_IMAGE")
                 .unwrap_or_else(|_| "argus/audit-sandbox:latest".to_string()),
+            stage_gates: StageGatesPolicy::default(),
         }
     }
 }
@@ -201,16 +208,104 @@ pub async fn run_pipeline_with_config(
     // Run stages inside an inner async block so cleanup runs even on stage error.
     // The existing `?` operator semantics inside the block produce a Result we
     // inspect AFTER calling shutdown on the code intel client.
+    //
+    // Every stage call routes through `quality::run_stage_with_retry` so that
+    // empty/insufficient output triggers bounded retries with prompt
+    // amplification and a soft-degrade `partial_analysis = true` flag when
+    // the budget is exhausted (see `audit_pipeline::quality`).
     let stages_result: Result<PipelineOutputs> = async {
+        // Shadow `ctx` and `event_sink` as references so closures capture them
+        // by Copy (since `&T` is Copy). Without this, `async move` blocks
+        // inside `Fn` closures would attempt to move the owned bindings.
+        let ctx = &ctx;
+        let event_sink = &event_sink;
+
         // ── Phase 1: recon ────────────────────────────────────────────────
         let mut outputs = PipelineOutputs::default();
-        outputs.recon = stages::recon::run(&ctx, &event_sink).await?;
+        outputs.recon = run_stage_with_retry(
+            &config.stage_gates.recon,
+            AuditStage::Recon,
+            &ctx.partial_analysis,
+            &event_sink,
+            |amp| async move { stages::recon::run(&ctx, &event_sink, amp.as_deref()).await },
+            |out: &types::ReconOutput| {
+                if out.initial_tasks.is_empty() {
+                    Err(GateFailure::new(
+                        "recon produced no initial_tasks",
+                        format!(
+                            "tasks=0 subsystems={}",
+                            out.subsystems.len()
+                        ),
+                    ))
+                } else {
+                    Ok(())
+                }
+            },
+        )
+        .await?;
 
         // ── Phase 2: hunt → validate → gapfill loop ───────────────────────────────
         let mut hunt_tasks = outputs.recon.initial_tasks.clone();
-        outputs.hunt =
-            stages::hunt::run(&ctx, &hunt_tasks, config.hunt_concurrency, &event_sink).await?;
-        outputs.validate = stages::validate::run(&ctx, &outputs.hunt, &event_sink).await?;
+        let input_task_count = hunt_tasks.len();
+        outputs.hunt = run_stage_with_retry(
+            &config.stage_gates.hunt,
+            AuditStage::Hunt,
+            &ctx.partial_analysis,
+            &event_sink,
+            |amp| {
+                let hunt_tasks_ref = &hunt_tasks;
+                async move {
+                    stages::hunt::run(
+                        &ctx,
+                        hunt_tasks_ref,
+                        config.hunt_concurrency,
+                        &event_sink,
+                        amp.as_deref(),
+                    )
+                    .await
+                }
+            },
+            move |out: &types::HuntOutput| {
+                if !out.findings.is_empty() || input_task_count == 0 {
+                    Ok(())
+                } else {
+                    Err(GateFailure::new(
+                        "hunt produced no findings",
+                        format!(
+                            "findings=0 input_tasks={input_task_count}"
+                        ),
+                    ))
+                }
+            },
+        )
+        .await?;
+        let hunt_input_findings = outputs.hunt.findings.len();
+        outputs.validate = run_stage_with_retry(
+            &config.stage_gates.validate,
+            AuditStage::Validate,
+            &ctx.partial_analysis,
+            &event_sink,
+            |amp| {
+                let outputs_hunt = &outputs.hunt;
+                async move {
+                    stages::validate::run(&ctx, outputs_hunt, &event_sink, amp.as_deref()).await
+                }
+            },
+            move |out: &types::ValidationOutput| {
+                if out.findings.len() >= hunt_input_findings {
+                    Ok(())
+                } else {
+                    Err(GateFailure::new(
+                        "validate produced fewer findings than hunt provided",
+                        format!(
+                            "validate_findings={} hunt_findings={hunt_input_findings}",
+                            out.findings.len()
+                        ),
+                    ))
+                }
+            },
+        )
+        .await?;
 
         for gap_iter in 0..config.gapfill_iterations {
             // Budget check (best-effort).
@@ -226,8 +321,30 @@ pub async fn run_pipeline_with_config(
                 }
             }
 
-            outputs.gapfill =
-                stages::gapfill::run(&ctx, &outputs.recon, &outputs.validate, &event_sink).await?;
+            outputs.gapfill = run_stage_with_retry(
+                &config.stage_gates.gapfill,
+                AuditStage::Gapfill,
+                &ctx.partial_analysis,
+                &event_sink,
+                |amp| {
+                    let outputs_recon = &outputs.recon;
+                    let outputs_validate = &outputs.validate;
+                    async move {
+                        stages::gapfill::run(
+                            &ctx,
+                            outputs_recon,
+                            outputs_validate,
+                            &event_sink,
+                            amp.as_deref(),
+                        )
+                        .await
+                    }
+                },
+                // Gapfill has max_retries=0 by default — empty new_tasks is a
+                // legitimate "no gaps" signal. Predicate is always-ok.
+                |_out: &types::GapfillOutput| Ok(()),
+            )
+            .await?;
 
             if outputs.gapfill.new_tasks.is_empty() {
                 break;
@@ -241,18 +358,138 @@ pub async fn run_pipeline_with_config(
             );
 
             hunt_tasks = outputs.gapfill.new_tasks.clone();
-            let gap_hunt =
-                stages::hunt::run(&ctx, &hunt_tasks, config.hunt_concurrency, &event_sink).await?;
+            let gap_input_task_count = hunt_tasks.len();
+            let gap_hunt = run_stage_with_retry(
+                &config.stage_gates.hunt,
+                AuditStage::Hunt,
+                &ctx.partial_analysis,
+                &event_sink,
+                |amp| {
+                    let hunt_tasks_ref = &hunt_tasks;
+                    async move {
+                        stages::hunt::run(
+                            &ctx,
+                            hunt_tasks_ref,
+                            config.hunt_concurrency,
+                            &event_sink,
+                            amp.as_deref(),
+                        )
+                        .await
+                    }
+                },
+                move |out: &types::HuntOutput| {
+                    if !out.findings.is_empty() || gap_input_task_count == 0 {
+                        Ok(())
+                    } else {
+                        Err(GateFailure::new(
+                            "gapfill-hunt produced no findings",
+                            format!(
+                                "findings=0 input_tasks={gap_input_task_count}"
+                            ),
+                        ))
+                    }
+                },
+            )
+            .await?;
 
             // Merge new findings into the accumulated hunt output.
             outputs.hunt.findings.extend(gap_hunt.findings);
-            outputs.validate = stages::validate::run(&ctx, &outputs.hunt, &event_sink).await?;
+            let gap_validate_input = outputs.hunt.findings.len();
+            outputs.validate = run_stage_with_retry(
+                &config.stage_gates.validate,
+                AuditStage::Validate,
+                &ctx.partial_analysis,
+                &event_sink,
+                |amp| {
+                    let outputs_hunt = &outputs.hunt;
+                    async move {
+                        stages::validate::run(&ctx, outputs_hunt, &event_sink, amp.as_deref()).await
+                    }
+                },
+                move |out: &types::ValidationOutput| {
+                    if out.findings.len() >= gap_validate_input {
+                        Ok(())
+                    } else {
+                        Err(GateFailure::new(
+                            "validate produced fewer findings than hunt provided",
+                            format!(
+                                "validate_findings={} hunt_findings={gap_validate_input}",
+                                out.findings.len()
+                            ),
+                        ))
+                    }
+                },
+            )
+            .await?;
         }
 
         // ── Phase 3: dedupe → trace ───────────────────────────────────────────────
-        outputs.dedupe = stages::dedupe::run(&ctx, &outputs.validate, &event_sink).await?;
-        outputs.trace =
-            stages::trace::run(&ctx, &outputs.dedupe, &outputs.validate, &event_sink).await?;
+        let confirmed_count = outputs
+            .validate
+            .findings
+            .iter()
+            .filter(|f| f.validation_status == "confirmed")
+            .count();
+        outputs.dedupe = run_stage_with_retry(
+            &config.stage_gates.dedupe,
+            AuditStage::Dedupe,
+            &ctx.partial_analysis,
+            &event_sink,
+            |amp| {
+                let outputs_validate = &outputs.validate;
+                async move {
+                    stages::dedupe::run(&ctx, outputs_validate, &event_sink, amp.as_deref()).await
+                }
+            },
+            move |out: &types::DedupeOutput| {
+                if confirmed_count == 0 || !out.groups.is_empty() {
+                    Ok(())
+                } else {
+                    Err(GateFailure::new(
+                        "dedupe produced no groups despite confirmed findings",
+                        format!(
+                            "groups=0 confirmed_findings={confirmed_count}"
+                        ),
+                    ))
+                }
+            },
+        )
+        .await?;
+        let trace_expected = outputs.dedupe.groups.len();
+        outputs.trace = run_stage_with_retry(
+            &config.stage_gates.trace,
+            AuditStage::Trace,
+            &ctx.partial_analysis,
+            &event_sink,
+            |amp| {
+                let outputs_dedupe = &outputs.dedupe;
+                let outputs_validate = &outputs.validate;
+                async move {
+                    stages::trace::run(
+                        &ctx,
+                        outputs_dedupe,
+                        outputs_validate,
+                        &event_sink,
+                        amp.as_deref(),
+                    )
+                    .await
+                }
+            },
+            move |out: &types::TraceOutput| {
+                if out.traces.len() >= trace_expected {
+                    Ok(())
+                } else {
+                    Err(GateFailure::new(
+                        "trace produced fewer verdicts than dedupe groups",
+                        format!(
+                            "traces={} expected={trace_expected}",
+                            out.traces.len()
+                        ),
+                    ))
+                }
+            },
+        )
+        .await?;
 
         // ── Phase 4: feedback → hunt → validate → dedupe → trace loop ────────────
         for fb_iter in 0..config.feedback_iterations {
@@ -268,7 +505,20 @@ pub async fn run_pipeline_with_config(
                 }
             }
 
-            outputs.feedback = stages::feedback::run(&ctx, &outputs.trace, &event_sink).await?;
+            outputs.feedback = run_stage_with_retry(
+                &config.stage_gates.feedback,
+                AuditStage::Feedback,
+                &ctx.partial_analysis,
+                &event_sink,
+                |amp| {
+                    let outputs_trace = &outputs.trace;
+                    async move {
+                        stages::feedback::run(&ctx, outputs_trace, &event_sink, amp.as_deref()).await
+                    }
+                },
+                |_out: &types::FeedbackOutput| Ok(()),
+            )
+            .await?;
 
             if outputs.feedback.new_tasks.is_empty() {
                 break;
@@ -281,22 +531,159 @@ pub async fn run_pipeline_with_config(
                 })),
             );
 
-            let fb_hunt = stages::hunt::run(
-                &ctx,
-                &outputs.feedback.new_tasks,
-                config.hunt_concurrency,
+            let fb_input_task_count = outputs.feedback.new_tasks.len();
+            let fb_hunt = run_stage_with_retry(
+                &config.stage_gates.hunt,
+                AuditStage::Hunt,
+                &ctx.partial_analysis,
                 &event_sink,
+                |amp| {
+                    let fb_new_tasks = &outputs.feedback.new_tasks;
+                    async move {
+                        stages::hunt::run(
+                            &ctx,
+                            fb_new_tasks,
+                            config.hunt_concurrency,
+                            &event_sink,
+                            amp.as_deref(),
+                        )
+                        .await
+                    }
+                },
+                move |out: &types::HuntOutput| {
+                    if !out.findings.is_empty() || fb_input_task_count == 0 {
+                        Ok(())
+                    } else {
+                        Err(GateFailure::new(
+                            "feedback-hunt produced no findings",
+                            format!(
+                                "findings=0 input_tasks={fb_input_task_count}"
+                            ),
+                        ))
+                    }
+                },
             )
             .await?;
             outputs.hunt.findings.extend(fb_hunt.findings);
-            outputs.validate = stages::validate::run(&ctx, &outputs.hunt, &event_sink).await?;
-            outputs.dedupe = stages::dedupe::run(&ctx, &outputs.validate, &event_sink).await?;
-            outputs.trace =
-                stages::trace::run(&ctx, &outputs.dedupe, &outputs.validate, &event_sink).await?;
+            let fb_validate_input = outputs.hunt.findings.len();
+            outputs.validate = run_stage_with_retry(
+                &config.stage_gates.validate,
+                AuditStage::Validate,
+                &ctx.partial_analysis,
+                &event_sink,
+                |amp| {
+                    let outputs_hunt = &outputs.hunt;
+                    async move {
+                        stages::validate::run(&ctx, outputs_hunt, &event_sink, amp.as_deref()).await
+                    }
+                },
+                move |out: &types::ValidationOutput| {
+                    if out.findings.len() >= fb_validate_input {
+                        Ok(())
+                    } else {
+                        Err(GateFailure::new(
+                            "validate produced fewer findings than hunt provided",
+                            format!(
+                                "validate_findings={} hunt_findings={fb_validate_input}",
+                                out.findings.len()
+                            ),
+                        ))
+                    }
+                },
+            )
+            .await?;
+            let fb_confirmed = outputs
+                .validate
+                .findings
+                .iter()
+                .filter(|f| f.validation_status == "confirmed")
+                .count();
+            outputs.dedupe = run_stage_with_retry(
+                &config.stage_gates.dedupe,
+                AuditStage::Dedupe,
+                &ctx.partial_analysis,
+                &event_sink,
+                |amp| {
+                    let outputs_validate = &outputs.validate;
+                    async move {
+                        stages::dedupe::run(&ctx, outputs_validate, &event_sink, amp.as_deref()).await
+                    }
+                },
+                move |out: &types::DedupeOutput| {
+                    if fb_confirmed == 0 || !out.groups.is_empty() {
+                        Ok(())
+                    } else {
+                        Err(GateFailure::new(
+                            "dedupe produced no groups despite confirmed findings",
+                            format!(
+                                "groups=0 confirmed_findings={fb_confirmed}"
+                            ),
+                        ))
+                    }
+                },
+            )
+            .await?;
+            let fb_trace_expected = outputs.dedupe.groups.len();
+            outputs.trace = run_stage_with_retry(
+                &config.stage_gates.trace,
+                AuditStage::Trace,
+                &ctx.partial_analysis,
+                &event_sink,
+                |amp| {
+                    let outputs_dedupe = &outputs.dedupe;
+                    let outputs_validate = &outputs.validate;
+                    async move {
+                        stages::trace::run(
+                            &ctx,
+                            outputs_dedupe,
+                            outputs_validate,
+                            &event_sink,
+                            amp.as_deref(),
+                        )
+                        .await
+                    }
+                },
+                move |out: &types::TraceOutput| {
+                    if out.traces.len() >= fb_trace_expected {
+                        Ok(())
+                    } else {
+                        Err(GateFailure::new(
+                            "trace produced fewer verdicts than dedupe groups",
+                            format!(
+                                "traces={} expected={fb_trace_expected}",
+                                out.traces.len()
+                            ),
+                        ))
+                    }
+                },
+            )
+            .await?;
         }
 
         // ── Phase 5: report ───────────────────────────────────────────
-        outputs.report = stages::report::run(&ctx, &outputs, &event_sink).await?;
+        outputs.report = run_stage_with_retry(
+            &config.stage_gates.report,
+            AuditStage::Report,
+            &ctx.partial_analysis,
+            event_sink,
+            |amp| {
+                let outputs_ref = &outputs;
+                async move {
+                    stages::report::run(ctx, outputs_ref, event_sink, amp.as_deref()).await
+                }
+            },
+            |out: &types::ReportOutput| {
+                if out.summary.trim().len() >= 32 {
+                    Ok(())
+                } else {
+                    Err(GateFailure::new(
+                        "report summary too short",
+                        format!("summary_len={}", out.summary.trim().len()),
+                    ))
+                }
+            },
+        )
+        .await?;
         Ok(outputs)
     }
     .await;

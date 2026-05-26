@@ -51,10 +51,7 @@ where
             repair_used: false,
         }),
         Err(first_error) => {
-            let repair_prompt = format!(
-                "The previous {stage} output did not parse as the required JSON object: {first_error}. Re-emit only the corrected JSON object, no prose. Previous output:\n{}",
-                invocation.content
-            );
+            let repair_prompt = build_repair_prompt(stage, &first_error, &invocation.content);
             let repair_invocation = invoker
                 .invoke(&repair_prompt, config)
                 .await
@@ -68,6 +65,34 @@ where
             })
         }
     }
+}
+
+/// Build a repair prompt that names the parse error and the most common LLM
+/// failure modes we have observed in production, so the second invocation
+/// has concrete guidance instead of a generic "try again".
+///
+/// Observed failure modes (each one has dropped a whole audit stage):
+///   - double-encoding: returning `"{\"new_tasks\":...}"` instead of the
+///     object. Detected at 2026-05-26 on the feedback stage.
+///   - schema drift: emitting `Vec<Object>` where the schema declared
+///     `Vec<String>` (e.g. `patterns`).
+///   - omitted required identifiers (e.g. `task_id` in feedback `new_tasks`).
+///   - markdown fences around the JSON.
+fn build_repair_prompt(stage: AuditStage, error: &str, previous: &str) -> String {
+    format!(
+        "The previous {stage} output did not parse as the required JSON object.\n\
+Parse error: {error}\n\
+\n\
+Common failure modes — verify your next response avoids these:\n\
+  1. Do NOT wrap the JSON object in a string literal (e.g. \"{{\\\"new_tasks\\\":...}}\"); emit the object directly.\n\
+  2. Do NOT substitute object arrays for string arrays. If the schema says `\"patterns\": [\"string\"]`, emit string items, not objects.\n\
+  3. Include every required field listed in the schema, including identifier fields (task_id, finding_id, etc.).\n\
+  4. Do NOT wrap the output in markdown code fences (```json ... ```).\n\
+\n\
+Re-emit ONLY the corrected JSON object, with no prose, explanation, or markdown.\n\
+\n\
+Previous output:\n{previous}"
+    )
 }
 
 pub fn parse_json<T>(text: &str) -> Result<T, String>
@@ -84,19 +109,42 @@ pub fn extract_json_value(text: &str) -> Result<serde_json::Value, String> {
         return Err("empty output".to_string());
     }
     if let Ok(value) = serde_json::from_str::<serde_json::Value>(trimmed) {
-        return Ok(value);
+        return Ok(unwrap_stringified_json(value));
     }
     if let Some(fenced) = extract_fenced_json(trimmed) {
         if let Ok(value) = serde_json::from_str::<serde_json::Value>(&fenced) {
-            return Ok(value);
+            return Ok(unwrap_stringified_json(value));
         }
     }
     if let Some(candidate) = extract_balanced_json_object(trimmed) {
         if let Ok(value) = serde_json::from_str::<serde_json::Value>(&candidate) {
-            return Ok(value);
+            return Ok(unwrap_stringified_json(value));
         }
     }
     Err("no parseable JSON object found".to_string())
+}
+
+/// LLMs occasionally double-encode their reply — returning a JSON *string
+/// literal* that contains the actual JSON object as escaped text
+/// (`"{\"new_tasks\":[...]}"`), rather than the object directly. Without
+/// unwrapping, the downstream `from_value::<T>` rejects it as
+/// `invalid type: string ..., expected struct ...` and the whole stage
+/// dies (see feedback-stage incident at 2026-05-26).
+///
+/// Unwrap exactly one layer when the payload is a `Value::String` whose
+/// trimmed contents start with `{` or `[`. Bounded depth (one) is enough —
+/// triple-encoding has not been observed and unbounded recursion would risk
+/// pathological input.
+fn unwrap_stringified_json(value: serde_json::Value) -> serde_json::Value {
+    if let serde_json::Value::String(inner) = &value {
+        let trimmed = inner.trim();
+        if trimmed.starts_with('{') || trimmed.starts_with('[') {
+            if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(trimmed) {
+                return parsed;
+            }
+        }
+    }
+    value
 }
 
 fn extract_fenced_json(text: &str) -> Option<String> {
@@ -158,5 +206,39 @@ mod tests {
                 .ok
         );
         assert!(parse_json::<Tiny>("text {\"ok\":true} tail").unwrap().ok);
+    }
+
+    /// Regression: LLM returns the JSON object as a string literal containing
+    /// escaped JSON (double-encoding). Without unwrap_stringified_json the
+    /// feedback stage at 2026-05-26 failed with
+    /// `invalid type: string "{...}", expected struct FeedbackOutput`.
+    #[test]
+    fn parse_json_unwraps_stringified_object() {
+        let double_encoded = "\"{\\\"ok\\\":true}\"";
+        let value = extract_json_value(double_encoded).expect("must unwrap");
+        assert!(value.is_object(), "expected object, got: {value:?}");
+        let tiny: Tiny = parse_json(double_encoded).expect("Tiny must deserialize");
+        assert!(tiny.ok);
+    }
+
+    /// Triple-encoded payloads stay strings — we bound depth at one to avoid
+    /// pathological inputs. The repair-prompt path will catch this case.
+    #[test]
+    fn parse_json_does_not_unwrap_beyond_one_layer() {
+        let triple = "\"\\\"{\\\\\\\"ok\\\\\\\":true}\\\"\"";
+        let value = extract_json_value(triple).expect("layer-1 unwrap succeeds");
+        // After one unwrap we have a `Value::String` whose content is still a
+        // quoted JSON literal — not an object. Deserialize fails, caller hits
+        // the repair branch.
+        assert!(value.is_string(), "expected unwrapped value to remain a string at depth 2, got {value:?}");
+    }
+
+    /// Stringified array variant — LLMs occasionally double-encode an array
+    /// payload too (e.g. when the top-level schema is `Vec<...>`).
+    #[test]
+    fn parse_json_unwraps_stringified_array() {
+        let double_encoded = "\"[1,2,3]\"";
+        let value = extract_json_value(double_encoded).expect("must unwrap");
+        assert!(value.is_array(), "expected array, got: {value:?}");
     }
 }

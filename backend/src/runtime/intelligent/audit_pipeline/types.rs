@@ -26,17 +26,41 @@ pub struct Subsystem {
     pub purpose: String,
 }
 
+/// Why each field carries `alias = "snake_case_name"`:
+/// the recon (`prompts.rs:266`) and feedback (`prompts.rs:295`) prompts both
+/// declare HuntTask in snake_case (`attack_class`, `scope_hint`, ...), but
+/// the struct uses `rename_all = "camelCase"` so the wire format stays
+/// camelCase for downstream consumers (event_log, frontend). Without
+/// aliases, the LLM-supplied snake_case keys would be silently dropped to
+/// defaults — yielding empty `attack_class`/`scope_hint` and orphan
+/// follow-up hunts that produce zero findings.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct HuntTask {
+    /// May be empty after deserialization when the LLM omits the field
+    /// (observed in feedback-stage `new_tasks` at 2026-05-26). Callers that
+    /// need a non-empty id — notably `hunt::run` which uses it to backfill
+    /// `finding.task_id` at `stages/hunt.rs:111` — MUST synthesize a value
+    /// (see `stages::feedback::run`).
+    #[serde(default, alias = "task_id", deserialize_with = "deserialize_string_lenient")]
     pub task_id: String,
-    #[serde(default = "default_source")]
+    #[serde(default = "default_source", deserialize_with = "deserialize_string_lenient")]
     pub source: String,
+    #[serde(
+        default,
+        alias = "attack_class",
+        deserialize_with = "deserialize_string_lenient"
+    )]
     pub attack_class: String,
+    #[serde(
+        default,
+        alias = "scope_hint",
+        deserialize_with = "deserialize_string_lenient"
+    )]
     pub scope_hint: String,
-    #[serde(default)]
+    #[serde(default, alias = "target_files")]
     pub target_files: Vec<String>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_string_lenient")]
     pub rationale: String,
     #[serde(default = "default_priority")]
     pub priority: u8,
@@ -156,6 +180,51 @@ where
         Some(serde_json::Value::Bool(b)) => Some(b.to_string()),
         Some(serde_json::Value::Number(n)) => Some(n.to_string()),
         Some(other) => Some(serde_json::to_string(&other).unwrap_or_default()),
+    })
+}
+
+/// `Vec<String>` deserializer that accepts the array shape the schema declares
+/// AND the object-array shape the LLM occasionally emits when the prompt
+/// example showed objects. Object items round-trip to compact JSON strings so
+/// content survives instead of failing the whole stage.
+///
+/// Why this exists: the feedback prompt at `prompts.rs:301` shows `patterns`
+/// as `[{"pattern_name":..., "description":..., "grep_hint":...}]`, but
+/// `FeedbackOutput.patterns` is declared as `Vec<String>`. The LLM follows
+/// the prompt example and returns objects — without this adapter the whole
+/// feedback stage dies with `invalid type: map, expected a string`,
+/// short-circuiting the feedback → hunt → validate → dedupe → trace loop.
+/// Null and scalar items coerce the same way as `deserialize_string_lenient`.
+/// A bare string (instead of an array) wraps to a single-element vector;
+/// other compound shapes round-trip to a single JSON-encoded item.
+fn deserialize_string_list_lenient<'de, D>(deserializer: D) -> Result<Vec<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = serde_json::Value::deserialize(deserializer)?;
+    Ok(match value {
+        serde_json::Value::Null => Vec::new(),
+        serde_json::Value::Array(items) => items
+            .into_iter()
+            .map(|item| match item {
+                serde_json::Value::String(s) => s,
+                serde_json::Value::Null => String::new(),
+                serde_json::Value::Bool(b) => b.to_string(),
+                serde_json::Value::Number(n) => n.to_string(),
+                other => serde_json::to_string(&other).unwrap_or_default(),
+            })
+            .filter(|item| !item.is_empty())
+            .collect(),
+        serde_json::Value::String(s) => {
+            if s.trim().is_empty() {
+                Vec::new()
+            } else {
+                vec![s]
+            }
+        }
+        serde_json::Value::Bool(b) => vec![b.to_string()],
+        serde_json::Value::Number(n) => vec![n.to_string()],
+        other => vec![serde_json::to_string(&other).unwrap_or_default()],
     })
 }
 
@@ -314,9 +383,12 @@ fn default_validation_status() -> String {
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct GapfillOutput {
-    #[serde(default)]
+    /// `alias = "new_tasks"`: gapfill prompt (`prompts.rs:264`) uses
+    /// snake_case keys. Same hazard as `FeedbackOutput`: missing alias would
+    /// silently drop the LLM's task list to empty.
+    #[serde(default, alias = "new_tasks")]
     pub new_tasks: Vec<HuntTask>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_string_lenient")]
     pub rationale: String,
 }
 
@@ -360,9 +432,13 @@ pub struct TraceResult {
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct FeedbackOutput {
-    #[serde(default)]
+    /// `alias = "new_tasks"`: feedback prompt (`prompts.rs:293`) declares the
+    /// schema in snake_case; LLM follows the prompt example. Without the
+    /// alias, the entire `new_tasks` array is silently dropped to empty,
+    /// terminating the feedback → hunt loop at `mod.rs:273`.
+    #[serde(default, alias = "new_tasks")]
     pub new_tasks: Vec<HuntTask>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_string_list_lenient")]
     pub patterns: Vec<String>,
 }
 
@@ -673,6 +749,104 @@ mod tests {
             "evidence object preserved: {}",
             f.evidence
         );
+    }
+
+    /// Regression: feedback-stage LLM returned `patterns` as `Vec<Object>`
+    /// (the prompt example at prompts.rs:301 shows objects) while the struct
+    /// declared `Vec<String>`. Pre-fix: `invalid type: map, expected a string`
+    /// → whole audit short-circuited (incident 2026-05-26).
+    #[test]
+    fn feedback_output_accepts_object_array_in_patterns() {
+        let raw = r#"{
+            "newTasks": [],
+            "patterns": [
+                {"pattern_name": "UninitializedSymbolTableEntry",
+                 "description": "Symbol table fields used before init.",
+                 "grep_hint": "id\\s*= mk|Class\\s*=|Val\\s*="},
+                {"pattern_name": "IntOverflowInLiteralParsing",
+                 "description": "val = val * 10 + digit without overflow check.",
+                 "grep_hint": "val\\s*=\\s*val\\s*\\*"}
+            ]
+        }"#;
+        let output: FeedbackOutput =
+            serde_json::from_str(raw).expect("object-array patterns must deserialize");
+        assert_eq!(output.patterns.len(), 2);
+        assert!(
+            output.patterns[0].contains("UninitializedSymbolTableEntry"),
+            "object pattern preserved as JSON string: {}",
+            output.patterns[0]
+        );
+        assert!(
+            output.patterns[1].contains("IntOverflowInLiteralParsing"),
+            "object pattern preserved as JSON string: {}",
+            output.patterns[1]
+        );
+    }
+
+    /// Schema-conformant `Vec<String>` patterns still deserialize unchanged.
+    #[test]
+    fn feedback_output_accepts_string_array_in_patterns() {
+        let raw = r#"{
+            "newTasks": [],
+            "patterns": ["uninit_symbol", "int_overflow", "untrusted_addr"]
+        }"#;
+        let output: FeedbackOutput =
+            serde_json::from_str(raw).expect("string-array patterns must deserialize");
+        assert_eq!(output.patterns, vec!["uninit_symbol", "int_overflow", "untrusted_addr"]);
+    }
+
+    /// Regression: HuntTask in feedback `new_tasks` omits `task_id` (prompt
+    /// schema at prompts.rs:293 doesn't include it). Pre-fix:
+    /// `missing field 'task_id'` → whole feedback stage failed. Post-fix:
+    /// deserialize succeeds with empty id; `stages::feedback::run`
+    /// synthesizes `hunt-fb-{idx}` after deserialize.
+    #[test]
+    fn hunt_task_deserializes_without_task_id() {
+        let raw = r#"{
+            "attack_class": "Uninitialized Symbol Table Fields",
+            "scope_hint": "Search all paths that create symbol entries.",
+            "target_files": ["c4.c"],
+            "rationale": "Inspired by HUNT-002 finding."
+        }"#;
+        let task: HuntTask =
+            serde_json::from_str(raw).expect("HuntTask without task_id must deserialize");
+        assert_eq!(task.task_id, "", "task_id absent → empty string");
+        assert_eq!(task.attack_class, "Uninitialized Symbol Table Fields");
+        assert_eq!(task.source, "recon", "source absent → default 'recon'");
+        assert_eq!(task.priority, 3, "priority absent → default 3");
+    }
+
+    /// Regression: full feedback-stage payload from the 2026-05-26 incident
+    /// — `new_tasks` items missing `task_id`, `patterns` as `Vec<Object>`.
+    /// Both bugs at once; this is the exact LLM output that broke the stage.
+    #[test]
+    fn feedback_output_accepts_incident_payload_2026_05_26() {
+        let raw = r#"{
+            "new_tasks": [
+                {"attack_class": "Uninitialized Symbol Table Fields",
+                 "scope_hint": "search symbol entry init paths",
+                 "target_files": ["c4.c"],
+                 "rationale": "HUNT-002 inspired"},
+                {"attack_class": "Unsafe Numeric Literal Parsing",
+                 "scope_hint": "tokenizer overflow checks",
+                 "target_files": ["c4.c"],
+                 "rationale": "HUNT-003 inspired"}
+            ],
+            "patterns": [
+                {"pattern_name": "UninitializedSymbolTableEntry",
+                 "description": "fields used before init",
+                 "grep_hint": "Class\\s*="},
+                {"pattern_name": "IntegerOverflowInLiteralParsing",
+                 "description": "signed arithmetic without overflow detect",
+                 "grep_hint": "val\\s*=\\s*val\\s*\\*"}
+            ]
+        }"#;
+        let output: FeedbackOutput = serde_json::from_str(raw)
+            .expect("incident payload must deserialize after fix");
+        assert_eq!(output.new_tasks.len(), 2);
+        assert_eq!(output.patterns.len(), 2);
+        // task_id is empty until feedback::run synthesizes one.
+        assert!(output.new_tasks.iter().all(|t| t.task_id.is_empty()));
     }
 
     /// Regression: scalar coercion — numbers, bools, and null in string fields

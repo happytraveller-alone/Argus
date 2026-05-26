@@ -64,9 +64,14 @@ pub async fn run(
     tasks: &[HuntTask],
     concurrency: usize,
     events: &PipelineEventSink,
+    amplification: Option<&str>,
 ) -> Result<HuntOutput> {
     let stage = AuditStage::Hunt;
     events.stage_started(stage);
+
+    // Convert the borrowed amplification into an owned String so each spawned
+    // task can clone it into its 'static future.
+    let amplification: Option<String> = amplification.map(str::to_string);
 
     let semaphore = Arc::new(tokio::sync::Semaphore::new(concurrency.max(1)));
     let mut join_set: JoinSet<Result<Vec<AuditFinding>>> = JoinSet::new();
@@ -76,6 +81,7 @@ pub async fn run(
         let events = events.clone();
         let task = task.clone();
         let sem = Arc::clone(&semaphore);
+        let task_amp = amplification.clone();
 
         join_set.spawn(async move {
             // Acquire permit before calling LLM to bound concurrency.
@@ -89,7 +95,10 @@ pub async fn run(
                     "findings": [{"findingId":"string","file":"string","lineStart":1,"lineEnd":1,"vulnClass":"string","severity":"low|medium|high|critical","description":"string","evidence":"string","confidence":0.0}]
                 }
             });
-            let prompt = stage_prompt(stage, &payload);
+            let mut prompt = stage_prompt(stage, &payload);
+            if let Some(amp) = task_amp.as_deref() {
+                prompt.push_str(amp);
+            }
 
             let mut output: HuntOutput = if let Some(runner) = &ctx.agent_runner {
                 let tools = standard_tool_defs(&["Read", "Grep", "Glob", "Exec"]);
@@ -914,7 +923,7 @@ mod tests {
         ];
 
         let sink = make_test_sink();
-        let result = run(&ctx, &tasks, 3, &sink).await;
+        let result = run(&ctx, &tasks, 3, &sink, None).await;
 
         assert!(result.is_ok(), "hunt run must return Ok even when one task fails: {result:?}");
         let output = result.unwrap();

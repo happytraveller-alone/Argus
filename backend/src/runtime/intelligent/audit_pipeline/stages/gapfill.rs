@@ -13,6 +13,7 @@ pub async fn run(
     recon: &ReconOutput,
     validation: &ValidationOutput,
     events: &PipelineEventSink,
+    amplification: Option<&str>,
 ) -> Result<GapfillOutput> {
     let stage = AuditStage::Gapfill;
     events.stage_started(stage);
@@ -23,7 +24,10 @@ pub async fn run(
         "instruction": "Identify under-covered areas and propose extra hunt tasks only when useful.",
         "requiredOutput": {"newTasks": [], "rationale": "string"}
     });
-    let prompt = stage_prompt(stage, &payload);
+    let mut prompt = stage_prompt(stage, &payload);
+    if let Some(amp) = amplification {
+        prompt.push_str(amp);
+    }
     let output = invoke_json::<GapfillOutput>(&*ctx.invoker, stage, &prompt, &ctx.llm_config)
         .await
         .map(|result| {

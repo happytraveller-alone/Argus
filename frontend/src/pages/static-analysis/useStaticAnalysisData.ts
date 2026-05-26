@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import {
   getCodeqlScanFindings,
@@ -94,6 +95,8 @@ export function useStaticAnalysisData({
   const [interruptTarget, setInterruptTarget] = useState<Engine | null>(null);
   const [interrupting, setInterrupting] = useState(false);
   const [resettingCodeqlPlan, setResettingCodeqlPlan] = useState(false);
+
+  const navigate = useNavigate();
 
   const opengrepSilentRefreshRef = useRef(false);
   const opengrepCompletionResultsRefreshRef = useRef<string | null>(null);
@@ -417,15 +420,20 @@ export function useStaticAnalysisData({
     if (!projectId) return;
     setResettingCodeqlPlan(true);
     try {
-      await resetCodeqlProjectBuildPlan(projectId);
-      toast.success("CodeQL 构建方案已重置");
-      await refreshAll(true);
+      const result = await resetCodeqlProjectBuildPlan(projectId);
+      toast.success("CodeQL 构建方案已重置，正在重新探索");
+      const newTaskId = result?.task_id ? String(result.task_id).trim() : "";
+      if (newTaskId && newTaskId !== codeqlTaskId) {
+        navigate(`/codeql-analysis/${newTaskId}`);
+      } else {
+        await refreshAll(true);
+      }
     } catch {
       toast.error("重置 CodeQL 构建方案失败");
     } finally {
       setResettingCodeqlPlan(false);
     }
-  }, [codeqlTask?.project_id, refreshAll]);
+  }, [codeqlTask?.project_id, codeqlTaskId, navigate, refreshAll]);
 
   const handleToggleStatus = useCallback(async (
     row: UnifiedFindingRow,
