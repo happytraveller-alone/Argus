@@ -47,6 +47,14 @@ line_no() {
   printf '%s' "$line"
 }
 
+assert_source_order() {
+  local file="$1" first="$2" second="$3"
+  local first_line second_line
+  first_line="$(line_no "$file" "$first")"
+  second_line="$(line_no "$file" "$second")"
+  [[ "$first_line" -lt "$second_line" ]] || fail "Expected $first to appear before $second in $file"
+}
+
 new_fixture() {
   local name="$1"
   local dir="$TMP_ROOT/$name"
@@ -148,6 +156,65 @@ assert_contains "$help_out" "--wait-exit"
 assert_contains "$help_out" "ARGUS_STUB_DOCKER=true"
 assert_contains "$help_out" "scripts/validate-llm-config.sh --env-file"
 
+# Podman pre-pulls the Joern scanner image with build base images, and normal
+# readiness polling suppresses transient curl stderr while retaining dry-run
+# command visibility through the stub/dry-run branches.
+assert_contains "$SCRIPT_SRC" 'log "Pre-pulling base/scanner images in parallel..."'
+assert_contains "$SCRIPT_SRC" 'log "Dry-run/stub: skipping base/scanner image pre-pull."'
+assert_contains "$SCRIPT_SRC" 'joern_image="$(joern_runner_image_ref)"'
+assert_contains "$SCRIPT_SRC" '"$joern_image"'
+assert_contains "$SCRIPT_SRC" 'curl -fsS "$BACKEND_HEALTH_URL" >/dev/null 2>&1'
+assert_contains "$SCRIPT_SRC" 'curl -fsS "$url" >/dev/null 2>&1'
+assert_source_order "$SCRIPT_SRC" 'joern_image="$(joern_runner_image_ref)"' 'podman pull "$img"'
+assert_source_order "$SCRIPT_SRC" 'podman_prepull_base_images' 'local build_funcs=("podman_build_opengrep_runner_image"'
+
+backend_wait_suppression_out="$help_dir/backend-wait-suppression.out"
+set +e
+(
+  cd "$ROOT_DIR"
+  # shellcheck disable=SC1090
+  source <(sed '$d' "$SCRIPT_SRC")
+  DRY_RUN=false
+  STUB_DOCKER=false
+  WAIT_TIMEOUT=0
+  WAIT_INTERVAL=0
+  BACKEND_HEALTH_URL="http://127.0.0.1:18000/health"
+  curl() {
+    echo "curl: (7) Failed to connect to 127.0.0.1 port 18000" >&2
+    return 7
+  }
+  wait_for_backend
+) >"$backend_wait_suppression_out" 2>&1
+backend_wait_suppression_rc=$?
+set -e
+[[ "$backend_wait_suppression_rc" -ne 0 ]] || fail "Backend wait should fail on timeout when curl never succeeds"
+assert_contains "$backend_wait_suppression_out" "Backend did not become reachable within"
+assert_not_contains "$backend_wait_suppression_out" "curl: (7)"
+
+backend_wait_retry_out="$help_dir/backend-wait-retry.out"
+(
+  cd "$ROOT_DIR"
+  # shellcheck disable=SC1090
+  source <(sed '$d' "$SCRIPT_SRC")
+  DRY_RUN=false
+  STUB_DOCKER=false
+  WAIT_TIMEOUT=2
+  WAIT_INTERVAL=0
+  BACKEND_HEALTH_URL="http://127.0.0.1:18000/health"
+  attempts=0
+  curl() {
+    attempts=$((attempts + 1))
+    if [[ "$attempts" -lt 2 ]]; then
+      echo "curl: (7) Failed to connect to 127.0.0.1 port 18000" >&2
+      return 7
+    fi
+    return 0
+  }
+  wait_for_backend
+) >"$backend_wait_retry_out" 2>&1
+assert_contains "$backend_wait_retry_out" "Backend is reachable: http://127.0.0.1:18000/health"
+assert_not_contains "$backend_wait_retry_out" "curl: (7)"
+
 # Standalone validator accepts valid LLM env and rejects missing/placeholder values.
 validator_dir="$(new_fixture validator)"
 write_valid_config "$validator_dir"
@@ -200,6 +267,16 @@ assert_contains "$default_podman_out" "--http-proxy=false"
 assert_contains "$default_podman_out" "OPENGREP_RUNNER_RUNTIME=podman"
 assert_contains "$default_podman_out" "Ensuring Joern scanner image container starts (Podman mode): ghcr.nju.edu.cn/joernio/joern:nightly"
 assert_contains "$default_podman_out" "podman run --rm --network none ghcr.nju.edu.cn/joernio/joern:nightly"
+default_podman_joern_line="$(line_no "$default_podman_out" "Ensuring Joern scanner image container starts (Podman mode)")"
+default_podman_backend_line="$(line_no "$default_podman_out" "podman run -d --name argus-backend")"
+default_podman_backend_wait_line="$(line_no "$default_podman_out" "curl -fsS http://127.0.0.1:18000/health")"
+default_podman_frontend_line="$(line_no "$default_podman_out" "podman run -d --name argus-frontend")"
+default_podman_frontend_wait_line="$(line_no "$default_podman_out" "curl -fsS http://127.0.0.1:13000")"
+[[ "$default_podman_joern_line" -lt "$default_podman_backend_line" \
+  && "$default_podman_backend_line" -lt "$default_podman_backend_wait_line" \
+  && "$default_podman_backend_wait_line" -lt "$default_podman_frontend_line" \
+  && "$default_podman_frontend_line" -lt "$default_podman_frontend_wait_line" ]] \
+  || fail "Expected default Podman order: Joern image ready -> backend -> backend readiness -> frontend -> frontend readiness"
 assert_not_contains "$default_podman_out" "docker compose"
 assert_not_contains "$default_podman_out" "/var/run/docker.sock"
 

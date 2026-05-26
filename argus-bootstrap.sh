@@ -1143,17 +1143,20 @@ podman_build_audit_sandbox_image() {
 
 podman_prepull_base_images() {
   if "$DRY_RUN" || is_truthy "$STUB_DOCKER"; then
-    log "Dry-run/stub: skipping base image pre-pull."
+    log "Dry-run/stub: skipping base/scanner image pre-pull."
     return 0
   fi
-  log "Pre-pulling base images in parallel..."
+  log "Pre-pulling base/scanner images in parallel..."
   local mirror="${DOCKERHUB_LIBRARY_MIRROR:-m.daocloud.io/docker.io/library}"
+  local joern_image
+  joern_image="$(joern_runner_image_ref)"
   local -a images=(
     "${mirror}/rust:1.90-slim-bookworm"
     "${mirror}/debian:trixie-slim"
     "${mirror}/node:22-alpine"
     "${mirror}/node:22-slim"
     "${mirror}/ubuntu:22.04"
+    "$joern_image"
   )
   local -a pull_pids=()
   for img in "${images[@]}"; do
@@ -1165,9 +1168,9 @@ podman_prepull_base_images() {
     wait "$pid" || ((pull_failures++))
   done
   if [[ "$pull_failures" -gt 0 ]]; then
-    log "Warning: $pull_failures base image(s) failed to pre-pull (builds will pull on demand)."
+    log "Warning: $pull_failures base/scanner image(s) failed to pre-pull (builds will pull on demand)."
   else
-    log "All base images pre-pulled."
+    log "All base/scanner images pre-pulled."
   fi
 }
 
@@ -1446,7 +1449,7 @@ wait_for_backend() {
   start="$(date +%s)"
   log "Waiting up to ${WAIT_TIMEOUT}s for backend readiness: $BACKEND_HEALTH_URL"
   while true; do
-    if curl -fsS "$BACKEND_HEALTH_URL" >/dev/null; then
+    if curl -fsS "$BACKEND_HEALTH_URL" >/dev/null 2>&1; then
       log "Backend is reachable: $BACKEND_HEALTH_URL"
       return 0
     fi
@@ -1531,7 +1534,7 @@ wait_for_frontend() {
   start="$(date +%s)"
   log "Waiting up to ${WAIT_TIMEOUT}s for frontend readiness: $url"
   while true; do
-    if curl -fsS "$url" >/dev/null; then
+    if curl -fsS "$url" >/dev/null 2>&1; then
       log "Frontend is reachable: $url"
       return 0
     fi
