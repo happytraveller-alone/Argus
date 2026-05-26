@@ -35,7 +35,7 @@ The backend reads the root `.env` and mounts `${DOCKER_SOCKET_PATH:-/var/run/doc
 
 ## GHCR Image Naming
 
-- GHCR image paths use `ghcr.io/<GitHub user or organization>/<image>:<tag>`.
+- GHCR image paths use `ghcr.nju.edu.cn/<GitHub user or organization>/<image>:<tag>`.
 - `audittool` is the repository name, not the GHCR owner; the default image namespace is the current repo owner `happytraveller-alone`.
 - `.github/workflows/docker-publish.yml` now handles backend, frontend, and OpenGrep runner image builds and publishing in one workflow; CodeQL scans run on a3s sandbox, no CodeQL runner container is published.
 - The OpenGrep runner publish path explicitly uses OCI image media types; local `runner-build` / `rebuild-opengrep-runner-verify.sh` still validate through Docker daemon-loaded images.

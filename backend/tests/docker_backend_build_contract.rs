@@ -54,7 +54,7 @@ fn compose_exposes_joern_runner_image_and_resource_controls() {
     ] {
         assert!(
             compose.contains(
-                "SCANNER_JOERN_IMAGE: ${SCANNER_JOERN_IMAGE:-ghcr.io/joernio/joern:nightly}"
+                "SCANNER_JOERN_IMAGE: ${SCANNER_JOERN_IMAGE:-ghcr.nju.edu.cn/joernio/joern:nightly}"
             ),
             "{name} must expose the Joern runner image override"
         );

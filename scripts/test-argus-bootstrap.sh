@@ -32,6 +32,38 @@ assert_no_global_prune_execution() {
   fi
 }
 
+install_fake_curl_for_shutdown() {
+  local dir="$1"
+  local bin_dir="$dir/fake-bin"
+  mkdir -p "$bin_dir"
+  cat > "$bin_dir/curl" <<'FAKECURL'
+#!/usr/bin/env bash
+set -euo pipefail
+method="GET"
+url=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -X) method="$2"; shift 2 ;;
+    -H) shift 2 ;;
+    -*) shift ;;
+    *) url="$1"; shift ;;
+  esac
+done
+printf '%s %s\n' "$method" "$url" >> "${FAKE_CURL_LOG:?}"
+case "$url" in
+  */health) printf '{"status":"ok"}\n' ;;
+  */api/v1/static-tasks/tasks\?status=running) printf '[{"id":"opengrep-running"}]\n' ;;
+  */api/v1/static-tasks/codeql/tasks\?status=running) printf '[{"task_id":"codeql-running"}]\n' ;;
+  */api/v1/static-tasks/joern/tasks\?status=running) printf '[{"taskId":"joern-running"}]\n' ;;
+  */api/v1/intelligent-tasks\?limit=200) printf '[{"taskId":"intel-pending","status":"pending"},{"taskId":"intel-running","status":"running"}]\n' ;;
+  */interrupt|*/cancel) printf '{"status":"cancelled"}\n' ;;
+  *) printf '{}\n' ;;
+esac
+FAKECURL
+  chmod +x "$bin_dir/curl"
+  printf '%s' "$bin_dir"
+}
+
 assert_banner_contact() {
   local file="$1"
   assert_contains "$file" "ARGUS"
@@ -155,7 +187,7 @@ help_dir="$(new_fixture help)"
 help_out="$help_dir/help.out"
 ( cd "$help_dir" && ./argus-bootstrap.sh --help ) >"$help_out" 2>&1
 assert_banner_contact "$help_out"
-assert_contains "$help_out" "./argus-bootstrap.sh [--runtime docker|podman] [--dry-run] [--wait-exit] [--help] -- <mode>"
+assert_contains "$help_out" "./argus-bootstrap.sh [--runtime docker|podman] [--dry-run] [--wait-exit] [--sequential-build] [--help] -- <mode>"
 assert_contains "$help_out" "Run modes:"
 assert_contains "$help_out" "default"
 assert_contains "$help_out" "keep-cache"
@@ -237,6 +269,8 @@ default_podman_out="$default_podman_dir/default-podman.out"
 assert_contains "$default_podman_out" "Container runtime: podman"
 assert_contains "$default_podman_out" "podman build --file $default_podman_dir/docker/opengrep-runner.Dockerfile --target opengrep-runner"
 assert_contains "$default_podman_out" "OPENGREP_RUNNER_RUNTIME=podman"
+assert_contains "$default_podman_out" "Ensuring Joern scanner image container starts (Podman mode): ghcr.nju.edu.cn/joernio/joern:nightly"
+assert_contains "$default_podman_out" "podman run --rm --network none ghcr.nju.edu.cn/joernio/joern:nightly"
 assert_not_contains "$default_podman_out" "docker compose"
 assert_not_contains "$default_podman_out" "/var/run/docker.sock"
 
@@ -376,6 +410,11 @@ assert_contains "$valid_out" "ARGUS_LLM_ENV_FILE=$valid_dir/.argus-llm.env"
 assert_contains "$valid_out" "ARGUS_RESET_IMPORT_TOKEN="
 assert_contains "$valid_out" "redacted-import-token"
 assert_contains "$valid_out" "curl -fsS http://127.0.0.1:18000/health"
+assert_contains "$valid_out" "Ensuring backend Podman can start Joern image: ghcr.nju.edu.cn/joernio/joern:nightly"
+assert_contains "$valid_out" 'podman image inspect "$image"'
+assert_contains "$valid_out" 'podman pull "$image"'
+assert_contains "$valid_out" 'podman run --rm --network none "$image"'
+assert_contains "$valid_out" "joern-parse"
 assert_contains "$valid_out" "Ensuring backend A3S Box cache has OpenGrep image: argus/opengrep-runner-local:latest"
 assert_contains "$valid_out" "a3s-box load -i"
 assert_contains "$valid_out" "curl -fsS -X POST"
@@ -389,10 +428,11 @@ down_line="$(line_no "$valid_out" "down --remove-orphans")"
 runner_build_line="$(line_no "$valid_out" "build opengrep-runner")"
 up_line="$(line_no "$valid_out" "up -d --build")"
 backend_wait_line="$(line_no "$valid_out" "curl -fsS http://127.0.0.1:18000/health")"
+joern_image_line="$(line_no "$valid_out" "Ensuring backend Podman can start Joern image")"
 import_line="$(line_no "$valid_out" "curl -fsS -X POST")"
 a3s_cache_line="$(line_no "$valid_out" "a3s-box load -i")"
 logs_line="$(line_no "$valid_out" "logs -f")"
-[[ "$banner_line" -lt "$validation_line" && "$validation_line" -lt "$down_line" && "$down_line" -lt "$runner_build_line" && "$runner_build_line" -lt "$up_line" && "$up_line" -lt "$backend_wait_line" && "$backend_wait_line" -lt "$a3s_cache_line" && "$a3s_cache_line" -lt "$import_line" && "$import_line" -lt "$logs_line" ]] || fail "Expected banner -> validation -> down -> runner image build -> detached up -> backend readiness -> A3S image cache -> import -> logs order"
+[[ "$banner_line" -lt "$validation_line" && "$validation_line" -lt "$down_line" && "$down_line" -lt "$runner_build_line" && "$runner_build_line" -lt "$up_line" && "$up_line" -lt "$backend_wait_line" && "$backend_wait_line" -lt "$joern_image_line" && "$joern_image_line" -lt "$a3s_cache_line" && "$a3s_cache_line" -lt "$import_line" && "$import_line" -lt "$logs_line" ]] || fail "Expected banner -> validation -> down -> runner image build -> detached up -> backend readiness -> Joern image startup -> A3S image cache -> import -> logs order"
 
 podman_word="podman"
 podman_compose_cmd="${podman_word} compose"
@@ -411,7 +451,7 @@ assert_contains "$podman_out" "Container runtime: podman"
 assert_contains "$podman_out" "podman build --file $podman_dir/docker/opengrep-runner.Dockerfile --target opengrep-runner"
 assert_contains "$podman_out" "--tag argus/opengrep-runner-local:latest"
 assert_contains "$podman_out" "podman build --file $podman_dir/docker/backend.Dockerfile --target runtime-plain"
-assert_contains "$podman_out" "--build-arg TARGETARCH=amd64"
+assert_contains "$podman_out" "--platform linux/amd64"
 assert_not_contains "$podman_out" "--build-arg UV_IMAGE="
 assert_not_contains "$podman_out" "--build-arg DOCKER_CLI_IMAGE="
 assert_contains "$podman_out" "--tag argus/backend-local:latest"
@@ -433,6 +473,12 @@ assert_contains "$podman_out" "Argus_PODMAN_BIN=podman"
 assert_contains "$podman_out" "CONTAINER_HOST=unix:///run/podman/podman.sock"
 assert_contains "$podman_out" "CONTAINER_CLI=podman"
 assert_contains "$podman_out" "RUNNER_PREFLIGHT_STRICT=false"
+assert_contains "$podman_out" "SCANNER_JOERN_IMAGE=ghcr.nju.edu.cn/joernio/joern:nightly"
+assert_contains "$podman_out" "Ensuring Joern scanner image container starts (Podman mode): ghcr.nju.edu.cn/joernio/joern:nightly"
+assert_contains "$podman_out" "podman image inspect ghcr.nju.edu.cn/joernio/joern:nightly"
+assert_contains "$podman_out" "podman pull ghcr.nju.edu.cn/joernio/joern:nightly"
+assert_contains "$podman_out" "podman run --rm --network none ghcr.nju.edu.cn/joernio/joern:nightly"
+assert_contains "$podman_out" "joern-parse"
 assert_contains "$podman_out" "/run/user/"
 assert_contains "$podman_out" "/podman/podman.sock:/run/podman/podman.sock"
 assert_contains "$podman_out" "argus_scan_workspace"
@@ -498,9 +544,8 @@ podman_shutdown_out="$podman_dir/podman-shutdown.out"
 assert_contains "$podman_shutdown_out" "runtime=podman"
 assert_contains "$podman_shutdown_out" "Mode=full under Podman: preserving Podman volumes and images"
 for podman_container in argus-frontend argus-backend argus-redis argus-db; do
-  assert_contains "$podman_shutdown_out" "podman inspect --format {{ index .Config.Labels \"io.argus.project\" }} {{ index .Config.Labels \"io.argus.runtime\" }} $podman_container"
   assert_contains "$podman_shutdown_out" "podman stop $podman_container"
-  assert_contains "$podman_shutdown_out" "podman rm $podman_container"
+  assert_contains "$podman_shutdown_out" "podman rm -f $podman_container"
 done
 assert_not_contains "$podman_shutdown_out" "argus-*"
 assert_not_contains "$podman_shutdown_out" "$podman_compose_cmd"
@@ -509,6 +554,24 @@ assert_not_contains "$podman_shutdown_out" "$podman_image_rm_cmd"
 assert_not_contains "$podman_shutdown_out" "$podman_rmi_cmd"
 assert_not_contains "$podman_shutdown_out" "$podman_prune_cmd"
 assert_not_contains "$podman_shutdown_out" "$podman_rm_volume_flag_cmd"
+
+shutdown_fake_dir="$(new_fixture shutdown-fake-curl)"
+write_valid_config "$shutdown_fake_dir"
+shutdown_fake_bin="$(install_fake_curl_for_shutdown "$shutdown_fake_dir")"
+shutdown_fake_log="$shutdown_fake_dir/fake-curl.log"
+shutdown_fake_out="$shutdown_fake_dir/shutdown-fake.out"
+( cd "$shutdown_fake_dir" && PATH="$shutdown_fake_bin:$PATH" FAKE_CURL_LOG="$shutdown_fake_log" ./argus-shutdown.sh --runtime docker --dry-run --hard ) >"$shutdown_fake_out" 2>&1
+assert_contains "$shutdown_fake_out" "Step 1: Force-cancel all running scans"
+assert_contains "$shutdown_fake_out" "Force-cancelling opengrep scan task: opengrep-running"
+assert_contains "$shutdown_fake_out" "Force-cancelling codeql scan task: codeql-running"
+assert_contains "$shutdown_fake_out" "Force-cancelling joern scan task: joern-running"
+assert_contains "$shutdown_fake_out" "Force-cancelling intelligent scan task: intel-running"
+assert_contains "$shutdown_fake_out" "POST /api/v1/static-tasks/tasks/opengrep-running/interrupt"
+assert_contains "$shutdown_fake_out" "POST /api/v1/static-tasks/codeql/tasks/codeql-running/interrupt"
+assert_contains "$shutdown_fake_out" "POST /api/v1/static-tasks/joern/tasks/joern-running/interrupt"
+assert_contains "$shutdown_fake_out" "POST /api/v1/intelligent-tasks/intel-running/cancel"
+assert_contains "$shutdown_fake_log" "GET http://127.0.0.1:18000/api/v1/static-tasks/joern/tasks?status=running"
+assert_contains "$shutdown_fake_log" "GET http://127.0.0.1:18000/api/v1/intelligent-tasks?limit=200"
 
 # Explicit default matches no-mode safety, even when legacy prune env is true.
 default_dir="$(new_fixture explicit-default)"
@@ -563,6 +626,7 @@ assert_contains "$wait_out" "build opengrep-runner"
 assert_not_contains "$wait_out" "build opengrep-runner codeql-runner"
 assert_contains "$wait_out" "up -d --build"
 assert_contains "$wait_out" "curl -fsS http://127.0.0.1:18000/health"
+assert_contains "$wait_out" "Ensuring backend Podman can start Joern image: ghcr.nju.edu.cn/joernio/joern:nightly"
 assert_contains "$wait_out" "Ensuring backend A3S Box cache has OpenGrep image: argus/opengrep-runner-local:latest"
 assert_contains "$wait_out" "curl -fsS -X POST"
 assert_contains "$wait_out" "curl -fsS http://127.0.0.1:13099"
@@ -593,6 +657,7 @@ assert_contains "$wait_aggressive_out" "build opengrep-runner"
 assert_not_contains "$wait_aggressive_out" "build opengrep-runner codeql-runner"
 assert_contains "$wait_aggressive_out" "up -d --build"
 assert_contains "$wait_aggressive_out" "curl -fsS http://127.0.0.1:18000/health"
+assert_contains "$wait_aggressive_out" "Ensuring backend Podman can start Joern image: ghcr.nju.edu.cn/joernio/joern:nightly"
 assert_contains "$wait_aggressive_out" "Ensuring backend A3S Box cache has OpenGrep image: argus/opengrep-runner-local:latest"
 assert_contains "$wait_aggressive_out" "curl -fsS -X POST"
 assert_contains "$wait_aggressive_out" "curl -fsS http://127.0.0.1:13100"
@@ -653,7 +718,7 @@ assert_contains "$ROOT_DIR/frontend/vite.config.ts" "http://127.0.0.1:18000"
 assert_contains "$compose_render_out" "VITE_API_TARGET: http://host.docker.internal:18000"
 assert_not_contains "$compose_render_out" "VITE_API_TARGET: http://backend:8000"
 assert_contains "$compose_render_out" "FRONTEND_NPM_REGISTRY: https://registry.npmmirror.com"
-assert_contains "$compose_render_out" "PNPM_VERSION: \"10.11.0\""
+assert_contains "$compose_render_out" "PNPM_VERSION: 10.11.0"
 assert_not_contains "$compose_render_out" "UV_IMAGE:"
 if grep -Eq '^[[:space:]]+NPM_REGISTRY:' "$compose_render_out"; then
   fail "compose backend/frontend build args must not include retired NPM_REGISTRY"
@@ -713,7 +778,7 @@ docker compose \
   --project-directory "$ROOT_DIR" \
   --file "$ROOT_DIR/scripts/release-templates/docker-compose.release-slim.yml" \
   config >"$release_compose_render_out"
-assert_contains "$release_compose_render_out" "SCANNER_OPENGREP_IMAGE: ghcr.io/happytraveller-alone/argus-opengrep-runner:latest"
+assert_contains "$release_compose_render_out" "SCANNER_OPENGREP_IMAGE: ghcr.nju.edu.cn/happytraveller-alone/argus-opengrep-runner:latest"
 assert_contains "$release_compose_render_out" "source: /dev/kvm"
 assert_contains "$release_compose_render_out" "target: /dev/kvm"
 assert_contains "$release_compose_render_out" "source: /dev/vhost-vsock"

@@ -20,7 +20,7 @@ services:
       - argus-network
 
   backend:
-    image: ${BACKEND_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${Argus_IMAGE_NAMESPACE:-happytraveller-alone}/argus-backend:${Argus_IMAGE_TAG:-latest}}
+    image: ${BACKEND_IMAGE:-${GHCR_REGISTRY:-ghcr.nju.edu.cn}/${Argus_IMAGE_NAMESPACE:-happytraveller-alone}/argus-backend:${Argus_IMAGE_TAG:-latest}}
     restart: unless-stopped
     working_dir: /app
     env_file:
@@ -45,7 +45,7 @@ services:
       DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/${POSTGRES_DB:-Argus}
       ASYNCPG_DSN: postgresql://postgres:postgres@db:5432/${POSTGRES_DB:-Argus}
       REDIS_URL: redis://redis:6379/0
-      GHCR_REGISTRY: ${GHCR_REGISTRY:-ghcr.io}
+      GHCR_REGISTRY: ${GHCR_REGISTRY:-ghcr.nju.edu.cn}
       Argus_IMAGE_NAMESPACE: ${Argus_IMAGE_NAMESPACE:-happytraveller-alone}
       Argus_IMAGE_TAG: ${Argus_IMAGE_TAG:-latest}
       RESET_STATIC_SCAN_TABLES_ON_DEPLOY: "false"
@@ -81,9 +81,9 @@ services:
       BACKEND_PYPI_INDEX_PRIMARY: ${BACKEND_PYPI_INDEX_PRIMARY:-}
       BACKEND_PYPI_INDEX_FALLBACK: ${BACKEND_PYPI_INDEX_FALLBACK:-}
       BACKEND_PYPI_INDEX_CANDIDATES: ${BACKEND_PYPI_INDEX_CANDIDATES:-https://mirrors.aliyun.com/pypi/simple/,https://pypi.tuna.tsinghua.edu.cn/simple,https://pypi.mirrors.ustc.edu.cn/simple/,https://mirrors.cloud.tencent.com/pypi/simple/,https://mirrors.huaweicloud.com/repository/pypi/simple/,https://mirrors.bfsu.edu.cn/pypi/web/simple/,https://pypi.org/simple}
-      SCANNER_OPENGREP_IMAGE: ${SCANNER_OPENGREP_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${Argus_IMAGE_NAMESPACE:-happytraveller-alone}/argus-opengrep-runner:${Argus_IMAGE_TAG:-latest}}
-      SCANNER_JOERN_IMAGE: ${SCANNER_JOERN_IMAGE:-ghcr.io/joernio/joern:nightly}
-      SCANNER_OPENGREP_A3S_BOX_IMAGE: ${SCANNER_OPENGREP_A3S_BOX_IMAGE:-${SCANNER_OPENGREP_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${Argus_IMAGE_NAMESPACE:-happytraveller-alone}/argus-opengrep-runner:${Argus_IMAGE_TAG:-latest}}}
+      SCANNER_OPENGREP_IMAGE: ${SCANNER_OPENGREP_IMAGE:-${GHCR_REGISTRY:-ghcr.nju.edu.cn}/${Argus_IMAGE_NAMESPACE:-happytraveller-alone}/argus-opengrep-runner:${Argus_IMAGE_TAG:-latest}}
+      SCANNER_JOERN_IMAGE: ${SCANNER_JOERN_IMAGE:-ghcr.nju.edu.cn/joernio/joern:nightly}
+      SCANNER_OPENGREP_A3S_BOX_IMAGE: ${SCANNER_OPENGREP_A3S_BOX_IMAGE:-${SCANNER_OPENGREP_IMAGE:-${GHCR_REGISTRY:-ghcr.nju.edu.cn}/${Argus_IMAGE_NAMESPACE:-happytraveller-alone}/argus-opengrep-runner:${Argus_IMAGE_TAG:-latest}}}
       GIT_MIRROR_ENABLED: ${GIT_MIRROR_ENABLED:-true}
       GIT_MIRROR_PREFIX: ${GIT_MIRROR_PREFIX:-https://gh-proxy.org}
       GIT_MIRROR_PREFIXES: ${GIT_MIRROR_PREFIXES:-https://gh-proxy.org,https://v6.gh-proxy.org}
@@ -119,7 +119,7 @@ services:
       - argus-network
 
   frontend:
-    image: ${FRONTEND_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${Argus_IMAGE_NAMESPACE:-happytraveller-alone}/argus-frontend:${Argus_IMAGE_TAG:-latest}}
+    image: ${FRONTEND_IMAGE:-${GHCR_REGISTRY:-ghcr.nju.edu.cn}/${Argus_IMAGE_NAMESPACE:-happytraveller-alone}/argus-frontend:${Argus_IMAGE_TAG:-latest}}
     restart: unless-stopped
     ports:
       - "${Argus_FRONTEND_PORT:-13000}:80"

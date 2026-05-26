@@ -46,6 +46,7 @@ PODMAN_POSTGRES_IMAGE="${ARGUS_PODMAN_POSTGRES_IMAGE:-${DOCKERHUB_LIBRARY_MIRROR
 PODMAN_REDIS_IMAGE="${ARGUS_PODMAN_REDIS_IMAGE:-${DOCKERHUB_LIBRARY_MIRROR:-m.daocloud.io/docker.io/library}/redis:8.6.2-alpine3.23}"
 PODMAN_TARGETARCH="${ARGUS_PODMAN_TARGETARCH:-amd64}"
 PODMAN_AUDIT_SANDBOX_IMAGE="${ARGUS_PODMAN_AUDIT_SANDBOX_IMAGE:-argus/audit-sandbox:latest}"
+DEFAULT_JOERN_IMAGE="ghcr.io/joernio/joern:nightly"
 PODMAN_CONTAINER_SOCKET="/run/podman/podman.sock"
 PODMAN_SEQUENTIAL_BUILD="${ARGUS_SEQUENTIAL_BUILD:-false}"
 PODMAN_BUILD_LOG_DIR="${TMPDIR:-/tmp}"
@@ -567,6 +568,10 @@ ensure_root_env_keys() {
     "SCANNER_OPENGREP_IMAGE" \
     "argus/opengrep-runner-local:latest" \
     "Local lowercase OCI tag for Docker and A3S Box OpenGrep scans."
+  ensure_env_key_default \
+    "SCANNER_JOERN_IMAGE" \
+    "$DEFAULT_JOERN_IMAGE" \
+    "Joern scanner image prepared during bootstrap and used by per-task Joern scan containers."
   normalize_legacy_opengrep_image_env "SCANNER_OPENGREP_IMAGE"
   normalize_legacy_opengrep_image_env "SCANNER_OPENGREP_A3S_BOX_IMAGE"
 }
@@ -1069,7 +1074,9 @@ podman_build_codeql_runner_image() {
   local cache_dir="$ROOT_DIR/docker/cache"
   local codeql_version="${CODEQL_VERSION:-2.16.1}"
   local gradle_version="${GRADLE_VERSION:-8.7}"
-  if [[ ! -f "$cache_dir/codeql-bundle-linux64.tar.gz" ]] || [[ ! -f "$cache_dir/gradle-${gradle_version}-bin.zip" ]]; then
+  if "$DRY_RUN" || is_truthy "$STUB_DOCKER"; then
+    log "Dry-run/stub: skipping CodeQL cache artifact download."
+  elif [[ ! -f "$cache_dir/codeql-bundle-linux64.tar.gz" ]] || [[ ! -f "$cache_dir/gradle-${gradle_version}-bin.zip" ]]; then
     log "Downloading CodeQL build cache artifacts..."
     bash "$ROOT_DIR/docker/codeql-cache-download.sh"
   fi
@@ -1318,7 +1325,8 @@ podman_run_backend() {
     -e "SCAN_WORKSPACE_ROOT=$scan_workspace_host" \
     -e "RUNNER_PREFLIGHT_STRICT=${RUNNER_PREFLIGHT_STRICT:-false}" \
     -e "CONTAINER_CLI=podman" \
-    -e "SCANNER_CODEQL_IMAGE=${SCANNER_CODEQL_IMAGE:-localhost/argus/codeql-runner:latest}" \
+    -e "SCANNER_CODEQL_IMAGE=$(codeql_runner_image_ref)" \
+    -e "SCANNER_JOERN_IMAGE=$(joern_runner_image_ref)" \
     -e "AUDIT_SANDBOX_IMAGE=${PODMAN_AUDIT_SANDBOX_IMAGE}" \
     -v argus_backend_uploads:/app/uploads \
     -v argus_backend_runtime_data:/app/data/runtime \
@@ -1368,6 +1376,25 @@ podman_start_frontend_stack() {
   podman_run_frontend
 }
 
+podman_ensure_joern_image_container_starts() {
+  local image
+  image="$(joern_runner_image_ref)"
+  log "Ensuring Joern scanner image container starts (Podman mode): $image"
+  if "$DRY_RUN" || is_truthy "$STUB_DOCKER"; then
+    run_cmd podman image inspect "$image"
+    run_cmd podman pull "$image"
+    run_cmd podman run --rm --network none "$image" /bin/sh -lc 'command -v joern >/dev/null && command -v joern-parse >/dev/null'
+    return 0
+  fi
+
+  if podman image inspect "$image" >/dev/null 2>&1; then
+    log "Joern scanner image already available: $image"
+  else
+    run_cmd podman pull "$image"
+  fi
+  run_cmd podman run --rm --network none "$image" /bin/sh -lc 'command -v joern >/dev/null && command -v joern-parse >/dev/null'
+}
+
 podman_load_a3s_box_opengrep_image() {
   local image
   image="$(opengrep_runner_image_ref)"
@@ -1414,6 +1441,23 @@ build_runner_images() {
   run_cmd docker compose --project-directory "$ROOT_DIR" --file "$COMPOSE_FILE" --project-name "$PROJECT_NAME" build opengrep-runner
 }
 
+ensure_joern_image_container_starts() {
+  local image
+  image="$(joern_runner_image_ref)"
+  log "Ensuring backend Podman can start Joern image: $image"
+  run_cmd docker compose --project-directory "$ROOT_DIR" --file "$COMPOSE_FILE" --project-name "$PROJECT_NAME" \
+    exec -T backend sh -lc '
+      set -eu
+      image="$1"
+      if podman image inspect "$image" >/dev/null 2>&1; then
+        echo "Joern scanner image already available: $image"
+      else
+        podman pull "$image"
+      fi
+      podman run --rm --network none "$image" /bin/sh -lc '"'"'command -v joern >/dev/null && command -v joern-parse >/dev/null'"'"'
+    ' sh "$image"
+}
+
 normalize_opengrep_image_ref_value() {
   local image="$1"
   case "$image" in
@@ -1436,6 +1480,14 @@ codeql_runner_image_ref() {
   image="${SCANNER_CODEQL_IMAGE:-}"
   [[ -z "$image" ]] && image="$(read_env_value SCANNER_CODEQL_IMAGE)"
   [[ -z "$image" ]] && image="localhost/argus/codeql-runner:latest"
+  printf '%s' "$image"
+}
+
+joern_runner_image_ref() {
+  local image
+  image="${SCANNER_JOERN_IMAGE:-}"
+  [[ -z "$image" ]] && image="$(read_env_value SCANNER_JOERN_IMAGE)"
+  [[ -z "$image" ]] && image="$DEFAULT_JOERN_IMAGE"
   printf '%s' "$image"
 }
 
@@ -1803,6 +1855,7 @@ start_stack() {
   build_runner_images
   compose_up_backend_detached
   wait_for_backend
+  ensure_joern_image_container_starts
   load_a3s_box_opengrep_image
   import_backend_env
   compose_up_frontend_detached
@@ -1819,6 +1872,7 @@ podman_start_stack() {
   log "Starting Argus via Podman image/container mode."
   ensure_podman_rootless_socket_env
   podman_build_local_images
+  podman_ensure_joern_image_container_starts
   podman_start_backend_stack
   wait_for_backend
   podman_load_a3s_box_opengrep_image

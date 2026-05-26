@@ -290,9 +290,15 @@ pub async fn run_pipeline_with_config(
     }
     .await;
 
-    // ── CodeGraph shutdown (always runs, even on stage error) ────────────────
-    // Per plan §Step 2.6: explicit lifecycle. PodmanSession::Drop remains as a
-    // last-resort safety net for panic paths.
+    // ── CodeGraph shutdown (always runs on stage success/error) ──────────────
+    // Per plan §Step 2.6: explicit lifecycle. PodmanSession::Drop is the
+    // safety net for panic AND task cancellation paths — if this function's
+    // future is dropped between init and this point, the inner async block is
+    // dropped first, `code_intel_client` is then dropped, and the PodmanSession
+    // inside it detaches a `tokio::spawn` that calls `podman rm -f` (see
+    // podman.rs:Drop). That spawn requires a live runtime; on full-runtime
+    // shutdown the container may leak — operationally acceptable for MVP given
+    // standalone container cleanup via `podman ps -a --filter label=argus-codegraph`.
     if let Some(client) = code_intel_client.as_ref() {
         if let Err(err) = client.shutdown().await {
             tracing::warn!(error = %err, "codegraph shutdown failed");

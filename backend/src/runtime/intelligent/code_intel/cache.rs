@@ -153,9 +153,10 @@ mod tests {
     use std::io::Write;
 
     fn temp_cache() -> (CodeGraphCache, tempfile::TempDir) {
+        // Construct CodeGraphCache directly with an isolated tempdir-rooted path
+        // — avoids mutating ARGUS_DATA_DIR which would race with parallel cargo
+        // test runners (architect review #4 reservation).
         let dir = tempfile::tempdir().expect("tempdir");
-        // Point ARGUS_DATA_DIR at the temp dir root; cache subdir is created by new().
-        std::env::set_var("ARGUS_DATA_DIR", dir.path());
         let cache = CodeGraphCache {
             root: dir.path().join("codegraph_cache"),
         };

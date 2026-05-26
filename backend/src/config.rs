@@ -320,7 +320,7 @@ impl AppConfig {
             scanner_opengrep_image: "argus/opengrep-runner:test".to_string(),
             scanner_opengrep_a3s_box_image: "argus/opengrep-runner:test".to_string(),
             scanner_codeql_image: "argus/codeql-runner:test".to_string(),
-            scanner_joern_image: "ghcr.io/joernio/joern:nightly".to_string(),
+            scanner_joern_image: "ghcr.nju.edu.cn/joernio/joern:nightly".to_string(),
             codeql_threads: 0,
             codeql_ram_mb: 6144,
             codeql_max_build_inference_rounds: 15,
@@ -485,7 +485,10 @@ mod tests {
     fn joern_config_defaults_are_deterministic() {
         let config = AppConfig::for_tests();
 
-        assert_eq!(config.scanner_joern_image, "ghcr.io/joernio/joern:nightly");
+        assert_eq!(
+            config.scanner_joern_image,
+            "ghcr.nju.edu.cn/joernio/joern:nightly"
+        );
         assert_eq!(config.joern_scan_timeout_seconds, 1800);
         assert_eq!(config.joern_results_json_limit_bytes, 268_435_456);
         assert_eq!(config.joern_stdout_limit_bytes, 1_048_576);

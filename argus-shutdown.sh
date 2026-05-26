@@ -185,66 +185,138 @@ load_env() {
 }
 
 # ---------------------------------------------------------------------------
-# STEP 1: Interrupt running scans (best-effort)
+# STEP 1: Force-cancel running scans (best-effort)
 # ---------------------------------------------------------------------------
+extract_task_ids() {
+  grep -o '"taskId":"[^"]*"\|"task_id":"[^"]*"\|"id":"[^"]*"' \
+    | sed 's/"taskId":"//;s/"task_id":"//;s/"id":"//;s/"//' 2>/dev/null || true
+}
+
+extract_cancellable_intelligent_task_ids() {
+  python3 -c '
+import json
+import sys
+
+try:
+    payload = json.load(sys.stdin)
+except Exception:
+    raise SystemExit(0)
+
+if isinstance(payload, dict):
+    payload = payload.get("items") or payload.get("tasks") or payload.get("data") or []
+
+for item in payload if isinstance(payload, list) else []:
+    if not isinstance(item, dict):
+        continue
+    status = str(item.get("status") or "").lower()
+    if status not in {"pending", "running"}:
+        continue
+    task_id = item.get("taskId") or item.get("task_id") or item.get("id")
+    if task_id:
+        print(task_id)
+' 2>/dev/null || true
+}
+
+interrupt_running_scan_engine() {
+  local engine="$1"
+  local list_path="$2"
+  local interrupt_path_template="$3"
+  local base_url="$4"
+  local response ids task_id interrupt_path
+
+  response=$(curl -sf "${base_url}${list_path}" 2>/dev/null) || response="[]"
+  ids=$(printf '%s' "$response" | extract_task_ids)
+
+  if [[ -z "$ids" ]]; then
+    log "  No running ${engine} scan tasks found."
+    return 0
+  fi
+
+  for task_id in $ids; do
+    interrupt_path="${interrupt_path_template//\{task_id\}/$task_id}"
+    log "  Force-cancelling ${engine} scan task: $task_id"
+    if [[ "$DRY_RUN" == true ]]; then
+      run_cmd "POST ${interrupt_path}" \
+        curl -sf -X POST "${base_url}${interrupt_path}" \
+          -H 'Content-Type: application/json'
+    else
+      run_cmd "POST ${interrupt_path}" \
+        curl -sf -X POST "${base_url}${interrupt_path}" \
+          -H 'Content-Type: application/json' >/dev/null 2>&1 \
+        || warn "Failed to cancel ${engine} scan task $task_id (continuing)"
+    fi
+  done
+}
+
+interrupt_intelligent_scan_tasks() {
+  local base_url="$1"
+  local response ids task_id interrupt_path
+
+  response=$(curl -sf "${base_url}/api/v1/intelligent-tasks?limit=200" 2>/dev/null) || response="[]"
+  ids=$(printf '%s' "$response" | extract_cancellable_intelligent_task_ids)
+
+  if [[ -z "$ids" ]]; then
+    log "  No running intelligent scan tasks found."
+    return 0
+  fi
+
+  for task_id in $ids; do
+    interrupt_path="/api/v1/intelligent-tasks/${task_id}/cancel"
+    log "  Force-cancelling intelligent scan task: $task_id"
+    if [[ "$DRY_RUN" == true ]]; then
+      run_cmd "POST ${interrupt_path}" \
+        curl -sf -X POST "${base_url}${interrupt_path}" \
+          -H 'Content-Type: application/json'
+    else
+      run_cmd "POST ${interrupt_path}" \
+        curl -sf -X POST "${base_url}${interrupt_path}" \
+          -H 'Content-Type: application/json' >/dev/null 2>&1 \
+        || warn "Failed to cancel intelligent scan task $task_id (continuing)"
+    fi
+  done
+}
+
 step1_interrupt_scans() {
-  log "Step 1: Interrupt running scans (best-effort)"
+  log "Step 1: Force-cancel all running scans (best-effort)"
 
   local backend_port="${Argus_BACKEND_PORT:-${BACKEND_PORT:-18000}}"
   local base_url="http://127.0.0.1:${backend_port}"
 
-  # Health check — best-effort, must not abort script
+  # Health check — best-effort, must not abort script.
   set +e
   local health_ok=false
   if curl -sf "${base_url}/health" >/dev/null 2>&1; then
     health_ok=true
   fi
-  set -e
 
   if [[ "$health_ok" == false ]]; then
-    warn "backend unreachable at ${base_url}; skipping task interrupts. Orphan sandboxes may persist; restart backend to reconcile."
+    set -e
+    warn "backend unreachable at ${base_url}; skipping task cancellation. Orphan scan containers may persist; restart backend to reconcile."
     return 0
   fi
 
   log "  Backend reachable at ${base_url}"
 
-  # Enumerate running opengrep tasks via GET /api/v1/static-tasks/tasks?status=running
-  # Per AS-3: no Postgres task tables; tasks are in-memory in backend — use the list API.
-  # Per AS-4: interrupting a task via the API calls cancel_*_scan which destroys sandbox.
-
-  set +e
-
-  # --- opengrep running tasks ---
-  local og_response
-  og_response=$(curl -sf "${base_url}/api/v1/static-tasks/tasks?status=running" 2>/dev/null) || og_response="[]"
-  local og_ids
-  og_ids=$(printf '%s' "$og_response" | grep -o '"taskId":"[^"]*"' | sed 's/"taskId":"//;s/"//' 2>/dev/null || true)
-
-  for task_id in $og_ids; do
-    log "  Interrupting opengrep task: $task_id"
-    run_cmd "POST /api/v1/static-tasks/tasks/${task_id}/interrupt" \
-      curl -sf -X POST "${base_url}/api/v1/static-tasks/tasks/${task_id}/interrupt" \
-        -H 'Content-Type: application/json' >/dev/null 2>&1 \
-      || warn "Failed to interrupt opengrep task $task_id (continuing)"
-  done
-
-  # --- codeql running tasks ---
-  local cq_response
-  cq_response=$(curl -sf "${base_url}/api/v1/static-tasks/codeql/tasks?status=running" 2>/dev/null) || cq_response="[]"
-  local cq_ids
-  cq_ids=$(printf '%s' "$cq_response" | grep -o '"taskId":"[^"]*"' | sed 's/"taskId":"//;s/"//' 2>/dev/null || true)
-
-  for task_id in $cq_ids; do
-    log "  Interrupting codeql task: $task_id"
-    run_cmd "POST /api/v1/static-tasks/codeql/tasks/${task_id}/interrupt" \
-      curl -sf -X POST "${base_url}/api/v1/static-tasks/codeql/tasks/${task_id}/interrupt" \
-        -H 'Content-Type: application/json' >/dev/null 2>&1 \
-      || warn "Failed to interrupt codeql task $task_id (continuing)"
-  done
+  interrupt_running_scan_engine \
+    "opengrep" \
+    "/api/v1/static-tasks/tasks?status=running" \
+    "/api/v1/static-tasks/tasks/{task_id}/interrupt" \
+    "$base_url"
+  interrupt_running_scan_engine \
+    "codeql" \
+    "/api/v1/static-tasks/codeql/tasks?status=running" \
+    "/api/v1/static-tasks/codeql/tasks/{task_id}/interrupt" \
+    "$base_url"
+  interrupt_running_scan_engine \
+    "joern" \
+    "/api/v1/static-tasks/joern/tasks?status=running" \
+    "/api/v1/static-tasks/joern/tasks/{task_id}/interrupt" \
+    "$base_url"
+  interrupt_intelligent_scan_tasks "$base_url"
 
   set -e
 
-  log "  Step 1 complete (sandbox cleanup handled by cancel_*_scan per AS-4)"
+  log "  Step 1 complete (running scan cancellation requested before container shutdown)"
 }
 
 # ---------------------------------------------------------------------------

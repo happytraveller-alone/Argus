@@ -2037,7 +2037,7 @@ esac
 
         let result = execute(RunnerSpec {
             scanner_type: "joern".to_string(),
-            image: "ghcr.io/joernio/joern:nightly".to_string(),
+            image: "ghcr.nju.edu.cn/joernio/joern:nightly".to_string(),
             container_runtime: ContainerRuntime::Podman,
             workspace_dir: workspace_dir.display().to_string(),
             command: vec!["/bin/sh".to_string(), "/scan/workspace/run.sh".to_string()],

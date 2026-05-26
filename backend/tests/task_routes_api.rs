@@ -668,7 +668,7 @@ async fn joern_static_task_routes_are_engine_scoped_and_do_not_fall_through_to_o
     let _workspace_volume = EnvVarGuard::set("SCAN_WORKSPACE_VOLUME", scan_root.to_str().unwrap());
 
     let mut config = isolated_test_config("joern-route-skeleton");
-    config.scanner_joern_image = "ghcr.io/joernio/joern:test".to_string();
+    config.scanner_joern_image = "ghcr.nju.edu.cn/joernio/joern:test".to_string();
     let state = AppState::from_config(config)
         .await
         .expect("state should build");
@@ -795,7 +795,7 @@ async fn joern_static_task_routes_are_engine_scoped_and_do_not_fall_through_to_o
     assert!(podman_logged.contains(":/scan/source:ro"));
     assert!(podman_logged.contains(":/scan/joern-queries:ro"));
     assert!(podman_logged.contains(":/scan/output:rw"));
-    assert!(podman_logged.contains("ghcr.io/joernio/joern:test /bin/sh"));
+    assert!(podman_logged.contains("ghcr.nju.edu.cn/joernio/joern:test /bin/sh"));
     assert!(podman_logged.contains("/scan/workspace/argus-joern-wrapper.sh"));
 }
 

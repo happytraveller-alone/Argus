@@ -32,14 +32,23 @@ pub use types::{CallChain, CallNode, CodeContext, SymbolMatch};
 /// via `Arc<dyn CodeIntelligence>`.
 #[async_trait]
 pub trait CodeIntelligence: Send + Sync {
-    /// Find all functions/methods that call the given symbol, up to `depth` hops.
+    /// Find functions/methods that call the given symbol.
     ///
-    /// Depth is capped at 5 inside the implementation to prevent token explosion.
+    /// MVP IMPLEMENTATION NOTE: the codegraph backend's `callers` subcommand
+    /// returns DIRECT callers only. The `depth` parameter is currently advisory
+    /// — the codegraph-backed impl returns depth=1 results regardless of the
+    /// requested depth, logging a debug message when `depth > 1`. For multi-hop
+    /// reachability use [`CodeIntelligence::get_call_chain`] instead, which
+    /// iterates internally up to `max_hops`. Future backends MAY implement
+    /// genuine multi-hop traversal here; trait callers should be prepared for
+    /// either behavior. Depth is capped at 5 to prevent token explosion.
     async fn get_callers(&self, symbol: &str, depth: u32) -> Result<Vec<CallNode>>;
 
-    /// Find all functions/methods that the given symbol calls, up to `depth` hops.
+    /// Find functions/methods that the given symbol calls.
     ///
-    /// Depth is capped at 5 inside the implementation.
+    /// Same MVP depth limitation as [`CodeIntelligence::get_callers`] — direct
+    /// edges only at depth=1, deeper depths logged but not honored. Use
+    /// [`CodeIntelligence::get_call_chain`] for multi-hop traversal.
     async fn get_callees(&self, symbol: &str, depth: u32) -> Result<Vec<CallNode>>;
 
     /// Return the function body, imports, and related symbols at a file:line position.

@@ -18,7 +18,7 @@ use crate::{
 pub const JOERN_ENGINE: &str = "joern";
 const JOERN_RULE_SOURCE_KINDS: &[&str] = &["internal_query"];
 
-pub const DEFAULT_JOERN_IMAGE: &str = "ghcr.io/joernio/joern:nightly";
+pub const DEFAULT_JOERN_IMAGE: &str = "ghcr.nju.edu.cn/joernio/joern:nightly";
 pub const SUMMARY_REL_PATH: &str = "output/summary.json";
 pub const GRAPH_PROOF_REL_PATH: &str = "output/graph-proof.json";
 pub const FINDINGS_REL_PATH: &str = "output/findings.json";
@@ -63,7 +63,7 @@ pub struct JoernDocsEvidence {
 
 pub fn docs_evidence() -> JoernDocsEvidence {
     JoernDocsEvidence {
-        image_source: "https://github.com/joernio/joern/pkgs/container/joern documents docker pull ghcr.io/joernio/joern:nightly",
+        image_source: "https://github.com/joernio/joern/pkgs/container/joern documents docker pull ghcr.nju.edu.cn/joernio/joern:nightly",
         parse_command_source: "https://docs.joern.io/export/ documents joern-parse /src/directory before joern-export",
         script_output_source: "https://docs.joern.io/interpreter/ documents joern --script with --param and the #> file-output operator",
         scan_result_source: "https://docs.joern.io/scan/ documents Joern Scan generating a CPG, executing queries, and printing Result: score/title/file/line/function",
@@ -553,7 +553,7 @@ mod tests {
         let evidence = docs_evidence();
         assert!(evidence
             .image_source
-            .contains("ghcr.io/joernio/joern:nightly"));
+            .contains("ghcr.nju.edu.cn/joernio/joern:nightly"));
         assert!(evidence.parse_command_source.contains("joern-parse"));
         assert!(evidence.script_output_source.contains("--script"));
         assert!(evidence.scan_result_source.contains("Result:"));

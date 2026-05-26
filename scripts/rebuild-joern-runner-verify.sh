@@ -2,7 +2,7 @@
 set -Eeuo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-IMAGE="${SCANNER_JOERN_IMAGE:-ghcr.io/joernio/joern:nightly}"
+IMAGE="${SCANNER_JOERN_IMAGE:-ghcr.nju.edu.cn/joernio/joern:nightly}"
 FIXTURE_DIR="$ROOT_DIR/backend/tests/fixtures/joern/libplist-cve-2017-6439"
 OUTPUT_DIR=""
 NO_PULL=0
@@ -18,7 +18,7 @@ CVE-2017-6439 fixture and verify Argus-owned output artifacts.
 
 Options:
   --fixture DIR      fixture root with manifest.json and src/ (default: backend/tests/fixtures/joern/libplist-cve-2017-6439)
-  --image NAME       Joern image to pull/run (default: SCANNER_JOERN_IMAGE or ghcr.io/joernio/joern:nightly)
+  --image NAME       Joern image to pull/run (default: SCANNER_JOERN_IMAGE or ghcr.nju.edu.cn/joernio/joern:nightly)
   --output-dir DIR   output directory for summary.json, graph-proof.json, findings.json, joern.log
                      (default: .omx/reports/joern-image-verify-<timestamp>)
   --no-pull          skip podman pull and use an already-present local image

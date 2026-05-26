@@ -37,7 +37,7 @@
 
 ## GHCR 镜像命名
 
-- GHCR 镜像地址格式是 `ghcr.io/<GitHub用户或组织>/<image>:<tag>`。
+- GHCR 镜像地址格式是 `ghcr.nju.edu.cn/<GitHub用户或组织>/<image>:<tag>`。
 - `audittool` 是仓库名，不是 GHCR owner；默认镜像前缀使用当前仓库 owner `happytraveller-alone`。
 - `.github/workflows/docker-publish.yml` 统一处理 backend、frontend 和 OpenGrep runner 容器镜像的构建与发布；CodeQL 扫描走 a3s sandbox，不发布 CodeQL runner 容器。
 - OpenGrep runner 发布时显式使用 OCI image media types；本地 `runner-build` / `rebuild-opengrep-runner-verify.sh` 仍使用 Docker daemon 本地镜像路径验证运行能力。

@@ -44,7 +44,7 @@ on:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
-  GHCR_REGISTRY: ghcr.io
+  GHCR_REGISTRY: ghcr.nju.edu.cn
   GHCR_PACKAGE_VISIBILITY: public
   Argus_IMAGE_TAG: latest
 
@@ -175,7 +175,7 @@ jobs:
 
           selected_images = [item["image_name"] for item in selected]
           published_images = [
-              f"ghcr.io/{os.environ['REPOSITORY_OWNER']}/{image_name}:latest"
+              f"ghcr.nju.edu.cn/{os.environ['REPOSITORY_OWNER']}/{image_name}:latest"
               for image_name in selected_images
           ]
           summary = {
@@ -249,7 +249,7 @@ jobs:
         run: |
           set -euo pipefail
           if [ "${Argus_IMAGE_NAMESPACE}" != "${GITHUB_REPOSITORY_OWNER}" ] && { [ -z "${GHCR_USERNAME}" ] || [ -z "${GHCR_TOKEN}" ]; }; then
-            echo "::error::Publishing to ghcr.io/${Argus_IMAGE_NAMESPACE} from repository owner ${GITHUB_REPOSITORY_OWNER} requires GHCR_USERNAME and GHCR_TOKEN secrets."
+            echo "::error::Publishing to ghcr.nju.edu.cn/${Argus_IMAGE_NAMESPACE} from repository owner ${GITHUB_REPOSITORY_OWNER} requires GHCR_USERNAME and GHCR_TOKEN secrets."
             exit 1
           fi
 
@@ -356,7 +356,7 @@ jobs:
           IMAGE: ${{ env.GHCR_REGISTRY }}/${{ env.Argus_IMAGE_NAMESPACE }}/${{ matrix.image_name }}:${{ env.Argus_IMAGE_TAG }}
         run: |
           set -euo pipefail
-          docker logout ghcr.io || true
+          docker logout ghcr.nju.edu.cn || true
           for attempt in 1 2 3; do
             if docker manifest inspect "${IMAGE}" >/dev/null 2>&1; then
               exit 0
