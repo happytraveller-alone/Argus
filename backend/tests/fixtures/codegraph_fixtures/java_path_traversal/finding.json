@@ -8,5 +8,8 @@
   "description": "User-controlled path component concatenated onto /data/ without validation; reaches Files.readAllBytes via readFile.",
   "evidence": "new File(\"/data/\" + name)",
   "expected_reachable": true,
-  "expected_call_chain": ["serveFile", "readFile"]
+  "expected_call_chain": ["serveFile", "readFile"],
+  "expected_classification": "real",
+  "expected_confidence_source": "llm_inferred",
+  "expected_path_pattern": null
 }

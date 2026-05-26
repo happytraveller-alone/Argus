@@ -13,6 +13,7 @@
 
 pub mod cache;
 pub mod codegraph_client;
+pub mod path_classifier;
 pub mod protocol;
 pub mod staging;
 pub mod types;

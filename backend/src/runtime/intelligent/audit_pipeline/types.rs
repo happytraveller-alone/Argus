@@ -81,6 +81,52 @@ pub struct PocResult {
     pub reproduced: bool,
 }
 
+/// Dismissal classification category for an `AuditFinding`.
+///
+/// Phase 0 scope: written deterministically by `path_classifier` when a finding's
+/// single target file matches a known test/vendor path component. Phase 1 will
+/// extend writers to include `rule_matched` (SoT) and `llm_inferred` (Hunt Pass 2).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DismissalCategory {
+    Real,
+    Sanitized,
+    Test,
+    Vendor,
+}
+
+/// Provenance for a dismissal verdict — records WHICH evidence channel produced it.
+///
+/// Phase 0 emits only `PathPattern` (deterministic glob match). Phase 1 will add
+/// SoT-driven `RuleMatched` and Hunt-Pass-2 driven `LlmInferred`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ConfidenceSource {
+    RuleMatched,
+    LlmInferred,
+    PathPattern,
+}
+
+/// Structured dismissal evidence attached to an `AuditFinding`.
+///
+/// Phase 0 scope — fields limited to what `path_classifier` can populate:
+///   - `category`: which dismissal bucket
+///   - `confidence_source`: provenance (Phase 0 always `PathPattern`)
+///   - `path_pattern`: the matched glob fragment (e.g. `"tests/"`, `"vendor/"`)
+///
+/// Phase 1 will add `sanitizer_symbols: Vec<String>` and `rationale: Option<String>`
+/// additively (Hunt Pass 2 prompt extension). `#[serde(default)]` on the wrapping
+/// `Option<DismissalEvidence>` keeps deserialization back-compatible for legacy
+/// findings missing the field.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DismissalEvidence {
+    pub category: DismissalCategory,
+    pub confidence_source: ConfidenceSource,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub path_pattern: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AuditFinding {
@@ -105,6 +151,8 @@ pub struct AuditFinding {
     pub poc_result: Option<PocResult>,
     #[serde(default)]
     pub hedged_language: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dismissal_evidence: Option<DismissalEvidence>,
 }
 
 impl Default for AuditFinding {
@@ -123,6 +171,7 @@ impl Default for AuditFinding {
             poc_code: None,
             poc_result: None,
             hedged_language: None,
+            dismissal_evidence: None,
         }
     }
 }
@@ -273,6 +322,82 @@ impl PipelineOutputs {
                 }
             })
             .collect()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// AC0.G — Back-compat: legacy `AuditFinding` JSON (pre Phase 0) MUST
+    /// deserialize cleanly with `dismissal_evidence == None`. No panic, no error.
+    #[test]
+    fn test_dismissal_evidence_backcompat_deserialize() {
+        // Hardcoded legacy JSON (camelCase, missing dismissalEvidence field).
+        let legacy_json = r#"{
+            "findingId": "legacy-001",
+            "file": "src/legacy.rs",
+            "lineStart": 10,
+            "lineEnd": 12,
+            "vulnClass": "sql_injection",
+            "severity": "high",
+            "description": "Legacy finding from pre-Phase-0 pipeline.",
+            "evidence": "format!(\"SELECT * FROM users WHERE id = {}\", input)"
+        }"#;
+
+        let finding: AuditFinding = serde_json::from_str(legacy_json)
+            .expect("legacy AuditFinding JSON must deserialize");
+        assert_eq!(finding.finding_id, "legacy-001");
+        assert!(
+            finding.dismissal_evidence.is_none(),
+            "missing dismissal_evidence field must deserialize to None"
+        );
+    }
+
+    /// Round-trip: a finding with `dismissal_evidence: None` must NOT emit the
+    /// field on serialize (skip_serializing_if), keeping wire payloads stable.
+    #[test]
+    fn test_dismissal_evidence_skip_serializing_when_none() {
+        let finding = AuditFinding {
+            finding_id: "no-evidence".to_string(),
+            file: "src/main.rs".to_string(),
+            vuln_class: "xss".to_string(),
+            severity: "low".to_string(),
+            description: "stub".to_string(),
+            evidence: "stub".to_string(),
+            ..Default::default()
+        };
+        let serialized = serde_json::to_string(&finding).unwrap();
+        assert!(
+            !serialized.contains("dismissalEvidence"),
+            "dismissal_evidence: None must be omitted, got: {serialized}"
+        );
+    }
+
+    /// Round-trip with Some(DismissalEvidence): field present + snake_case enum tags.
+    #[test]
+    fn test_dismissal_evidence_roundtrip_some() {
+        let finding = AuditFinding {
+            finding_id: "test-finding".to_string(),
+            file: "tests/integration.rs".to_string(),
+            vuln_class: "sql_injection".to_string(),
+            severity: "high".to_string(),
+            description: "stub".to_string(),
+            evidence: "stub".to_string(),
+            dismissal_evidence: Some(DismissalEvidence {
+                category: DismissalCategory::Test,
+                confidence_source: ConfidenceSource::PathPattern,
+                path_pattern: Some("tests/".to_string()),
+            }),
+            ..Default::default()
+        };
+        let serialized = serde_json::to_string(&finding).unwrap();
+        assert!(serialized.contains("\"category\":\"test\""));
+        assert!(serialized.contains("\"confidenceSource\":\"path_pattern\""));
+        assert!(serialized.contains("\"pathPattern\":\"tests/\""));
+
+        let round_tripped: AuditFinding = serde_json::from_str(&serialized).unwrap();
+        assert_eq!(round_tripped.dismissal_evidence, finding.dismissal_evidence);
     }
 }
 
