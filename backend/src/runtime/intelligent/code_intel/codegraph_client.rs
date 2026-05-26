@@ -102,6 +102,19 @@ impl CodeGraphClient {
         tokio::fs::create_dir_all(&index_host_path)
             .await
             .with_context(|| format!("create index dir {}", index_host_path.display()))?;
+        // Bind-mounted writable target: the codegraph container runs as a
+        // non-root UID and the in-container UID often does not map to the host
+        // UID owning this dir (backend-in-container + Podman-on-host). Widen
+        // perms on the directory so the `cp` step inside the container can
+        // write `codegraph.db` regardless of UID mapping.
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let perms = std::fs::Permissions::from_mode(0o777);
+            if let Err(e) = tokio::fs::set_permissions(&index_host_path, perms).await {
+                warn!(path = %index_host_path.display(), error = %e, "chmod codegraph index dir failed");
+            }
+        }
 
         // 3. Try cache.
         let cache_hit = cache

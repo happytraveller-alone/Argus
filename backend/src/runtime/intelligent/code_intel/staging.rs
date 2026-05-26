@@ -52,6 +52,22 @@ pub async fn prepare(
         .await
         .with_context(|| format!("failed to create staging dir: {}", src_dir.display()))?;
 
+    // The codegraph container runs as a non-root UID (see audit-sandbox.Dockerfile
+    // `USER auditor`/uid 1000). When the backend runs in a Docker container while
+    // Podman runs on the host (or in a different user namespace), the host UID
+    // owning this dir does not align with the UID that container-UID-1000 maps
+    // to, so `codegraph init` fails to mkdir `.codegraph/` here with EACCES.
+    // Widen permission on this directory only — files written inside remain
+    // owned/protected by whichever UID writes them.
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let perms = std::fs::Permissions::from_mode(0o777);
+        if let Err(e) = tokio::fs::set_permissions(&src_dir, perms).await {
+            tracing::warn!(path = %src_dir.display(), error = %e, "chmod staging src dir failed");
+        }
+    }
+
     // Extraction is CPU/IO-heavy; run on the blocking thread pool.
     let archive_path = archive_path.to_owned();
     let archive_name = archive_name.to_owned();
