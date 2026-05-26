@@ -11,20 +11,28 @@ its own reasoning under controlled, ground-truthed inputs.
 
 ## Fixtures
 
-| Fixture | Language | Pattern | Reachable? | Classification |
-|---------|----------|---------|------------|----------------|
-| `python_sqli/` | Python (Flask) | SQL injection across 3 files | Yes | real |
-| `java_path_traversal/` | Java (Spring) | Path traversal across 2 files | Yes | real |
-| `python_sqli_sanitized_negative/` | Python | `psycopg2.sql.SQL` parameterized variant of `python_sqli/` | No | sanitized (rule_matched) |
-| `java_path_traversal_test_negative/` | Java | Identical shape to `java_path_traversal/`, located under `src/test/java/` | No | test (path_pattern) |
+Phase 2 / v0.2 acceptance matrix — **6 fixtures**: 3 real-label (Python, Java,
+TS) + 3 dismissible negative (sanitized, test, vendor). This is the corpus the
+`codegraph_ac2_acceptance` suite runs the production-threshold gates on
+(real recall ≥ 90%, sanitized precision ≥ 80%, FPR ≤ 20%, vendor 100%, test 100%).
 
-The two negative fixtures are critical for AC1 precision: the audit pipeline
-must NOT over-flag a sanitized chain or test-source code as actionable. The
-two positive fixtures exercise recall on real cross-file taint flows.
+| Fixture | Language | Pattern | Reachable? | Classification | Phase |
+|---------|----------|---------|------------|----------------|-------|
+| `python_sqli/` | Python (Flask) | SQL injection across 3 files | Yes | real (llm_inferred) | 1 |
+| `java_path_traversal/` | Java (Spring) | Path traversal across 2 files | Yes | real (llm_inferred) | 1 |
+| `ts_proto_pollution/` | TypeScript | Prototype pollution across 2 files (no SoT sanitizer in chain) | Yes | real (llm_inferred) | 2 |
+| `python_sqli_sanitized_negative/` | Python | `psycopg2.sql.SQL` parameterized variant of `python_sqli/` | No | sanitized (rule_matched) | 1 |
+| `java_path_traversal_test_negative/` | Java | Identical shape to `java_path_traversal/`, located under `src/test/java/` | No | test (path_pattern) | 1 |
+| `python_sqli_vendor_negative/` | Python | Identical shape to `python_sqli/`, located under `vendor/` | No | vendor (path_pattern) | 2 |
 
-Phase 2 / v0.2 (deferred) adds:
-- `python_sqli_vendor_negative/` (vendored copy under `vendor/`)
-- `go_ssrf/` or `ts_proto_pollution/` (third real-label fixture)
+The three negative fixtures exercise distinct dismissal channels:
+- `..._sanitized_negative` → **SoT (`rule_matched`)** — the most specific channel
+- `..._test_negative` → **path classifier (`path_pattern`)** with `src/test/java/`
+- `..._vendor_negative` → **path classifier (`path_pattern`)** with `vendor/`
+
+The three real fixtures exercise recall on cross-file taint flows with no
+sanitizer in any chain — the audit pipeline must surface each one without
+emitting a dismissal verdict.
 
 ## Layout per fixture
 

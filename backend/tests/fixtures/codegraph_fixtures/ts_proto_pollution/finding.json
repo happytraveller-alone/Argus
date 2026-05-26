@@ -1,0 +1,16 @@
+{
+  "finding_id": "HUNT-TS-PROTO-POLLUTION-001",
+  "file": "src/utils/merge.ts",
+  "line_start": 19,
+  "line_end": 25,
+  "vuln_class": "prototype_pollution",
+  "severity": "high",
+  "description": "Untrusted req.body keys flow from router.mergeUserSettings into utils/merge.deepMerge which recursively assigns without filtering __proto__, constructor, or prototype. No TS SoT sanitizer appears in the chain — classify real via llm_inferred.",
+  "evidence": "target[key] = {}; deepMerge(target[key] as Bag, value as Bag);",
+  "expected_reachable": true,
+  "expected_call_chain": ["mergeUserSettings", "deepMerge"],
+  "expected_classification": "real",
+  "expected_confidence_source": "llm_inferred",
+  "expected_path_pattern": null,
+  "expected_dismissal_rationale": null
+}

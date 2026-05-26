@@ -1,17 +1,42 @@
-//! AC2 acceptance test — Plan Phase 1 / v0.1 (`AC1.G`).
+//! AC2 acceptance test — Plan Phase 2 / v0.2 production thresholds (`AC2.C`).
 //!
-//! Drives the four codegraph fixtures through the deterministic dismissal
+//! Drives the **six** codegraph fixtures through the deterministic dismissal
 //! channels (path-pattern from `path_classifier`, rule-matched from
-//! `sanitizer_sot`) and asserts:
-//!   - Real recall: both real fixtures classified as real (no dismissal_evidence
-//!     OR dismissal_evidence.category == Real). N=2 → 100%.
-//!   - Sanitized precision: `python_sqli_sanitized_negative` → category=Sanitized
-//!     + confidence_source=RuleMatched + sanitizer_symbols contains
-//!     "psycopg2.sql.SQL". N=1 → 100%.
-//!   - Test precision: `java_path_traversal_test_negative` → category=Test +
-//!     confidence_source=PathPattern. N=1 → 100%.
-//!   - FPR: 0 negatives misclassified as real.
-//!   - Schema completeness: every negative fixture has `dismissal_evidence.is_some()`.
+//! `sanitizer_sot`) and asserts the v0.2 production gate:
+//!
+//! ## Fixture matrix (N = 6 total = 3 real + 3 negative)
+//!
+//! Real-label (cross-file unsanitized chains — must surface as real):
+//!   1. `python_sqli/`            — Flask cross-file SQLi
+//!   2. `java_path_traversal/`    — Spring cross-file path traversal
+//!   3. `ts_proto_pollution/`     — Express cross-file prototype pollution
+//!
+//! Negative (must be deterministically dismissed pre-Pass-2):
+//!   4. `python_sqli_sanitized_negative/`        — sanitized via SoT rule_matched
+//!   5. `java_path_traversal_test_negative/`     — test path_pattern
+//!   6. `python_sqli_vendor_negative/`           — vendor path_pattern
+//!
+//! ## v0.2 thresholds (`AC2.C` — production gate)
+//!
+//! - **Real recall ≥ 90%** (was 80% in v0.1). With N=3 real fixtures the
+//!   smallest discrete count satisfying ≥ 90% is `ceil(0.9 × 3) = 3`, so the
+//!   effective gate is **3/3 real fixtures surface as real (100%)**.
+//! - **Sanitized precision ≥ 80%** (was 70% in v0.1). With N=1 sanitized
+//!   fixture, the gate is unchanged at 1/1 (100%).
+//! - **Test path classification = 100%**. With N=1 test fixture: 1/1.
+//! - **Vendor path classification = 100%** (new in Phase 2). With N=1 vendor
+//!   fixture: 1/1.
+//! - **FPR ≤ 20%** (was 30% in v0.1). With N=3 negative fixtures the largest
+//!   discrete count satisfying ≤ 20% is `floor(0.2 × 3) = 0`, so the effective
+//!   gate is **0/3 negatives may flip to real**.
+//! - **Schema completeness 100%** — every negative fixture must produce
+//!   `dismissal_evidence.is_some()`.
+//!
+//! The "% threshold on tiny N" reduces to discrete counts: at N=3 the only
+//! arithmetic-feasible gates are 100% or 67%, and we pick the stricter one
+//! that still allows the v0.2 percentages on the larger v0.3 corpus.
+//!
+//! ## Test methodology
 //!
 //! The test deliberately bypasses LLM Pass 1 / Pass 2 (which require live
 //! model access) and stages the deterministic pre-Pass-2 verdict the
@@ -169,16 +194,19 @@ fn expected_confidence_source(case: &FixtureCase) -> Option<&str> {
 
 #[test]
 fn ac2_acceptance_real_recall_sanitized_test_classification() {
-    // ── Load all 4 fixtures ────────────────────────────────────────────────
+    // ── Load all 6 fixtures (v0.2 matrix: 3 real + 3 negative) ─────────────
     let real_python = load_fixture("python_sqli");
     let real_java = load_fixture("java_path_traversal");
+    let real_ts = load_fixture("ts_proto_pollution");
     let san = load_fixture("python_sqli_sanitized_negative");
     let test = load_fixture("java_path_traversal_test_negative");
+    let vendor = load_fixture("python_sqli_vendor_negative");
 
-    let fixtures = [&real_python, &real_java, &san, &test];
+    let fixtures = [&real_python, &real_java, &real_ts, &san, &test, &vendor];
     let mut real_recall_count = 0usize;
     let mut sanitized_correct_count = 0usize;
     let mut test_correct_count = 0usize;
+    let mut vendor_correct_count = 0usize;
     let mut fpr_count = 0usize;
 
     for case in fixtures.iter() {
@@ -249,6 +277,8 @@ fn ac2_acceptance_real_recall_sanitized_test_classification() {
                 }
                 if expected == "test" {
                     test_correct_count += 1;
+                } else {
+                    vendor_correct_count += 1;
                 }
             }
             other => panic!("unexpected expected_classification: {other}"),
@@ -272,14 +302,26 @@ fn ac2_acceptance_real_recall_sanitized_test_classification() {
         }
     }
 
-    // AC1.G assertions.
-    assert_eq!(real_recall_count, 2, "both real fixtures must recall");
+    // AC2.C v0.2 production-gate assertions (per fixture matrix doc above).
+    // N=3 real: ceil(0.9 × 3) = 3 → all 3 must recall.
+    assert_eq!(
+        real_recall_count, 3,
+        "v0.2 real recall ≥90% on N=3 = 3/3; got {real_recall_count}"
+    );
+    // N=1 sanitized: 1/1.
     assert_eq!(
         sanitized_correct_count, 1,
-        "sanitized precision must be 1/1"
+        "v0.2 sanitized precision must be 1/1"
     );
-    assert_eq!(test_correct_count, 1, "test precision must be 1/1");
-    assert_eq!(fpr_count, 0, "FPR must be 0 — no negative may flip to real");
+    // N=1 test: 1/1.
+    assert_eq!(test_correct_count, 1, "v0.2 test precision must be 1/1");
+    // N=1 vendor: 1/1 (new in Phase 2).
+    assert_eq!(vendor_correct_count, 1, "v0.2 vendor precision must be 1/1");
+    // N=3 negative: floor(0.2 × 3) = 0 → no flip allowed.
+    assert_eq!(
+        fpr_count, 0,
+        "v0.2 FPR ≤20% on N=3 = 0/3 flips; got {fpr_count}"
+    );
 }
 
 /// AC1.G schema completeness: each negative fixture's finding.json declares
@@ -289,8 +331,10 @@ fn ac2_acceptance_fixture_schemas_parse_cleanly() {
     for name in [
         "python_sqli",
         "java_path_traversal",
+        "ts_proto_pollution",
         "python_sqli_sanitized_negative",
         "java_path_traversal_test_negative",
+        "python_sqli_vendor_negative",
     ] {
         let case = load_fixture(name);
         let classification = expected_classification(&case);

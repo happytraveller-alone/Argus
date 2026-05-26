@@ -1,0 +1,16 @@
+{
+  "finding_id": "HUNT-PY-SQLI-VENDOR-001",
+  "file": "vendor/python_sqli_vendor_negative/db.py",
+  "line_start": 11,
+  "line_end": 11,
+  "vuln_class": "sql_injection",
+  "severity": "high",
+  "description": "SQL-injection-shaped finding in a vendored Python tree. The sink and taint chain are identical to python_sqli/ but the entire fixture lives under vendor/ — the path classifier must classify as vendor via the path_pattern channel.",
+  "evidence": "f\"SELECT * FROM users WHERE id = {parsed['user_id']}\"",
+  "expected_reachable": false,
+  "expected_call_chain": ["handle_lookup", "parse_request", "build_query", "run_query"],
+  "expected_classification": "vendor",
+  "expected_confidence_source": "path_pattern",
+  "expected_path_pattern": "vendor/",
+  "expected_dismissal_rationale": "sink resides under vendor/ — third-party pinned code outside first-party patch scope"
+}

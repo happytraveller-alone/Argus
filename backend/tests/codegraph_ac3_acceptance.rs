@@ -1,18 +1,20 @@
-//! AC3 acceptance test — Plan Phase 1 / v0.1 (`AC1.H`).
+//! AC3 acceptance test — Plan Phase 2 / v0.2 production thresholds (`AC2.D`).
 //!
 //! Two assertions:
 //!   1. Language identification: when the codegraph handoff supplies
 //!      `primary_language` ∈ {python, java, typescript}, the parsed build
 //!      plan adopts it and DOES NOT mark `language_fallback_used`.
-//!   2. Vendor reduction (dual-run protocol):
+//!   2. Vendor reduction (dual-run protocol, v0.2 tightened):
 //!      - run #1: codegraph handoff includes `vendor_paths: ["vendor/"]` —
 //!        the build plan's evidence_json carries them so downstream filtering
 //!        can exclude vendored sources from CodeQL source-path inclusion.
 //!      - run #2: `codegraph_unavailable=true` (no handoff at all) — the
 //!        build plan does NOT exclude vendor paths.
-//!      The assertion: vendor-classified file count in run #1 ≤ 0.4× run #2.
-//!      The test simulates the file counting with a small fixture-tree
-//!      mock so we exercise the consumer logic without spinning codegraph.
+//!      The v0.2 assertion: vendor-classified file count in run #1 ≤ 0.2× run #2
+//!      (≥80% reduction; v0.1 was ≥60%). With 5 vendor files mocked in run #2
+//!      and exclude-prefix `vendor/` in run #1, run #1 = 0 → reduction 100%.
+//!      The test simulates file counting with a small fixture-tree mock so we
+//!      exercise the consumer logic without spinning codegraph.
 
 use backend_rust::scan::codeql::parse_compile_sandbox_plan;
 use serde_json::json;
@@ -21,7 +23,13 @@ use serde_json::json;
 /// Asserts: each language flows through without firing language_fallback_used.
 #[test]
 fn ac3_acceptance_language_identification_three_languages() {
-    for lang in ["python", "java", "typescript"] {
+    // CodeQL convention: typescript maps to javascript-typescript (TS shares
+    // the JS extractor). Test asserts the normalized language as parsed.
+    for (lang, expected_plan_lang) in [
+        ("python", "python"),
+        ("java", "java"),
+        ("typescript", "javascript-typescript"),
+    ] {
         let payload = json!({
             "build_mode": "manual",
             "commands": ["echo ok"],
@@ -45,8 +53,8 @@ fn ac3_acceptance_language_identification_three_languages() {
         let plan = parse_compile_sandbox_plan(&payload.to_string())
             .expect("parse with codegraph handoff");
         assert_eq!(
-            plan.language, lang,
-            "language must be {lang} from codegraph handoff, got {}",
+            plan.language, expected_plan_lang,
+            "language must be {expected_plan_lang} (normalized from handoff {lang}), got {}",
             plan.language
         );
         assert!(
@@ -127,12 +135,12 @@ fn ac3_acceptance_vendor_reduction_dual_run() {
         .count();
 
     eprintln!(
-        "ac3 vendor reduction: run1={vendor_in_run1} run2={vendor_in_run2} (≥60% reduction required)"
+        "ac3 vendor reduction (v0.2): run1={vendor_in_run1} run2={vendor_in_run2} (≥80% reduction required)"
     );
     assert!(vendor_in_run2 > 0, "run #2 must observe vendor files");
     assert!(
-        (vendor_in_run1 as f64) <= 0.4 * (vendor_in_run2 as f64),
-        "vendor reduction must be ≥60% (run1={vendor_in_run1} run2={vendor_in_run2})"
+        (vendor_in_run1 as f64) <= 0.2 * (vendor_in_run2 as f64),
+        "v0.2 vendor reduction must be ≥80% (run1={vendor_in_run1} run2={vendor_in_run2})"
     );
 }
 
