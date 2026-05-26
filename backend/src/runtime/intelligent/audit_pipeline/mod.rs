@@ -22,6 +22,7 @@ use crate::{
         code_intel::{cache::CodeGraphCache, codegraph_client::CodeGraphClient, CodeIntelligence},
         config::IntelligentLlmConfig,
         llm::IntelligentLlmInvoker,
+        task::flush_findings_to_record,
         types::{IntelligentTaskEvent, IntelligentTaskFinding},
     },
     state::AppState,
@@ -279,6 +280,10 @@ pub async fn run_pipeline_with_config(
             },
         )
         .await?;
+        // Flush hunt findings before validate starts (AC6: findings immediately
+        // visible after Hunt completes).
+        let _ = flush_findings_to_record(state, task_id, &outputs.to_incremental_findings()).await;
+
         let hunt_input_findings = outputs.hunt.findings.len();
         outputs.validate = run_stage_with_retry(
             &config.stage_gates.validate,
@@ -306,6 +311,9 @@ pub async fn run_pipeline_with_config(
             },
         )
         .await?;
+
+        // Flush after validate (AC7: findings updated with validation status).
+        let _ = flush_findings_to_record(state, task_id, &outputs.to_incremental_findings()).await;
 
         for gap_iter in 0..config.gapfill_iterations {
             // Budget check (best-effort).
@@ -490,6 +498,9 @@ pub async fn run_pipeline_with_config(
             },
         )
         .await?;
+
+        // Flush after trace (AC7: findings updated with trace summary).
+        let _ = flush_findings_to_record(state, task_id, &outputs.to_incremental_findings()).await;
 
         // ── Phase 4: feedback → hunt → validate → dedupe → trace loop ────────────
         for fb_iter in 0..config.feedback_iterations {

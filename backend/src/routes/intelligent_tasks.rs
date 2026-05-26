@@ -15,7 +15,7 @@ use tokio::sync::broadcast;
 use crate::{
     db::{intelligent_task_state, projects},
     error::ApiError,
-    runtime::intelligent::types::IntelligentTaskRecord,
+    runtime::intelligent::types::{IntelligentTaskFinding, IntelligentTaskRecord},
     state::AppState,
 };
 
@@ -36,6 +36,10 @@ pub fn router() -> Router<AppState> {
         .route("/{task_id}", get(get_task).delete(delete_task))
         .route("/{task_id}/cancel", post(cancel_task))
         .route("/{task_id}/stream", get(stream_task))
+        .route(
+            "/{task_id}/findings/{finding_id}/verdict",
+            post(set_finding_verdict),
+        )
 }
 
 async fn create_task(
@@ -187,6 +191,53 @@ async fn stream_task(
     };
 
     Sse::new(output).keep_alive(KeepAlive::default())
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SetVerdictRequest {
+    verdict: Option<String>,
+}
+
+async fn set_finding_verdict(
+    State(state): State<AppState>,
+    Path((task_id, finding_id)): Path<(String, String)>,
+    Json(payload): Json<SetVerdictRequest>,
+) -> Result<Json<IntelligentTaskFinding>, ApiError> {
+    // Validate verdict value.
+    if let Some(ref v) = payload.verdict {
+        if v != "verified" && v != "false_positive" {
+            return Err(ApiError::BadRequest(format!(
+                "invalid verdict: {v}. Allowed: verified, false_positive, null"
+            )));
+        }
+    }
+
+    let updated = intelligent_task_state::update_record(&state, &task_id, |record| {
+        for finding in &mut record.findings {
+            if finding.id == finding_id {
+                finding.user_verdict = payload.verdict.clone();
+                break;
+            }
+        }
+    })
+    .await
+    .map_err(internal_error)?
+    .ok_or_else(|| ApiError::NotFound(format!("Intelligent task not found: {task_id}")))?;
+
+    // Return just the updated finding.
+    let finding = updated
+        .findings
+        .iter()
+        .find(|f| f.id == finding_id)
+        .cloned()
+        .ok_or_else(|| {
+            ApiError::NotFound(format!(
+                "Finding not found: {finding_id} in task {task_id}"
+            ))
+        })?;
+
+    Ok(Json(finding))
 }
 
 fn internal_error(error: anyhow::Error) -> ApiError {

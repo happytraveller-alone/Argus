@@ -46,5 +46,23 @@ export function toIntelligentTaskActivity(
 		durationMs: record.durationMs ?? null,
 		route: `/agent-audit/${record.taskId}`,
 		cancelTarget: { mode: "intelligent", taskId: record.taskId },
+		progressPercent: computeIntelligentProgress(record),
 	};
+}
+
+/**
+ * Derive progress percent (0-100) from agent_completed events in the log.
+ * Mirrors `getIntelligentProgressPercent` in AgentAuditDetail.tsx.
+ */
+function computeIntelligentProgress(record: IntelligentTaskRecord): number {
+	if (record.status === "pending") return 0;
+	if (record.status === "completed") return 100;
+	const completed = new Set<string>();
+	for (const ev of record.eventLog ?? []) {
+		if (ev.kind === "agent_completed") {
+			const stage = (ev.data as Record<string, unknown> | undefined)?.stage;
+			if (typeof stage === "string") completed.add(stage);
+		}
+	}
+	return Math.ceil((completed.size / 8) * 100);
 }

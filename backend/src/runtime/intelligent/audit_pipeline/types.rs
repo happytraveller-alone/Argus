@@ -475,6 +475,89 @@ pub struct PipelineOutputs {
 }
 
 impl PipelineOutputs {
+    /// Convert all current hunt findings to `IntelligentTaskFinding` for
+    /// incremental flush. Unlike `to_task_findings()`, this does NOT filter
+    /// for `validation_status == "confirmed"` — it includes every finding
+    /// produced so far so the frontend can render them immediately after Hunt.
+    #[must_use]
+    pub fn to_incremental_findings(&self) -> Vec<IntelligentTaskFinding> {
+        let deduped_ids: std::collections::HashSet<&str> = self
+            .dedupe
+            .groups
+            .iter()
+            .flat_map(|g| g.finding_ids.iter().map(|s| s.as_str()))
+            .collect();
+        let trace_by_id = self
+            .trace
+            .traces
+            .iter()
+            .map(|trace| (trace.finding_id.as_str(), trace))
+            .collect::<std::collections::BTreeMap<_, _>>();
+
+        // Use validated findings when available; fall back to raw hunt findings
+        // when validation hasn't run yet.
+        if self.validate.findings.is_empty() {
+            // Before validate: convert raw hunt findings directly.
+            self.hunt
+                .findings
+                .iter()
+                .filter(|f| deduped_ids.is_empty() || deduped_ids.contains(f.finding_id.as_str()))
+                .map(|finding| IntelligentTaskFinding {
+                    id: finding.finding_id.clone(),
+                    severity: finding.severity.clone(),
+                    summary: finding.description.clone(),
+                    evidence: enrich_evidence(finding, None),
+                    file: Some(finding.file.clone()),
+                    line_start: Some(finding.line_start),
+                    line_end: Some(finding.line_end),
+                    vuln_class: Some(finding.vuln_class.clone()),
+                    confidence: finding.confidence,
+                    validation_status: None,
+                    reachable: None,
+                    trace_summary: None,
+                    poc_result: finding
+                        .poc_result
+                        .as_ref()
+                        .map(|p| serde_json::to_value(p).unwrap_or_default()),
+                    user_verdict: None,
+                })
+                .collect()
+        } else {
+            self.validate
+                .findings
+                .iter()
+                .filter(|vf| deduped_ids.is_empty() || deduped_ids.contains(vf.finding.finding_id.as_str()))
+                .map(|validated| {
+                    let finding = &validated.finding;
+                    let trace = trace_by_id.get(finding.finding_id.as_str());
+                    IntelligentTaskFinding {
+                        id: finding.finding_id.clone(),
+                        severity: finding.severity.clone(),
+                        summary: finding.description.clone(),
+                        evidence: enrich_evidence(finding, trace.copied()),
+                        file: Some(finding.file.clone()),
+                        line_start: Some(finding.line_start),
+                        line_end: Some(finding.line_end),
+                        vuln_class: Some(finding.vuln_class.clone()),
+                        confidence: finding.confidence,
+                        validation_status: if validated.validation_status.is_empty() {
+                            None
+                        } else {
+                            Some(validated.validation_status.clone())
+                        },
+                        reachable: trace.map(|trace| trace.reachable),
+                        trace_summary: trace.map(|trace| trace.rationale.clone()),
+                        poc_result: finding
+                            .poc_result
+                            .as_ref()
+                            .map(|p| serde_json::to_value(p).unwrap_or_default()),
+                        user_verdict: None,
+                    }
+                })
+                .collect()
+        }
+    }
+
     #[must_use]
     pub fn to_task_findings(&self) -> Vec<IntelligentTaskFinding> {
         let trace_by_id = self
@@ -507,6 +590,7 @@ impl PipelineOutputs {
                         .poc_result
                         .as_ref()
                         .map(|p| serde_json::to_value(p).unwrap_or_default()),
+                    user_verdict: None,
                 }
             })
             .collect()

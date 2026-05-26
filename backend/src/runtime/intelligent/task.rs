@@ -14,10 +14,27 @@ use crate::{
         audit_pipeline,
         config::resolve_intelligent_llm_config,
         llm::{HttpIntelligentLlmInvoker, IntelligentLlmInvoker},
-        types::{IntelligentTaskEvent, IntelligentTaskRecord},
+        types::{IntelligentTaskEvent, IntelligentTaskFinding, IntelligentTaskRecord},
     },
     state::AppState,
 };
+
+/// Flush findings incrementally to the persistent task record.
+///
+/// Must be called BEFORE `stage_completed` events are emitted so the frontend
+/// sees the findings when it reloads the record. This is `.await`-ed
+/// synchronously — do NOT `tokio::spawn` it.
+pub async fn flush_findings_to_record(
+    state: &AppState,
+    task_id: &str,
+    findings: &[IntelligentTaskFinding],
+) -> Result<()> {
+    intelligent_task_state::update_record(state, task_id, |record| {
+        record.findings = findings.to_vec();
+    })
+    .await?;
+    Ok(())
+}
 
 const BROADCAST_CAPACITY: usize = 256;
 

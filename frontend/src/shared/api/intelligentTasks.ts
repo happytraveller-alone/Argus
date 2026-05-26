@@ -30,6 +30,8 @@ export interface IntelligentTaskFinding {
 	reachable?: boolean | null;
 	traceSummary?: string | null;
 	coverageMatrix?: Record<string, unknown> | null;
+	/** User verdict: null=pending, "verified"=true positive, "false_positive"=false positive */
+	userVerdict?: string | null;
 }
 
 export interface IntelligentTaskEventLogEntry {
@@ -56,6 +58,8 @@ export interface IntelligentTaskRecord {
 	findings: IntelligentTaskFinding[];
 	failureReason?: string;
 	failureStage?: string;
+	/** True when scan ran in degraded mode (codegraph indexing unavailable) */
+	partialAnalysis?: boolean;
 }
 
 /**
@@ -108,5 +112,21 @@ export async function deleteIntelligentTask(
 	taskId: string,
 ): Promise<{ deleted: boolean; taskId: string; terminalStatus: IntelligentTaskStatus }> {
 	const response = await apiClient.delete(`/intelligent-tasks/${taskId}`);
+	return response.data;
+}
+
+/**
+ * Set user verdict on an intelligent task finding.
+ * verdict: "verified" | "false_positive" | null (revert to pending)
+ */
+export async function setIntelligentFindingVerdict(
+	taskId: string,
+	findingId: string,
+	verdict: string | null,
+): Promise<IntelligentTaskFinding> {
+	const response = await apiClient.post(
+		`/intelligent-tasks/${taskId}/findings/${findingId}/verdict`,
+		{ verdict },
+	);
 	return response.data;
 }

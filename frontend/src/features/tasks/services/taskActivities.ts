@@ -63,6 +63,8 @@ export interface TaskActivityItem {
 	durationMs?: number | null;
 	route: string;
 	cancelTarget?: TaskActivityCancelTarget;
+	/** Explicit progress percent from intelligent audit event log (0-100) */
+	progressPercent?: number;
 }
 
 function normalizeTaskName(name: string | null | undefined): string {
@@ -473,6 +475,10 @@ export function getTaskProgressPercent(
 	activity: TaskActivityItem,
 	nowMs = Date.now(),
 ): number {
+	// Intelligent audit tasks carry an explicit progress from the event log.
+	if (activity.progressPercent != null) {
+		return activity.progressPercent;
+	}
 	return getTaskDisplayProgressPercent({
 		status: activity.status,
 		createdAt: activity.createdAt,

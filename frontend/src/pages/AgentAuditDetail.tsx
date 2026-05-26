@@ -21,6 +21,8 @@ import { getApiBaseUrl } from "@/shared/api/apiBase";
 import {
 	cancelIntelligentTask,
 	getIntelligentTask,
+	setIntelligentFindingVerdict,
+	type IntelligentTaskEventLogEntry,
 	type IntelligentTaskFinding,
 	type IntelligentTaskRecord,
 	type IntelligentTaskStatus,
@@ -34,6 +36,35 @@ const TERMINAL_STATUSES: Set<IntelligentTaskStatus> = new Set([
 
 function isTerminal(status: string): boolean {
 	return TERMINAL_STATUSES.has(status as IntelligentTaskStatus);
+}
+
+/**
+ * Derive scan progress (0-100) from completed pipeline stages in the event log.
+ * Reads `agent_completed` events with `data.stage`. 8 stages total:
+ * recon, hunt, validate, gapfill, dedupe, trace, feedback, report.
+ */
+function getIntelligentProgressPercent(record: IntelligentTaskRecord): number {
+	const status = record.status;
+	if (status === "pending") return 0;
+	if (status === "completed") return 100;
+	if (status === "failed" || status === "cancelled") {
+		// Freeze at the last observed completed-stage count.
+		const completed = countCompletedStages(record.eventLog);
+		return Math.ceil((completed / 8) * 100);
+	}
+	const completed = countCompletedStages(record.eventLog);
+	return Math.ceil((completed / 8) * 100);
+}
+
+function countCompletedStages(eventLog: IntelligentTaskEventLogEntry[]): number {
+	const completed = new Set<string>();
+	for (const ev of eventLog ?? []) {
+		if (ev.kind === "agent_completed") {
+			const stage = (ev.data as Record<string, unknown> | undefined)?.stage;
+			if (typeof stage === "string") completed.add(stage);
+		}
+	}
+	return completed.size;
 }
 
 function formatDuration(durationMs?: number): string {
@@ -82,10 +113,14 @@ function resolveIntelligentScanStage(
 	let lastActive: string | null = null;
 	const completedSteps = new Set<string>();
 	for (const ev of events) {
-		const step = typeof ev.data?.step === "string" ? ev.data.step : null;
-		if (!step) continue;
-		if (ev.kind === "step_completed") completedSteps.add(step);
-		else if (ev.kind === "step_started") lastActive = step;
+		// Backend emits agent_started/agent_completed with data.stage, NOT
+		// step_started/step_completed with data.step. The step_* events are
+		// task-level wrappers (config_resolve, audit_pipeline) and must not
+		// be treated as pipeline stages.
+		const stage = typeof ev.data?.stage === "string" ? ev.data.stage : null;
+		if (!stage) continue;
+		if (ev.kind === "agent_completed") completedSteps.add(stage);
+		else if (ev.kind === "agent_started") lastActive = stage;
 	}
 	if (completedSteps.has("report")) return "completed";
 	if (lastActive && INTELLIGENT_STAGE_ORDER.includes(lastActive as IntelligentScanStage)) {
@@ -157,101 +192,238 @@ function IntelligentScanStages({ stage }: { stage: IntelligentScanStage }) {
 	);
 }
 
-const findingColumns: AppColumnDef<IntelligentTaskFinding, unknown>[] = [
-	{
-		id: "rowNumber",
-		header: "序号",
-		enableSorting: false,
-		meta: {
-			label: "序号",
-			align: "center",
-			width: 72,
+function formatLocation(finding: IntelligentTaskFinding): string {
+	const file = finding.file || "";
+	const start = finding.lineStart != null ? String(finding.lineStart) : "";
+	const end = finding.lineEnd != null && finding.lineEnd !== finding.lineStart
+		? String(finding.lineEnd) : "";
+	if (!file) return "-";
+	const base = `${file}:${start}`;
+	return end ? `${base}-${end}` : base;
+}
+
+function deriveFindingStatus(
+	finding: IntelligentTaskFinding,
+	record: IntelligentTaskRecord,
+): string {
+	if (record.status === "completed") {
+		if (finding.userVerdict === "verified") return "真实";
+		if (finding.userVerdict === "false_positive") return "误报";
+		return "待确认";
+	}
+	const lastStage = findLastCompletedStage(record.eventLog);
+	if (lastStage === "hunt") return "已搜寻";
+	if (lastStage === "validate") {
+		return finding.validationStatus === "rejected" ? "已驳回" : "已验证";
+	}
+	if (lastStage === "dedupe") return "已去重";
+	if (lastStage === "trace") return "已追踪";
+	if (lastStage === "report") return "报告生成中";
+	return "扫描中";
+}
+
+function findLastCompletedStage(
+	eventLog: IntelligentTaskEventLogEntry[],
+): string | null {
+	for (let i = eventLog.length - 1; i >= 0; i--) {
+		const ev = eventLog[i];
+		if (ev.kind === "agent_completed") {
+			const s = (ev.data as Record<string, unknown> | undefined)?.stage;
+			if (typeof s === "string") return s;
+		}
+	}
+	return null;
+}
+
+function hasHuntCompleted(eventLog: IntelligentTaskEventLogEntry[]): boolean {
+	return eventLog.some(
+		(ev) =>
+			ev.kind === "agent_completed" &&
+			(ev.data as Record<string, unknown> | undefined)?.stage === "hunt",
+	);
+}
+
+// ── Verdict button with double-click-to-revert ──────────────────────────
+
+let lastVerdictClick: {
+	btn: "verified" | "false_positive";
+	findingId: string;
+	ts: number;
+} | null = null;
+
+function VerdictButton({
+	finding,
+	target,
+	disabled,
+	onVerdict,
+}: {
+	finding: IntelligentTaskFinding;
+	target: "verified" | "false_positive";
+	disabled?: boolean;
+	onVerdict: (findingId: string, verdict: string | null) => void;
+}) {
+	const isActive = finding.userVerdict === target;
+	const label = target === "verified" ? "判真" : "判假";
+	const now = Date.now();
+	const last = lastVerdictClick;
+
+	const handleClick = () => {
+		if (disabled) return;
+		// Double-click same button within 300ms → revert to null
+		if (
+			isActive &&
+			last &&
+			last.btn === target &&
+			last.findingId === finding.id &&
+			now - last.ts < 300
+		) {
+			onVerdict(finding.id, null);
+			lastVerdictClick = null;
+			return;
+		}
+		onVerdict(finding.id, target);
+		lastVerdictClick = { btn: target, findingId: finding.id, ts: now };
+	};
+
+	return (
+		<Button
+			size="sm"
+			variant={isActive ? "default" : "outline"}
+			className={`h-6 px-2 font-mono text-[11px] ${
+				isActive
+					? target === "verified"
+						? "bg-emerald-600 hover:bg-emerald-700"
+						: "bg-rose-600 hover:bg-rose-700"
+					: ""
+			}`}
+			disabled={disabled}
+			onClick={handleClick}
+		>
+			{label}
+		</Button>
+	);
+}
+
+// ── Column builder (depends on VerdictButton above) ────────────────────
+
+function buildFindingColumns(
+	record: IntelligentTaskRecord | null,
+	navigate: ReturnType<typeof useNavigate>,
+	onVerdict: (findingId: string, verdict: string | null) => void,
+): AppColumnDef<IntelligentTaskFinding, unknown>[] {
+	return [
+		{
+			id: "rowNumber",
+			header: "#",
+			enableSorting: false,
+			meta: { label: "#", align: "center", width: 48 },
+			cell: ({ row, table }) =>
+				table.getState().pagination.pageIndex *
+					table.getState().pagination.pageSize +
+				table.getRowModel().rows.findIndex((r) => r.id === row.id) +
+				1,
 		},
-		cell: ({ row, table }) =>
-			table.getState().pagination.pageIndex *
-				table.getState().pagination.pageSize +
-			table.getRowModel().rows.findIndex((r) => r.id === row.id) +
-			1,
-	},
-	{
-		id: "id",
-		accessorFn: (row) => row.id,
-		header: "问题 ID",
-		enableSorting: false,
-		meta: {
-			label: "问题 ID",
-			align: "left",
-			width: 220,
-			minWidth: 180,
-			filterVariant: "text",
+		{
+			id: "severity",
+			accessorFn: (row) => row.severity,
+			header: "危害",
+			enableHiding: false,
+			meta: {
+				label: "危害", width: 90,
+				filterVariant: "select",
+				filterOptions: [
+					{ label: "严重", value: "critical" },
+					{ label: "高危", value: "high" },
+					{ label: "中危", value: "medium" },
+					{ label: "低危", value: "low" },
+				],
+			},
+			cell: ({ row }) => (
+				<Badge variant="outline" className="font-mono text-[11px]">
+					{row.original.severity || "-"}
+				</Badge>
+			),
 		},
-		cell: ({ row }) => (
-			<span
-				className="block max-w-full truncate font-mono text-sm"
-				title={row.original.id}
-			>
-				{row.original.id || "-"}
-			</span>
-		),
-	},
-	{
-		id: "severity",
-		accessorFn: (row) => row.severity,
-		header: "危害",
-		enableHiding: false,
-		meta: {
-			label: "漏洞危害",
-			width: 140,
-			filterVariant: "select",
-			filterOptions: [
-				{ label: "严重", value: "critical" },
-				{ label: "高危", value: "high" },
-				{ label: "中危", value: "medium" },
-				{ label: "低危", value: "low" },
-			],
+		{
+			id: "location",
+			accessorFn: (row) => formatLocation(row),
+			header: "位置",
+			enableSorting: false,
+			meta: { label: "位置", minWidth: 220, filterVariant: "text" },
+			cell: ({ row }) => {
+				const loc = formatLocation(row.original);
+				return (
+					<button
+						type="button"
+						className="block max-w-[16rem] truncate text-left font-mono text-[11px] text-sky-300 hover:underline cursor-pointer"
+						title={`点击复制: ${loc}`}
+						onClick={() => {
+							void navigator.clipboard.writeText(loc);
+							toast.success("路径已复制");
+						}}
+					>
+						{loc}
+					</button>
+				);
+			},
 		},
-		cell: ({ row }) => (
-			<Badge variant="outline" className="font-mono text-xs">
-				{row.original.severity || "-"}
-			</Badge>
-		),
-	},
-	{
-		id: "summary",
-		accessorFn: (row) => row.summary,
-		header: "问题摘要",
-		enableSorting: false,
-		enableHiding: false,
-		meta: {
-			label: "问题摘要",
-			align: "left",
-			minWidth: 360,
-			filterVariant: "text",
+		{
+			id: "status",
+			accessorFn: (row) => row.id,
+			header: "状态",
+			enableSorting: false,
+			meta: { label: "状态", width: 100 },
+			cell: ({ row }) => {
+				const status = deriveFindingStatus(row.original, record!);
+				return (
+					<span className="font-mono text-[11px] text-muted-foreground">
+						{status}
+					</span>
+				);
+			},
 		},
-		cell: ({ row }) => (
-			<span className="block max-w-[34rem] whitespace-normal text-sm text-foreground/90">
-				{row.original.summary || "-"}
-			</span>
-		),
-	},
-	{
-		id: "evidence",
-		accessorFn: (row) => row.evidence,
-		header: "证据",
-		enableSorting: false,
-		meta: {
-			label: "证据",
-			align: "left",
-			minWidth: 420,
-			filterVariant: "text",
+		{
+			id: "actions",
+			header: "操作",
+			enableSorting: false,
+			meta: { label: "操作", width: 200 },
+			cell: ({ row }) => {
+				const finding = row.original;
+				const done = record?.status === "completed";
+				return (
+					<div className="flex items-center gap-1.5">
+						<Button
+							size="sm"
+							variant="outline"
+							className="h-6 px-2 font-mono text-[11px]"
+							onClick={() =>
+								navigate(
+									`/finding-detail/${finding.id}?source=intelligent&taskId=${record?.taskId ?? ""}`,
+								)
+							}
+						>
+							详情
+						</Button>
+						<VerdictButton
+							finding={finding}
+							target="verified"
+							disabled={!done}
+							onVerdict={onVerdict}
+						/>
+						<VerdictButton
+							finding={finding}
+							target="false_positive"
+							disabled={!done}
+							onVerdict={onVerdict}
+						/>
+					</div>
+				);
+			},
 		},
-		cell: ({ row }) => (
-			<span className="block max-w-[42rem] whitespace-normal font-mono text-xs text-muted-foreground">
-				{row.original.evidence || "-"}
-			</span>
-		),
-	},
-];
+	];
+}
+
+// ── Page component ──────────────────────────────────────────────────────
 
 export default function AgentAuditDetail() {
 	const { taskId } = useParams<{ taskId: string }>();
@@ -314,6 +486,34 @@ export default function AgentAuditDetail() {
 		};
 	}, [fetchRecord, record]);
 
+	const handleVerdict = useCallback(
+		(findingId: string, verdict: string | null) => {
+			if (!taskId) return;
+			// Optimistic UI: update local record immediately.
+			if (record) {
+				const updated = { ...record };
+				const idx = updated.findings?.findIndex((f) => f.id === findingId) ?? -1;
+				if (idx >= 0 && updated.findings) {
+					updated.findings = [...updated.findings];
+					updated.findings[idx] = {
+						...updated.findings[idx],
+						userVerdict: verdict,
+					};
+				}
+				setRecord(updated);
+			}
+			// Fire API call; rollback on failure.
+			setIntelligentFindingVerdict(taskId, findingId, verdict).catch((err) => {
+				toast.error(
+					`判定失败：${err instanceof Error ? err.message : "未知错误"}`,
+				);
+				// Rollback: re-fetch the full record.
+				void fetchRecord();
+			});
+		},
+		[taskId, record, fetchRecord],
+	);
+
 	const handleCancel = async () => {
 		if (!taskId) return;
 		setCancelling(true);
@@ -375,14 +575,8 @@ export default function AgentAuditDetail() {
 	const activeEvents: SseEvent[] =
 		sseEvents.length > 0 ? sseEvents : replayEvents;
 	const progressPercent = taskTerminal
-		? record.status === "completed"
-			? 100
-			: 0
-		: activeEvents.some((event) => event.kind === "step_completed")
-			? 70
-			: activeEvents.length > 0
-				? 35
-				: 0;
+		? record.status === "completed" ? 100 : 0
+		: getIntelligentProgressPercent(record);
 	const headerTags = [
 		record.projectName?.trim() || record.projectId || "-",
 		`${progressPercent}%`,
@@ -486,12 +680,16 @@ export default function AgentAuditDetail() {
 				<div className="min-h-[28rem] min-w-0 overflow-y-auto rounded-md pr-1 lg:h-full">
 					<DataTable
 						data={findings}
-						columns={findingColumns}
+						columns={buildFindingColumns(record, navigate, handleVerdict)}
 						state={tableState}
 						onStateChange={setTableState}
 						emptyState={{
-							title: "暂无发现问题",
-							description: "0 findings (lifecycle proof captured)",
+							title: hasHuntCompleted(record.eventLog ?? [])
+								? "暂无发现问题"
+								: "搜寻阶段进行中…",
+							description: hasHuntCompleted(record.eventLog ?? [])
+								? "0 findings (lifecycle proof captured)"
+								: "等待第一批 findings",
 						}}
 						toolbar={{
 							searchPlaceholder: "搜索问题、危害或证据",

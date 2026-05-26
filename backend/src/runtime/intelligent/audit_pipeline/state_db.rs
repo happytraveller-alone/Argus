@@ -51,6 +51,7 @@ impl AuditStateDb {
                 raw_json TEXT,
                 validation_status TEXT,
                 group_id TEXT,
+                user_verdict TEXT,
                 PRIMARY KEY (run_id, finding_id)
             );",
         )?;
@@ -72,6 +73,22 @@ impl AuditStateDb {
                 output_tokens INT
             );",
         )?;
+
+        // Migration: add user_verdict column to existing findings tables.
+        let has_col: bool = conn
+            .prepare("SELECT user_verdict FROM findings LIMIT 0")
+            .is_ok();
+        if !has_col {
+            conn.execute_batch(
+                "ALTER TABLE findings ADD COLUMN user_verdict TEXT;",
+            )?;
+        }
+        // Ensure the partial index exists (idempotent).
+        conn.execute_batch(
+            "CREATE INDEX IF NOT EXISTS idx_findings_user_verdict
+                 ON findings(user_verdict) WHERE user_verdict IS NOT NULL;",
+        )?;
+
         Ok(Self { conn })
     }
 

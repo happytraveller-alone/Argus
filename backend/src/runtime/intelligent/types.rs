@@ -86,6 +86,10 @@ pub struct IntelligentTaskFinding {
     pub trace_summary: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub poc_result: Option<serde_json::Value>,
+    /// User verdict: `None` = pending, `Some("verified")` = true positive,
+    /// `Some("false_positive")` = false positive.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub user_verdict: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
