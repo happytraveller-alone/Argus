@@ -14,11 +14,16 @@ $SCRIPT_NAME - validate Argus LLM bootstrap env
 Usage:
   scripts/$SCRIPT_NAME [--env-file <path>]
 
-Required keys:
-  LLM_PROVIDER
-  LLM_API_KEY
-  LLM_MODEL
-  LLM_BASE_URL
+Config forms:
+  Numbered (canonical, supports multiple configs):
+    LLM_1_PROVIDER, LLM_1_API_KEY, LLM_1_MODEL, LLM_1_BASE_URL
+    LLM_2_PROVIDER, LLM_2_API_KEY, LLM_2_MODEL, LLM_2_BASE_URL
+    ...
+
+  Legacy bare keys (auto-promoted to LLM_1_* when no numbered config present):
+    LLM_PROVIDER, LLM_API_KEY, LLM_MODEL, LLM_BASE_URL
+
+Precedence: numbered > bare (bare auto-promoted only when no numbered config present).
 USAGE
 }
 
@@ -58,6 +63,7 @@ ensure_template() {
   fail "LLM env template does not exist: $TEMPLATE_FILE"
 }
 
+# Read a specific key from ENV_FILE. Strips comments, blank lines, and surrounding quotes.
 read_env_value() {
   local key="$1"
   awk -v key="$key" '
@@ -72,7 +78,7 @@ read_env_value() {
         value = substr($0, index($0, "=") + 1)
         gsub(/^[[:space:]]+|[[:space:]]+$/, "", value)
         if ((substr(value, 1, 1) == "\"" && substr(value, length(value), 1) == "\"") ||
-            (substr(value, 1, 1) == "'"'"'" && substr(value, length(value), 1) == "'"'"'")) {
+            (substr(value, 1, 1) == "'" && substr(value, length(value), 1) == "'")) {
           value = substr(value, 2, length(value) - 2)
         }
         found = value
@@ -108,26 +114,81 @@ is_placeholder_value() {
   esac
 }
 
+# Require a key to be present and non-empty. Prints the value on success.
 require_key() {
   local key="$1"
+  local label="$2"
   local value
   value="$(read_env_value "$key")"
   if [[ -z "$value" ]]; then
-    fail "Required env key $key is missing or empty."
+    fail "${label}Required env key $key is missing or empty."
   fi
   printf '%s' "$value"
 }
 
 validate_provider() {
   local provider="$1"
+  local label="$2"
   case "$provider" in
     openai_compatible|anthropic_compatible)
       return 0
       ;;
     *)
-      fail "LLM_PROVIDER must be openai_compatible or anthropic_compatible."
+      fail "${label}LLM_PROVIDER must be openai_compatible or anthropic_compatible."
       ;;
   esac
+}
+
+# Find all numeric indices used in LLM_N_PROVIDER keys. Prints sorted unique indices, one per line.
+find_numbered_indices() {
+  awk '
+    /^[[:space:]]*#/ { next }
+    /^[[:space:]]*$/ { next }
+    {
+      if (match($0, /^[[:space:]]*LLM_([0-9]+)_PROVIDER[[:space:]]*=/)) {
+        n = substr($0, RSTART, RLENGTH)
+        gsub(/^[[:space:]]*LLM_/, "", n)
+        gsub(/_PROVIDER[[:space:]]*=.*/, "", n)
+        print n
+      }
+    }
+  ' "$ENV_FILE" | sort -un
+}
+
+# Validate a single config block. label is the human-readable prefix like "[LLM 1] " or "[LLM 1 (legacy bare)] ".
+# key_prefix is the env key prefix like "LLM_1_" or "LLM_" (for bare legacy).
+validate_block() {
+  local label="$1"
+  local key_prefix="$2"
+
+  local provider api_key model base_url
+  provider="$(require_key "${key_prefix}PROVIDER" "$label")"
+  validate_provider "$provider" "$label"
+
+  api_key="$(require_key "${key_prefix}API_KEY" "$label")"
+  model="$(require_key "${key_prefix}MODEL" "$label")"
+  base_url="$(require_key "${key_prefix}BASE_URL" "$label")"
+
+  for key_and_value in \
+    "${key_prefix}API_KEY=$api_key" \
+    "${key_prefix}MODEL=$model" \
+    "${key_prefix}BASE_URL=$base_url"
+  do
+    local key="${key_and_value%%=*}"
+    local value="${key_and_value#*=}"
+    if is_placeholder_value "$value"; then
+      fail "${label}${key} still contains a placeholder value."
+    fi
+  done
+}
+
+# Detect stacked bare LLM_PROVIDER lines (excludes LLM_N_PROVIDER).
+check_stacked_bare_dup() {
+  local count
+  count="$(grep -Ec '^[[:space:]]*LLM_PROVIDER[[:space:]]*=' "$ENV_FILE" || true)"
+  if [[ "$count" -gt 1 ]]; then
+    printf '[argus-llm-config] Warning: detected %s stacked bare LLM_PROVIDER lines. Only the last is parsed by env-file injection. Convert to LLM_1_*/LLM_2_*/... to use all of them.\n' "$count" >&2
+  fi
 }
 
 main() {
@@ -135,25 +196,34 @@ main() {
   ensure_template
   [[ -f "$ENV_FILE" ]] || fail "LLM env file does not exist. A template is available at $TEMPLATE_FILE."
 
-  local provider api_key model base_url
-  provider="$(require_key LLM_PROVIDER)"
-  api_key="$(require_key LLM_API_KEY)"
-  model="$(require_key LLM_MODEL)"
-  base_url="$(require_key LLM_BASE_URL)"
+  # Collect numbered indices (LLM_1_PROVIDER, LLM_2_PROVIDER, ...)
+  local indices_raw
+  indices_raw="$(find_numbered_indices)"
 
-  validate_provider "$provider"
+  local -a indices=()
+  while IFS= read -r idx; do
+    [[ -n "$idx" ]] && indices+=("$idx")
+  done <<< "$indices_raw"
 
-  for key_and_value in \
-    "LLM_API_KEY=$api_key" \
-    "LLM_MODEL=$model" \
-    "LLM_BASE_URL=$base_url"
-  do
-    local key="${key_and_value%%=*}"
-    local value="${key_and_value#*=}"
-    if is_placeholder_value "$value"; then
-      fail "$key still contains a placeholder value."
+  if [[ "${#indices[@]}" -gt 0 ]]; then
+    # Numbered configs present — validate each block
+    for n in "${indices[@]}"; do
+      validate_block "[LLM ${n}] " "LLM_${n}_"
+    done
+  else
+    # No numbered configs — check for bare legacy keys
+    local bare_provider
+    bare_provider="$(read_env_value "LLM_PROVIDER")"
+    if [[ -n "$bare_provider" ]]; then
+      # Auto-promote bare keys as virtual LLM_1_* (no file rewrite)
+      validate_block "[LLM 1 (legacy bare)] " "LLM_"
+    else
+      fail "LLM_PROVIDER 未配置 / not configured. Please set LLM_1_PROVIDER (numbered) or LLM_PROVIDER (legacy bare) in $ENV_FILE."
     fi
-  done
+  fi
+
+  # Dup-detection: warn on stacked bare LLM_PROVIDER lines (non-fatal)
+  check_stacked_bare_dup
 
   log "LLM env config is valid: $ENV_FILE"
 }

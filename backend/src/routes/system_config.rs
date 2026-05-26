@@ -53,6 +53,21 @@ pub struct ImportEnvResponse {
     pub reason_code: Option<String>,
     pub stage: Option<String>,
     pub metadata: Option<Value>,
+    /// ID of the row whose preflight passed first. None when all rows failed.
+    pub winning_row_id: Option<String>,
+    /// Per-row preflight outcomes, in the order rows were attempted.
+    pub rows: Vec<ImportRowResult>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportRowResult {
+    pub id: String,
+    pub index: usize,
+    pub preflight: String,
+    pub reason_code: Option<String>,
+    pub fingerprint: Option<String>,
+    pub message: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -577,81 +592,238 @@ pub async fn import_env(
 ) -> Result<Json<ImportEnvResponse>, ApiError> {
     verify_import_token(&headers)?;
     let defaults = default_config(state.config.as_ref());
-    let imported_llm =
+    let imported_rows =
         import_llm_config_from_env(&llm_config_set::legacy_defaults(state.config.as_ref()))?;
     let imported_other = merge_json(&defaults.other_config, &json!({}));
-    let runtime =
-        build_runtime_config(&imported_llm, &imported_other).map_err(llm_gate_bad_request)?;
 
-    match test_llm_generation(&state.http_client, &runtime).await {
-        Ok(outcome) => {
-            let metadata = outcome.metadata();
-            let mut imported_envelope = llm_config_set::normalize_for_save(
-                &mark_imported_system_config(&imported_llm),
-                None,
-                state.config.as_ref(),
-            )
-            .map_err(llm_gate_bad_request)?;
-            let imported_row_id = imported_envelope["rows"][0]["id"]
-                .as_str()
-                .unwrap_or_default()
-                .to_string();
-            imported_envelope = llm_config_set::mark_row_preflight(
-                &imported_envelope,
-                &imported_row_id,
-                "passed",
-                None,
-                Some("导入后连接校验通过"),
-                Some(&outcome.fingerprint),
-            );
-            imported_envelope = llm_config_set::set_latest_preflight_run(
-                &imported_envelope,
-                vec![imported_row_id.clone()],
-                Some(imported_row_id),
-                Some(outcome.fingerprint.clone()),
-            );
-            let stored = system_config::save_current(
-                &state,
-                imported_envelope,
-                imported_other,
-                metadata.clone(),
-            )
-            .await
-            .map_err(internal_error)?;
-            let merged = merge_with_defaults(state.config.as_ref(), Some(stored));
-            sync_python_user_config_mirror(&state, Some(&merged)).await?;
-            Ok(Json(import_response(
-                true,
-                "已从 .argus-llm.env 导入并完成 LLM 测试。",
-                &imported_llm,
-                Some(metadata),
-                None,
-                None,
-            )))
+    // Build the initial multi-row envelope by normalizing each row individually
+    // (each call yields a 1-row envelope), then merging the rows into one envelope.
+    // Each row gets a fresh ID assigned by normalize_for_save; preflight starts as
+    // "untested" via empty_preflight() (llm_config_set.rs:653).
+    let mut envelope: Value = json!({
+        "schemaVersion": llm_config_set::LLM_CONFIG_SET_SCHEMA_VERSION,
+        "rows": [],
+        "latestPreflightRun": {
+            "runId": Value::Null,
+            "checkedAt": Value::Null,
+            "attemptedRowIds": [],
+            "winningRowId": Value::Null,
+            "winningFingerprint": Value::Null,
+        },
+        "migration": {
+            "status": "not_needed",
+            "message": Value::Null,
+            "sourceSchemaVersion": Value::Null,
         }
-        Err(error) => {
-            let imported_envelope = llm_config_set::normalize_for_save(
-                &mark_imported_system_config(&imported_llm),
-                None,
-                state.config.as_ref(),
-            )
-            .map_err(llm_gate_bad_request)?;
-            let stored =
-                system_config::save_current(&state, imported_envelope, imported_other, json!({}))
-                    .await
-                    .map_err(internal_error)?;
-            let merged = merge_with_defaults(state.config.as_ref(), Some(stored));
-            sync_python_user_config_mirror(&state, Some(&merged)).await?;
-            Ok(Json(import_response(
-                false,
-                &error.message,
-                &imported_llm,
-                None,
-                Some(error.reason_code.to_string()),
-                Some("llm_test".to_string()),
-            )))
+    });
+    let mut row_configs: Vec<Value> = Vec::with_capacity(imported_rows.len());
+    for (zero_index, row_legacy) in imported_rows.iter().enumerate() {
+        let one_row_envelope = llm_config_set::normalize_for_save(
+            &mark_imported_system_config(row_legacy),
+            None,
+            state.config.as_ref(),
+        )
+        .map_err(llm_gate_bad_request)?;
+        let mut row = one_row_envelope["rows"][0].clone();
+        // normalize_for_save -> migrate_legacy (llm_config_set.rs:427) hardcodes
+        // id="llmcfg_legacy_1" for flat-shape input; we must reassign per-row
+        // here to keep multi-row ids unique. Do NOT remove without checking
+        // migrate_legacy semantics.
+        row["id"] = Value::String(format!("llmcfg_{}", Uuid::new_v4().simple()));
+        // Override priority to enforce 1-based ordering by env slot.
+        row["priority"] = Value::Number(((zero_index + 1) as i64).into());
+        if let Some(rows) = envelope.get_mut("rows").and_then(Value::as_array_mut) {
+            rows.push(row);
+        }
+        row_configs.push(row_legacy.clone());
+    }
+
+    // SYNC WITH agent_preflight at system_config.rs:884 — any change to
+    // classify_fallback / FallbackCategory::is_fallback_eligible semantics
+    // must update both call sites.
+    let mut winning_row_id: Option<String> = None;
+    let mut winning_fingerprint: Option<String> = None;
+    let mut winning_metadata: Option<Value> = None;
+    let mut attempted_row_ids: Vec<String> = Vec::new();
+    let mut per_row_results: Vec<ImportRowResult> = Vec::new();
+    let mut last_failure_message: Option<String> = None;
+    let mut last_failure_reason: Option<String> = None;
+    let rows_snapshot: Vec<Value> = envelope["rows"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    let total = rows_snapshot.len();
+    for (zero_index, row) in rows_snapshot.iter().enumerate() {
+        let display_index = zero_index + 1;
+        let row_id = row
+            .get("id")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string();
+        let row_legacy = &row_configs[zero_index];
+        attempted_row_ids.push(row_id.clone());
+        let runtime = match build_runtime_config(row_legacy, &imported_other) {
+            Ok(runtime) => runtime,
+            Err(error) => {
+                let category = llm_config_set::classify_fallback(&error);
+                let api_key = read_string(row_legacy, "llmApiKey").unwrap_or_default();
+                let safe_msg = redact_secrets_in_message(&error.message, &api_key);
+                envelope = llm_config_set::mark_row_preflight(
+                    &envelope,
+                    &row_id,
+                    "failed",
+                    Some(category.reason_code()),
+                    Some(&safe_msg),
+                    None,
+                );
+                per_row_results.push(ImportRowResult {
+                    id: row_id.clone(),
+                    index: zero_index,
+                    preflight: "failed".to_string(),
+                    reason_code: Some(category.reason_code().to_string()),
+                    fingerprint: None,
+                    message: Some(safe_msg.clone()),
+                });
+                // Only capture row-1 failure so top-level reason mirrors row 1, not last row.
+                if last_failure_message.is_none() {
+                    last_failure_message = Some(safe_msg);
+                    last_failure_reason = Some(category.reason_code().to_string());
+                }
+                if category.is_fallback_eligible() {
+                    continue;
+                }
+                tracing::info!(
+                    "[import] break-class halt at row {}/{}; remaining rows not attempted",
+                    display_index,
+                    total
+                );
+                break;
+            }
+        };
+        match test_llm_generation(&state.http_client, &runtime).await {
+            Ok(outcome) => {
+                envelope = llm_config_set::mark_row_preflight(
+                    &envelope,
+                    &row_id,
+                    "passed",
+                    None,
+                    Some("导入后连接校验通过"),
+                    Some(&outcome.fingerprint),
+                );
+                winning_row_id = Some(row_id.clone());
+                winning_fingerprint = Some(outcome.fingerprint.clone());
+                winning_metadata = Some(outcome.metadata());
+                per_row_results.push(ImportRowResult {
+                    id: row_id.clone(),
+                    index: zero_index,
+                    preflight: "passed".to_string(),
+                    reason_code: None,
+                    fingerprint: Some(outcome.fingerprint),
+                    message: None,
+                });
+                break;
+            }
+            Err(error) => {
+                let category = llm_config_set::classify_fallback(&error);
+                let api_key = read_string(row_legacy, "llmApiKey").unwrap_or_default();
+                let safe_msg = redact_secrets_in_message(&error.message, &api_key);
+                envelope = llm_config_set::mark_row_preflight(
+                    &envelope,
+                    &row_id,
+                    "failed",
+                    Some(category.reason_code()),
+                    Some(&safe_msg),
+                    None,
+                );
+                per_row_results.push(ImportRowResult {
+                    id: row_id.clone(),
+                    index: zero_index,
+                    preflight: "failed".to_string(),
+                    reason_code: Some(category.reason_code().to_string()),
+                    fingerprint: None,
+                    message: Some(safe_msg.clone()),
+                });
+                // Only capture row-1 failure so top-level reason mirrors row 1, not last row.
+                if last_failure_message.is_none() {
+                    last_failure_message = Some(safe_msg);
+                    last_failure_reason = Some(category.reason_code().to_string());
+                }
+                if !category.is_fallback_eligible() {
+                    tracing::info!(
+                        "[import] break-class halt at row {}/{}; remaining rows not attempted",
+                        display_index,
+                        total
+                    );
+                    break;
+                }
+            }
         }
     }
+
+    envelope = llm_config_set::set_latest_preflight_run(
+        &envelope,
+        attempted_row_ids,
+        winning_row_id.clone(),
+        winning_fingerprint,
+    );
+
+    let save_metadata = winning_metadata.clone().unwrap_or_else(|| json!({}));
+    let stored =
+        system_config::save_current(&state, envelope, imported_other, save_metadata.clone())
+            .await
+            .map_err(internal_error)?;
+    let merged = merge_with_defaults(state.config.as_ref(), Some(stored));
+    sync_python_user_config_mirror(&state, Some(&merged)).await?;
+
+    // Per AC16: when winning_row_id is Some, top-level provider/model/baseUrl mirror the
+    // winning row's values. When None (all failed), mirror row 1 with noActiveConfig: true.
+    let (response_llm, response_metadata, success_flag, message, reason_code, stage) =
+        match &winning_row_id {
+            Some(winner_id) => {
+                let winner_legacy = per_row_results
+                    .iter()
+                    .find(|r| &r.id == winner_id)
+                    .map(|r| r.index)
+                    .and_then(|idx| row_configs.get(idx).cloned())
+                    .unwrap_or_else(|| {
+                        row_configs.first().cloned().unwrap_or_else(|| json!({}))
+                    });
+                (
+                    winner_legacy,
+                    Some(save_metadata),
+                    true,
+                    "已从 .argus-llm.env 导入并完成 LLM 测试。".to_string(),
+                    None,
+                    None,
+                )
+            }
+            None => {
+                let row_one = row_configs.first().cloned().unwrap_or_else(|| json!({}));
+                let no_active_metadata = json!({ "noActiveConfig": true });
+                let msg = last_failure_message.unwrap_or_else(|| {
+                    "未能完成 .argus-llm.env 导入：所有候选 LLM 配置均预检失败。".to_string()
+                });
+                (
+                    row_one,
+                    Some(no_active_metadata),
+                    false,
+                    msg,
+                    last_failure_reason,
+                    Some("llm_test".to_string()),
+                )
+            }
+        };
+
+    Ok(Json(import_response(
+        success_flag,
+        &message,
+        &response_llm,
+        response_metadata,
+        reason_code,
+        stage,
+        winning_row_id,
+        per_row_results,
+    )))
 }
 
 pub async fn fetch_llm_models(
@@ -1231,22 +1403,65 @@ fn verify_import_token(headers: &HeaderMap) -> Result<(), ApiError> {
     Ok(())
 }
 
-fn import_llm_config_from_env(default_llm_config: &Value) -> Result<Value, ApiError> {
-    let provider = env_required("LLM_PROVIDER")?;
+fn import_llm_config_from_env(default_llm_config: &Value) -> Result<Vec<Value>, ApiError> {
+    // Enumerate LLM_N_PROVIDER for N = 1, 2, 3, ... until first None.
+    let mut found_indices: Vec<usize> = Vec::new();
+    let mut probe = 1usize;
+    while env_optional(&format!("LLM_{probe}_PROVIDER")).is_some() {
+        found_indices.push(probe);
+        probe += 1;
+    }
+
+    // Precedence: numbered prefix wins over bare. If both present, bare is silently dropped.
+    let bare_provider_present = env_optional("LLM_PROVIDER").is_some();
+    let indices: Vec<Option<usize>> = if !found_indices.is_empty() {
+        if bare_provider_present {
+            tracing::info!("[import] numbered prefix detected; bare LLM_* keys ignored");
+        }
+        found_indices.into_iter().map(Some).collect()
+    } else if bare_provider_present {
+        // Auto-promote bare keys to LLM_1_*
+        vec![None]
+    } else {
+        return Err(ApiError::BadRequest("LLM_PROVIDER 未配置。".to_string()));
+    };
+
+    let mut rows: Vec<Value> = Vec::with_capacity(indices.len());
+    for slot in indices {
+        let row = build_row_for_slot(default_llm_config, slot)?;
+        rows.push(row);
+    }
+    Ok(rows)
+}
+
+/// Build a single LLM row from environment variables for the given slot.
+/// `slot = Some(N)` reads `LLM_N_*`; `slot = None` reads bare `LLM_*` (auto-promoted as row 1).
+/// Returns a sanitized row Value (legacy `llm*` flat shape) ready for `normalize_for_save`.
+fn build_row_for_slot(default_llm_config: &Value, slot: Option<usize>) -> Result<Value, ApiError> {
+    let key = |suffix: &str| -> String {
+        match slot {
+            Some(n) => format!("LLM_{n}_{suffix}"),
+            None => format!("LLM_{suffix}"),
+        }
+    };
+
+    let provider_key = key("PROVIDER");
+    let provider = env_required(&provider_key)?;
     let provider = normalize_provider_id(&provider);
     if !is_supported_protocol_provider(&provider) {
-        return Err(ApiError::BadRequest(
-            "LLM_PROVIDER 必须是 openai_compatible 或 anthropic_compatible。".to_string(),
-        ));
+        return Err(ApiError::BadRequest(format!(
+            "{provider_key} 必须是 openai_compatible 或 anthropic_compatible。"
+        )));
     }
-    let api_key = env_required("LLM_API_KEY")?;
+    let api_key_key = key("API_KEY");
+    let api_key = env_required(&api_key_key)?;
     if api_key == REDACTED_SECRET_PLACEHOLDER {
-        return Err(ApiError::BadRequest(
-            "LLM_API_KEY 不能是脱敏占位符。".to_string(),
-        ));
+        return Err(ApiError::BadRequest(format!(
+            "{api_key_key} 不能是脱敏占位符。"
+        )));
     }
-    let model = env_required("LLM_MODEL")?;
-    let base_url = env_required("LLM_BASE_URL")?;
+    let model = env_required(&key("MODEL"))?;
+    let base_url = env_required(&key("BASE_URL"))?;
     let mut overrides = json!({
         "llmConfigVersion": crate::llm::LLM_CONFIG_VERSION,
         "llmProvider": provider,
@@ -1258,8 +1473,9 @@ fn import_llm_config_from_env(default_llm_config: &Value) -> Result<Value, ApiEr
         "llmApiKeyRef": "system_config:llmApiKey",
     });
     if let Some(map) = overrides.as_object_mut() {
-        if let Some(value) = env_optional("LLM_TIMEOUT")
-            .and_then(|value| parse_i64_env_value("LLM_TIMEOUT", &value).ok())
+        let timeout_key = key("TIMEOUT");
+        if let Some(value) = env_optional(&timeout_key)
+            .and_then(|value| parse_i64_env_value(&timeout_key, &value).ok())
         {
             map.insert(
                 "llmTimeout".to_string(),
@@ -1267,35 +1483,40 @@ fn import_llm_config_from_env(default_llm_config: &Value) -> Result<Value, ApiEr
             );
         }
         if let Some(value) =
-            env_optional("LLM_TEMPERATURE").and_then(|value| parse_f64_json_value(&value))
+            env_optional(&key("TEMPERATURE")).and_then(|value| parse_f64_json_value(&value))
         {
             map.insert("llmTemperature".to_string(), value);
         }
-        if let Some(value) = env_optional("LLM_MAX_TOKENS")
-            .and_then(|value| parse_i64_env_value("LLM_MAX_TOKENS", &value).ok())
+        let max_tokens_key = key("MAX_TOKENS");
+        if let Some(value) = env_optional(&max_tokens_key)
+            .and_then(|value| parse_i64_env_value(&max_tokens_key, &value).ok())
         {
             map.insert("llmMaxTokens".to_string(), Value::Number(value.into()));
         }
-        if let Some(value) = env_optional("LLM_FIRST_TOKEN_TIMEOUT")
-            .and_then(|value| parse_i64_env_value("LLM_FIRST_TOKEN_TIMEOUT", &value).ok())
+        let first_token_key = key("FIRST_TOKEN_TIMEOUT");
+        if let Some(value) = env_optional(&first_token_key)
+            .and_then(|value| parse_i64_env_value(&first_token_key, &value).ok())
         {
             map.insert(
                 "llmFirstTokenTimeout".to_string(),
                 Value::Number(value.into()),
             );
         }
-        if let Some(value) = env_optional("LLM_STREAM_TIMEOUT")
-            .and_then(|value| parse_i64_env_value("LLM_STREAM_TIMEOUT", &value).ok())
+        let stream_timeout_key = key("STREAM_TIMEOUT");
+        if let Some(value) = env_optional(&stream_timeout_key)
+            .and_then(|value| parse_i64_env_value(&stream_timeout_key, &value).ok())
         {
             map.insert("llmStreamTimeout".to_string(), Value::Number(value.into()));
         }
+        // AGENT_TIMEOUT is GLOBAL: only read top-level AGENT_TIMEOUT (no per-row variant).
+        // Per-row LLM_N_AGENT_TIMEOUT is silently ignored per AC17.
         if let Some(value) = env_optional("AGENT_TIMEOUT")
             .or_else(|| env_optional("AGENT_TIMEOUT_SECONDS"))
             .and_then(|value| parse_i64_env_value("AGENT_TIMEOUT", &value).ok())
         {
             map.insert("agentTimeout".to_string(), Value::Number(value.into()));
         }
-        if let Some(value) = env_optional("LLM_CUSTOM_HEADERS") {
+        if let Some(value) = env_optional(&key("CUSTOM_HEADERS")) {
             map.insert("llmCustomHeaders".to_string(), Value::String(value));
         }
     }
@@ -1343,6 +1564,7 @@ fn mark_imported_system_config(llm_config: &Value) -> Value {
     marked
 }
 
+#[allow(clippy::too_many_arguments)]
 fn import_response(
     success: bool,
     message: &str,
@@ -1350,6 +1572,8 @@ fn import_response(
     metadata: Option<Value>,
     reason_code: Option<String>,
     stage: Option<String>,
+    winning_row_id: Option<String>,
+    rows: Vec<ImportRowResult>,
 ) -> ImportEnvResponse {
     ImportEnvResponse {
         success,
@@ -1364,6 +1588,8 @@ fn import_response(
         reason_code,
         stage,
         metadata,
+        winning_row_id,
+        rows,
     }
 }
 
@@ -1498,6 +1724,31 @@ fn normalize_provider_for_route(provider: &str) -> String {
     } else {
         normalized
     }
+}
+
+/// Redact API key material from error messages before persisting or returning.
+/// Uses literal string replacement only (no regex dep) to avoid introducing new dependencies.
+fn redact_secrets_in_message(message: &str, api_key: &str) -> String {
+    let mut redacted = message.to_string();
+    // Strip the exact API key if long enough to be meaningful.
+    if api_key.len() >= 8 {
+        redacted = redacted.replace(api_key, "***configured***");
+    }
+    // Strip sk-... style keys (OpenAI/Anthropic format) by scanning for the prefix.
+    while let Some(start) = redacted.find("sk-") {
+        let tail = &redacted[start + 3..];
+        let end = tail
+            .find(|c: char| !c.is_ascii_alphanumeric() && c != '_' && c != '-')
+            .unwrap_or(tail.len());
+        if end >= 20 {
+            // long enough to be a real key
+            let replace_end = start + 3 + end;
+            redacted = format!("{}sk-***{}", &redacted[..start], &redacted[replace_end..]);
+        } else {
+            break;
+        }
+    }
+    redacted
 }
 
 fn read_string(value: &Value, key: &str) -> Option<String> {

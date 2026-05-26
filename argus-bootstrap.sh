@@ -91,6 +91,7 @@ Environment:
   scripts/validate-llm-config.sh --env-file ./.argus-llm.env to confirm the LLM
   config, then run ./$SCRIPT_NAME again. Existing legacy LLM values in .env are
   migrated into .argus-llm.env automatically.
+  python3 (preferred) or jq is required to parse the multi-row LLM import response.
 
 Run modes:
   default      Safe default. Preserve data volumes and Docker image/build cache.
@@ -223,6 +224,64 @@ read_llm_env_value() {
   read_env_value_from_file "$ARGUS_LLM_ENV_FILE" "$key"
 }
 
+# _assert_json_tool_available: fail visibly (in the main shell) if neither jq nor python3 works.
+# Call this BEFORE any subshell that invokes parse_import_response_json.
+_assert_json_tool_available() {
+  if printf 'null' | jq -e . >/dev/null 2>&1; then return 0; fi
+  if printf 'import sys\n' | python3 - >/dev/null 2>&1; then return 0; fi
+  fail "argus-bootstrap requires python3 (preferred) or jq to parse the multi-row LLM import response. Install one of them and re-run."
+}
+
+# parse_import_response_json: parse the backend import response (multi-row or legacy single-row).
+# Reads JSON from $1 (string). Outputs:
+#   WINNING_ROW_ID=<id or empty>      — from winningRowId field (empty if absent)
+#   SUCCESS=<true|false>              — from success field (for legacy single-row compat)
+#   [LLM N] preflight: id=... reasonCode=... message=...   (one per row, only if rows present)
+# Requires python3 (preferred) or jq. Fails hard if neither available.
+parse_import_response_json() {
+  local json="$1"
+  # Probe tools with a trivial invocation to confirm they are functional (not just present in PATH).
+  local _jq_ok=false _py_ok=false
+  if printf 'null' | jq -e . >/dev/null 2>&1; then _jq_ok=true; fi
+  if printf 'import sys\n' | python3 - >/dev/null 2>&1; then _py_ok=true; fi
+
+  if "$_jq_ok"; then
+    printf '%s' "$json" | jq -r '
+      "WINNING_ROW_ID=" + (.winningRowId // ""),
+      "SUCCESS=" + (if .success == false then "false" else "true" end),
+      (.rows[]? | "[LLM \(.index+1)] \(.preflight): id=\(.id) reasonCode=\(.reasonCode // "null") message=\(.message // "")")
+    '
+  elif "$_py_ok"; then
+    printf '%s' "$json" | python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+winning = d.get('winningRowId') or ''
+print('WINNING_ROW_ID=' + winning)
+success = 'false' if d.get('success') is False else 'true'
+print('SUCCESS=' + success)
+rows = d.get('rows') or []
+for r in rows:
+    idx = (r.get('index') or 0) + 1
+    preflight = r.get('preflight') or 'unknown'
+    rid = r.get('id') or ''
+    reason = r.get('reasonCode') or 'null'
+    msg = r.get('message') or ''
+    print('[LLM %d] %s: id=%s reasonCode=%s message=%s' % (idx, preflight, rid, reason, msg))
+"
+  else
+    fail "argus-bootstrap requires python3 (preferred) or jq to parse the multi-row LLM import response. Install one of them and re-run."
+  fi
+}
+
+# detect_duplicate_legacy_bare_keys: warn if ARGUS_LLM_ENV_FILE has stacked bare LLM_PROVIDER blocks.
+detect_duplicate_legacy_bare_keys() {
+  local count
+  count=$(awk '/^[[:space:]]*#/ {next} /^[[:space:]]*LLM_PROVIDER[[:space:]]*=/ { c++ } END { print c+0 }' "$ARGUS_LLM_ENV_FILE")
+  if (( count > 1 )); then
+    printf >&2 '[argus-bootstrap] Warning: detected %s stacked bare LLM_PROVIDER blocks in %s. Only the LAST block is active. Convert to LLM_1_*/LLM_2_*/... to use all of them.\n' "$count" "$ARGUS_LLM_ENV_FILE"
+  fi
+}
+
 is_placeholder_value() {
   local value="$1"
   case "$value" in
@@ -266,6 +325,7 @@ validate_llm_config() {
   [[ -x "$LLM_CONFIG_VALIDATOR" ]] || fail "LLM config validator is missing or not executable: $LLM_CONFIG_VALIDATOR"
   ensure_root_env_file
   ensure_llm_env_file
+  detect_duplicate_legacy_bare_keys
   "$LLM_CONFIG_VALIDATOR" --env-file "$ARGUS_LLM_ENV_FILE"
 }
 
@@ -1489,22 +1549,58 @@ import_backend_env() {
   local response
   if [[ -n "${ARGUS_TEST_IMPORT_RESPONSE:-}" ]]; then
     response="$ARGUS_TEST_IMPORT_RESPONSE"
-    printf '%s
-' "$response"
+    printf '%s\n' "$response"
   elif "$DRY_RUN" || is_truthy "$STUB_DOCKER"; then
     run_cmd curl -fsS -X POST -H "X-Argus-Reset-Import-Token: $ARGUS_RESET_IMPORT_TOKEN" "$BACKEND_IMPORT_URL"
     return 0
   elif response="$(curl -fsS -X POST -H "X-Argus-Reset-Import-Token: $ARGUS_RESET_IMPORT_TOKEN" "$BACKEND_IMPORT_URL")"; then
-    printf '%s
-' "$response"
+    printf '%s\n' "$response"
   else
     fail "backend LLM env import/test failed. 请重新配置 $ARGUS_LLM_ENV_FILE 后再运行 bootstrap。"
   fi
 
-  if printf '%s' "$response" | grep -Eq '"success"[[:space:]]*:[[:space:]]*false'; then
-    fail "backend LLM env import/test returned failure. 请重新配置 $ARGUS_LLM_ENV_FILE 后再运行 bootstrap。"
+  # Verify a JSON tool is functional before entering the subshell for parse_import_response_json.
+  # This must happen in the main shell so fail() can print the error and exit visibly.
+  _assert_json_tool_available
+
+  # Parse response via parse_import_response_json (requires python3 or jq; fails hard if neither).
+  # Outputs: WINNING_ROW_ID=<id|empty|null>, then one [LLM N] line per row.
+  # For legacy single-row responses (no rows array), also outputs SUCCESS=<true|false>.
+  local parsed_output winning_row_id
+  parsed_output="$(parse_import_response_json "$response")"
+  winning_row_id="$(printf '%s\n' "$parsed_output" | grep '^WINNING_ROW_ID=' | cut -d= -f2)"
+
+  # Log one line per row (skip the metadata lines).
+  while IFS= read -r row_line; do
+    case "$row_line" in
+      WINNING_ROW_ID=*|SUCCESS=*) continue ;;
+    esac
+    log "$row_line"
+  done <<< "$parsed_output"
+
+  # Determine if this is a multi-row response (has rows) or legacy single-row.
+  # Use awk for explicit numeric extraction — grep -c can return non-zero exit when
+  # count is 0, causing spurious failures even with || true in strict mode.
+  local has_rows
+  has_rows=$(printf '%s\n' "$parsed_output" | awk '/^\[LLM /{c++} END{print c+0}')
+
+  if [[ "$has_rows" -eq 0 ]]; then
+    # Legacy single-row response: use SUCCESS field parsed alongside.
+    local success_val
+    success_val="$(printf '%s\n' "$parsed_output" | grep '^SUCCESS=' | cut -d= -f2)"
+    if [[ "$success_val" == "false" ]]; then
+      fail "backend LLM env import/test returned failure. 请重新配置 $ARGUS_LLM_ENV_FILE 后再运行 bootstrap。"
+    fi
+    log "Backend LLM env import/test succeeded; response was sanitized by backend."
+    return 0
   fi
-  log "Backend LLM env import/test succeeded; response was sanitized by backend."
+
+  # Multi-row response: require a winning row.
+  if [[ -z "$winning_row_id" || "$winning_row_id" == "null" ]]; then
+    fail "backend LLM env import/test failed: no row passed preflight. Per-row failures above. 请重新配置 $ARGUS_LLM_ENV_FILE 后再运行 bootstrap."
+  fi
+
+  log "Backend LLM env import succeeded; winning row=$winning_row_id. Response sanitized by backend."
 }
 
 follow_foreground_logs() {

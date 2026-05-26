@@ -816,7 +816,7 @@ runner_profile_count="$(grep -F -c 'profiles: [ "runner-build" ]' "$ROOT_DIR/doc
 [[ "$runner_profile_count" -eq 1 ]] || fail "only opengrep runner service should be a profile-only image build target"
 assert_contains "$ROOT_DIR/docker-compose.yml" "\"host.docker.internal:host-gateway\""
 assert_contains "$ROOT_DIR/env.example" "VITE_API_TARGET=http://host.docker.internal:18000"
-assert_contains "$ROOT_DIR/llm.env.example" "LLM_PROVIDER=openai_compatible"
+assert_contains "$ROOT_DIR/llm.env.example" "LLM_1_PROVIDER=openai_compatible"
 assert_not_contains "$ROOT_DIR/env.example" "VITE_API_TARGET=http://backend:8000"
 assert_contains "$ROOT_DIR/frontend/vite.config.ts" "http://127.0.0.1:18000"
 assert_contains "$compose_render_out" "VITE_API_TARGET: http://host.docker.internal:18000"
@@ -925,5 +925,198 @@ bare_out="$bare_dir/bare.out"
 ( cd "$bare_dir" && ARGUS_STUB_DOCKER=true ./argus-bootstrap.sh --runtime docker -- ) >"$bare_out" 2>&1
 assert_contains "$bare_out" "Run mode: default"
 assert_no_global_prune_execution "$bare_out"
+
+# validate-llm-config.sh: multi-config valid (AC6/AC7) — two well-formed numbered blocks exit 0.
+multi_cfg_dir="$(new_fixture validate-multi-valid)"
+write_valid_config "$multi_cfg_dir"
+multi_cfg_env="$multi_cfg_dir/multi.env"
+cat > "$multi_cfg_env" <<'ENV'
+LLM_1_PROVIDER=openai_compatible
+LLM_1_API_KEY=sk-real-key-abc123
+LLM_1_MODEL=gpt-4
+LLM_1_BASE_URL=https://api.example.com
+LLM_2_PROVIDER=anthropic_compatible
+LLM_2_API_KEY=sk-real-key-def456
+LLM_2_MODEL=claude-opus-4
+LLM_2_BASE_URL=https://api.example.com
+ENV
+set +e
+multi_cfg_out="$(bash "$multi_cfg_dir/scripts/validate-llm-config.sh" --env-file "$multi_cfg_env" 2>&1)"
+multi_cfg_rc=$?
+set -e
+[[ "$multi_cfg_rc" -eq 0 ]] || fail "test_validate_multi_config_valid: expected exit 0, got $multi_cfg_rc. Output: $multi_cfg_out"
+
+# validate-llm-config.sh: placeholder in row 2 exits non-zero, error names LLM_2_API_KEY (AC6).
+placeholder_row2_env="$multi_cfg_dir/placeholder-row2.env"
+cat > "$placeholder_row2_env" <<'ENV'
+LLM_1_PROVIDER=openai_compatible
+LLM_1_API_KEY=sk-real-key-abc123
+LLM_1_MODEL=gpt-4
+LLM_1_BASE_URL=https://api.example.com
+LLM_2_PROVIDER=anthropic_compatible
+LLM_2_API_KEY=sk-your-api-key
+LLM_2_MODEL=claude-opus-4
+LLM_2_BASE_URL=https://api.example.com
+ENV
+placeholder_row2_out_file="$multi_cfg_dir/placeholder-row2.out"
+set +e
+bash "$multi_cfg_dir/scripts/validate-llm-config.sh" --env-file "$placeholder_row2_env" >"$placeholder_row2_out_file" 2>&1
+placeholder_row2_rc=$?
+set -e
+[[ "$placeholder_row2_rc" -ne 0 ]] || fail "test_validate_placeholder_in_row_2: expected non-zero exit"
+assert_contains "$placeholder_row2_out_file" "LLM 2"
+assert_contains "$placeholder_row2_out_file" "LLM_2_API_KEY"
+
+# validate-llm-config.sh: bare legacy keys (no numbered prefix) exit 0 — auto-promote (AC7).
+legacy_dir="$(new_fixture validate-bare-legacy)"
+write_valid_config "$legacy_dir"
+legacy_env="$legacy_dir/legacy.env"
+cat > "$legacy_env" <<'ENV'
+LLM_PROVIDER=openai_compatible
+LLM_API_KEY=sk-real-key-legacy
+LLM_MODEL=gpt-4
+LLM_BASE_URL=https://api.example.com
+ENV
+set +e
+legacy_out="$(bash "$legacy_dir/scripts/validate-llm-config.sh" --env-file "$legacy_env" 2>&1)"
+legacy_rc=$?
+set -e
+[[ "$legacy_rc" -eq 0 ]] || fail "test_validate_bare_keys_legacy: expected exit 0, got $legacy_rc. Output: $legacy_out"
+
+# validate-llm-config.sh: stacked bare LLM_PROVIDER lines print dup warning but exit 0.
+stacked_dir="$(new_fixture validate-stacked-dup)"
+write_valid_config "$stacked_dir"
+stacked_env="$stacked_dir/stacked.env"
+cat > "$stacked_env" <<'ENV'
+LLM_PROVIDER=openai_compatible
+LLM_API_KEY=sk-real-key-first
+LLM_MODEL=gpt-4
+LLM_BASE_URL=https://api.example.com
+LLM_PROVIDER=openai_compatible
+ENV
+stacked_out_file="$stacked_dir/stacked.out"
+set +e
+bash "$stacked_dir/scripts/validate-llm-config.sh" --env-file "$stacked_env" >"$stacked_out_file" 2>&1
+stacked_rc=$?
+set -e
+[[ "$stacked_rc" -eq 0 ]] || fail "test_validate_stacked_dup_warning: expected exit 0, got $stacked_rc"
+assert_contains "$stacked_out_file" "detected"
+assert_contains "$stacked_out_file" "stacked"
+assert_contains "$stacked_out_file" "LLM_PROVIDER"
+
+# validate-llm-config.sh: empty file exits non-zero with "LLM_PROVIDER 未配置" message.
+no_llm_dir="$(new_fixture validate-no-llm)"
+write_valid_config "$no_llm_dir"
+no_llm_env="$no_llm_dir/empty.env"
+cat > "$no_llm_env" <<'ENV'
+# no LLM keys here
+ENV
+no_llm_out_file="$no_llm_dir/no-llm.out"
+set +e
+bash "$no_llm_dir/scripts/validate-llm-config.sh" --env-file "$no_llm_env" >"$no_llm_out_file" 2>&1
+no_llm_rc=$?
+set -e
+[[ "$no_llm_rc" -ne 0 ]] || fail "test_validate_no_llm_keys: expected non-zero exit"
+assert_contains "$no_llm_out_file" "LLM_PROVIDER 未配置"
+
+# AC1/AC15: multi-row response with one passing row: winning_row_id set, exit 0, [LLM 1] logged.
+multi_win_dir="$(new_fixture multi-config-winning-row)"
+write_valid_config "$multi_win_dir"
+multi_win_out="$multi_win_dir/multi-win.out"
+( cd "$multi_win_dir" && ARGUS_STUB_DOCKER=true \
+  ARGUS_TEST_IMPORT_RESPONSE='{"success":true,"message":"ok","winningRowId":"row1","rows":[{"id":"row1","index":0,"preflight":"passed","reasonCode":null,"fingerprint":"fp1","message":null}]}' \
+  ./argus-bootstrap.sh --runtime docker --wait-exit -- default ) >"$multi_win_out" 2>&1
+assert_contains "$multi_win_out" "[LLM 1]"
+assert_contains "$multi_win_out" "passed"
+assert_contains "$multi_win_out" "winning row=row1"
+assert_contains "$multi_win_out" "Complete. Frontend:"
+
+# AC3/AC15: partial failure - first row passes, second untested; exit 0, both row lines logged.
+multi_partial_dir="$(new_fixture multi-config-partial-failure)"
+write_valid_config "$multi_partial_dir"
+multi_partial_out="$multi_partial_dir/multi-partial.out"
+( cd "$multi_partial_dir" && ARGUS_STUB_DOCKER=true \
+  ARGUS_TEST_IMPORT_RESPONSE='{"success":true,"message":"ok","winningRowId":"row1","rows":[{"id":"row1","index":0,"preflight":"passed","reasonCode":null,"fingerprint":"fp1","message":null},{"id":"row2","index":1,"preflight":"untested","reasonCode":null,"fingerprint":null,"message":null}]}' \
+  ./argus-bootstrap.sh --runtime docker --wait-exit -- default ) >"$multi_partial_out" 2>&1
+assert_contains "$multi_partial_out" "[LLM 1]"
+assert_contains "$multi_partial_out" "[LLM 2]"
+assert_contains "$multi_partial_out" "winning row=row1"
+assert_contains "$multi_partial_out" "Complete. Frontend:"
+
+# AC4/AC15: all rows failed; exit non-zero, both reason codes printed, no "Complete."
+multi_all_fail_dir="$(new_fixture multi-config-all-failed)"
+write_valid_config "$multi_all_fail_dir"
+multi_all_fail_out="$multi_all_fail_dir/multi-all-fail.out"
+set +e
+( cd "$multi_all_fail_dir" && ARGUS_STUB_DOCKER=true \
+  ARGUS_TEST_IMPORT_RESPONSE='{"success":false,"message":"all failed","winningRowId":null,"rows":[{"id":"row1","index":0,"preflight":"failed","reasonCode":"auth","fingerprint":null,"message":"401"},{"id":"row2","index":1,"preflight":"failed","reasonCode":"connectivity","fingerprint":null,"message":"refused"}]}' \
+  ./argus-bootstrap.sh --runtime docker --wait-exit -- default ) >"$multi_all_fail_out" 2>&1
+multi_all_fail_rc=$?
+set -e
+[[ "$multi_all_fail_rc" -ne 0 ]] || fail "test_bootstrap_multi_config_all_failed: expected non-zero exit"
+assert_contains "$multi_all_fail_out" "auth"
+assert_contains "$multi_all_fail_out" "connectivity"
+assert_not_contains "$multi_all_fail_out" "Complete. Frontend:"
+
+# AC5: stacked bare LLM_PROVIDER blocks in .argus-llm.env produce a warning via bootstrap.
+stacked_bootstrap_dir="$(new_fixture multi-config-stacked-bootstrap)"
+write_valid_config "$stacked_bootstrap_dir"
+cat > "$stacked_bootstrap_dir/.argus-llm.env" <<'ENV'
+LLM_PROVIDER=openai_compatible
+LLM_API_KEY=sk-key-first
+LLM_MODEL=gpt-4
+LLM_BASE_URL=https://api.example.com
+LLM_TIMEOUT=150
+LLM_TEMPERATURE=0.1
+LLM_MAX_TOKENS=4096
+AGENT_TIMEOUT=1800
+LLM_PROVIDER=openai_compatible
+ENV
+stacked_bootstrap_out="$stacked_bootstrap_dir/stacked-bootstrap.out"
+set +e
+( cd "$stacked_bootstrap_dir" && ARGUS_STUB_DOCKER=true \
+  ARGUS_TEST_IMPORT_RESPONSE='{"success":true,"message":"ok","winningRowId":"row1","rows":[{"id":"row1","index":0,"preflight":"passed","reasonCode":null,"fingerprint":"fp1","message":null}]}' \
+  ./argus-bootstrap.sh --runtime docker --wait-exit -- default ) >"$stacked_bootstrap_out" 2>&1
+stacked_bootstrap_rc=$?
+set -e
+# Warning should appear in stderr (captured in combined output); bootstrap may exit non-zero due to validator.
+grep -q "stacked" "$stacked_bootstrap_out" || fail "test_bootstrap_stacked_legacy_warning: expected 'stacked' in output"
+grep -q "LLM_PROVIDER" "$stacked_bootstrap_out" || fail "test_bootstrap_stacked_legacy_warning: expected 'LLM_PROVIDER' in output"
+
+# AC15: no python3, no jq in PATH → bootstrap fails with clear Install message.
+# Strategy: prepend a fake-bin dir that intercepts python3 and jq calls and exits 1,
+# while real PATH provides all other utilities needed for the bootstrap to reach import_backend_env.
+no_json_tool_dir="$(new_fixture multi-config-no-json-tool)"
+write_valid_config "$no_json_tool_dir"
+no_json_tool_out="$no_json_tool_dir/no-json-tool.out"
+fake_no_json_bin="$no_json_tool_dir/fake-no-json-bin"
+mkdir -p "$fake_no_json_bin"
+printf '#!/bin/sh\nexit 127\n' > "$fake_no_json_bin/python3"
+printf '#!/bin/sh\nexit 127\n' > "$fake_no_json_bin/jq"
+chmod +x "$fake_no_json_bin/python3" "$fake_no_json_bin/jq"
+set +e
+( cd "$no_json_tool_dir" && PATH="$fake_no_json_bin:$PATH" ARGUS_STUB_DOCKER=true \
+  ARGUS_TEST_IMPORT_RESPONSE='{"success":true,"message":"ok","winningRowId":"row1","rows":[{"id":"row1","index":0,"preflight":"passed","reasonCode":null,"fingerprint":"fp1","message":null}]}' \
+  ./argus-bootstrap.sh --runtime docker --wait-exit -- default ) >"$no_json_tool_out" 2>&1
+no_json_tool_rc=$?
+set -e
+# Should fail because neither python3 nor jq available.
+[[ "$no_json_tool_rc" -ne 0 ]] || fail "test_bootstrap_no_python3_no_jq_fails_clearly: expected non-zero exit"
+{ grep -q "python3" "$no_json_tool_out" || grep -q "jq" "$no_json_tool_out"; } \
+  || fail "test_bootstrap_no_python3_no_jq_fails_clearly: expected 'python3' or 'jq' in output"
+grep -q "Install" "$no_json_tool_out" \
+  || fail "test_bootstrap_no_python3_no_jq_fails_clearly: expected 'Install' in output"
+
+# AC10: no container restart commands issued between wait_for_backend and import_backend_env.
+no_restart_dir="$(new_fixture no-restart)"
+write_valid_config "$no_restart_dir"
+no_restart_out="$no_restart_dir/no-restart.out"
+( cd "$no_restart_dir" && ARGUS_STUB_DOCKER=true \
+  ARGUS_TEST_IMPORT_RESPONSE='{"success":true,"winningRowId":"row1","rows":[{"id":"row1","index":0,"preflight":"passed","reasonCode":null,"fingerprint":"f","message":null}]}' \
+  ./argus-bootstrap.sh --runtime docker --wait-exit -- default ) >"$no_restart_out" 2>&1
+assert_contains "$no_restart_out" "Complete. Frontend"
+assert_not_contains "$no_restart_out" "podman restart"
+assert_not_contains "$no_restart_out" "podman stop"
+assert_not_contains "$no_restart_out" "docker restart"
 
 echo "[test] argus-bootstrap tests passed"
