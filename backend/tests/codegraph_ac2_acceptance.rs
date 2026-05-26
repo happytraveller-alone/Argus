@@ -1,10 +1,11 @@
-//! AC2 acceptance test — Plan Phase 2 / v0.2 production thresholds (`AC2.C`).
+//! AC2 acceptance test — Plan Phase 2 / v0.2 + v0.3.b production thresholds.
 //!
-//! Drives the **six** codegraph fixtures through the deterministic dismissal
+//! Drives the codegraph fixtures through the deterministic dismissal
 //! channels (path-pattern from `path_classifier`, rule-matched from
-//! `sanitizer_sot`) and asserts the v0.2 production gate:
+//! `sanitizer_sot`, and v0.3.b dead-code from `code_intel::dead_code`) and
+//! asserts the production gate:
 //!
-//! ## Fixture matrix (N = 6 total = 3 real + 3 negative)
+//! ## Fixture matrix (v0.3.b: N = 7 total = 3 real + 4 negative)
 //!
 //! Real-label (cross-file unsanitized chains — must surface as real):
 //!   1. `python_sqli/`            — Flask cross-file SQLi
@@ -15,6 +16,7 @@
 //!   4. `python_sqli_sanitized_negative/`        — sanitized via SoT rule_matched
 //!   5. `java_path_traversal_test_negative/`     — test path_pattern
 //!   6. `python_sqli_vendor_negative/`           — vendor path_pattern
+//!   7. `python_sqli_dead_code_negative/`        — dead-code rule_matched (v0.3.b)
 //!
 //! ## v0.2 thresholds (`AC2.C` — production gate)
 //!
@@ -49,6 +51,7 @@ use std::path::{Path, PathBuf};
 use backend_rust::runtime::intelligent::audit_pipeline::types::{
     ConfidenceSource, DismissalCategory, DismissalEvidence,
 };
+use backend_rust::runtime::intelligent::code_intel::dead_code::detect_dead_code;
 use backend_rust::runtime::intelligent::code_intel::lookup_sanitizer;
 use backend_rust::runtime::intelligent::code_intel::path_classifier::{
     classify_path, PathCategory,
@@ -176,6 +179,26 @@ fn deterministic_dismissal_for(case: &FixtureCase) -> Option<DismissalEvidence> 
             rationale: None,
         });
     }
+
+    // v0.3.b: dead-code channel. Same ordering as the runtime: runs ONLY when
+    // neither SoT nor path-pattern fired. Source is read from the fixture
+    // directory (fixtures are unpacked on disk for the test runner).
+    let line_start = case
+        .finding
+        .get("line_start")
+        .and_then(Value::as_u64)
+        .unwrap_or(1) as u32;
+    if let (Some(lang), Ok(source)) = (lang, std::fs::read_to_string(case.dir.join(file))) {
+        if let Some(pattern) = detect_dead_code(&source, line_start, lang) {
+            return Some(DismissalEvidence {
+                category: DismissalCategory::DeadCode,
+                confidence_source: ConfidenceSource::RuleMatched,
+                path_pattern: None,
+                sanitizer_symbols: vec![pattern.to_string()],
+                rationale: None,
+            });
+        }
+    }
     None
 }
 
@@ -194,19 +217,21 @@ fn expected_confidence_source(case: &FixtureCase) -> Option<&str> {
 
 #[test]
 fn ac2_acceptance_real_recall_sanitized_test_classification() {
-    // ── Load all 6 fixtures (v0.2 matrix: 3 real + 3 negative) ─────────────
+    // ── Load all 7 fixtures (v0.3.b matrix: 3 real + 4 negative) ───────────
     let real_python = load_fixture("python_sqli");
     let real_java = load_fixture("java_path_traversal");
     let real_ts = load_fixture("ts_proto_pollution");
     let san = load_fixture("python_sqli_sanitized_negative");
     let test = load_fixture("java_path_traversal_test_negative");
     let vendor = load_fixture("python_sqli_vendor_negative");
+    let dead = load_fixture("python_sqli_dead_code_negative");
 
-    let fixtures = [&real_python, &real_java, &real_ts, &san, &test, &vendor];
+    let fixtures = [&real_python, &real_java, &real_ts, &san, &test, &vendor, &dead];
     let mut real_recall_count = 0usize;
     let mut sanitized_correct_count = 0usize;
     let mut test_correct_count = 0usize;
     let mut vendor_correct_count = 0usize;
+    let mut dead_correct_count = 0usize;
     let mut fpr_count = 0usize;
 
     for case in fixtures.iter() {
@@ -281,6 +306,27 @@ fn ac2_acceptance_real_recall_sanitized_test_classification() {
                     vendor_correct_count += 1;
                 }
             }
+            "dead_code" => {
+                let v = verdict
+                    .as_ref()
+                    .expect("dead_code fixture must produce dismissal_evidence");
+                assert_eq!(v.category, DismissalCategory::DeadCode);
+                assert_eq!(v.confidence_source, ConfidenceSource::RuleMatched);
+                let want_syms = case
+                    .finding
+                    .get("expected_sanitizer_symbols")
+                    .and_then(Value::as_array)
+                    .expect("dead_code fixture must declare expected_sanitizer_symbols");
+                for want in want_syms {
+                    let want = want.as_str().unwrap();
+                    assert!(
+                        v.sanitizer_symbols.iter().any(|s| s == want),
+                        "expected sanitizer_symbols to contain {want:?} got {:?}",
+                        v.sanitizer_symbols
+                    );
+                }
+                dead_correct_count += 1;
+            }
             other => panic!("unexpected expected_classification: {other}"),
         }
 
@@ -302,25 +348,30 @@ fn ac2_acceptance_real_recall_sanitized_test_classification() {
         }
     }
 
-    // AC2.C v0.2 production-gate assertions (per fixture matrix doc above).
+    // AC2.C / v0.3.b production-gate assertions (per fixture matrix doc above).
     // N=3 real: ceil(0.9 × 3) = 3 → all 3 must recall.
     assert_eq!(
         real_recall_count, 3,
-        "v0.2 real recall ≥90% on N=3 = 3/3; got {real_recall_count}"
+        "real recall ≥90% on N=3 = 3/3; got {real_recall_count}"
     );
     // N=1 sanitized: 1/1.
     assert_eq!(
         sanitized_correct_count, 1,
-        "v0.2 sanitized precision must be 1/1"
+        "sanitized precision must be 1/1"
     );
     // N=1 test: 1/1.
-    assert_eq!(test_correct_count, 1, "v0.2 test precision must be 1/1");
-    // N=1 vendor: 1/1 (new in Phase 2).
-    assert_eq!(vendor_correct_count, 1, "v0.2 vendor precision must be 1/1");
-    // N=3 negative: floor(0.2 × 3) = 0 → no flip allowed.
+    assert_eq!(test_correct_count, 1, "test precision must be 1/1");
+    // N=1 vendor: 1/1.
+    assert_eq!(vendor_correct_count, 1, "vendor precision must be 1/1");
+    // N=1 dead_code: 1/1 (v0.3.b new).
+    assert_eq!(
+        dead_correct_count, 1,
+        "v0.3.b dead_code precision must be 1/1"
+    );
+    // N=4 negative: floor(0.2 × 4) = 0 → no flip allowed (FPR still 0).
     assert_eq!(
         fpr_count, 0,
-        "v0.2 FPR ≤20% on N=3 = 0/3 flips; got {fpr_count}"
+        "FPR ≤20% on N=4 = 0/4 flips; got {fpr_count}"
     );
 }
 
@@ -335,11 +386,15 @@ fn ac2_acceptance_fixture_schemas_parse_cleanly() {
         "python_sqli_sanitized_negative",
         "java_path_traversal_test_negative",
         "python_sqli_vendor_negative",
+        "python_sqli_dead_code_negative",
     ] {
         let case = load_fixture(name);
         let classification = expected_classification(&case);
         assert!(
-            matches!(classification, "real" | "sanitized" | "test" | "vendor"),
+            matches!(
+                classification,
+                "real" | "sanitized" | "test" | "vendor" | "dead_code"
+            ),
             "fixture {name}: invalid expected_classification {classification}"
         );
         let source = expected_confidence_source(&case);

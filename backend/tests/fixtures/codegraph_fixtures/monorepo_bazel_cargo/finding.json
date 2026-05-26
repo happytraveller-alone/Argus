@@ -1,0 +1,13 @@
+{
+  "finding_id": "fixture-monorepo-bazel-cargo-001",
+  "file": "services/api/main.py",
+  "line_start": 1,
+  "line_end": 1,
+  "vuln_class": "fixture_marker",
+  "severity": "low",
+  "description": "Top-level fixture marker for the monorepo_bazel_cargo fixture. The fixture exercises vendor-path exclusion against a real mixed-build-system file tree (Bazel + Cargo + Maven); the AC3 dual-run test asserts that vendor/ files are reduced ≥80% when the codegraph handoff supplies vendor_paths.",
+  "evidence": "monorepo fixture — see README.md",
+  "expected_languages": ["python", "rust", "java"],
+  "expected_vendor_prefix": "vendor/",
+  "expected_classification": "real"
+}

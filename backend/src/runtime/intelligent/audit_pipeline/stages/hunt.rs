@@ -31,6 +31,7 @@ use serde_json::{json, Value};
 use tokio::task::JoinSet;
 
 use crate::runtime::intelligent::agent_runner::{standard_tool_defs, AgentRunConfig};
+use crate::runtime::intelligent::code_intel::dead_code::detect_dead_code;
 use crate::runtime::intelligent::code_intel::path_classifier::{classify_path, PathCategory};
 use crate::runtime::intelligent::code_intel::{lookup_sanitizer, CodeIntelligence};
 use crate::runtime::intelligent::token_budget::{BudgetExceeded, Pass, TokenBudget};
@@ -420,6 +421,40 @@ async fn enrich_dismissal_two_pass(
             sanitizer_symbols: vec![symbol.clone()],
             rationale: None,
         });
+    }
+
+    // ── v0.3.b: dead-code channel — runs AFTER path_classifier (normalize_finding)
+    //    and SoT, BEFORE Pass 2. Only fires when no deterministic verdict has
+    //    been set yet (path_pattern or rule_matched). On hit, write a
+    //    DeadCode / RuleMatched verdict and skip Pass 2 entirely — the
+    //    dismissal is conclusive.
+    let dead_code_hit = if finding.dismissal_evidence.is_none() {
+        ctx.archive
+            .read_text_file(&finding.file, 256 * 1024)
+            .ok()
+            .flatten()
+            .and_then(|source| {
+                detect_dead_code(&source, finding.line_start, &lang).map(|p| p.to_string())
+            })
+    } else {
+        None
+    };
+    if let Some(pattern) = dead_code_hit.as_ref() {
+        finding.dismissal_evidence = Some(DismissalEvidence {
+            category: DismissalCategory::DeadCode,
+            confidence_source: ConfidenceSource::RuleMatched,
+            path_pattern: None,
+            sanitizer_symbols: vec![pattern.clone()],
+            rationale: None,
+        });
+        events.emit(
+            IntelligentTaskEvent::new("hunt_dead_code_hit").with_data(json!({
+                "findingId": finding_id,
+                "pattern": pattern,
+            })),
+        );
+        // Deterministic dismissal — skip Pass 2 LLM call.
+        return Ok(());
     }
 
     // ── Pass 2: reasoning over evidence ────────────────────────────────────

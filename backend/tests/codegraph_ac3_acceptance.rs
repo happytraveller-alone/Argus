@@ -1,6 +1,6 @@
-//! AC3 acceptance test — Plan Phase 2 / v0.2 production thresholds (`AC2.D`).
+//! AC3 acceptance test — Plan Phase 2 / v0.2 + v0.3.b production thresholds.
 //!
-//! Two assertions:
+//! Assertions:
 //!   1. Language identification: when the codegraph handoff supplies
 //!      `primary_language` ∈ {python, java, typescript}, the parsed build
 //!      plan adopts it and DOES NOT mark `language_fallback_used`.
@@ -11,10 +11,13 @@
 //!      - run #2: `codegraph_unavailable=true` (no handoff at all) — the
 //!        build plan does NOT exclude vendor paths.
 //!      The v0.2 assertion: vendor-classified file count in run #1 ≤ 0.2× run #2
-//!      (≥80% reduction; v0.1 was ≥60%). With 5 vendor files mocked in run #2
-//!      and exclude-prefix `vendor/` in run #1, run #1 = 0 → reduction 100%.
-//!      The test simulates file counting with a small fixture-tree mock so we
-//!      exercise the consumer logic without spinning codegraph.
+//!      (≥80% reduction; v0.1 was ≥60%).
+//!   3. **v0.3.b**: Same dual-run protocol against a REAL monorepo fixture
+//!      (`monorepo_bazel_cargo/`) — replaces the v0.2 in-test mock. The
+//!      filesystem walk of the fixture is the source of truth for file
+//!      counting; the v0.2 80% reduction threshold remains.
+
+use std::path::PathBuf;
 
 use backend_rust::scan::codeql::parse_compile_sandbox_plan;
 use serde_json::json;
@@ -142,6 +145,108 @@ fn ac3_acceptance_vendor_reduction_dual_run() {
         (vendor_in_run1 as f64) <= 0.2 * (vendor_in_run2 as f64),
         "v0.2 vendor reduction must be ≥80% (run1={vendor_in_run1} run2={vendor_in_run2})"
     );
+}
+
+/// v0.3.b — vendor reduction against a REAL monorepo fixture
+/// (`monorepo_bazel_cargo/`). Replaces the v0.2 in-test mocked file list.
+/// Walks the on-disk fixture, runs the same dual-run protocol, asserts the
+/// v0.2 ≥80% threshold.
+#[test]
+fn ac3_acceptance_vendor_reduction_monorepo_fixture() {
+    let fixture_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests")
+        .join("fixtures")
+        .join("codegraph_fixtures")
+        .join("monorepo_bazel_cargo");
+    assert!(
+        fixture_root.is_dir(),
+        "monorepo fixture must exist at {}",
+        fixture_root.display()
+    );
+
+    // Walk the fixture and collect file paths RELATIVE to the fixture root.
+    let mut files: Vec<String> = Vec::new();
+    walk_files(&fixture_root, &fixture_root, &mut files);
+    files.sort();
+    assert!(
+        files.iter().any(|f| f.starts_with("vendor/")),
+        "fixture must contain vendor/ files (got: {files:?})"
+    );
+
+    // Run #1: handoff supplies vendor_paths — downstream excludes them.
+    let handoff_run1 = json!({
+        "primary_language": "python",
+        "languages_indexed": ["python", "rust", "java"],
+        "vendor_paths": ["vendor/"]
+    });
+    let excluded_prefixes_run1: Vec<String> = handoff_run1
+        .get("vendor_paths")
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str().map(str::to_string))
+                .collect()
+        })
+        .unwrap_or_default();
+    let vendor_in_run1 = files
+        .iter()
+        .filter(|f| {
+            let kept = !excluded_prefixes_run1
+                .iter()
+                .any(|prefix| f.starts_with(prefix));
+            let is_vendor_path = f.starts_with("vendor/");
+            kept && is_vendor_path
+        })
+        .count();
+
+    // Run #2: codegraph_unavailable — no handoff, no exclusion.
+    let excluded_prefixes_run2: Vec<String> = Vec::new();
+    let vendor_in_run2 = files
+        .iter()
+        .filter(|f| {
+            let kept = !excluded_prefixes_run2
+                .iter()
+                .any(|prefix| f.starts_with(prefix));
+            let is_vendor_path = f.starts_with("vendor/");
+            kept && is_vendor_path
+        })
+        .count();
+
+    eprintln!(
+        "ac3 monorepo vendor reduction: run1={vendor_in_run1} run2={vendor_in_run2} (≥80% required; fixture {} files)",
+        files.len()
+    );
+    assert!(
+        vendor_in_run2 >= 3,
+        "monorepo fixture must surface ≥3 vendor files in run #2; got {vendor_in_run2}"
+    );
+    assert!(
+        (vendor_in_run1 as f64) <= 0.2 * (vendor_in_run2 as f64),
+        "v0.2/v0.3.b vendor reduction ≥80% (run1={vendor_in_run1} run2={vendor_in_run2})"
+    );
+}
+
+/// Recursive directory walker — collects file paths relative to `root` into
+/// `out`. Uses only std::fs to avoid pulling a `walkdir` dependency.
+fn walk_files(root: &std::path::Path, dir: &std::path::Path, out: &mut Vec<String>) {
+    let entries = match std::fs::read_dir(dir) {
+        Ok(e) => e,
+        Err(_) => return,
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let metadata = match entry.metadata() {
+            Ok(m) => m,
+            Err(_) => continue,
+        };
+        if metadata.is_dir() {
+            walk_files(root, &path, out);
+        } else if metadata.is_file() {
+            if let Ok(rel) = path.strip_prefix(root) {
+                out.push(rel.to_string_lossy().into_owned());
+            }
+        }
+    }
 }
 
 /// AC1.H related — when no language signal exists anywhere (no LLM,

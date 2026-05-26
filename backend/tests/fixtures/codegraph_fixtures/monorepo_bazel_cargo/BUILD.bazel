@@ -1,0 +1,14 @@
+# Top-level Bazel BUILD for the monorepo_bazel_cargo fixture.
+#
+# Mixed-build-system shape used by ac3_acceptance to exercise vendor
+# exclusion against a real file tree (replacing the v0.2 in-test mock).
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "all_sources",
+    srcs = glob(
+        ["services/**/*", "crates/**/*"],
+        exclude = ["vendor/**"],
+    ),
+)

@@ -13,6 +13,7 @@
 
 pub mod cache;
 pub mod codegraph_client;
+pub mod dead_code;
 pub mod path_classifier;
 pub mod protocol;
 pub mod sanitizer_sot;

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Top-level Maven aggregator for the monorepo_bazel_cargo fixture.
+     Lists the legacy-java service module so the fixture exposes a Maven
+     build system alongside Bazel and Cargo. -->
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+    <modelVersion>4.0.0</modelVersion>
+    <groupId>com.example</groupId>
+    <artifactId>monorepo-aggregator</artifactId>
+    <version>1.0.0</version>
+    <packaging>pom</packaging>
+    <modules>
+        <module>services/legacy-java</module>
+    </modules>
+</project>

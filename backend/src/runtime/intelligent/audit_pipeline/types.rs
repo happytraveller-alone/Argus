@@ -86,6 +86,13 @@ pub struct PocResult {
 /// Phase 0 scope: written deterministically by `path_classifier` when a finding's
 /// single target file matches a known test/vendor path component. Phase 1 will
 /// extend writers to include `rule_matched` (SoT) and `llm_inferred` (Hunt Pass 2).
+///
+/// v0.3.b adds `DeadCode` — written deterministically by `code_intel::dead_code`
+/// when the finding's `line_start` lives inside an unreachable region
+/// (`if False:` block, `#[cfg(test)]` gate, code after an unconditional return,
+/// `if (false) {` branch, etc.). Always paired with `confidence_source ==
+/// RuleMatched` and the pattern name (e.g. `"if_false_branch"`) in
+/// `sanitizer_symbols[0]`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum DismissalCategory {
@@ -93,6 +100,7 @@ pub enum DismissalCategory {
     Sanitized,
     Test,
     Vendor,
+    DeadCode,
 }
 
 /// Provenance for a dismissal verdict — records WHICH evidence channel produced it.

@@ -1,0 +1,17 @@
+{
+  "finding_id": "HUNT-PY-SQLI-DEAD-001",
+  "file": "db.py",
+  "line_start": 16,
+  "line_end": 16,
+  "vuln_class": "sql_injection",
+  "severity": "high",
+  "description": "Apparent SQL injection sink inside build_query's f-string interpolation. The entire branch is guarded by `if False:` and is therefore unreachable.",
+  "evidence": "f\"SELECT * FROM users WHERE id = {parsed['user_id']}\"",
+  "expected_reachable": false,
+  "expected_call_chain": ["handle_lookup", "parse_request", "build_query", "run_query"],
+  "expected_classification": "dead_code",
+  "expected_confidence_source": "rule_matched",
+  "expected_sanitizer_symbols": ["if_false_branch"],
+  "expected_dismissal_rationale": "sink lives inside `if False:` block",
+  "expected_path_pattern": null
+}
