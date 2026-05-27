@@ -42,9 +42,16 @@ pub struct HuntTask {
     /// need a non-empty id — notably `hunt::run` which uses it to backfill
     /// `finding.task_id` at `stages/hunt.rs:111` — MUST synthesize a value
     /// (see `stages::feedback::run`).
-    #[serde(default, alias = "task_id", deserialize_with = "deserialize_string_lenient")]
+    #[serde(
+        default,
+        alias = "task_id",
+        deserialize_with = "deserialize_string_lenient"
+    )]
     pub task_id: String,
-    #[serde(default = "default_source", deserialize_with = "deserialize_string_lenient")]
+    #[serde(
+        default = "default_source",
+        deserialize_with = "deserialize_string_lenient"
+    )]
     pub source: String,
     #[serde(
         default,
@@ -167,9 +174,7 @@ where
 
 /// `Option<String>` counterpart to [`deserialize_string_lenient`]. Maps absent
 /// or `null` → `None`; other JSON shapes coerce to `Some(string)`.
-fn deserialize_option_string_lenient<'de, D>(
-    deserializer: D,
-) -> Result<Option<String>, D::Error>
+fn deserialize_option_string_lenient<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
@@ -302,7 +307,10 @@ pub struct AuditFinding {
     pub line_end: u32,
     #[serde(default, deserialize_with = "deserialize_string_lenient")]
     pub vuln_class: String,
-    #[serde(default = "default_severity", deserialize_with = "deserialize_string_lenient")]
+    #[serde(
+        default = "default_severity",
+        deserialize_with = "deserialize_string_lenient"
+    )]
     pub severity: String,
     #[serde(default, deserialize_with = "deserialize_string_lenient")]
     pub description: String,
@@ -526,7 +534,9 @@ impl PipelineOutputs {
             self.validate
                 .findings
                 .iter()
-                .filter(|vf| deduped_ids.is_empty() || deduped_ids.contains(vf.finding.finding_id.as_str()))
+                .filter(|vf| {
+                    deduped_ids.is_empty() || deduped_ids.contains(vf.finding.finding_id.as_str())
+                })
                 .map(|validated| {
                     let finding = &validated.finding;
                     let trace = trace_by_id.get(finding.finding_id.as_str());
@@ -695,7 +705,10 @@ mod tests {
         }"#;
         let mut output_c: super::HuntOutput =
             serde_json::from_str(raw_c).expect("C finding must deserialize");
-        assert_eq!(output_c.findings[0].language, "", "language absent → empty before normalize");
+        assert_eq!(
+            output_c.findings[0].language, "",
+            "language absent → empty before normalize"
+        );
         normalize_finding_for_test(&mut output_c.findings[0]);
         assert_eq!(
             output_c.findings[0].language, "c",
@@ -727,9 +740,18 @@ mod tests {
             .poc_result
             .as_ref()
             .expect("string pocResult must produce Some(PocResult)");
-        assert_eq!(poc.stdout, "VULNERABILITY CONFIRMED - arbitrary read achievable.");
-        assert_eq!(poc.language, "", "string-form PocResult leaves language empty");
-        assert!(!poc.reproduced, "string-form PocResult does not assert reproduction");
+        assert_eq!(
+            poc.stdout,
+            "VULNERABILITY CONFIRMED - arbitrary read achievable."
+        );
+        assert_eq!(
+            poc.language, "",
+            "string-form PocResult leaves language empty"
+        );
+        assert!(
+            !poc.reproduced,
+            "string-form PocResult does not assert reproduction"
+        );
     }
 
     /// Regression: when the LLM returns `pocResult` as a *partial* object that
@@ -876,7 +898,10 @@ mod tests {
         }"#;
         let output: FeedbackOutput =
             serde_json::from_str(raw).expect("string-array patterns must deserialize");
-        assert_eq!(output.patterns, vec!["uninit_symbol", "int_overflow", "untrusted_addr"]);
+        assert_eq!(
+            output.patterns,
+            vec!["uninit_symbol", "int_overflow", "untrusted_addr"]
+        );
     }
 
     /// Regression: HuntTask in feedback `new_tasks` omits `task_id` (prompt
@@ -925,8 +950,8 @@ mod tests {
                  "grep_hint": "val\\s*=\\s*val\\s*\\*"}
             ]
         }"#;
-        let output: FeedbackOutput = serde_json::from_str(raw)
-            .expect("incident payload must deserialize after fix");
+        let output: FeedbackOutput =
+            serde_json::from_str(raw).expect("incident payload must deserialize after fix");
         assert_eq!(output.new_tasks.len(), 2);
         assert_eq!(output.patterns.len(), 2);
         // task_id is empty until feedback::run synthesizes one.
@@ -1021,5 +1046,196 @@ pub fn fallback_recon(entries: &[ArchiveEntry]) -> ReconOutput {
                 priority: 2,
             },
         ],
+    }
+}
+
+/// Per-request overrides for `AuditPipelineConfig` tuning knobs.
+///
+/// Callers (e.g. the API handler) may supply a partial override; any `None`
+/// field falls back to the base config value via `into_config`.
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AuditConfigOverride {
+    #[serde(default)]
+    pub path_blacklist_extra: Option<Vec<String>>,
+    #[serde(default)]
+    pub reflection_iterations: Option<usize>,
+}
+
+/// Per-task config override bounds — protects against authenticated-DoS via
+/// oversized vectors or runaway reflection loops (security M1).
+pub const PATH_BLACKLIST_EXTRA_MAX_ENTRIES: usize = 64;
+pub const PATH_BLACKLIST_EXTRA_MAX_ENTRY_LEN: usize = 128;
+pub const REFLECTION_ITERATIONS_MAX: usize = 10;
+
+impl AuditConfigOverride {
+    /// Merge override onto a base config, producing a new config.
+    pub fn into_config(self, base: &super::AuditPipelineConfig) -> super::AuditPipelineConfig {
+        let mut cfg = base.clone();
+        if let Some(extra) = self.path_blacklist_extra {
+            cfg.path_blacklist_extra = extra;
+        }
+        if let Some(n) = self.reflection_iterations {
+            cfg.reflection_iterations = n;
+        }
+        cfg
+    }
+
+    /// Validate user-supplied bounds. Returns Err with a stable string message
+    /// suitable for surfacing as a 400 Bad Request.
+    pub fn validate(&self) -> Result<(), &'static str> {
+        if let Some(extra) = &self.path_blacklist_extra {
+            if extra.len() > PATH_BLACKLIST_EXTRA_MAX_ENTRIES {
+                return Err("path_blacklist_extra: too many entries (max 64)");
+            }
+            for s in extra {
+                if s.is_empty() {
+                    return Err("path_blacklist_extra: empty entry not allowed");
+                }
+                if s.len() > PATH_BLACKLIST_EXTRA_MAX_ENTRY_LEN {
+                    return Err("path_blacklist_extra: entry too long (max 128 chars)");
+                }
+                if s.contains('\0') {
+                    return Err("path_blacklist_extra: NUL byte not allowed");
+                }
+                if s.contains('/') || s.contains('\\') {
+                    return Err(
+                        "path_blacklist_extra: entry must be a single path component (no slashes)",
+                    );
+                }
+                if s == ".." || s.contains("..") {
+                    return Err("path_blacklist_extra: '..' not allowed");
+                }
+            }
+        }
+        if let Some(n) = self.reflection_iterations {
+            if n == 0 {
+                return Err("reflection_iterations: must be >= 1");
+            }
+            if n > REFLECTION_ITERATIONS_MAX {
+                return Err("reflection_iterations: max 10");
+            }
+        }
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod audit_config_override_tests {
+    use super::*;
+
+    #[test]
+    fn validate_accepts_valid_input() {
+        let cfg = AuditConfigOverride {
+            path_blacklist_extra: Some(vec!["custom_dir".to_string(), "extra".to_string()]),
+            reflection_iterations: Some(5),
+        };
+        assert!(cfg.validate().is_ok());
+    }
+
+    #[test]
+    fn validate_accepts_none_fields() {
+        let cfg = AuditConfigOverride::default();
+        assert!(cfg.validate().is_ok());
+    }
+
+    #[test]
+    fn validate_rejects_oversized_extra_vec() {
+        let cfg = AuditConfigOverride {
+            path_blacklist_extra: Some(vec!["x".to_string(); PATH_BLACKLIST_EXTRA_MAX_ENTRIES + 1]),
+            reflection_iterations: None,
+        };
+        let err = cfg.validate().unwrap_err();
+        assert!(err.contains("too many entries"));
+    }
+
+    #[test]
+    fn validate_rejects_nul_byte() {
+        let cfg = AuditConfigOverride {
+            path_blacklist_extra: Some(vec!["bad\0entry".to_string()]),
+            reflection_iterations: None,
+        };
+        let err = cfg.validate().unwrap_err();
+        assert!(err.contains("NUL byte"));
+    }
+
+    #[test]
+    fn validate_rejects_slash() {
+        let cfg = AuditConfigOverride {
+            path_blacklist_extra: Some(vec!["foo/bar".to_string()]),
+            reflection_iterations: None,
+        };
+        let err = cfg.validate().unwrap_err();
+        assert!(err.contains("single path component"));
+    }
+
+    #[test]
+    fn validate_rejects_backslash() {
+        let cfg = AuditConfigOverride {
+            path_blacklist_extra: Some(vec!["foo\\bar".to_string()]),
+            reflection_iterations: None,
+        };
+        let err = cfg.validate().unwrap_err();
+        assert!(err.contains("single path component"));
+    }
+
+    #[test]
+    fn validate_rejects_dotdot() {
+        let cfg = AuditConfigOverride {
+            path_blacklist_extra: Some(vec!["..".to_string()]),
+            reflection_iterations: None,
+        };
+        let err = cfg.validate().unwrap_err();
+        assert!(err.contains(".."));
+    }
+
+    #[test]
+    fn validate_rejects_dotdot_substring() {
+        let cfg = AuditConfigOverride {
+            path_blacklist_extra: Some(vec!["foo..bar".to_string()]),
+            reflection_iterations: None,
+        };
+        let err = cfg.validate().unwrap_err();
+        assert!(err.contains(".."));
+    }
+
+    #[test]
+    fn validate_rejects_empty_entry() {
+        let cfg = AuditConfigOverride {
+            path_blacklist_extra: Some(vec!["".to_string()]),
+            reflection_iterations: None,
+        };
+        let err = cfg.validate().unwrap_err();
+        assert!(err.contains("empty"));
+    }
+
+    #[test]
+    fn validate_rejects_oversized_entry() {
+        let cfg = AuditConfigOverride {
+            path_blacklist_extra: Some(vec!["a".repeat(PATH_BLACKLIST_EXTRA_MAX_ENTRY_LEN + 1)]),
+            reflection_iterations: None,
+        };
+        let err = cfg.validate().unwrap_err();
+        assert!(err.contains("too long"));
+    }
+
+    #[test]
+    fn validate_rejects_iterations_above_max() {
+        let cfg = AuditConfigOverride {
+            path_blacklist_extra: None,
+            reflection_iterations: Some(REFLECTION_ITERATIONS_MAX + 1),
+        };
+        let err = cfg.validate().unwrap_err();
+        assert!(err.contains("max 10"));
+    }
+
+    #[test]
+    fn validate_rejects_iterations_zero() {
+        let cfg = AuditConfigOverride {
+            path_blacklist_extra: None,
+            reflection_iterations: Some(0),
+        };
+        let err = cfg.validate().unwrap_err();
+        assert!(err.contains(">= 1"));
     }
 }

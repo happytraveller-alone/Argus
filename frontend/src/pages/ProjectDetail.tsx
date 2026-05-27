@@ -40,11 +40,20 @@ import {
 } from "@/pages/project-detail/potentialVulnerabilities";
 import { api } from "@/shared/api/database";
 import {
+	type IntelligentTaskRecord,
+	listAllProjectIntelligentTasks,
+} from "@/shared/api/intelligentTasks";
+import {
+	getAllCodeqlScanTasks,
+	getAllJoernScanTasks,
+	getAllOpengrepScanTasks,
+	getCodeqlScanFindings,
+	getJoernScanFindings,
 	getOpengrepScanFindings,
-	getOpengrepScanTasks,
 	type OpengrepFinding,
 	type OpengrepScanTask,
 } from "@/shared/api/opengrep";
+import type { StaticAnalysisEngine } from "@/shared/api/staticAnalysisEngines";
 import type { Project } from "@/shared/types";
 import { appendReturnTo } from "@/shared/utils/findingRoute";
 
@@ -82,14 +91,21 @@ function getRecentTaskStatusBadge(status: string) {
 	}
 }
 
-async function getAllOpengrepTaskFindings(
+async function getAllStaticTaskFindings(
 	taskId: string,
+	engine: StaticAnalysisEngine,
 ): Promise<OpengrepFinding[]> {
 	const findings: OpengrepFinding[] = [];
 	let skip = 0;
 
 	while (true) {
-		const page = await getOpengrepScanFindings({
+		const fetchFindings =
+			engine === "codeql"
+				? getCodeqlScanFindings
+				: engine === "joern"
+					? getJoernScanFindings
+					: getOpengrepScanFindings;
+		const page = await fetchFindings({
 			taskId,
 			skip,
 			limit: DETAIL_POTENTIAL_FINDINGS_FETCH_LIMIT,
@@ -101,6 +117,17 @@ async function getAllOpengrepTaskFindings(
 	}
 
 	return findings;
+}
+
+function normalizeStaticEngine(
+	value: string | null | undefined,
+): StaticAnalysisEngine {
+	const normalized = String(value || "")
+		.trim()
+		.toLowerCase();
+	if (normalized === "codeql") return "codeql";
+	if (normalized === "joern") return "joern";
+	return "opengrep";
 }
 
 interface ProjectDescriptionSectionProps {
@@ -180,9 +207,9 @@ export function ProjectDescriptionSection({
 
 				{status === "ready" && hasDescription ? (
 					<div className="space-y-3">
-						{paragraphs.map((paragraph, index) => (
+						{paragraphs.map((paragraph) => (
 							<p
-								key={`${index}:${paragraph.slice(0, 24)}`}
+								key={paragraph}
 								className="text-sm leading-7 text-slate-200/90"
 							>
 								{paragraph}
@@ -230,7 +257,12 @@ export default function ProjectDetail() {
 	const location = useLocation();
 	const navigate = useNavigate();
 	const [project, setProject] = useState<Project | null>(null);
-	const [staticTasks, setStaticTasks] = useState<OpengrepScanTask[]>([]);
+	const [opengrepTasks, setOpengrepTasks] = useState<OpengrepScanTask[]>([]);
+	const [codeqlTasks, setCodeqlTasks] = useState<OpengrepScanTask[]>([]);
+	const [joernTasks, setJoernTasks] = useState<OpengrepScanTask[]>([]);
+	const [intelligentTasks, setIntelligentTasks] = useState<
+		IntelligentTaskRecord[]
+	>([]);
 	const [potentialFindings, setPotentialFindings] = useState<
 		ProjectDetailPotentialListItem[]
 	>([]);
@@ -252,6 +284,7 @@ export default function ProjectDetail() {
 		taskId: string;
 		taskCategory: ProjectCardTaskFindingCategory;
 		taskLabel: string;
+		staticEngine?: StaticAnalysisEngine | null;
 	} | null>(null);
 	const [recentTasksTableState, setRecentTasksTableState] =
 		useState<DataTableQueryState>({
@@ -282,8 +315,10 @@ export default function ProjectDetail() {
 			: fallbackBackPath;
 	const currentRoute = `${location.pathname}${location.search}`;
 	const withStaticReturnTo = useCallback(
-		(route: string, taskKind: string) => {
-			if (taskKind !== "static") return route;
+		(route: string, taskKindOrEngine: string) => {
+			if (taskKindOrEngine !== "static" && taskKindOrEngine !== "opengrep") {
+				return route;
+			}
 			return appendReturnTo(route, currentRoute);
 		},
 		[currentRoute],
@@ -297,29 +332,42 @@ export default function ProjectDetail() {
 		async (
 			projectId: string,
 			projectName: string,
-			sourceOpengrepTaskPool: OpengrepScanTask[],
+			sourceStaticTaskPool: OpengrepScanTask[],
+			sourceIntelligentTasks: IntelligentTaskRecord[],
 		) => {
 			setPotentialStatus("loading");
 			setPotentialFindings([]);
 			setPotentialTotalFindings(0);
 
 			try {
-				const sourceOpengrepTasks = sourceOpengrepTaskPool
+				const sourceStaticTasks = sourceStaticTaskPool
 					.filter((task) => task.project_id === projectId)
 					.sort(
 						(a, b) =>
 							new Date(b.created_at).getTime() -
 							new Date(a.created_at).getTime(),
 					);
+				const sourceIntelligentTaskPool = sourceIntelligentTasks
+					.filter((task) => task.projectId === projectId)
+					.sort(
+						(a, b) =>
+							new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+					);
 
-				if (sourceOpengrepTasks.length === 0) {
+				if (
+					sourceStaticTasks.length === 0 &&
+					sourceIntelligentTaskPool.length === 0
+				) {
 					setPotentialStatus("empty");
 					return;
 				}
 
 				const staticFindingsResult = await Promise.allSettled(
-					sourceOpengrepTasks.map((task) =>
-						getAllOpengrepTaskFindings(task.id),
+					sourceStaticTasks.map((task) =>
+						getAllStaticTaskFindings(
+							task.id,
+							normalizeStaticEngine(task.engine),
+						),
 					),
 				);
 
@@ -328,18 +376,43 @@ export default function ProjectDetail() {
 						if (result.status !== "fulfilled" || !Array.isArray(result.value)) {
 							return [];
 						}
-						const fallbackTaskId = sourceOpengrepTasks[index]?.id || "";
+						const fallbackTask = sourceStaticTasks[index];
+						const fallbackTaskId = fallbackTask?.id || "";
+						const fallbackEngine = normalizeStaticEngine(fallbackTask?.engine);
 						return result.value.map((finding) => ({
 							...finding,
 							scan_task_id: finding.scan_task_id || fallbackTaskId,
+							engine: finding.engine || fallbackEngine,
 						}));
 					},
 				);
+				const staticFindingsByEngine = {
+					opengrep: staticFindings.filter(
+						(finding) => normalizeStaticEngine(finding.engine) === "opengrep",
+					),
+					codeql: staticFindings.filter(
+						(finding) => normalizeStaticEngine(finding.engine) === "codeql",
+					),
+					joern: staticFindings.filter(
+						(finding) => normalizeStaticEngine(finding.engine) === "joern",
+					),
+				};
 
 				const nextTree = buildProjectDetailPotentialTree({
 					projectName,
-					opengrepTasks: sourceOpengrepTasks,
-					opengrepFindings: staticFindings,
+					opengrepTasks: sourceStaticTasks.filter(
+						(task) => normalizeStaticEngine(task.engine) === "opengrep",
+					),
+					codeqlTasks: sourceStaticTasks.filter(
+						(task) => normalizeStaticEngine(task.engine) === "codeql",
+					),
+					joernTasks: sourceStaticTasks.filter(
+						(task) => normalizeStaticEngine(task.engine) === "joern",
+					),
+					opengrepFindings: staticFindingsByEngine.opengrep,
+					codeqlFindings: staticFindingsByEngine.codeql,
+					joernFindings: staticFindingsByEngine.joern,
+					intelligentTasks: sourceIntelligentTaskPool,
 				});
 
 				const flattenedFindings =
@@ -364,16 +437,48 @@ export default function ProjectDetail() {
 			setPotentialFindings([]);
 			setPotentialTotalFindings(0);
 
-			const [projectRes, staticTasksRes] =
-				await Promise.allSettled([
-					api.getProjectById(id),
-					getOpengrepScanTasks({ projectId: id }),
-				]);
+			const [
+				projectRes,
+				opengrepTasksRes,
+				codeqlTasksRes,
+				joernTasksRes,
+				intelligentTasksRes,
+			] = await Promise.allSettled([
+				api.getProjectById(id),
+				getAllOpengrepScanTasks({ projectId: id }),
+				getAllCodeqlScanTasks({ projectId: id }),
+				getAllJoernScanTasks({ projectId: id }),
+				listAllProjectIntelligentTasks(id),
+			]);
 
-			const nextStaticTasks =
-				staticTasksRes.status === "fulfilled" &&
-				Array.isArray(staticTasksRes.value)
-					? staticTasksRes.value
+			const nextOpengrepTasks =
+				opengrepTasksRes.status === "fulfilled" &&
+				Array.isArray(opengrepTasksRes.value)
+					? opengrepTasksRes.value.map((task) => ({
+							...task,
+							engine: normalizeStaticEngine(task.engine || "opengrep"),
+						}))
+					: [];
+			const nextCodeqlTasks =
+				codeqlTasksRes.status === "fulfilled" &&
+				Array.isArray(codeqlTasksRes.value)
+					? codeqlTasksRes.value.map((task) => ({
+							...task,
+							engine: normalizeStaticEngine(task.engine || "codeql"),
+						}))
+					: [];
+			const nextJoernTasks =
+				joernTasksRes.status === "fulfilled" &&
+				Array.isArray(joernTasksRes.value)
+					? joernTasksRes.value.map((task) => ({
+							...task,
+							engine: normalizeStaticEngine(task.engine || "joern"),
+						}))
+					: [];
+			const nextIntelligentTasks =
+				intelligentTasksRes.status === "fulfilled" &&
+				Array.isArray(intelligentTasksRes.value)
+					? intelligentTasksRes.value
 					: [];
 
 			if (projectRes.status === "fulfilled") {
@@ -383,20 +488,41 @@ export default function ProjectDetail() {
 				setProject(null);
 			}
 
-			if (staticTasksRes.status !== "fulfilled") {
-				console.warn("Failed to load static tasks:", staticTasksRes.reason);
+			if (opengrepTasksRes.status !== "fulfilled") {
+				console.warn("Failed to load Opengrep tasks:", opengrepTasksRes.reason);
+			}
+			if (codeqlTasksRes.status !== "fulfilled") {
+				console.warn("Failed to load CodeQL tasks:", codeqlTasksRes.reason);
+			}
+			if (joernTasksRes.status !== "fulfilled") {
+				console.warn("Failed to load Joern tasks:", joernTasksRes.reason);
+			}
+			if (intelligentTasksRes.status !== "fulfilled") {
+				console.warn(
+					"Failed to load intelligent tasks:",
+					intelligentTasksRes.reason,
+				);
 			}
 
-			setStaticTasks(nextStaticTasks);
+			setOpengrepTasks(nextOpengrepTasks);
+			setCodeqlTasks(nextCodeqlTasks);
+			setJoernTasks(nextJoernTasks);
+			setIntelligentTasks(nextIntelligentTasks);
 
 			const projectName =
 				projectRes.status === "fulfilled"
 					? String(projectRes.value?.name || "")
 					: "";
+			const nextStaticTasks = [
+				...nextOpengrepTasks,
+				...nextCodeqlTasks,
+				...nextJoernTasks,
+			];
 			void fetchProjectPotentialVulnerabilities(
 				id,
 				projectName,
 				nextStaticTasks,
+				nextIntelligentTasks,
 			);
 		} catch (error) {
 			console.error("Failed to load project data:", error);
@@ -501,10 +627,13 @@ export default function ProjectDetail() {
 		return getProjectCardRecentTasks({
 			projectId: id,
 			agentTasks: [],
-			opengrepTasks: staticTasks,
+			opengrepTasks,
+			codeqlTasks,
+			joernTasks,
+			intelligentTasks,
 			limit: DETAIL_RECENT_TASK_LIMIT,
 		});
-	}, [id, staticTasks]);
+	}, [codeqlTasks, id, intelligentTasks, joernTasks, opengrepTasks]);
 
 	const handleTaskCreated = () => {
 		toast.success("扫描任务已创建", {
@@ -520,11 +649,13 @@ export default function ProjectDetail() {
 			taskId: string,
 			taskCategory: ProjectCardTaskFindingCategory,
 			taskLabel: string,
+			staticEngine?: StaticAnalysisEngine | null,
 		) => {
 			setSelectedTaskFindings({
 				taskId,
 				taskCategory,
 				taskLabel,
+				staticEngine,
 			});
 		},
 		[],
@@ -666,7 +797,10 @@ export default function ProjectDetail() {
 								className="cyber-btn-ghost h-7 px-3"
 							>
 								<Link
-									to={withStaticReturnTo(row.original.route, row.original.kind)}
+									to={withStaticReturnTo(
+										row.original.route,
+										row.original.engine || row.original.kind,
+									)}
 								>
 									任务详情
 								</Link>
@@ -684,7 +818,9 @@ export default function ProjectDetail() {
 										openTaskFindingsDialog(
 											row.original.id,
 											taskCategory,
-											getProjectDetailPotentialTaskCategoryText(taskCategory),
+											row.original.scanTypeLabel ||
+												getProjectDetailPotentialTaskCategoryText(taskCategory),
+											row.original.engine,
 										);
 									}}
 								>
@@ -837,6 +973,14 @@ export default function ProjectDetail() {
 				}}
 				taskId={selectedTaskFindings?.taskId || ""}
 				taskCategory={selectedTaskFindings?.taskCategory || "static"}
+				staticEngine={selectedTaskFindings?.staticEngine}
+				intelligentTask={
+					selectedTaskFindings?.taskCategory === "intelligent"
+						? intelligentTasks.find(
+								(task) => task.taskId === selectedTaskFindings.taskId,
+							) || null
+						: null
+				}
 				projectName={project.name}
 				returnTo={currentRoute}
 				taskLabel={selectedTaskFindings?.taskLabel || "任务"}

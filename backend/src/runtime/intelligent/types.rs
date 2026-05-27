@@ -41,6 +41,13 @@ pub struct IntelligentTaskEvent {
 }
 
 impl IntelligentTaskEvent {
+    // New event kinds emitted by the reflection + blacklist mechanism (audit_pipeline):
+    // - "reflection_round_started"      { stage, round, reason }
+    // - "reflection_round_completed"    { stage, round, action: "prune"|"reshape", droppedCount?, keptCount? }
+    // - "reflection_budget_exhausted"   { stage, totalRounds }
+    // - "finding_blacklisted"           { stage, findingId, path, blacklistReason }
+    // - "stage_quality_gate_failed"     (existing, retained for round-5 fallback)
+    // - "BLACKLIST_VIOLATION" is a GateFailure.reason string, not a separate event kind
     pub fn new(kind: impl Into<String>) -> Self {
         Self {
             kind: kind.into(),

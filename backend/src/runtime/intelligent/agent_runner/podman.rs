@@ -31,7 +31,7 @@ enum CodegraphSourceMountMode {
 
 impl PodmanSession {
     pub async fn create(archive_path: &str, image: &str) -> Result<Self> {
-        let vol = format!("{}:/workspace:ro", archive_path);
+        let vol = format!("{archive_path}:/workspace:ro");
         let output = Command::new("podman")
             .args([
                 "run",
@@ -425,7 +425,7 @@ impl PodmanSession {
                     .exec_command(&cmd, self.default_exec_timeout_ms)
                     .await?;
                 if code != 0 {
-                    bail!("{}", stderr);
+                    bail!("{stderr}");
                 }
                 Ok(stdout)
             }
@@ -434,7 +434,7 @@ impl PodmanSession {
                 let scope = match input["path"].as_str() {
                     Some(p) => {
                         validate_path(p)?;
-                        format!("/workspace/{}", p)
+                        format!("/workspace/{p}")
                     }
                     None => "/workspace".to_string(),
                 };
@@ -450,7 +450,7 @@ impl PodmanSession {
                 let cmd = if pattern.contains('/') {
                     format!(
                         "find /workspace -path {}",
-                        sh_quote(&format!("/workspace/{}", pattern))
+                        sh_quote(&format!("/workspace/{pattern}"))
                     )
                 } else {
                     format!("find /workspace -name {}", sh_quote(pattern))

@@ -495,10 +495,11 @@ async fn agent_preflight_baseline_behavior() {
     let _codex_home_guard = EnvVarGuard::remove("CODEX_HOME");
     let _codex_host_guard = EnvVarGuard::remove("ARGUS_CODEX_HOST_DIR");
     let _default_runner_guard = EnvVarGuard::set("AGENTFLOW_DEFAULT_RUNNER_ENABLED", "false");
-    let state =
-        AppState::from_config(isolated_test_config("system-config-agent-preflight-baseline"))
-            .await
-            .expect("state should build");
+    let state = AppState::from_config(isolated_test_config(
+        "system-config-agent-preflight-baseline",
+    ))
+    .await
+    .expect("state should build");
     let app = build_router(state, ShutdownGate::default());
     let mock_base_url =
         spawn_llm_mock_server(r#"{"choices":[{"message":{"content":"preflight baseline"}}]}"#)
@@ -1450,9 +1451,7 @@ async fn import_env_two_numbered_configs_first_passes() {
             .unwrap(),
     )
     .unwrap();
-    let saved_rows = current["llmConfig"]["rows"]
-        .as_array()
-        .expect("saved rows");
+    let saved_rows = current["llmConfig"]["rows"].as_array().expect("saved rows");
     assert_eq!(saved_rows.len(), 2);
     assert_eq!(saved_rows[0]["model"], "gpt-5-row1");
     assert_eq!(saved_rows[1]["model"], "gpt-5-row2");
@@ -1482,10 +1481,9 @@ async fn import_env_numbered_wins_over_bare_silently_drops_bare() {
     let _llm_1_model = EnvVarGuard::set("LLM_1_MODEL", "gpt-numbered");
     let _llm_1_base = EnvVarGuard::set("LLM_1_BASE_URL", &numbered_mock);
 
-    let state =
-        AppState::from_config(isolated_test_config("system-config-import-precedence"))
-            .await
-            .expect("state should build");
+    let state = AppState::from_config(isolated_test_config("system-config-import-precedence"))
+        .await
+        .expect("state should build");
     let app = build_router(state, ShutdownGate::default());
 
     let response = app
@@ -1629,8 +1627,7 @@ async fn import_env_codeql_and_fallback_tier_vars_ignored() {
     let _llm_1_model = EnvVarGuard::set("LLM_1_MODEL", "gpt-dead-tier");
     let _llm_1_base = EnvVarGuard::set("LLM_1_BASE_URL", &mock);
     // Dead tier vars set with bogus values; they must be ignored.
-    let _codeql_provider =
-        EnvVarGuard::set("CODEQL_LLM_PROVIDER", "should_be_ignored_provider");
+    let _codeql_provider = EnvVarGuard::set("CODEQL_LLM_PROVIDER", "should_be_ignored_provider");
     let _codeql_api_key = EnvVarGuard::set("CODEQL_LLM_API_KEY", "sk-codeql-leak");
     let _codeql_model = EnvVarGuard::set("CODEQL_LLM_MODEL", "codeql-ghost-model");
     let _codeql_base = EnvVarGuard::set("CODEQL_LLM_BASE_URL", "https://codeql.ghost/v1");
@@ -1693,8 +1690,7 @@ async fn codeql_llm_allow_source_snippets_loads_from_env() {
     let _guard = EnvVarGuard::set("CODEQL_LLM_ALLOW_SOURCE_SNIPPETS", "false");
     let config = AppConfig::from_env().expect("config load");
     assert_eq!(
-        config.codeql_llm_allow_source_snippets,
-        false,
+        config.codeql_llm_allow_source_snippets, false,
         "CODEQL_LLM_ALLOW_SOURCE_SNIPPETS=false should propagate through AppConfig::from_env"
     );
 }
@@ -1716,10 +1712,9 @@ async fn import_env_placeholder_rejected_per_row() {
     let _llm_2_model = EnvVarGuard::set("LLM_2_MODEL", "gpt-row-2");
     let _llm_2_base = EnvVarGuard::set("LLM_2_BASE_URL", "https://row-2.example/v1");
 
-    let state =
-        AppState::from_config(isolated_test_config("system-config-import-placeholder"))
-            .await
-            .expect("state should build");
+    let state = AppState::from_config(isolated_test_config("system-config-import-placeholder"))
+        .await
+        .expect("state should build");
     let app = build_router(state, ShutdownGate::default());
     let response = app
         .oneshot(
@@ -1778,10 +1773,9 @@ async fn import_env_winning_row_id_some_mirrors_winner() {
     let _llm_2_model = EnvVarGuard::set("LLM_2_MODEL", "gpt-row-2");
     let _llm_2_base = EnvVarGuard::set("LLM_2_BASE_URL", &row_2_base);
 
-    let state =
-        AppState::from_config(isolated_test_config("system-config-import-winner-some"))
-            .await
-            .expect("state should build");
+    let state = AppState::from_config(isolated_test_config("system-config-import-winner-some"))
+        .await
+        .expect("state should build");
     let app = build_router(state, ShutdownGate::default());
     let response = app
         .oneshot(
@@ -1851,10 +1845,9 @@ async fn import_env_all_rows_fail_winning_row_id_none_mirrors_row_1() {
     let _llm_2_model = EnvVarGuard::set("LLM_2_MODEL", "gpt-row-2-fail");
     let _llm_2_base = EnvVarGuard::set("LLM_2_BASE_URL", &row_2_base);
 
-    let state =
-        AppState::from_config(isolated_test_config("system-config-import-all-fail"))
-            .await
-            .expect("state should build");
+    let state = AppState::from_config(isolated_test_config("system-config-import-all-fail"))
+        .await
+        .expect("state should build");
     let app = build_router(state, ShutdownGate::default());
     let response = app
         .clone()
@@ -1903,7 +1896,9 @@ async fn import_env_all_rows_fail_winning_row_id_none_mirrors_row_1() {
 /// Helper: spawn a mock server that ALWAYS replies HTTP 429 (rate-limited / quota).
 /// Triggers `QuotaRateLimit` in `classify_fallback`, which is a break-class category.
 async fn spawn_llm_mock_429() -> String {
-    let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind 429 mock");
+    let listener = TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind 429 mock");
     let addr = listener.local_addr().unwrap();
     tokio::spawn(async move {
         loop {
@@ -1944,10 +1939,9 @@ async fn import_env_break_class_halt_remaining_rows_untested() {
     let _llm_2_model = EnvVarGuard::set("LLM_2_MODEL", "gpt-row-2");
     let _llm_2_base = EnvVarGuard::set("LLM_2_BASE_URL", &row_2_base);
 
-    let state =
-        AppState::from_config(isolated_test_config("system-config-import-break-halt"))
-            .await
-            .expect("state should build");
+    let state = AppState::from_config(isolated_test_config("system-config-import-break-halt"))
+        .await
+        .expect("state should build");
     let app = build_router(state, ShutdownGate::default());
     let response = app
         .clone()
@@ -2008,10 +2002,9 @@ async fn import_env_break_class_halt_emits_single_log_line() {
     let _llm_2_model = EnvVarGuard::set("LLM_2_MODEL", "gpt-row-2");
     let _llm_2_base = EnvVarGuard::set("LLM_2_BASE_URL", &row_2_base);
 
-    let state =
-        AppState::from_config(isolated_test_config("system-config-import-break-log"))
-            .await
-            .expect("state should build");
+    let state = AppState::from_config(isolated_test_config("system-config-import-break-log"))
+        .await
+        .expect("state should build");
     let app = build_router(state, ShutdownGate::default());
     let response = app
         .oneshot(
@@ -2081,10 +2074,9 @@ async fn import_env_fallback_eligible_continues_through_chain() {
     let _llm_3_model = EnvVarGuard::set("LLM_3_MODEL", "gpt-c3");
     let _llm_3_base = EnvVarGuard::set("LLM_3_BASE_URL", &row_3_base);
 
-    let state =
-        AppState::from_config(isolated_test_config("system-config-import-continue"))
-            .await
-            .expect("state should build");
+    let state = AppState::from_config(isolated_test_config("system-config-import-continue"))
+        .await
+        .expect("state should build");
     let app = build_router(state, ShutdownGate::default());
     let response = app
         .oneshot(
@@ -2684,7 +2676,8 @@ async fn import_env_redacts_api_key_from_error_message() {
 
     let _token = EnvVarGuard::set("ARGUS_RESET_IMPORT_TOKEN", "token-redact");
     let _llm_1_provider = EnvVarGuard::set("LLM_1_PROVIDER", "openai_compatible");
-    let _llm_1_api_key = EnvVarGuard::set("LLM_1_API_KEY", "sk-secret-key-leaks-here-1234567890abcdef");
+    let _llm_1_api_key =
+        EnvVarGuard::set("LLM_1_API_KEY", "sk-secret-key-leaks-here-1234567890abcdef");
     let _llm_1_model = EnvVarGuard::set("LLM_1_MODEL", "gpt-redact-test");
     let _llm_1_base = EnvVarGuard::set("LLM_1_BASE_URL", &base_url);
 

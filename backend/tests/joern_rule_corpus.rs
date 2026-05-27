@@ -17,10 +17,7 @@ use tempfile::TempDir;
 use tokio::fs;
 use tokio::process::Command;
 
-const FIXTURE_ROOT: &str = concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/tests/fixtures/joern/rules"
-);
+const FIXTURE_ROOT: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/joern/rules");
 const QUERY_ASSETS_ROOT: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/assets/scan_rule_assets/rules_joern"
@@ -84,7 +81,9 @@ async fn joern_rule_corpus_combined_run() {
     fs::create_dir_all(&src_dir).await.expect("create src dir");
     for rule in &RULES {
         for kind in &["positive", "negative"] {
-            let src = PathBuf::from(FIXTURE_ROOT).join(rule).join(format!("{}.c", kind));
+            let src = PathBuf::from(FIXTURE_ROOT)
+                .join(rule)
+                .join(format!("{}.c", kind));
             let dst = src_dir.join(format!("{}__{}.c", rule, kind));
             fs::copy(&src, &dst)
                 .await
@@ -200,7 +199,10 @@ async fn joern_rule_corpus_combined_run() {
     }
 
     // 7. All finding ids must be distinct (C4 collision check).
-    let ids: HashSet<&str> = findings.iter().map(|f| f["id"].as_str().unwrap_or("")).collect();
+    let ids: HashSet<&str> = findings
+        .iter()
+        .map(|f| f["id"].as_str().unwrap_or(""))
+        .collect();
     assert_eq!(
         ids.len(),
         findings.len(),
@@ -212,7 +214,10 @@ async fn joern_rule_corpus_combined_run() {
     // 8. For tainted-* rules, evidence.taint_source must be either absent (dataflow
     //    unavailable) or a non-empty string (round-trip integrity, C11).
     for rule in &TAINT_RULES {
-        for f in findings.iter().filter(|f| f["rule_id"].as_str() == Some(*rule)) {
+        for f in findings
+            .iter()
+            .filter(|f| f["rule_id"].as_str() == Some(*rule))
+        {
             if let Some(ts) = f["evidence"].get("taint_source") {
                 if !ts.is_null() {
                     assert!(

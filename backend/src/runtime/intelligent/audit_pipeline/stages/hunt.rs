@@ -65,6 +65,7 @@ pub async fn run(
     concurrency: usize,
     events: &PipelineEventSink,
     amplification: Option<&str>,
+    path_blacklist_extra: &[String],
 ) -> Result<HuntOutput> {
     let stage = AuditStage::Hunt;
     events.stage_started(stage);
@@ -153,6 +154,36 @@ pub async fn run(
         }
     }
 
+    // Post-drain blacklist retain: drop findings whose `file` path is blacklisted.
+    // For each dropped finding, emit a `finding_blacklisted` event so callers can
+    // reconstruct GateFailure.metadata.violated_paths (defense-in-depth via
+    // predicate at call site in Step 8).
+    let mut dropped_for_blacklist: usize = 0;
+    findings.retain(|f| {
+        match crate::runtime::intelligent::code_intel::is_blacklisted(
+            Path::new(&f.file),
+            path_blacklist_extra,
+        ) {
+            Some(reason) => {
+                events.emit(
+                    IntelligentTaskEvent::new("finding_blacklisted").with_data(json!({
+                        "stage": stage.as_str(),
+                        "findingId": f.finding_id,
+                        "path": super::sanitize_path_for_event(&f.file),
+                        "blacklistReason": reason,
+                    })),
+                );
+                dropped_for_blacklist += 1;
+                false
+            }
+            None => true,
+        }
+    });
+    // dropped_for_blacklist intentionally not surfaced on output; the call-site
+    // predicate (Step 8) re-scans the post-retain output and reconstructs
+    // GateFailure with metadata.violated_paths if anything is still blacklisted.
+    let _ = dropped_for_blacklist; // suppress unused if not logged elsewhere
+
     let output = HuntOutput { findings };
     events.stage_completed(stage, json!({"findingCount": output.findings.len()}));
     Ok(output)
@@ -170,7 +201,12 @@ fn path_classify_for_task(target_files: &[String]) -> Option<DismissalEvidence> 
     let dismissal_category = match category {
         PathCategory::Test => Some(DismissalCategory::Test),
         PathCategory::Vendor => Some(DismissalCategory::Vendor),
-        PathCategory::RealCode => None,
+        // Blacklisted paths are handled by the is_blacklisted helper in later
+        // pipeline steps (reflection / retain filter). The legacy
+        // path_classify_for_task path does not yet carry a DismissalCategory
+        // for blacklist dirs — treat as real code here so existing behaviour
+        // is preserved until those steps are wired in.
+        PathCategory::Blacklisted(_) | PathCategory::RealCode => None,
     };
     dismissal_category.map(|category| DismissalEvidence {
         category,
@@ -217,8 +253,7 @@ fn normalize_finding(
     // Language backfill: if the LLM omitted language or left it blank,
     // derive it from the file extension (AC1.2).
     if finding.language.trim().is_empty() {
-        finding.language = map_extension_to_language(&finding.file)
-            .unwrap_or_default();
+        finding.language = map_extension_to_language(&finding.file).unwrap_or_default();
     }
 
     // Path-pattern dismissal verdict (Phase 0 / AC0.F).
@@ -842,8 +877,8 @@ mod stub {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::stub::QueuedStubInvoker;
+    use super::*;
     use crate::runtime::intelligent::audit_pipeline::{
         context::{AuditRunContext, PipelineEventSink},
         repo::ProjectArchive,
@@ -917,9 +952,12 @@ mod tests {
         ];
 
         let sink = make_test_sink();
-        let result = run(&ctx, &tasks, 3, &sink, None).await;
+        let result = run(&ctx, &tasks, 3, &sink, None, &[]).await;
 
-        assert!(result.is_ok(), "hunt run must return Ok even when one task fails: {result:?}");
+        assert!(
+            result.is_ok(),
+            "hunt run must return Ok even when one task fails: {result:?}"
+        );
         let output = result.unwrap();
         // Should have findings from both successful tasks.
         assert_eq!(
@@ -928,7 +966,11 @@ mod tests {
             "expected 2 findings from 2 successful tasks, got {}",
             output.findings.len()
         );
-        let ids: Vec<&str> = output.findings.iter().map(|f| f.finding_id.as_str()).collect();
+        let ids: Vec<&str> = output
+            .findings
+            .iter()
+            .map(|f| f.finding_id.as_str())
+            .collect();
         assert!(ids.contains(&"f-a"), "missing finding f-a");
         assert!(ids.contains(&"f-b"), "missing finding f-b");
     }

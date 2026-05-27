@@ -82,13 +82,38 @@ export async function createIntelligentTask(
  */
 export async function listIntelligentTasks(
 	limit?: number,
+	options?: { projectId?: string; skip?: number },
 ): Promise<IntelligentTaskRecord[]> {
 	const params: Record<string, string> = {};
 	if (limit !== undefined) {
 		params.limit = String(limit);
 	}
+	if (options?.skip !== undefined) {
+		params.skip = String(options.skip);
+	}
+	if (options?.projectId) {
+		params.projectId = options.projectId;
+	}
 	const response = await apiClient.get(`/intelligent-tasks`, { params });
 	return Array.isArray(response.data) ? response.data : [];
+}
+
+export async function listAllProjectIntelligentTasks(
+	projectId: string,
+): Promise<IntelligentTaskRecord[]> {
+	const batchSize = 200;
+	const tasks: IntelligentTaskRecord[] = [];
+	let skip = 0;
+
+	while (true) {
+		const page = await listIntelligentTasks(batchSize, { projectId, skip });
+		if (page.length === 0) break;
+		tasks.push(...page);
+		if (page.length < batchSize) break;
+		skip += page.length;
+	}
+
+	return tasks;
 }
 
 /**
@@ -107,15 +132,15 @@ export async function getIntelligentTask(
 export async function cancelIntelligentTask(
 	taskId: string,
 ): Promise<IntelligentTaskRecord> {
-	const response = await apiClient.post(
-		`/intelligent-tasks/${taskId}/cancel`,
-	);
+	const response = await apiClient.post(`/intelligent-tasks/${taskId}/cancel`);
 	return response.data;
 }
 
-export async function deleteIntelligentTask(
-	taskId: string,
-): Promise<{ deleted: boolean; taskId: string; terminalStatus: IntelligentTaskStatus }> {
+export async function deleteIntelligentTask(taskId: string): Promise<{
+	deleted: boolean;
+	taskId: string;
+	terminalStatus: IntelligentTaskStatus;
+}> {
 	const response = await apiClient.delete(`/intelligent-tasks/${taskId}`);
 	return response.data;
 }

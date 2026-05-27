@@ -1,5 +1,5 @@
-import test from "node:test";
 import assert from "node:assert/strict";
+import test from "node:test";
 
 // We test the module's URL/body shapes by intercepting axios via monkey-patching.
 // The module is ESM-imported; we validate exported shapes at the type level and
@@ -29,6 +29,10 @@ test("intelligentTasks API module exports required interfaces and functions", ()
 	// Functions
 	assert.match(source, /export\s+async\s+function\s+createIntelligentTask/);
 	assert.match(source, /export\s+async\s+function\s+listIntelligentTasks/);
+	assert.match(
+		source,
+		/export\s+async\s+function\s+listAllProjectIntelligentTasks/,
+	);
 	assert.match(source, /export\s+async\s+function\s+getIntelligentTask/);
 	assert.match(source, /export\s+async\s+function\s+cancelIntelligentTask/);
 });
@@ -52,6 +56,32 @@ test("listIntelligentTasks gets /intelligent-tasks with optional limit param", (
 
 	assert.match(source, /apiClient\.get\(`\/intelligent-tasks`/);
 	assert.match(source, /limit/);
+});
+
+test("listIntelligentTasks supports projectId query for project detail task binding", () => {
+	const source = readFileSync(apiClientPath, "utf8");
+
+	assert.match(
+		source,
+		/options\?:\s*\{\s*projectId\?:\s*string;\s*skip\?:\s*number\s*\}/,
+	);
+	assert.match(source, /params\.projectId\s*=\s*options\.projectId/);
+	assert.match(source, /params\.skip\s*=\s*String\(options\.skip\)/);
+});
+
+test("listAllProjectIntelligentTasks paginates project-bound intelligent tasks", () => {
+	const source = readFileSync(apiClientPath, "utf8");
+
+	assert.match(
+		source,
+		/export\s+async\s+function\s+listAllProjectIntelligentTasks/,
+	);
+	assert.match(source, /const batchSize = 200/);
+	assert.match(
+		source,
+		/listIntelligentTasks\(batchSize,\s*\{\s*projectId,\s*skip\s*\}\)/,
+	);
+	assert.match(source, /skip \+= page\.length/);
 });
 
 test("getIntelligentTask gets /intelligent-tasks/{taskId}", () => {

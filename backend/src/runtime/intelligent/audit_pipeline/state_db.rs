@@ -79,9 +79,7 @@ impl AuditStateDb {
             .prepare("SELECT user_verdict FROM findings LIMIT 0")
             .is_ok();
         if !has_col {
-            conn.execute_batch(
-                "ALTER TABLE findings ADD COLUMN user_verdict TEXT;",
-            )?;
+            conn.execute_batch("ALTER TABLE findings ADD COLUMN user_verdict TEXT;")?;
         }
         // Ensure the partial index exists (idempotent).
         conn.execute_batch(

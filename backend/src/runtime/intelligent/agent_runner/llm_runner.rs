@@ -190,11 +190,11 @@ impl LlmAgentRunner {
                     .unwrap_or("{}");
                 let payload = serde_json::from_str::<serde_json::Value>(text)
                     .unwrap_or_else(|_| json!({"raw": text}));
-                return Ok(Some(AgentRunResult {
+                Ok(Some(AgentRunResult {
                     payload,
                     turns_used: turn + 1,
                     tokens: total_tokens.clone(),
-                }));
+                }))
             }
             "tool_use" => {
                 messages.push(json!({"role": "assistant", "content": content_blocks.clone()}));
@@ -255,11 +255,11 @@ impl LlmAgentRunner {
                 let text = message["content"].as_str().unwrap_or("{}");
                 let payload = serde_json::from_str::<serde_json::Value>(text)
                     .unwrap_or_else(|_| json!({"raw": text}));
-                return Ok(Some(AgentRunResult {
+                Ok(Some(AgentRunResult {
                     payload,
                     turns_used: turn + 1,
                     tokens: total_tokens.clone(),
-                }));
+                }))
             }
             "tool_calls" => {
                 messages.push(message.clone());

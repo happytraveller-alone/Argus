@@ -1,11 +1,17 @@
-import {
-	type ProjectCardTaskFindingCategory,
-	type ProjectCardVulnerabilityConfidence,
-	type ProjectCardVulnerabilitySeverity,
+import type {
+	ProjectCardTaskFindingCategory,
+	ProjectCardVulnerabilityConfidence,
+	ProjectCardVulnerabilitySeverity,
 } from "@/features/projects/services/projectCardPreview";
+import { buildProjectDetailAgentFindingSnapshot } from "@/pages/project-detail/intelligentFindingSnapshot";
+import type { IntelligentTaskRecord } from "@/shared/api/intelligentTasks";
 import type { OpengrepFinding, OpengrepScanTask } from "@/shared/api/opengrep";
 import { resolveCweDisplay } from "@/shared/security/cweCatalog";
-import { buildFindingDetailPath } from "@/shared/utils/findingRoute";
+import {
+	buildFindingDetailLocationState,
+	buildFindingDetailPath,
+	type FindingDetailLocationState,
+} from "@/shared/utils/findingRoute";
 
 export interface ProjectDetailPotentialFindingNode {
 	type: "finding";
@@ -18,6 +24,7 @@ export interface ProjectDetailPotentialFindingNode {
 	confidence: ProjectCardVulnerabilityConfidence;
 	location: string;
 	route: string | null;
+	detailState?: FindingDetailLocationState | null;
 	taskCategory: ProjectCardTaskFindingCategory;
 	source: "static" | "agent";
 	line: number | null;
@@ -75,6 +82,7 @@ export interface ProjectDetailPotentialListItem {
 	taskName: string;
 	taskCreatedAt: string;
 	route: string | null;
+	detailState?: FindingDetailLocationState | null;
 	source: "static" | "agent";
 }
 
@@ -121,10 +129,13 @@ function normalizeTimestamp(value: string | null | undefined): number {
 function normalizeSeverity(
 	severity: string | null | undefined,
 ): ProjectCardVulnerabilitySeverity {
-	const normalized = String(severity || "").trim().toUpperCase();
+	const normalized = String(severity || "")
+		.trim()
+		.toUpperCase();
 	if (normalized.includes("CRITICAL")) return "CRITICAL";
 	if (normalized.includes("HIGH") || normalized === "ERROR") return "HIGH";
-	if (normalized.includes("MEDIUM") || normalized === "WARNING") return "MEDIUM";
+	if (normalized.includes("MEDIUM") || normalized === "WARNING")
+		return "MEDIUM";
 	if (normalized.includes("LOW") || normalized === "INFO") return "LOW";
 	return "UNKNOWN";
 }
@@ -132,10 +143,24 @@ function normalizeSeverity(
 function normalizeStaticConfidence(
 	confidence: string | null | undefined,
 ): ProjectCardVulnerabilityConfidence {
-	const normalized = String(confidence || "").trim().toUpperCase();
+	const normalized = String(confidence || "")
+		.trim()
+		.toUpperCase();
 	if (normalized === "HIGH") return "HIGH";
 	if (normalized === "MEDIUM") return "MEDIUM";
 	if (normalized === "LOW") return "LOW";
+	return "UNKNOWN";
+}
+
+function normalizeIntelligentConfidence(
+	confidence: number | null | undefined,
+): ProjectCardVulnerabilityConfidence {
+	if (typeof confidence !== "number" || !Number.isFinite(confidence)) {
+		return "UNKNOWN";
+	}
+	if (confidence >= 0.8) return "HIGH";
+	if (confidence >= 0.5) return "MEDIUM";
+	if (confidence > 0) return "LOW";
 	return "UNKNOWN";
 }
 
@@ -147,7 +172,9 @@ function severityRank(severity: ProjectCardVulnerabilitySeverity): number {
 	return 0;
 }
 
-function confidenceRank(confidence: ProjectCardVulnerabilityConfidence): number {
+function confidenceRank(
+	confidence: ProjectCardVulnerabilityConfidence,
+): number {
 	if (confidence === "HIGH") return 3;
 	if (confidence === "MEDIUM") return 2;
 	if (confidence === "LOW") return 1;
@@ -172,6 +199,27 @@ export function getProjectDetailPotentialTaskCategoryText(
 ): string {
 	if (category === "static") return "静态审计";
 	return "智能审计";
+}
+
+function getStaticTaskCategoryText(engine: string | null | undefined): string {
+	const normalized = String(engine || "opengrep")
+		.trim()
+		.toLowerCase();
+	if (normalized === "codeql") return "CodeQL 静态审计";
+	if (normalized === "joern") return "Joern 静态审计";
+	return "Opengrep 静态审计";
+}
+
+function getStaticFindingEngine(
+	taskEngine: string | null | undefined,
+	findingEngine: string | null | undefined,
+): "opengrep" | "codeql" | "joern" {
+	const normalized = String(findingEngine || taskEngine || "opengrep")
+		.trim()
+		.toLowerCase();
+	if (normalized === "codeql") return "codeql";
+	if (normalized === "joern") return "joern";
+	return "opengrep";
 }
 
 export function toProjectRelativePotentialPath(
@@ -324,6 +372,7 @@ function sortTreeNodes(
 function buildTaskNode(params: {
 	taskId: string;
 	taskCategory: ProjectCardTaskFindingCategory;
+	taskLabel: string;
 	taskName: string;
 	createdAt: string;
 	findings: CandidateFinding[];
@@ -384,7 +433,7 @@ function buildTaskNode(params: {
 		nodeKey: taskKey,
 		taskId: params.taskId,
 		taskCategory: params.taskCategory,
-		taskLabel: getProjectDetailPotentialTaskCategoryText(params.taskCategory),
+		taskLabel: params.taskLabel,
 		taskName: params.taskName,
 		createdAt: params.createdAt,
 		count: params.findings.length,
@@ -449,6 +498,7 @@ export function flattenProjectDetailPotentialFindings(
 				taskName: task.taskName,
 				taskCreatedAt: task.createdAt,
 				route: leaf.route,
+				detailState: leaf.detailState,
 				source: leaf.source,
 			});
 		}
@@ -461,6 +511,11 @@ export function buildProjectDetailPotentialTree(params: {
 	projectName: string;
 	opengrepTasks?: OpengrepScanTask[];
 	opengrepFindings?: OpengrepFinding[];
+	codeqlTasks?: OpengrepScanTask[];
+	codeqlFindings?: OpengrepFinding[];
+	joernTasks?: OpengrepScanTask[];
+	joernFindings?: OpengrepFinding[];
+	intelligentTasks?: IntelligentTaskRecord[];
 }): ProjectDetailPotentialTree {
 	const projectName = String(params.projectName || "");
 	const taskInfo = new Map<
@@ -468,23 +523,46 @@ export function buildProjectDetailPotentialTree(params: {
 		{
 			taskId: string;
 			taskCategory: ProjectCardTaskFindingCategory;
+			taskLabel: string;
 			taskName: string;
 			createdAt: string;
+			engine?: "opengrep" | "codeql" | "joern";
 		}
 	>();
 
-	for (const task of params.opengrepTasks || []) {
+	for (const task of [
+		...(params.opengrepTasks || []),
+		...(params.codeqlTasks || []),
+		...(params.joernTasks || []),
+	]) {
+		const engine = getStaticFindingEngine(task.engine, null);
 		taskInfo.set(task.id, {
 			taskId: task.id,
 			taskCategory: "static",
+			taskLabel: getStaticTaskCategoryText(engine),
 			taskName: String(task.name || "").trim(),
 			createdAt: task.created_at,
+			engine,
+		});
+	}
+
+	for (const task of params.intelligentTasks || []) {
+		taskInfo.set(task.taskId, {
+			taskId: task.taskId,
+			taskCategory: "intelligent",
+			taskLabel: "智能审计",
+			taskName: String(task.inputSummary || "").trim(),
+			createdAt: task.createdAt,
 		});
 	}
 
 	const candidateFindings: CandidateFinding[] = [];
 
-	for (const finding of params.opengrepFindings || []) {
+	for (const finding of [
+		...(params.opengrepFindings || []),
+		...(params.codeqlFindings || []),
+		...(params.joernFindings || []),
+	]) {
 		const severity = normalizeSeverity(finding.severity);
 		const confidence = normalizeStaticConfidence(finding.confidence);
 		if (!shouldIncludeFinding({ severity, confidence })) continue;
@@ -493,7 +571,8 @@ export function buildProjectDetailPotentialTree(params: {
 		if (!task) continue;
 
 		const line =
-			typeof finding.start_line === "number" && Number.isFinite(finding.start_line)
+			typeof finding.start_line === "number" &&
+			Number.isFinite(finding.start_line)
 				? finding.start_line
 				: null;
 		const title =
@@ -507,6 +586,7 @@ export function buildProjectDetailPotentialTree(params: {
 			fallbackLabel: title,
 		});
 
+		const engine = getStaticFindingEngine(task.engine, finding.engine);
 		candidateFindings.push({
 			type: "finding",
 			nodeKey: `task:${task.taskCategory}:${task.taskId}:finding:${finding.id}`,
@@ -526,7 +606,7 @@ export function buildProjectDetailPotentialTree(params: {
 				source: "static",
 				taskId: task.taskId,
 				findingId: finding.id,
-				engine: "opengrep",
+				engine,
 			}),
 			taskCategory: "static",
 			source: "static",
@@ -536,6 +616,68 @@ export function buildProjectDetailPotentialTree(params: {
 			taskName: task.taskName,
 			relativePath,
 		});
+	}
+
+	for (const task of params.intelligentTasks || []) {
+		const taskInfoItem = taskInfo.get(task.taskId);
+		if (!taskInfoItem) continue;
+
+		for (const finding of task.findings || []) {
+			const severity = normalizeSeverity(finding.severity);
+			const confidence = normalizeIntelligentConfidence(finding.confidence);
+			if (!shouldIncludeFinding({ severity, confidence })) continue;
+
+			const line =
+				typeof finding.lineStart === "number" &&
+				Number.isFinite(finding.lineStart)
+					? finding.lineStart
+					: null;
+			const title =
+				String(finding.summary || "").trim() ||
+				String(finding.vulnClass || "").trim() ||
+				"潜在漏洞";
+			const filePath = String(finding.file || "").trim() || "-";
+			const relativePath = toProjectRelativePotentialPath(
+				filePath,
+				projectName,
+			);
+			const cweDisplay = resolveCweDisplay({
+				cwe: finding.vulnClass,
+				fallbackLabel: title,
+			});
+
+			candidateFindings.push({
+				type: "finding",
+				nodeKey: `task:${taskInfoItem.taskCategory}:${taskInfoItem.taskId}:finding:${finding.id}`,
+				id: finding.id,
+				title,
+				cweLabel: cweDisplay.label,
+				cweTooltip: cweDisplay.tooltip,
+				severity,
+				confidence,
+				location: formatProjectDetailPotentialLocation({
+					filePath,
+					line,
+					projectName,
+					source: "agent",
+				}),
+				route: buildFindingDetailPath({
+					source: "agent",
+					taskId: taskInfoItem.taskId,
+					findingId: finding.id,
+				}),
+				detailState: buildFindingDetailLocationState(
+					buildProjectDetailAgentFindingSnapshot(finding, task),
+				),
+				taskCategory: "intelligent",
+				source: "agent",
+				line,
+				taskId: taskInfoItem.taskId,
+				taskCreatedAt: taskInfoItem.createdAt,
+				taskName: taskInfoItem.taskName,
+				relativePath,
+			});
+		}
 	}
 
 	const findingsByTask = new Map<string, CandidateFinding[]>();
@@ -552,17 +694,19 @@ export function buildProjectDetailPotentialTree(params: {
 			return buildTaskNode({
 				taskId,
 				taskCategory: first.taskCategory,
+				taskLabel:
+					taskInfo.get(taskId)?.taskLabel ||
+					getProjectDetailPotentialTaskCategoryText(first.taskCategory),
 				taskName: first.taskName,
 				createdAt: first.taskCreatedAt,
 				findings,
 			});
 		})
-		.filter(
-			(task): task is ProjectDetailPotentialTaskNode => Boolean(task),
-		)
+		.filter((task): task is ProjectDetailPotentialTaskNode => Boolean(task))
 		.sort((left, right) => {
 			const byTime =
-				normalizeTimestamp(right.createdAt) - normalizeTimestamp(left.createdAt);
+				normalizeTimestamp(right.createdAt) -
+				normalizeTimestamp(left.createdAt);
 			if (byTime !== 0) return byTime;
 			return right.count - left.count;
 		});

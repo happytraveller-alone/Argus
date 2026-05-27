@@ -19,6 +19,7 @@ export interface TaskFindingRow {
 	severity: TaskFindingSeverity;
 	confidence: TaskFindingConfidence;
 	route: string | null;
+	locationState?: unknown;
 	createdAt: string | null;
 }
 

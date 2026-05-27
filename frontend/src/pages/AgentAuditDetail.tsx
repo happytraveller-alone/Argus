@@ -1,4 +1,4 @@
-import { ArrowLeft, CheckCircle2, Circle, Loader2, RefreshCw, Terminal } from "lucide-react";
+import { ArrowLeft, RefreshCw, Terminal } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -17,6 +17,7 @@ import {
 	DialogTitle,
 } from "@/components/ui/dialog";
 import { type SseEvent, useSseStream } from "@/hooks/useSseStream";
+import type { AgentFinding } from "@/shared/api/agentTasks";
 import { getApiBaseUrl } from "@/shared/api/apiBase";
 import {
 	cancelIntelligentTask,
@@ -27,6 +28,10 @@ import {
 	type IntelligentTaskRecord,
 	type IntelligentTaskStatus,
 } from "@/shared/api/intelligentTasks";
+import {
+	buildFindingDetailLocationState,
+	buildFindingDetailPath,
+} from "@/shared/utils/findingRoute";
 
 const TERMINAL_STATUSES: Set<IntelligentTaskStatus> = new Set([
 	"completed",
@@ -36,35 +41,6 @@ const TERMINAL_STATUSES: Set<IntelligentTaskStatus> = new Set([
 
 function isTerminal(status: string): boolean {
 	return TERMINAL_STATUSES.has(status as IntelligentTaskStatus);
-}
-
-/**
- * Derive scan progress (0-100) from completed pipeline stages in the event log.
- * Reads `agent_completed` events with `data.stage`. 8 stages total:
- * recon, hunt, validate, gapfill, dedupe, trace, feedback, report.
- */
-function getIntelligentProgressPercent(record: IntelligentTaskRecord): number {
-	const status = record.status;
-	if (status === "pending") return 0;
-	if (status === "completed") return 100;
-	if (status === "failed" || status === "cancelled") {
-		// Freeze at the last observed completed-stage count.
-		const completed = countCompletedStages(record.eventLog);
-		return Math.ceil((completed / 8) * 100);
-	}
-	const completed = countCompletedStages(record.eventLog);
-	return Math.ceil((completed / 8) * 100);
-}
-
-function countCompletedStages(eventLog: IntelligentTaskEventLogEntry[]): number {
-	const completed = new Set<string>();
-	for (const ev of eventLog ?? []) {
-		if (ev.kind === "agent_completed") {
-			const stage = (ev.data as Record<string, unknown> | undefined)?.stage;
-			if (typeof stage === "string") completed.add(stage);
-		}
-	}
-	return completed.size;
 }
 
 function formatDuration(durationMs?: number): string {
@@ -92,102 +68,6 @@ function Field({ label, value }: { label: string; value: React.ReactNode }) {
 				{label}
 			</span>
 			<span className="font-mono text-sm text-foreground">{value ?? "-"}</span>
-		</div>
-	);
-}
-
-type IntelligentScanStage = "pending" | "recon" | "hunt" | "validate" | "gapfill" | "dedupe" | "trace" | "feedback" | "report" | "completed" | "failed";
-
-const INTELLIGENT_STAGE_ORDER: IntelligentScanStage[] = [
-	"recon", "hunt", "validate", "gapfill", "dedupe", "trace", "feedback", "report",
-];
-
-function resolveIntelligentScanStage(
-	status: string | undefined,
-	events: SseEvent[],
-): IntelligentScanStage {
-	const s = String(status || "").trim().toLowerCase();
-	if (s === "completed") return "completed";
-	if (s === "failed" || s === "cancelled") return "failed";
-	if (s === "pending") return "pending";
-	let lastActive: string | null = null;
-	const completedSteps = new Set<string>();
-	for (const ev of events) {
-		// Backend emits agent_started/agent_completed with data.stage, NOT
-		// step_started/step_completed with data.step. The step_* events are
-		// task-level wrappers (config_resolve, audit_pipeline) and must not
-		// be treated as pipeline stages.
-		const stage = typeof ev.data?.stage === "string" ? ev.data.stage : null;
-		if (!stage) continue;
-		if (ev.kind === "agent_completed") completedSteps.add(stage);
-		else if (ev.kind === "agent_started") lastActive = stage;
-	}
-	if (completedSteps.has("report")) return "completed";
-	if (lastActive && INTELLIGENT_STAGE_ORDER.includes(lastActive as IntelligentScanStage)) {
-		return lastActive as IntelligentScanStage;
-	}
-	for (let i = INTELLIGENT_STAGE_ORDER.length - 1; i >= 0; i--) {
-		if (completedSteps.has(INTELLIGENT_STAGE_ORDER[i])) {
-			const next = INTELLIGENT_STAGE_ORDER[i + 1];
-			return next ?? "completed";
-		}
-	}
-	return "recon";
-}
-
-const STAGE_LABELS: Record<string, string> = {
-	recon: "侦察",
-	hunt: "搜寻",
-	validate: "验证",
-	gapfill: "补漏",
-	dedupe: "去重",
-	trace: "追踪",
-	feedback: "反馈",
-	report: "报告",
-};
-
-function IntelligentScanStages({ stage }: { stage: IntelligentScanStage }) {
-	const ORDER: Record<string, number> = { pending: -1, recon: 0, hunt: 1, validate: 2, gapfill: 3, dedupe: 4, trace: 5, feedback: 6, report: 7, completed: 8, failed: 8 };
-	const currentIndex = ORDER[stage] ?? -1;
-
-	return (
-		<div className="flex items-center gap-0">
-			{INTELLIGENT_STAGE_ORDER.map((key, i) => {
-				const isDone = currentIndex > i || stage === "completed";
-				const isActive = currentIndex === i && stage !== "completed" && stage !== "failed" && stage !== "pending";
-				const isFailed = stage === "failed" && currentIndex === i;
-				return (
-					<div key={key} className="flex items-center">
-						<div className="flex flex-col items-center gap-1">
-							<div className={`flex h-6 w-6 items-center justify-center rounded-full border text-xs font-medium transition-colors ${
-								isDone
-									? "border-emerald-500/60 bg-emerald-500/20 text-emerald-300"
-									: isActive
-									? "border-sky-400/70 bg-sky-500/20 text-sky-300"
-									: isFailed
-									? "border-rose-500/60 bg-rose-500/20 text-rose-300"
-									: "border-border bg-muted/30 text-muted-foreground"
-							}`}>
-								{isDone ? (
-									<CheckCircle2 className="h-3.5 w-3.5" />
-								) : isActive ? (
-									<Loader2 className="h-3 w-3 animate-spin" />
-								) : (
-									<Circle className="h-3 w-3" />
-								)}
-							</div>
-							<span className={`text-[11px] whitespace-nowrap ${
-								isDone ? "text-emerald-300" : isActive ? "text-sky-300" : "text-muted-foreground"
-							}`}>
-								{STAGE_LABELS[key]}
-							</span>
-						</div>
-						{i < INTELLIGENT_STAGE_ORDER.length - 1 && (
-							<div className={`mx-1.5 mb-4 h-px w-5 ${isDone ? "bg-emerald-500/40" : "bg-border"}`} />
-						)}
-					</div>
-				);
-			})}
 		</div>
 	);
 }
@@ -241,6 +121,58 @@ function hasHuntCompleted(eventLog: IntelligentTaskEventLogEntry[]): boolean {
 			ev.kind === "agent_completed" &&
 			(ev.data as Record<string, unknown> | undefined)?.stage === "hunt",
 	);
+}
+
+/**
+ * Project an intelligent-task finding onto the unified `AgentFinding` shape
+ * so it can be rendered by the shared finding-detail page without an extra
+ * backend roundtrip. The page expects narrative sections under `### 根因解释`,
+ * `### 业务影响`, `### 修复建议`, `### 验证结论` markdown headings, so we
+ * synthesise them from the available evidence/trace fields.
+ */
+function buildAgentFindingSnapshot(
+	finding: IntelligentTaskFinding,
+	record: IntelligentTaskRecord,
+): AgentFinding {
+	const evidence = String(finding.evidence ?? "").trim();
+	const traceSummary = String(finding.traceSummary ?? "").trim();
+	const validationStatus = String(finding.validationStatus ?? "").trim();
+	const isFalsePositive = finding.userVerdict === "false_positive";
+
+	const sections: string[] = [];
+	if (evidence) sections.push(`### 根因解释\n${evidence}`);
+	const verificationParts: string[] = [];
+	if (traceSummary) verificationParts.push(traceSummary);
+	if (validationStatus) verificationParts.push(`验证状态：${validationStatus}`);
+	if (finding.reachable != null) {
+		verificationParts.push(`可达性：${finding.reachable ? "可达" : "不可达"}`);
+	}
+	if (verificationParts.length > 0) {
+		sections.push(`### 验证结论\n${verificationParts.join("\n\n")}`);
+	}
+	const descriptionMarkdown = sections.join("\n\n");
+
+	return {
+		id: finding.id,
+		task_id: record.taskId,
+		vulnerability_type: finding.vulnClass ?? null,
+		severity: finding.severity ?? null,
+		title: finding.summary ?? null,
+		display_title: finding.summary ?? null,
+		description: evidence || null,
+		description_markdown: descriptionMarkdown || evidence || null,
+		file_path: finding.file ?? null,
+		line_start: finding.lineStart ?? null,
+		line_end: finding.lineEnd ?? null,
+		code_snippet: null,
+		code_context: null,
+		confidence: finding.confidence ?? null,
+		ai_confidence: finding.confidence ?? null,
+		verdict: finding.userVerdict ?? null,
+		status: isFalsePositive ? "false_positive" : (validationStatus || null),
+		authenticity: isFalsePositive ? "false_positive" : null,
+		verification_evidence: traceSummary || evidence || null,
+	};
 }
 
 // ── Verdict button with double-click-to-revert ──────────────────────────
@@ -314,9 +246,9 @@ function buildFindingColumns(
 	return [
 		{
 			id: "rowNumber",
-			header: "#",
+			header: "序号",
 			enableSorting: false,
-			meta: { label: "#", align: "center", width: 48 },
+			meta: { label: "序号", align: "center", width: 64 },
 			cell: ({ row, table }) =>
 				table.getState().pagination.pageIndex *
 					table.getState().pagination.pageSize +
@@ -349,13 +281,14 @@ function buildFindingColumns(
 			accessorFn: (row) => formatLocation(row),
 			header: "位置",
 			enableSorting: false,
-			meta: { label: "位置", minWidth: 220, filterVariant: "text" },
+			enableColumnFilter: false,
+			meta: { label: "位置", minWidth: 260, plainHeader: true },
 			cell: ({ row }) => {
 				const loc = formatLocation(row.original);
 				return (
 					<button
 						type="button"
-						className="block max-w-[16rem] truncate text-left font-mono text-[11px] text-sky-300 hover:underline cursor-pointer"
+						className="block w-full whitespace-normal break-all text-left font-mono text-[11px] text-sky-300 hover:underline cursor-pointer"
 						title={`点击复制: ${loc}`}
 						onClick={() => {
 							void navigator.clipboard.writeText(loc);
@@ -386,21 +319,28 @@ function buildFindingColumns(
 			id: "actions",
 			header: "操作",
 			enableSorting: false,
-			meta: { label: "操作", width: 200 },
+			meta: { label: "操作", width: 220, align: "center" },
 			cell: ({ row }) => {
 				const finding = row.original;
 				const done = record?.status === "completed";
 				return (
-					<div className="flex items-center gap-1.5">
+					<div className="flex items-center justify-center gap-1.5">
 						<Button
 							size="sm"
 							variant="outline"
 							className="h-6 px-2 font-mono text-[11px]"
-							onClick={() =>
+							onClick={() => {
+								if (!record) return;
+								const snapshot = buildAgentFindingSnapshot(finding, record);
 								navigate(
-									`/finding-detail/${finding.id}?source=intelligent&taskId=${record?.taskId ?? ""}`,
-								)
-							}
+									buildFindingDetailPath({
+										source: "agent",
+										taskId: record.taskId,
+										findingId: finding.id,
+									}),
+									{ state: buildFindingDetailLocationState(snapshot) },
+								);
+							}}
 						>
 							详情
 						</Button>
@@ -477,7 +417,7 @@ export default function AgentAuditDetail() {
 		}
 		pollingRef.current = setInterval(() => {
 			void fetchRecord();
-		}, 3000);
+		}, 5000);
 		return () => {
 			if (pollingRef.current) {
 				clearInterval(pollingRef.current);
@@ -574,17 +514,11 @@ export default function AgentAuditDetail() {
 	}));
 	const activeEvents: SseEvent[] =
 		sseEvents.length > 0 ? sseEvents : replayEvents;
-	const progressPercent = taskTerminal
-		? record.status === "completed" ? 100 : 0
-		: getIntelligentProgressPercent(record);
 	const headerTags = [
 		record.projectName?.trim() || record.projectId || "-",
-		`${progressPercent}%`,
 		formatDuration(record.durationMs),
 		`发现问题 ${findings.length.toLocaleString()}`,
 	];
-
-	const scanStage = resolveIntelligentScanStage(record.status, activeEvents);
 
 	const returnToParam =
 		new URLSearchParams(location.search).get("returnTo") || "";
@@ -669,12 +603,6 @@ export default function AgentAuditDetail() {
 				</div>
 			</div>
 
-			{/* Progress stage indicator — always visible */}
-			<div className="relative flex items-center gap-4 rounded border border-border bg-card/40 px-4 py-3">
-				<span className="text-xs text-muted-foreground shrink-0">扫描阶段</span>
-				<IntelligentScanStages stage={scanStage} />
-			</div>
-
 			{/* Findings table — full width */}
 			<div className="relative min-h-[28rem] lg:h-[calc(100vh-14rem)]">
 				<div className="min-h-[28rem] min-w-0 overflow-y-auto rounded-md pr-1 lg:h-full">
@@ -732,14 +660,14 @@ export default function AgentAuditDetail() {
 			<Dialog open={showLlmLog} onOpenChange={setShowLlmLog}>
 				<DialogContent className="max-w-4xl max-h-[80vh] overflow-hidden flex flex-col">
 					<DialogHeader>
-						<DialogTitle>时间日志 ({eventLog.length})</DialogTitle>
+						<DialogTitle>时间日志 ({activeEvents.length})</DialogTitle>
 					</DialogHeader>
 					<div className="flex-1 overflow-y-auto">
 						<div className="flex flex-col gap-0">
-							{eventLog.length === 0 ? (
+							{activeEvents.length === 0 ? (
 								<p className="py-8 text-center text-sm text-muted-foreground">暂无交互记录</p>
 							) : (
-								eventLog.map((ev, idx) => {
+								activeEvents.map((ev, idx) => {
 									const data = ev.data && typeof ev.data === "object" ? (ev.data as Record<string, unknown>) : null;
 									const redactedError = data?.redacted_error;
 									const isLlm = ev.kind === "llm_attempt";
@@ -766,7 +694,7 @@ export default function AgentAuditDetail() {
 														isLlm ? "bg-violet-400" : isAgent ? "bg-emerald-400" : "bg-sky-400"
 													}`} />
 												</div>
-												{idx < eventLog.length - 1 && (
+												{idx < activeEvents.length - 1 && (
 													<div className="mt-0.5 w-px flex-1 bg-border/30" style={{ minHeight: "0.75rem" }} />
 												)}
 											</div>

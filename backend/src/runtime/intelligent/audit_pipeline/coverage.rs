@@ -116,7 +116,7 @@ impl CoverageMatrix {
                 self.attack_classes.iter().all(|ac| {
                     self.cells
                         .get(&((*sub).clone(), ac.clone()))
-                        .map_or(true, |c| c.findings_confirmed == 0)
+                        .is_none_or(|c| c.findings_confirmed == 0)
                 })
             })
             .cloned()
@@ -131,7 +131,7 @@ impl CoverageMatrix {
                 self.subsystems.iter().all(|sub| {
                     self.cells
                         .get(&(sub.clone(), (*ac).clone()))
-                        .map_or(true, |c| c.findings_confirmed == 0)
+                        .is_none_or(|c| c.findings_confirmed == 0)
                 })
             })
             .cloned()

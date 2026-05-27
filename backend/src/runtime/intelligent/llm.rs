@@ -48,7 +48,10 @@ fn build_body_preview(body: &[u8]) -> String {
     };
     let text = String::from_utf8_lossy(head).to_string();
     if body.len() > RAW_BODY_PREVIEW_BYTES {
-        format!("{text}…[truncated {} bytes]", body.len() - RAW_BODY_PREVIEW_BYTES)
+        format!(
+            "{text}…[truncated {} bytes]",
+            body.len() - RAW_BODY_PREVIEW_BYTES
+        )
     } else {
         text
     }
@@ -212,10 +215,8 @@ fn build_invocation_result(
     let success = outcome.error.is_none() && !content_is_empty;
 
     let prompt_chars = prompt.chars().count();
-    let prompt_preview = redact_for_logging(
-        &build_text_preview(prompt, PROMPT_PREVIEW_CHARS),
-        config,
-    );
+    let prompt_preview =
+        redact_for_logging(&build_text_preview(prompt, PROMPT_PREVIEW_CHARS), config);
 
     let mut data = json!({
         "provider": format!("{:?}", config.provider),
@@ -667,8 +668,12 @@ mod tests {
     #[test]
     fn is_retryable_status_429_and_5xx() {
         assert!(is_retryable_status(reqwest::StatusCode::TOO_MANY_REQUESTS));
-        assert!(is_retryable_status(reqwest::StatusCode::INTERNAL_SERVER_ERROR));
-        assert!(is_retryable_status(reqwest::StatusCode::SERVICE_UNAVAILABLE));
+        assert!(is_retryable_status(
+            reqwest::StatusCode::INTERNAL_SERVER_ERROR
+        ));
+        assert!(is_retryable_status(
+            reqwest::StatusCode::SERVICE_UNAVAILABLE
+        ));
         assert!(!is_retryable_status(reqwest::StatusCode::OK));
         assert!(!is_retryable_status(reqwest::StatusCode::BAD_REQUEST));
         assert!(!is_retryable_status(reqwest::StatusCode::UNAUTHORIZED));

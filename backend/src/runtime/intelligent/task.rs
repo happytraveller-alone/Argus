@@ -12,6 +12,7 @@ use crate::{
     db::{intelligent_task_state, system_config},
     runtime::intelligent::{
         audit_pipeline,
+        audit_pipeline::{types::AuditConfigOverride, AuditPipelineConfig},
         config::resolve_intelligent_llm_config,
         llm::{HttpIntelligentLlmInvoker, IntelligentLlmInvoker},
         types::{IntelligentTaskEvent, IntelligentTaskFinding, IntelligentTaskRecord},
@@ -70,6 +71,7 @@ impl IntelligentTaskManager {
         self: &Arc<Self>,
         state: AppState,
         project_id: String,
+        audit_config_override: Option<AuditConfigOverride>,
     ) -> Result<IntelligentTaskRecord> {
         // Basic UUID-ish validation
         if project_id.trim().is_empty() {
@@ -127,7 +129,14 @@ impl IntelligentTaskManager {
                 let tx_for_task = tx.clone();
                 let handle = tokio::spawn(async move {
                     manager
-                        .run_task(state, task_id_for_handle, project_id, config, tx_for_task)
+                        .run_task(
+                            state,
+                            task_id_for_handle,
+                            project_id,
+                            config,
+                            tx_for_task,
+                            audit_config_override,
+                        )
                         .await;
                 });
                 self.live_tasks.lock().await.insert(task_id, (handle, tx));
@@ -196,6 +205,7 @@ impl IntelligentTaskManager {
         project_id: String,
         config: crate::runtime::intelligent::config::IntelligentLlmConfig,
         tx: broadcast::Sender<IntelligentTaskEvent>,
+        audit_config_override: Option<AuditConfigOverride>,
     ) {
         let started = Instant::now();
 
@@ -232,9 +242,21 @@ impl IntelligentTaskManager {
         );
 
         let invoker = Arc::clone(&self.invoker);
-        let pipeline_result =
-            audit_pipeline::run_pipeline(&state, &task_id, &project_id, &config, invoker, &tx)
-                .await;
+        let base_cfg = AuditPipelineConfig::default();
+        let audit_cfg = match audit_config_override {
+            Some(o) => o.into_config(&base_cfg),
+            None => base_cfg,
+        };
+        let pipeline_result = audit_pipeline::run_pipeline_with_config(
+            &state,
+            &task_id,
+            &project_id,
+            &config,
+            invoker,
+            &tx,
+            &audit_cfg,
+        )
+        .await;
 
         let duration_ms = started.elapsed().as_millis() as u64;
 

@@ -30,11 +30,30 @@ pub async fn get_record(state: &AppState, task_id: &str) -> Result<Option<Intell
     Ok(load_snapshot(state).await?.tasks.remove(task_id))
 }
 
-pub async fn list_records(state: &AppState, limit: usize) -> Result<Vec<IntelligentTaskRecord>> {
+pub async fn list_records(
+    state: &AppState,
+    skip: usize,
+    limit: usize,
+) -> Result<Vec<IntelligentTaskRecord>> {
     let mut records: Vec<_> = load_snapshot(state).await?.tasks.into_values().collect();
     records.sort_by(|left, right| right.created_at.cmp(&left.created_at));
-    records.truncate(limit);
-    Ok(records)
+    Ok(records.into_iter().skip(skip).take(limit).collect())
+}
+
+pub async fn list_records_by_project(
+    state: &AppState,
+    project_id: &str,
+    skip: usize,
+    limit: usize,
+) -> Result<Vec<IntelligentTaskRecord>> {
+    let mut records: Vec<_> = load_snapshot(state)
+        .await?
+        .tasks
+        .into_values()
+        .filter(|record| record.project_id == project_id)
+        .collect();
+    records.sort_by(|left, right| right.created_at.cmp(&left.created_at));
+    Ok(records.into_iter().skip(skip).take(limit).collect())
 }
 
 pub async fn update_record<F>(
@@ -181,11 +200,72 @@ mod tests {
             r.created_at = format!("2026-05-02T00:00:0{i}Z");
             save_record(&state, r).await.unwrap();
         }
-        let records = list_records(&state, 10).await.unwrap();
+        let records = list_records(&state, 0, 10).await.unwrap();
         assert_eq!(records.len(), 3);
         // should be descending
         assert!(records[0].created_at >= records[1].created_at);
         assert!(records[1].created_at >= records[2].created_at);
+    }
+
+    #[tokio::test]
+    async fn list_records_by_project_filters_before_limit() {
+        let state = build_state("list-project").await;
+        for (task_id, project_id, created_at) in [
+            ("old-target", "target-project", "2026-05-02T00:00:01Z"),
+            ("other-new", "other-project", "2026-05-02T00:00:03Z"),
+            ("new-target", "target-project", "2026-05-02T00:00:02Z"),
+        ] {
+            let mut record = IntelligentTaskRecord::new_pending(
+                task_id.to_string(),
+                project_id.to_string(),
+                "m".to_string(),
+                "f".to_string(),
+            );
+            record.created_at = created_at.to_string();
+            save_record(&state, record).await.unwrap();
+        }
+
+        let records = list_records_by_project(&state, "target-project", 0, 10)
+            .await
+            .unwrap();
+        assert_eq!(
+            records
+                .iter()
+                .map(|record| record.task_id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["new-target", "old-target"],
+        );
+    }
+
+    #[tokio::test]
+    async fn list_records_by_project_applies_skip_after_project_filter() {
+        let state = build_state("list-project-skip").await;
+        for (task_id, project_id, created_at) in [
+            ("target-old", "target-project", "2026-05-02T00:00:01Z"),
+            ("other-new", "other-project", "2026-05-02T00:00:04Z"),
+            ("target-middle", "target-project", "2026-05-02T00:00:02Z"),
+            ("target-new", "target-project", "2026-05-02T00:00:03Z"),
+        ] {
+            let mut record = IntelligentTaskRecord::new_pending(
+                task_id.to_string(),
+                project_id.to_string(),
+                "m".to_string(),
+                "f".to_string(),
+            );
+            record.created_at = created_at.to_string();
+            save_record(&state, record).await.unwrap();
+        }
+
+        let records = list_records_by_project(&state, "target-project", 1, 2)
+            .await
+            .unwrap();
+        assert_eq!(
+            records
+                .iter()
+                .map(|record| record.task_id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["target-middle", "target-old"],
+        );
     }
 
     #[tokio::test]

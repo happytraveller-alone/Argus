@@ -106,9 +106,7 @@ async fn seed_libplist_project(state: &AppState) -> String {
         zw.finish().expect("finish zip");
     }
 
-    let file_size = fs::metadata(&archive_path)
-        .expect("zip metadata")
-        .len();
+    let file_size = fs::metadata(&archive_path).expect("zip metadata").len();
 
     let archive = StoredProjectArchive {
         original_filename: format!("{project_id}.zip"),
@@ -149,10 +147,9 @@ async fn seed_libplist_project(state: &AppState) -> String {
 async fn seed_llm_config_from_env(state: &AppState) {
     let base_url = std::env::var("ARGUS_LLM_BASE_URL")
         .unwrap_or_else(|_| "https://api.openai.com/v1".to_string());
-    let model = std::env::var("ARGUS_LLM_MODEL")
-        .unwrap_or_else(|_| "gpt-4o".to_string());
-    let api_key = std::env::var("ARGUS_LLM_API_KEY")
-        .unwrap_or_else(|_| "sk-placeholder".to_string());
+    let model = std::env::var("ARGUS_LLM_MODEL").unwrap_or_else(|_| "gpt-4o".to_string());
+    let api_key =
+        std::env::var("ARGUS_LLM_API_KEY").unwrap_or_else(|_| "sk-placeholder".to_string());
 
     let llm_config = json!({
         "schemaVersion": 2,
@@ -240,7 +237,9 @@ async fn run_pipeline(scope: &str) -> IntelligentTaskRecord {
 async fn libplist_smoke_pipeline_completes() {
     // Gate: skip unless explicitly opted in.
     if std::env::var("ARGUS_RUN_LLM_INTEGRATION").as_deref() != Ok("1") {
-        eprintln!("skipping: set ARGUS_RUN_LLM_INTEGRATION=1 to run libplist_smoke_pipeline_completes");
+        eprintln!(
+            "skipping: set ARGUS_RUN_LLM_INTEGRATION=1 to run libplist_smoke_pipeline_completes"
+        );
         return;
     }
 
@@ -315,9 +314,6 @@ async fn libplist_smoke_produces_confirmed_real_finding() {
     let q = qualifying.unwrap();
     eprintln!(
         "[smoke/ac4] qualifying finding: id={} file={:?} vuln_class={:?} validation_status={:?}",
-        q.id,
-        q.file,
-        q.vuln_class,
-        q.validation_status,
+        q.id, q.file, q.vuln_class, q.validation_status,
     );
 }

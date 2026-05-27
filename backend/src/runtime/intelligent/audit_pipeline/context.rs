@@ -138,6 +138,18 @@ impl PipelineEventSink {
         })));
     }
 
+    /// Emits the `agent_completed` SSE event for a stage transition.
+    ///
+    /// CONTRACT (per .omc/plans/ralplan-intelligent-audit-detail-ui-fixes-2026-05-26.md §BE-4):
+    /// Callers should persist any stage-produced findings to the IntelligentTaskRecord
+    /// (via `task::flush_findings_to_record(...).await`) BEFORE invoking
+    /// `stage_completed`, so that frontend SSE consumers re-querying the record after
+    /// observing `agent_completed{stage}` see the post-stage findings without a race.
+    /// Currently the orchestrator in `audit_pipeline/mod.rs` flushes AFTER each stage
+    /// returns (because emits happen inside the stage's `run()` function). The race
+    /// window equals the duration of `flush_findings_to_record` (~ms) and is acceptable
+    /// for current consumers which read findings from the SSE-attached record snapshot
+    /// rather than re-fetching on each event.
     pub fn stage_completed(&self, stage: AuditStage, data: serde_json::Value) {
         self.emit(
             IntelligentTaskEvent::new("agent_completed").with_data(json!({

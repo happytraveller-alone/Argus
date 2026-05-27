@@ -252,7 +252,10 @@ export function ProjectPotentialVulnerabilitiesSection({
 								variant="outline"
 								className="cyber-btn-ghost h-7 px-3"
 							>
-								<Link to={appendReturnTo(row.original.route, currentRoute)}>
+								<Link
+									to={appendReturnTo(row.original.route, currentRoute)}
+									state={row.original.detailState}
+								>
 									详情
 								</Link>
 							</Button>

@@ -490,10 +490,15 @@ async fn single_pass_for_finding(
     if let Some(amp) = amplification {
         prompt.push_str(amp);
     }
-    let output =
-        invoke_json::<TraceOutput>(&*ctx.invoker, AuditStage::Trace, &prompt, &ctx.llm_config, events)
-            .await?
-            .payload;
+    let output = invoke_json::<TraceOutput>(
+        &*ctx.invoker,
+        AuditStage::Trace,
+        &prompt,
+        &ctx.llm_config,
+        events,
+    )
+    .await?
+    .payload;
     let trace = output
         .traces
         .into_iter()

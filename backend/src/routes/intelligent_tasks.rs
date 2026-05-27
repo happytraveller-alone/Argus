@@ -15,7 +15,10 @@ use tokio::sync::broadcast;
 use crate::{
     db::{intelligent_task_state, projects},
     error::ApiError,
-    runtime::intelligent::types::{IntelligentTaskFinding, IntelligentTaskRecord},
+    runtime::intelligent::{
+        audit_pipeline::types::AuditConfigOverride,
+        types::{IntelligentTaskFinding, IntelligentTaskRecord},
+    },
     state::AppState,
 };
 
@@ -23,11 +26,16 @@ use crate::{
 #[serde(rename_all = "camelCase")]
 struct CreateIntelligentTaskRequest {
     project_id: String,
+    #[serde(default)]
+    audit_config_override: Option<AuditConfigOverride>,
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct ListQuery {
     limit: Option<usize>,
+    skip: Option<usize>,
+    project_id: Option<String>,
 }
 
 pub fn router() -> Router<AppState> {
@@ -50,9 +58,20 @@ async fn create_task(
         return Err(ApiError::BadRequest("projectId is required".to_string()));
     }
 
+    // Security M1: validate user-supplied bounds before submission.
+    if let Some(override_cfg) = &payload.audit_config_override {
+        if let Err(msg) = override_cfg.validate() {
+            return Err(ApiError::BadRequest(msg.to_string()));
+        }
+    }
+
     let record = state
         .intelligent_task_manager
-        .submit(state.clone(), payload.project_id)
+        .submit(
+            state.clone(),
+            payload.project_id,
+            payload.audit_config_override,
+        )
         .await
         .map_err(internal_error)?;
 
@@ -72,9 +91,17 @@ async fn list_tasks(
     Query(query): Query<ListQuery>,
 ) -> Result<Json<Vec<IntelligentTaskRecord>>, ApiError> {
     let limit = query.limit.unwrap_or(50).clamp(1, 200);
-    let records = intelligent_task_state::list_records(&state, limit)
-        .await
-        .map_err(internal_error)?;
+    let skip = query.skip.unwrap_or(0);
+    let records = match query.project_id.as_deref() {
+        Some(project_id) if !project_id.trim().is_empty() => {
+            intelligent_task_state::list_records_by_project(&state, project_id, skip, limit)
+                .await
+                .map_err(internal_error)?
+        }
+        _ => intelligent_task_state::list_records(&state, skip, limit)
+            .await
+            .map_err(internal_error)?,
+    };
     Ok(Json(bind_project_names(&state, records).await?))
 }
 
@@ -232,9 +259,7 @@ async fn set_finding_verdict(
         .find(|f| f.id == finding_id)
         .cloned()
         .ok_or_else(|| {
-            ApiError::NotFound(format!(
-                "Finding not found: {finding_id} in task {task_id}"
-            ))
+            ApiError::NotFound(format!("Finding not found: {finding_id} in task {task_id}"))
         })?;
 
     Ok(Json(finding))

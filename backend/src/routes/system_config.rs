@@ -648,10 +648,7 @@ pub async fn import_env(
     let mut per_row_results: Vec<ImportRowResult> = Vec::new();
     let mut last_failure_message: Option<String> = None;
     let mut last_failure_reason: Option<String> = None;
-    let rows_snapshot: Vec<Value> = envelope["rows"]
-        .as_array()
-        .cloned()
-        .unwrap_or_default();
+    let rows_snapshot: Vec<Value> = envelope["rows"].as_array().cloned().unwrap_or_default();
     let total = rows_snapshot.len();
     for (zero_index, row) in rows_snapshot.iter().enumerate() {
         let display_index = zero_index + 1;
@@ -785,9 +782,7 @@ pub async fn import_env(
                     .find(|r| &r.id == winner_id)
                     .map(|r| r.index)
                     .and_then(|idx| row_configs.get(idx).cloned())
-                    .unwrap_or_else(|| {
-                        row_configs.first().cloned().unwrap_or_else(|| json!({}))
-                    });
+                    .unwrap_or_else(|| row_configs.first().cloned().unwrap_or_else(|| json!({})));
                 (
                     winner_legacy,
                     Some(save_metadata),

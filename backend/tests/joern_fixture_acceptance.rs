@@ -106,11 +106,18 @@ async fn libplist_fixture_expected_output_maps_to_cve_static_finding() {
         parsed.graph_proof["functions"][0],
         payload["expected"]["function"]
     );
-    let target = parsed.findings.iter().find(|f| {
-        f.payload.get("rule").and_then(|r| r.get("id"))
-            .and_then(|v| v.as_str()) == Some("joern-c-tainted-memcpy")
-            && f.payload.get("start_line").and_then(|v| v.as_u64()) == Some(288)
-    }).expect("expected joern-c-tainted-memcpy finding at line 288");
+    let target = parsed
+        .findings
+        .iter()
+        .find(|f| {
+            f.payload
+                .get("rule")
+                .and_then(|r| r.get("id"))
+                .and_then(|v| v.as_str())
+                == Some("joern-c-tainted-memcpy")
+                && f.payload.get("start_line").and_then(|v| v.as_u64()) == Some(288)
+        })
+        .expect("expected joern-c-tainted-memcpy finding at line 288");
     let finding_payload = &target.payload;
     assert_eq!(finding_payload["engine"], "joern");
     assert_eq!(
@@ -157,7 +164,11 @@ async fn joern_rule_asset_is_bundled_and_targets_libplist_cve() {
     let asset_paths: std::collections::HashSet<&str> =
         scala_assets.iter().map(|a| a.asset_path.as_str()).collect();
     for expected in &EXPECTED_JOERN_ASSET_PATHS {
-        assert!(asset_paths.contains(expected), "missing joern asset {}", expected);
+        assert!(
+            asset_paths.contains(expected),
+            "missing joern asset {}",
+            expected
+        );
     }
 
     let orchestrator = scala_assets

@@ -545,12 +545,9 @@ async fn run_json<T: serde::de::DeserializeOwned>(session: &PodmanSession, cmd: 
             // structural character.
             let truncated = truncate_json_tail(trimmed);
             if truncated.len() < trimmed.len() {
-                match serde_json::from_str::<T>(&truncated) {
-                    Ok(value) => {
-                        debug!("JSON parse succeeded after tail truncation for `{cmd}`");
-                        return Ok(value);
-                    }
-                    Err(_) => {}
+                if let Ok(value) = serde_json::from_str::<T>(&truncated) {
+                    debug!("JSON parse succeeded after tail truncation for `{cmd}`");
+                    return Ok(value);
                 }
             }
             Err(first_err).with_context(|| {

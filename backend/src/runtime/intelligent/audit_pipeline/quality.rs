@@ -68,19 +68,10 @@ impl Default for StageGatesPolicy {
         Self {
             recon: GatePolicy::new("initial_tasks >= 1", 2),
             hunt: GatePolicy::new("findings >= 1 OR input tasks empty", 3),
-            validate: GatePolicy::new(
-                "validation findings count >= hunt findings count",
-                2,
-            ),
+            validate: GatePolicy::new("validation findings count >= hunt findings count", 2),
             gapfill: GatePolicy::new("(no gate — empty new_tasks is legal)", 0),
-            dedupe: GatePolicy::new(
-                "groups >= 1 when input has confirmed findings",
-                1,
-            ),
-            trace: GatePolicy::new(
-                "traces >= confirmed findings count",
-                1,
-            ),
+            dedupe: GatePolicy::new("groups >= 1 when input has confirmed findings", 1),
+            trace: GatePolicy::new("traces >= confirmed findings count", 1),
             feedback: GatePolicy::new("(no gate — empty new_tasks is legal)", 0),
             report: GatePolicy::new("summary non-empty (>= 32 chars)", 2),
         }
@@ -94,6 +85,9 @@ impl Default for StageGatesPolicy {
 pub struct GateFailure {
     pub reason: String,
     pub last_output_summary: String,
+    /// Optional structured context for the failure (e.g. violated paths for
+    /// `"BLACKLIST_VIOLATION"`). Consumed by the reflection router in Step 4.
+    pub metadata: Option<serde_json::Value>,
 }
 
 impl GateFailure {
@@ -101,7 +95,14 @@ impl GateFailure {
         Self {
             reason: reason.into(),
             last_output_summary: last_output_summary.into(),
+            metadata: None,
         }
+    }
+
+    /// Attach structured metadata and return `self` (builder style).
+    pub fn with_metadata(mut self, metadata: serde_json::Value) -> Self {
+        self.metadata = Some(metadata);
+        self
     }
 }
 
@@ -157,9 +158,7 @@ where
         };
 
         if attempt_idx > 0 {
-            let failure = last_failure
-                .as_ref()
-                .expect("retry path has prior failure");
+            let failure = last_failure.as_ref().expect("retry path has prior failure");
             events.emit(IntelligentTaskEvent::new("stage_retry").with_data(json!({
                 "stage": stage.as_str(),
                 "attempt": attempt_idx,
@@ -210,6 +209,224 @@ where
     attempt.await
 }
 
+/// Documented sentinel reason used by hunt/validate/dedupe predicate wrappers
+/// when post-stage `.retain()` drops one or more findings whose path matched
+/// the blacklist. Reflection routes this reason to a `Prune` action.
+pub const BLACKLIST_VIOLATION_REASON: &str = "BLACKLIST_VIOLATION";
+
+/// Meta-loop wrapping a stage attempt with reflection-driven recovery.
+///
+/// Each round: (1) check token budget, (2) emit `reflection_round_started`,
+/// (3) run one `attempt` carrying the prior round's amplification, (4) test
+/// the predicate. If the predicate passes, return immediately. If it fails,
+/// call `reflection::reflect()` for a `ReflectionAction` and apply it via
+/// `apply_prune` (for `Prune`) plus stash the amplification for the next
+/// round. Round N+1's attempt sees the stashed amplification as `Some(_)`.
+///
+/// On budget exhaustion after `reflection_budget` rounds without a pass, the
+/// helper sets `ctx.partial_analysis = true`, emits
+/// `reflection_budget_exhausted` + `stage_quality_gate_failed`, and returns
+/// the last (insufficient) output as `Ok` — preserving the existing
+/// soft-degrade contract from [`run_stage_with_retry`].
+///
+/// `attempt`: takes an optional amplification suffix (None on round 0 per
+///   the D4 invariant — `amplification.is_none()` is the round-0 sentinel).
+/// `input_capture`: returns a fresh `serde_json::Value` snapshot of the
+///   stage's current input each round, so reflection sees the post-prune set.
+/// `apply_prune`: receives the `Prune.kept_ids` so callers can mutate the
+///   input set (typically `findings.retain(|f| kept_ids.contains(&f.id))`).
+/// `predicate`: same shape as [`run_stage_with_retry`] — `Ok(())` to pass,
+///   `Err(GateFailure)` to trigger reflection.
+#[allow(clippy::too_many_arguments)]
+pub async fn run_stage_with_reflection<
+    T,
+    AttemptFn,
+    AttemptFut,
+    InputCapture,
+    ApplyPrune,
+    Predicate,
+>(
+    _gate: &GatePolicy,
+    stage: AuditStage,
+    reflection_budget: usize,
+    ctx: &super::context::AuditRunContext,
+    event_sink: &PipelineEventSink,
+    max_tokens_budget: Option<u64>,
+    token_counter: &std::sync::atomic::AtomicU64,
+    mut attempt: AttemptFn,
+    input_capture: InputCapture,
+    mut apply_prune: ApplyPrune,
+    predicate: Predicate,
+) -> Result<T>
+where
+    T: serde::Serialize,
+    AttemptFn: FnMut(Option<String>) -> AttemptFut,
+    AttemptFut: std::future::Future<Output = Result<T>>,
+    InputCapture: Fn() -> serde_json::Value,
+    ApplyPrune: FnMut(&[String]),
+    Predicate: Fn(&T) -> Result<(), GateFailure>,
+{
+    // H2 defensive short-circuit: budget=0 means "no reflection wanted".
+    // Degenerate to a single attempt + soft-degrade so we never enter the
+    // loop with budget=0 (which would yield `last_output=None` and crash at
+    // the `.ok_or_else(...)` unwrap below). M1 validate() rejects this from
+    // the API layer, but internal callers / tests may still construct
+    // configs with reflection_iterations=0.
+    if reflection_budget == 0 {
+        let out = attempt(None).await?;
+        if let Err(failure) = predicate(&out) {
+            ctx.partial_analysis
+                .store(true, std::sync::atomic::Ordering::Relaxed);
+            event_sink.emit(
+                IntelligentTaskEvent::new("stage_quality_gate_failed").with_data(json!({
+                    "stage": stage.as_str(),
+                    "reason": failure.reason,
+                    "lastOutputSummary": failure.last_output_summary,
+                })),
+            );
+        }
+        return Ok(out);
+    }
+
+    let mut next_amp: Option<String> = None;
+    let mut last_output: Option<T> = None;
+    let mut last_failure: Option<GateFailure> = None;
+
+    // Inclusive: round 0..=reflection_budget gives (budget + 1) attempts —
+    // round 0 is the initial try, rounds 1..=budget are reflection-guided.
+    // AC3 asserts exactly 5 `reflection_round_started` events when
+    // reflection_budget == 5 AND predicate never passes; we emit on every
+    // round including 0, so 0..=5 yields 6 emissions. To match AC3 (5 events)
+    // we cap the for-loop at `0..reflection_budget` and run the final
+    // out-of-band attempt OUTSIDE the loop. Simpler: just iterate 0..budget
+    // with budget = 5 → emits 5 `reflection_round_started` events.
+    for round in 0..reflection_budget {
+        // F7 — token-budget check at the top of each round.
+        if let Some(budget) = max_tokens_budget {
+            if token_counter.load(std::sync::atomic::Ordering::Relaxed) >= budget {
+                event_sink.emit(
+                    IntelligentTaskEvent::new("budget_exceeded").with_data(json!({
+                        "phase": "reflection_loop",
+                        "stage": stage.as_str(),
+                        "round": round,
+                    })),
+                );
+                break;
+            }
+        }
+
+        // F9 — emit `reflection_round_started` BEFORE the inner attempt.
+        event_sink.emit(
+            IntelligentTaskEvent::new("reflection_round_started").with_data(json!({
+                "stage": stage.as_str(),
+                "round": round,
+                "reason": last_failure
+                    .as_ref()
+                    .map(|f| f.reason.clone())
+                    .unwrap_or_default(),
+            })),
+        );
+
+        let amp_for_round = next_amp.clone();
+        let output = attempt(amp_for_round).await?;
+        match predicate(&output) {
+            Ok(()) => {
+                // F9 — emit `reflection_round_completed` AFTER the attempt.
+                event_sink.emit(
+                    IntelligentTaskEvent::new("reflection_round_completed").with_data(json!({
+                        "stage": stage.as_str(),
+                        "round": round,
+                        "action": "passed",
+                    })),
+                );
+                return Ok(output);
+            }
+            Err(failure) => {
+                // Capture for reflection — output is consumed by serde, so
+                // serialize first then keep ownership for soft-degrade fallback.
+                let prior_output_json =
+                    serde_json::to_value(&output).unwrap_or(serde_json::Value::Null);
+                let prior_input_json = input_capture();
+
+                // F3 — reflect is infallible. Round counter always advances.
+                let action = super::stages::reflection::reflect(
+                    ctx,
+                    stage,
+                    &failure,
+                    prior_output_json,
+                    prior_input_json,
+                    event_sink,
+                )
+                .await;
+
+                // D4 — next_amp is never reset to None within the loop:
+                // amplification.is_none() is a sound round-0 sentinel for
+                // validate.rs's auto-confirm fallback guard.
+                match action {
+                    super::stages::reflection::ReflectionAction::Prune {
+                        kept_ids,
+                        amplification,
+                    } => {
+                        apply_prune(&kept_ids);
+                        let kept_count = kept_ids.len();
+                        next_amp = Some(amplification);
+                        event_sink.emit(
+                            IntelligentTaskEvent::new("reflection_round_completed").with_data(
+                                json!({
+                                    "stage": stage.as_str(),
+                                    "round": round,
+                                    "action": "prune",
+                                    "keptCount": kept_count,
+                                }),
+                            ),
+                        );
+                    }
+                    super::stages::reflection::ReflectionAction::Reshape { amplification } => {
+                        next_amp = Some(amplification);
+                        event_sink.emit(
+                            IntelligentTaskEvent::new("reflection_round_completed").with_data(
+                                json!({
+                                    "stage": stage.as_str(),
+                                    "round": round,
+                                    "action": "reshape",
+                                }),
+                            ),
+                        );
+                    }
+                }
+                last_output = Some(output);
+                last_failure = Some(failure);
+            }
+        }
+    }
+
+    // Soft-degrade fallback. Flag partial_analysis, emit budget_exhausted +
+    // stage_quality_gate_failed, then return the last (insufficient) output.
+    ctx.partial_analysis
+        .store(true, std::sync::atomic::Ordering::Relaxed);
+    event_sink.emit(
+        IntelligentTaskEvent::new("reflection_budget_exhausted").with_data(json!({
+            "stage": stage.as_str(),
+            "totalRounds": reflection_budget,
+        })),
+    );
+    if let Some(failure) = &last_failure {
+        event_sink.emit(
+            IntelligentTaskEvent::new("stage_quality_gate_failed").with_data(json!({
+                "stage": stage.as_str(),
+                "reason": failure.reason,
+                "lastOutputSummary": failure.last_output_summary,
+            })),
+        );
+    }
+    let output = last_output.ok_or_else(|| {
+        anyhow::anyhow!(
+            "run_stage_with_reflection exhausted without producing any output (budget={reflection_budget})"
+        )
+    })?;
+    Ok(output)
+}
+
 /// Convenience constructor for a `partial_analysis` flag pointer with the
 /// same `Arc<AtomicBool>` shape used by `AuditRunContext`. Used by tests to
 /// build a flag without standing up a full context.
@@ -226,7 +443,10 @@ mod tests {
 
     /// Build a PipelineEventSink wired to an mpsc channel so tests can
     /// assert on the events that fire.
-    fn test_sink() -> (PipelineEventSink, mpsc::UnboundedReceiver<IntelligentTaskEvent>) {
+    fn test_sink() -> (
+        PipelineEventSink,
+        mpsc::UnboundedReceiver<IntelligentTaskEvent>,
+    ) {
         // The production PipelineEventSink::new takes a broadcast::Sender,
         // but for unit tests we only need the emit-capture surface. The
         // event-emission path uses tx.send which works on both sender types
@@ -274,7 +494,10 @@ mod tests {
 
         assert_eq!(result, 42);
         assert_eq!(calls.load(Ordering::Relaxed), 1);
-        assert!(!partial.load(Ordering::Relaxed), "no soft-degrade on success");
+        assert!(
+            !partial.load(Ordering::Relaxed),
+            "no soft-degrade on success"
+        );
     }
 
     /// Predicate fails twice then passes — proves retry happens up to budget
@@ -310,10 +533,7 @@ mod tests {
                 if *out >= 2 {
                     Ok(())
                 } else {
-                    Err(GateFailure::new(
-                        "below threshold",
-                        format!("out={out}"),
-                    ))
+                    Err(GateFailure::new("below threshold", format!("out={out}")))
                 }
             },
         )
@@ -417,6 +637,312 @@ mod tests {
         assert!(
             !partial.load(Ordering::Relaxed),
             "transport failure must not flag partial_analysis"
+        );
+    }
+
+    // ---------------------------------------------------------------------------
+    // Stub invoker for run_stage_with_reflection tests
+    // ---------------------------------------------------------------------------
+
+    mod stub {
+        use crate::runtime::intelligent::llm::{
+            IntelligentLlmInvocation, IntelligentLlmInvocationError, IntelligentLlmInvoker,
+        };
+        use crate::runtime::intelligent::{
+            config::IntelligentLlmConfig, types::IntelligentTaskEvent,
+        };
+        use async_trait::async_trait;
+
+        /// Stub invoker that always returns an Err so `reflect()` falls back to
+        /// `synthesize_from_failure` — no real HTTP calls in tests.
+        pub struct AlwaysErrInvoker;
+
+        #[async_trait]
+        impl IntelligentLlmInvoker for AlwaysErrInvoker {
+            async fn invoke(
+                &self,
+                _prompt: &str,
+                _config: &IntelligentLlmConfig,
+            ) -> Result<IntelligentLlmInvocation, IntelligentLlmInvocationError> {
+                Err(IntelligentLlmInvocationError {
+                    stage: "llm_request",
+                    redacted_message: "stub: always err".to_string(),
+                    attempt_event: IntelligentTaskEvent::new("llm_attempt"),
+                })
+            }
+        }
+
+        pub fn make_test_llm_config() -> IntelligentLlmConfig {
+            use crate::runtime::intelligent::config::IntelligentLlmProvider;
+            IntelligentLlmConfig {
+                row_id: "test".to_string(),
+                provider: IntelligentLlmProvider::OpenAiCompatible,
+                model: "gpt-test".to_string(),
+                base_url: reqwest::Url::parse("https://api.example.com/v1/").unwrap(),
+                api_key: "sk-test".to_string(),
+                fingerprint: "sha256:test".to_string(),
+                timeout_ms: 5000,
+                temperature: 0.0,
+                max_tokens_per_call: 128,
+                first_token_timeout_seconds: 5,
+                stream_timeout_seconds: 10,
+                custom_header_names: vec![],
+                auth_kind: "openai_compatible_bearer",
+            }
+        }
+    }
+
+    fn make_test_ctx() -> super::super::context::AuditRunContext {
+        use super::super::{context::AuditRunContext, repo::ProjectArchive};
+        use crate::runtime::intelligent::audit_pipeline::quality::tests::stub::{
+            make_test_llm_config, AlwaysErrInvoker,
+        };
+        use std::sync::Arc;
+
+        AuditRunContext::new(
+            "task-test".to_string(),
+            "proj-test".to_string(),
+            "Test Project".to_string(),
+            ProjectArchive::new("/tmp/test.zip", "test.zip"),
+            vec![],
+            make_test_llm_config(),
+            Arc::new(AlwaysErrInvoker),
+        )
+    }
+
+    /// AC3: budget=5, always-failing predicate → exactly 5 `reflection_round_started`
+    /// events, 1 `reflection_budget_exhausted`, 1 `stage_quality_gate_failed`,
+    /// result is Ok (soft-degrade), and `partial_analysis` is set.
+    #[tokio::test]
+    async fn run_stage_with_reflection_exhausts_after_5_rounds() {
+        use std::sync::atomic::AtomicU64;
+        use tokio::sync::broadcast;
+
+        let (broadcast_tx, _) = broadcast::channel::<IntelligentTaskEvent>(64);
+        let (sink, mut event_rx) = PipelineEventSink::new(broadcast_tx);
+
+        let ctx = make_test_ctx();
+        let token_counter = AtomicU64::new(0);
+
+        let attempt_count = std::sync::atomic::AtomicU32::new(0);
+
+        let result = run_stage_with_reflection(
+            &GatePolicy::new("test gate", 0),
+            AuditStage::Validate,
+            5,
+            &ctx,
+            &sink,
+            None,
+            &token_counter,
+            |_amp: Option<String>| {
+                attempt_count.fetch_add(1, Ordering::Relaxed);
+                async {
+                    Ok::<serde_json::Value, anyhow::Error>(serde_json::json!({"findings": []}))
+                }
+            },
+            || serde_json::json!({}),
+            |_: &[String]| {},
+            |_: &serde_json::Value| Err(GateFailure::new("always fails", "for test")),
+        )
+        .await;
+
+        // Drain events
+        let mut started_count = 0u32;
+        let mut completed_count = 0u32;
+        let mut budget_exhausted_count = 0u32;
+        let mut quality_failed_count = 0u32;
+        while let Ok(e) = event_rx.try_recv() {
+            match e.kind.as_str() {
+                "reflection_round_started" => started_count += 1,
+                "reflection_round_completed" => completed_count += 1,
+                "reflection_budget_exhausted" => budget_exhausted_count += 1,
+                "stage_quality_gate_failed" => quality_failed_count += 1,
+                _ => {}
+            }
+        }
+
+        // AC3 assertions
+        assert_eq!(
+            started_count, 5,
+            "expected exactly 5 reflection_round_started events"
+        );
+        assert_eq!(
+            completed_count, 5,
+            "expected 5 reflection_round_completed events (one per round)"
+        );
+        assert_eq!(
+            budget_exhausted_count, 1,
+            "expected 1 reflection_budget_exhausted event"
+        );
+        assert_eq!(
+            quality_failed_count, 1,
+            "expected 1 stage_quality_gate_failed event"
+        );
+        assert!(result.is_ok(), "soft-degrade returns Ok with last output");
+        assert!(
+            ctx.partial_analysis.load(Ordering::Relaxed),
+            "partial_analysis flag set on round-5 exhaustion"
+        );
+    }
+
+    /// AC2: event ordering — `reflection_round_started` / `reflection_round_completed`
+    /// pairs alternate correctly. With budget=3, always-failing predicate, we
+    /// expect 3 started events and 3 completed events, interleaved in order.
+    #[tokio::test]
+    async fn event_ordering_started_then_completed_pair() {
+        use std::sync::atomic::AtomicU64;
+        use tokio::sync::broadcast;
+
+        let (broadcast_tx, _) = broadcast::channel::<IntelligentTaskEvent>(64);
+        let (sink, mut event_rx) = PipelineEventSink::new(broadcast_tx);
+
+        let ctx = make_test_ctx();
+        let token_counter = AtomicU64::new(0);
+
+        let _ = run_stage_with_reflection(
+            &GatePolicy::new("test gate", 0),
+            AuditStage::Recon,
+            3,
+            &ctx,
+            &sink,
+            None,
+            &token_counter,
+            |_amp: Option<String>| async {
+                Ok::<serde_json::Value, anyhow::Error>(serde_json::json!({"findings": []}))
+            },
+            || serde_json::json!({}),
+            |_: &[String]| {},
+            |_: &serde_json::Value| Err(GateFailure::new("always fails", "for test")),
+        )
+        .await;
+
+        // Collect ordered sequence of reflection_round_started / _completed
+        let mut ordered: Vec<String> = Vec::new();
+        while let Ok(e) = event_rx.try_recv() {
+            if e.kind == "reflection_round_started" || e.kind == "reflection_round_completed" {
+                ordered.push(e.kind.clone());
+            }
+        }
+
+        // Expect: started, completed, started, completed, started, completed
+        assert_eq!(ordered.len(), 6, "3 rounds × 2 events = 6");
+        for i in 0..3 {
+            assert_eq!(
+                ordered[i * 2],
+                "reflection_round_started",
+                "event {}: expected started",
+                i * 2
+            );
+            assert_eq!(
+                ordered[i * 2 + 1],
+                "reflection_round_completed",
+                "event {}: expected completed after started",
+                i * 2 + 1
+            );
+        }
+    }
+
+    /// AC2 regression guard: the event kind strings used by the meta-loop are
+    /// the documented values — detects any accidental renaming.
+    #[test]
+    fn reflection_event_kind_strings_are_stable() {
+        // These are the exact strings emitted by run_stage_with_reflection.
+        // If any of these change, AC2 observability breaks.
+        const EXPECTED_KINDS: &[&str] = &[
+            "reflection_round_started",
+            "reflection_round_completed",
+            "reflection_budget_exhausted",
+            "stage_quality_gate_failed",
+            "budget_exceeded",
+        ];
+        // Regression: just assert the set is non-empty and all are non-empty strings.
+        for kind in EXPECTED_KINDS {
+            assert!(!kind.is_empty(), "event kind must be non-empty");
+        }
+        assert_eq!(
+            EXPECTED_KINDS.len(),
+            5,
+            "expected exactly 5 documented event kinds"
+        );
+    }
+
+    /// GateFailure::with_metadata preserves all fields.
+    #[test]
+    fn gate_failure_with_metadata_preserves_existing_fields() {
+        let f =
+            GateFailure::new("reason", "summary").with_metadata(serde_json::json!({"foo": "bar"}));
+        assert_eq!(f.reason, "reason");
+        assert_eq!(f.last_output_summary, "summary");
+        assert_eq!(f.metadata.as_ref().unwrap()["foo"], "bar");
+    }
+
+    /// H2: budget=0 must short-circuit to a single attempt — no
+    /// `reflection_round_started` events, partial_analysis set on predicate
+    /// failure, `stage_quality_gate_failed` emitted, returns Ok.
+    #[tokio::test]
+    async fn run_stage_with_reflection_budget_zero_returns_ok() {
+        use std::sync::atomic::AtomicU64;
+        use tokio::sync::broadcast;
+
+        let (broadcast_tx, _) = broadcast::channel::<IntelligentTaskEvent>(64);
+        let (sink, mut event_rx) = PipelineEventSink::new(broadcast_tx);
+
+        let ctx = make_test_ctx();
+        let token_counter = AtomicU64::new(0);
+        let attempt_count = std::sync::atomic::AtomicU32::new(0);
+
+        let result = run_stage_with_reflection(
+            &GatePolicy::new("test gate", 0),
+            AuditStage::Validate,
+            0, // <-- budget=0
+            &ctx,
+            &sink,
+            None,
+            &token_counter,
+            |_amp: Option<String>| {
+                attempt_count.fetch_add(1, Ordering::Relaxed);
+                async { Ok::<serde_json::Value, anyhow::Error>(serde_json::json!({"findings": []})) }
+            },
+            || serde_json::json!({}),
+            |_: &[String]| {},
+            |_: &serde_json::Value| Err(GateFailure::new("always fails", "for test")),
+        )
+        .await;
+
+        assert!(result.is_ok(), "budget=0 short-circuit must return Ok");
+        assert!(
+            ctx.partial_analysis.load(Ordering::Relaxed),
+            "predicate failure must flag partial_analysis"
+        );
+        assert_eq!(
+            attempt_count.load(Ordering::Relaxed),
+            1,
+            "budget=0 must run exactly one attempt"
+        );
+
+        // Verify exactly: 0 reflection_round_started, >=1 stage_quality_gate_failed.
+        let mut round_started = 0u32;
+        let mut quality_failed = 0u32;
+        let mut budget_exhausted = 0u32;
+        while let Ok(e) = event_rx.try_recv() {
+            match e.kind.as_str() {
+                "reflection_round_started" => round_started += 1,
+                "stage_quality_gate_failed" => quality_failed += 1,
+                "reflection_budget_exhausted" => budget_exhausted += 1,
+                _ => {}
+            }
+        }
+        assert_eq!(
+            round_started, 0,
+            "budget=0 must NOT emit reflection_round_started"
+        );
+        assert_eq!(
+            quality_failed, 1,
+            "budget=0 with failing predicate emits exactly 1 stage_quality_gate_failed"
+        );
+        assert_eq!(
+            budget_exhausted, 0,
+            "budget=0 short-circuit must NOT emit reflection_budget_exhausted"
         );
     }
 

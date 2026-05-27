@@ -1,5 +1,9 @@
+use std::path::Path;
+
 use anyhow::Result;
 use serde_json::json;
+
+use crate::runtime::intelligent::types::IntelligentTaskEvent;
 
 use super::super::{
     context::{AuditRunContext, AuditStage, PipelineEventSink},
@@ -13,6 +17,7 @@ pub async fn run(
     validation: &ValidationOutput,
     events: &PipelineEventSink,
     amplification: Option<&str>,
+    path_blacklist_extra: &[String],
 ) -> Result<DedupeOutput> {
     let stage = AuditStage::Dedupe;
     events.stage_started(stage);
@@ -30,9 +35,10 @@ pub async fn run(
     if let Some(amp) = amplification {
         prompt.push_str(amp);
     }
-    let mut output = invoke_json::<DedupeOutput>(&*ctx.invoker, stage, &prompt, &ctx.llm_config, events)
-        .await?
-        .payload;
+    let mut output =
+        invoke_json::<DedupeOutput>(&*ctx.invoker, stage, &prompt, &ctx.llm_config, events)
+            .await?
+            .payload;
     if output.groups.is_empty() {
         output.groups = validation
             .findings
@@ -46,6 +52,50 @@ pub async fn run(
             })
             .collect();
     }
+
+    // Build a lookup from finding_id -> file path for blacklist cross-reference
+    let id_to_path: std::collections::HashMap<&str, &str> = validation
+        .findings
+        .iter()
+        .map(|vf| (vf.finding.finding_id.as_str(), vf.finding.file.as_str()))
+        .collect();
+
+    let mut groups_to_drop: Vec<usize> = Vec::new();
+
+    for (group_idx, group) in output.groups.iter_mut().enumerate() {
+        let canonical_id = group.canonical_finding_id.clone();
+        group.finding_ids.retain(|fid| {
+            if let Some(path) = id_to_path.get(fid.as_str()) {
+                if let Some(reason) = crate::runtime::intelligent::code_intel::is_blacklisted(
+                    Path::new(path),
+                    path_blacklist_extra,
+                ) {
+                    events.emit(IntelligentTaskEvent::new("finding_blacklisted").with_data(
+                        json!({
+                            "stage": stage.as_str(),
+                            "findingId": fid,
+                            "path": super::sanitize_path_for_event(path),
+                            "blacklistReason": reason,
+                        }),
+                    ));
+                    return false;
+                }
+            }
+            true
+        });
+
+        // If canonical was dropped or group is now empty, mark for whole-group removal
+        let canonical_dropped = !group.finding_ids.iter().any(|fid| fid == &canonical_id);
+        if canonical_dropped || group.finding_ids.is_empty() {
+            groups_to_drop.push(group_idx);
+        }
+    }
+
+    // Drop groups in reverse order to preserve indices
+    for idx in groups_to_drop.into_iter().rev() {
+        output.groups.remove(idx);
+    }
+
     events.stage_completed(stage, json!({"groupCount": output.groups.len()}));
     Ok(output)
 }

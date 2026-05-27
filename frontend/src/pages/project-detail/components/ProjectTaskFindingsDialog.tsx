@@ -1,29 +1,38 @@
+import type { ColumnDef } from "@tanstack/react-table";
 import { ArrowLeft, Bug } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import type { ColumnDef } from "@tanstack/react-table";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import {
-	DataTable,
 	type AppColumnDef,
+	DataTable,
 	type DataTableQueryState,
 } from "@/components/data-table";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
 	Dialog,
 	DialogContent,
 	DialogHeader,
 	DialogTitle,
 } from "@/components/ui/dialog";
+import { buildProjectDetailAgentFindingSnapshot } from "@/pages/project-detail/intelligentFindingSnapshot";
+import { getStaticAnalysisOpengrepRuleName } from "@/pages/static-analysis/viewModel";
+import type {
+	IntelligentTaskFinding,
+	IntelligentTaskRecord,
+} from "@/shared/api/intelligentTasks";
 import {
+	getCodeqlScanFindings,
+	getJoernScanFindings,
 	getOpengrepScanFindings,
 	type OpengrepFinding,
 } from "@/shared/api/opengrep";
-import { getStaticAnalysisOpengrepRuleName } from "@/pages/static-analysis/viewModel";
 import { resolveCweDisplay } from "@/shared/security/cweCatalog";
 import {
 	appendReturnTo,
+	buildFindingDetailLocationState,
 	buildFindingDetailPath,
+	type FindingDetailLocationState,
 } from "@/shared/utils/findingRoute";
 import {
 	normalizeTaskFindingConfidence,
@@ -46,6 +55,8 @@ export interface ProjectTaskFindingsDialogProps {
 	onOpenChange: (open: boolean) => void;
 	taskId: string;
 	taskCategory: TaskFindingCategory;
+	staticEngine?: "opengrep" | "codeql" | "joern" | null;
+	intelligentTask?: IntelligentTaskRecord | null;
 	projectName: string;
 	returnTo: string;
 	taskLabel: string;
@@ -195,10 +206,17 @@ function toStaticRelativePath(projectName: string, filePath: string): string {
 
 async function fetchAllStaticFindings(
 	taskId: string,
+	staticEngine: "opengrep" | "codeql" | "joern",
 ): Promise<OpengrepFinding[]> {
 	const findings: OpengrepFinding[] = [];
 	for (let batchIndex = 0; batchIndex < MAX_FINDING_BATCHES; batchIndex += 1) {
-		const page = await getOpengrepScanFindings({
+		const fetchFindings =
+			staticEngine === "codeql"
+				? getCodeqlScanFindings
+				: staticEngine === "joern"
+					? getJoernScanFindings
+					: getOpengrepScanFindings;
+		const page = await fetchFindings({
 			taskId,
 			skip: batchIndex * FINDING_BATCH_SIZE,
 			limit: FINDING_BATCH_SIZE,
@@ -212,6 +230,7 @@ async function fetchAllStaticFindings(
 function normalizeStaticFindings(
 	taskId: string,
 	findings: OpengrepFinding[],
+	staticEngine: "opengrep" | "codeql" | "joern",
 ): TaskFindingRow[] {
 	return findings.map((finding) => {
 		const ruleLabel = resolveStaticFindingRuleLabel(finding);
@@ -235,9 +254,49 @@ function normalizeStaticFindings(
 				source: "static",
 				taskId,
 				findingId: finding.id,
-				engine: "opengrep",
+				engine: staticEngine,
 			}),
 			createdAt: null,
+		};
+	});
+}
+
+function normalizeIntelligentFindings(
+	record: IntelligentTaskRecord,
+	findings: IntelligentTaskFinding[],
+): TaskFindingRow[] {
+	return findings.map((finding) => {
+		const typeDisplay = resolveCweDisplay({
+			cwe: finding.vulnClass,
+			fallbackLabel:
+				String(finding.vulnClass || "").trim() ||
+				String(finding.summary || "").trim() ||
+				"潜在漏洞",
+		});
+
+		return {
+			id: finding.id,
+			taskId: record.taskId,
+			taskCategory: "intelligent",
+			title:
+				String(finding.summary || "").trim() ||
+				String(finding.vulnClass || "").trim() ||
+				"未命名漏洞",
+			typeLabel: typeDisplay.label,
+			typeTooltip: typeDisplay.tooltip || typeDisplay.label,
+			filePath: String(finding.file || "").trim() || "-",
+			line: toPositiveLine(finding.lineStart),
+			severity: normalizeTaskFindingSeverity(finding.severity),
+			confidence: normalizeTaskFindingConfidence(finding.confidence),
+			route: buildFindingDetailPath({
+				source: "agent",
+				taskId: record.taskId,
+				findingId: finding.id,
+			}),
+			createdAt: record.createdAt,
+			locationState: buildFindingDetailLocationState(
+				buildProjectDetailAgentFindingSnapshot(finding, record),
+			) satisfies FindingDetailLocationState,
 		};
 	});
 }
@@ -247,6 +306,8 @@ export default function ProjectTaskFindingsDialog({
 	onOpenChange,
 	taskId,
 	taskCategory,
+	staticEngine = "opengrep",
+	intelligentTask = null,
 	projectName,
 	returnTo,
 	taskLabel,
@@ -268,7 +329,11 @@ export default function ProjectTaskFindingsDialog({
 		density: "comfortable",
 	});
 	const cacheRef = useRef(new Map<string, TaskFindingRow[]>());
-	const cacheKey = `${taskCategory}:${taskId}`;
+	const resolvedStaticEngine =
+		staticEngine === "codeql" || staticEngine === "joern"
+			? staticEngine
+			: "opengrep";
+	const cacheKey = `${taskCategory}:${resolvedStaticEngine}:${taskId}`;
 
 	const formatLocation = useCallback(
 		(filePath: string, line: number | null) => {
@@ -318,9 +383,15 @@ export default function ProjectTaskFindingsDialog({
 					taskCategory === "static"
 						? normalizeStaticFindings(
 								taskId,
-								await fetchAllStaticFindings(taskId),
+								await fetchAllStaticFindings(taskId, resolvedStaticEngine),
+								resolvedStaticEngine,
 							)
-						: [];
+						: intelligentTask
+							? normalizeIntelligentFindings(
+									intelligentTask,
+									intelligentTask.findings ?? [],
+								)
+							: [];
 
 				const sortedRows = sortTaskFindings(nextRows);
 				if (cancelled) return;
@@ -342,7 +413,14 @@ export default function ProjectTaskFindingsDialog({
 		return () => {
 			cancelled = true;
 		};
-	}, [cacheKey, open, taskCategory, taskId]);
+	}, [
+		cacheKey,
+		intelligentTask,
+		open,
+		resolvedStaticEngine,
+		taskCategory,
+		taskId,
+	]);
 
 	const columns = useMemo<ColumnDef<TaskFindingRow>[]>(
 		() =>
@@ -479,7 +557,10 @@ export default function ProjectTaskFindingsDialog({
 								variant="outline"
 								className="cyber-btn-ghost h-8 px-3"
 							>
-								<Link to={appendReturnTo(row.original.route, returnTo)}>
+								<Link
+									to={appendReturnTo(row.original.route, returnTo)}
+									state={row.original.locationState}
+								>
 									详情
 								</Link>
 							</Button>

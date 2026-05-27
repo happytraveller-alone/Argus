@@ -51,7 +51,7 @@ pub fn start_exploration_container(
     let container_name = format!("codeql-explore-{task_id}-{short_id}");
 
     let workspace_mount = format!("{}:/scan/workspace:rw", workspace_dir.display());
-    let memory_flag = format!("{}m", memory_mb);
+    let memory_flag = format!("{memory_mb}m");
 
     let output = Command::new(&runtime_bin)
         .args([

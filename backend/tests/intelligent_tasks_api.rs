@@ -112,6 +112,7 @@ impl IntelligentLlmInvoker for ScriptedInvoker {
             Err(redacted) => Err(IntelligentLlmInvocationError {
                 stage: "llm_request",
                 redacted_message: redacted,
+                attempt_event: IntelligentTaskEvent::new("llm_attempt"),
             }),
         }
     }
@@ -377,6 +378,68 @@ async fn intelligent_task_api_binds_project_name_from_backend_project_record() {
             .and_then(|item| item["projectName"].as_str()),
         Some(format!("test-{project_id}").as_str())
     );
+}
+
+#[tokio::test]
+async fn intelligent_task_api_filters_list_by_project_id_before_limit() {
+    let state = build_state_default("project-id-filter").await;
+    let target_project_id = Uuid::new_v4().to_string();
+    let other_project_id = Uuid::new_v4().to_string();
+    seed_project_with_archive(&state, &target_project_id).await;
+    seed_project_with_archive(&state, &other_project_id).await;
+
+    for (task_id, project_id, created_at) in [
+        (
+            "target-old",
+            target_project_id.as_str(),
+            "2026-05-02T00:00:01Z",
+        ),
+        (
+            "other-new",
+            other_project_id.as_str(),
+            "2026-05-02T00:00:03Z",
+        ),
+        (
+            "target-new",
+            target_project_id.as_str(),
+            "2026-05-02T00:00:02Z",
+        ),
+    ] {
+        let mut record = IntelligentTaskRecord::new_pending(
+            task_id.to_string(),
+            project_id.to_string(),
+            "model".to_string(),
+            "fp".to_string(),
+        );
+        record.created_at = created_at.to_string();
+        record.status = IntelligentTaskStatus::Completed;
+        intelligent_task_state::save_record(&state, record)
+            .await
+            .expect("save intelligent task");
+    }
+
+    let app = build_router(state, ShutdownGate::default());
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method(Method::GET)
+                .uri(format!(
+                    "/api/v1/intelligent-tasks?projectId={target_project_id}&skip=1&limit=1"
+                ))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let payload = response_json(response).await;
+    let ids = payload
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|item| item["taskId"].as_str().unwrap())
+        .collect::<Vec<_>>();
+    assert_eq!(ids, vec!["target-old"]);
 }
 
 #[tokio::test]

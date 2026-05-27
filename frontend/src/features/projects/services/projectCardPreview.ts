@@ -1,6 +1,3 @@
-import type { AgentTask } from "@/shared/api/agentTasks";
-import type { AgentFinding } from "@/shared/api/agentTasks";
-import type { OpengrepFinding, OpengrepScanTask } from "@/shared/api/opengrep";
 import {
 	buildOpengrepSeverityCounts,
 	getOpengrepVisibleFindingCount,
@@ -8,6 +5,9 @@ import {
 	mergeSeverityCounts,
 	type SeverityCounts,
 } from "@/features/tasks/services/taskActivities";
+import type { AgentFinding, AgentTask } from "@/shared/api/agentTasks";
+import type { IntelligentTaskRecord } from "@/shared/api/intelligentTasks";
+import type { OpengrepFinding, OpengrepScanTask } from "@/shared/api/opengrep";
 import { resolveCweDisplay } from "@/shared/security/cweCatalog";
 import { buildFindingDetailPath } from "@/shared/utils/findingRoute";
 
@@ -18,6 +18,7 @@ export interface ProjectCardRecentTask {
 	id: string;
 	projectId: string;
 	kind: ProjectCardTaskKind;
+	engine?: "opengrep" | "codeql" | "joern" | null;
 	status: string;
 	progressPercent: number;
 	createdAt: string;
@@ -322,21 +323,54 @@ export function getProjectCardRecentTasks(params: {
 	projectId: string;
 	agentTasks: AgentTask[];
 	opengrepTasks: OpengrepScanTask[];
+	codeqlTasks?: OpengrepScanTask[];
+	joernTasks?: OpengrepScanTask[];
+	intelligentTasks?: IntelligentTaskRecord[];
 	limit?: number;
 }): ProjectCardRecentTask[] {
-	const { projectId, opengrepTasks } = params;
+	const {
+		projectId,
+		opengrepTasks,
+		codeqlTasks = [],
+		joernTasks = [],
+		intelligentTasks = [],
+	} = params;
 	const limit = params.limit ?? 3;
-	const staticItems: ProjectCardRecentTask[] = opengrepTasks
-		.filter((task) => task.project_id === projectId)
-		.map((task) => {
+	const staticItems: ProjectCardRecentTask[] = [
+		...opengrepTasks.map((task) => ({
+			task,
+			engine: "opengrep" as const,
+			engineLabel: "Opengrep",
+		})),
+		...codeqlTasks.map((task) => ({
+			task,
+			engine: "codeql" as const,
+			engineLabel: "CodeQL",
+		})),
+		...joernTasks.map((task) => ({
+			task,
+			engine: "joern" as const,
+			engineLabel: "Joern",
+		})),
+	]
+		.filter(({ task }) => task.project_id === projectId)
+		.map(({ task, engine, engineLabel }) => {
 			const status = normalizeStatus(task.status);
 			const params = new URLSearchParams();
-			params.set("opengrepTaskId", task.id);
+			params.set(`${engine}TaskId`, task.id);
+			if (engine !== "opengrep") {
+				params.set("engine", engine);
+			}
+			const route =
+				engine === "codeql"
+					? `/codeql-analysis/${task.id}?${params.toString()}`
+					: `/static-analysis/${task.id}?${params.toString()}`;
 
 			return {
 				id: task.id,
 				projectId: task.project_id,
 				kind: "static",
+				engine,
 				status,
 				progressPercent: getStatusProgressBaseline(status),
 				createdAt: task.created_at,
@@ -346,9 +380,9 @@ export function getProjectCardRecentTasks(params: {
 						? null
 						: (task.updated_at ?? null),
 				durationMs: toNullableNonNegativeNumber(task.scan_duration_ms),
-				route: `/static-analysis/${task.id}?${params.toString()}`,
-				label: "静态审计",
-				scanTypeLabel: "静态审计",
+				route,
+				label: `${engineLabel} 静态审计`,
+				scanTypeLabel: `${engineLabel} 静态审计`,
 				scannedFiles: toNullableNonNegativeNumber(task.files_scanned),
 				scannedLines: toNullableNonNegativeNumber(task.lines_scanned),
 				vulnerabilities: getOpengrepVisibleFindingCount(task),
@@ -358,7 +392,38 @@ export function getProjectCardRecentTasks(params: {
 			};
 		});
 
-	const intelligentItems: ProjectCardRecentTask[] = [];
+	const intelligentItems: ProjectCardRecentTask[] = intelligentTasks
+		.filter((task) => task.projectId === projectId)
+		.map((task) => {
+			const status = normalizeStatus(task.status);
+			const progress =
+				typeof task.status === "string" && task.status === "completed"
+					? 100
+					: getStatusProgressBaseline(status);
+			return {
+				id: task.taskId,
+				projectId: task.projectId,
+				kind: "intelligent",
+				engine: null,
+				status,
+				progressPercent: progress,
+				createdAt: task.createdAt,
+				startedAt: task.startedAt ?? null,
+				completedAt: task.completedAt ?? null,
+				durationMs: toNullableNonNegativeNumber(task.durationMs),
+				route: `/agent-audit/${task.taskId}`,
+				label: "智能审计",
+				scanTypeLabel: "智能审计",
+				scannedFiles: null,
+				scannedLines: null,
+				vulnerabilities: Array.isArray(task.findings)
+					? task.findings.length
+					: 0,
+				taskCategory: "intelligent",
+				supportsFindingsDetail: true,
+				findingsButtonDisabledReason: null,
+			} satisfies ProjectCardRecentTask;
+		});
 
 	return [...staticItems, ...intelligentItems]
 		.sort(

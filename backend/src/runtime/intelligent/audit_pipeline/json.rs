@@ -25,7 +25,12 @@ fn annotate_with_stage(event: &mut IntelligentTaskEvent, stage: AuditStage, phas
 }
 
 /// Emit a stage-tagged `llm_attempt` event from a successful invocation.
-fn emit_success(events: &PipelineEventSink, stage: AuditStage, phase: Option<&str>, invocation: &IntelligentLlmInvocation) {
+fn emit_success(
+    events: &PipelineEventSink,
+    stage: AuditStage,
+    phase: Option<&str>,
+    invocation: &IntelligentLlmInvocation,
+) {
     let mut event = invocation.attempt_event.clone();
     annotate_with_stage(&mut event, stage, phase);
     events.emit(event);
@@ -35,7 +40,12 @@ fn emit_success(events: &PipelineEventSink, stage: AuditStage, phase: Option<&st
 /// the critical surface that, prior to this refactor, dropped the failure
 /// attempt on the floor — leaving the audit time log with `audit_pipeline_failed`
 /// but no preceding context for what the gateway actually returned.
-fn emit_failure(events: &PipelineEventSink, stage: AuditStage, phase: Option<&str>, err: &IntelligentLlmInvocationError) {
+fn emit_failure(
+    events: &PipelineEventSink,
+    stage: AuditStage,
+    phase: Option<&str>,
+    err: &IntelligentLlmInvocationError,
+) {
     let mut event = err.attempt_event.clone();
     annotate_with_stage(&mut event, stage, phase);
     events.emit(event);
@@ -281,7 +291,10 @@ mod tests {
         // After one unwrap we have a `Value::String` whose content is still a
         // quoted JSON literal — not an object. Deserialize fails, caller hits
         // the repair branch.
-        assert!(value.is_string(), "expected unwrapped value to remain a string at depth 2, got {value:?}");
+        assert!(
+            value.is_string(),
+            "expected unwrapped value to remain a string at depth 2, got {value:?}"
+        );
     }
 
     /// Stringified array variant — LLMs occasionally double-encode an array

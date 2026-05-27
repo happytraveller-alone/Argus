@@ -8,6 +8,8 @@
 //!   `__tests__/`, `*_test.rs`, `src/test/java/`)
 //! - [`PathCategory::Vendor`] — third-party vendored code (e.g. `vendor/`,
 //!   `third_party/`, `node_modules/`)
+//! - [`PathCategory::Blacklisted`] — non-source directories that should never
+//!   appear in audit findings (e.g. `.git`, `docs`, `examples`, `fuzz`)
 //! - [`PathCategory::RealCode`] — everything else (presumed first-party source)
 //!
 //! ## Matching semantics
@@ -26,16 +28,46 @@ use std::path::{Component, Path};
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PathCategory {
     /// First-party source code (or anything that did not match a known
-    /// test/vendor pattern).
+    /// test/vendor/blacklist pattern).
     RealCode,
     /// Unit, integration, or specification test code.
     Test,
     /// Third-party vendored dependencies.
     Vendor,
+    /// Non-source directories that must never appear in audit findings
+    /// (docs, examples, build output, fuzz harnesses, etc.).
+    /// The inner `&'static str` names the matched `BLACKLIST_DIRS` entry.
+    Blacklisted(&'static str),
 }
 
 /// Vendor directory components — matched whole against any path component.
 const VENDOR_DIRS: &[&str] = &["vendor", "third_party", "node_modules"];
+
+/// Blacklisted directory components — matched whole against any path component.
+/// These directories contain non-source material (docs, build output, fuzz
+/// harnesses, examples, etc.) and must never appear in audit findings.
+const BLACKLIST_DIRS: &[&str] = &[
+    ".git",
+    ".github",
+    "bench",
+    "benchmark",
+    "benchmarks",
+    "build",
+    "demo",
+    "demos",
+    "dist",
+    "doc",
+    "docs",
+    "example",
+    "examples",
+    "fuzz",
+    "fuzzing",
+    "sample",
+    "samples",
+    "scripts",
+    "target",
+    "tools",
+];
 
 /// Test directory components — matched whole against any path component.
 const TEST_DIRS: &[&str] = &["tests", "test", "__tests__", "spec"];
@@ -51,15 +83,16 @@ const TEST_PATH_PREFIXES: &[&str] = &["src/test/java"];
 const TEST_FILENAME_GLOBS: &[&str] = &["*_test.*", "*.test.ts", "*.test.js", "*_spec.rb"];
 
 /// Classify a file path into one of [`PathCategory::Test`],
-/// [`PathCategory::Vendor`], or [`PathCategory::RealCode`].
+/// [`PathCategory::Vendor`], [`PathCategory::Blacklisted`], or
+/// [`PathCategory::RealCode`].
 ///
 /// Returns the category plus, when matched, a human-readable glob fragment that
 /// identifies WHICH pattern fired — suitable for filling the
 /// `dismissal_evidence.path_pattern` field on an `AuditFinding`.
 ///
-/// Matching is precedence-ordered: Vendor > Test > RealCode. (Vendor first
-/// because a `vendor/test/foo.go` path is more honestly "vendored" than
-/// "test code".)
+/// Matching is precedence-ordered: Vendor > Test > Blacklisted > RealCode.
+/// (Vendor first because a `vendor/test/foo.go` path is more honestly
+/// "vendored" than "test code".)
 #[must_use]
 pub fn classify_path(path: &Path) -> (PathCategory, Option<String>) {
     let components: Vec<&str> = path
@@ -105,7 +138,52 @@ pub fn classify_path(path: &Path) -> (PathCategory, Option<String>) {
         }
     }
 
+    // Blacklisted dirs — non-source material that must never reach findings.
+    for comp in &components {
+        for &dir in BLACKLIST_DIRS {
+            if *comp == dir {
+                return (PathCategory::Blacklisted(dir), Some(format!("{dir}/")));
+            }
+        }
+    }
+
     (PathCategory::RealCode, None)
+}
+
+/// Returns the blacklist reason for `path` (considering both built-in patterns
+/// and the caller-supplied `extra` component list), or `None` if the path is
+/// legitimate first-party source code.
+///
+/// The returned `&'static str` is one of:
+/// - `"vendor_dir"` — matched a `VENDOR_DIRS` entry
+/// - `"test_dir"` — matched a `TEST_DIRS` / `TEST_PATH_PREFIXES` entry or a
+///   filename-glob test pattern
+/// - `"blacklist_dir"` — matched a `BLACKLIST_DIRS` entry
+/// - `"path_blacklist_extra"` — matched a caller-supplied `extra` component
+///
+/// Precedence follows `classify_path`: Vendor > Test > Blacklisted > extra.
+pub fn is_blacklisted(path: &Path, extra: &[String]) -> Option<&'static str> {
+    match classify_path(path) {
+        (PathCategory::Vendor, _) => Some("vendor_dir"),
+        (PathCategory::Test, _) => Some("test_dir"),
+        (PathCategory::Blacklisted(_), _) => Some("blacklist_dir"),
+        (PathCategory::RealCode, _) => {
+            // Check caller-supplied extra components.
+            let components: Vec<&str> = path
+                .components()
+                .filter_map(|c| match c {
+                    std::path::Component::Normal(os) => os.to_str(),
+                    _ => None,
+                })
+                .collect();
+            for comp in &components {
+                if extra.iter().any(|e| e == comp) {
+                    return Some("path_blacklist_extra");
+                }
+            }
+            None
+        }
+    }
 }
 
 /// Minimal glob matcher: supports `*` as wildcard. The whole pattern must
@@ -214,5 +292,58 @@ mod tests {
         let (cat, pat) = classify("");
         assert_eq!(cat, PathCategory::RealCode);
         assert_eq!(pat, None);
+    }
+
+    // ── Blacklisted variant tests ──────────────────────────────────────────
+
+    #[test]
+    fn classify_path_returns_blacklisted_for_dot_github() {
+        let (cat, pat) = classify(".github/workflows/ci.yml");
+        assert_eq!(cat, PathCategory::Blacklisted(".github"));
+        assert_eq!(pat.as_deref(), Some(".github/"));
+    }
+
+    #[test]
+    fn classify_path_returns_blacklisted_for_fuzz() {
+        let (cat, pat) = classify("fuzz/fuzz_targets/target.rs");
+        assert_eq!(cat, PathCategory::Blacklisted("fuzz"));
+        assert_eq!(pat.as_deref(), Some("fuzz/"));
+    }
+
+    #[test]
+    fn classify_path_precedence_vendor_beats_test_beats_blacklist() {
+        // vendor/tests/docs/foo.rs — vendor wins (highest precedence)
+        let (cat, _) = classify("vendor/tests/docs/foo.rs");
+        assert_eq!(cat, PathCategory::Vendor);
+
+        // tests/docs/foo.rs — test wins over blacklist
+        let (cat, _) = classify("tests/docs/foo.rs");
+        assert_eq!(cat, PathCategory::Test);
+
+        // docs/foo.rs — blacklist fires (no vendor or test component)
+        let (cat, _) = classify("docs/foo.rs");
+        assert_eq!(cat, PathCategory::Blacklisted("docs"));
+    }
+
+    // ── is_blacklisted tests ──────────────────────────────────────────────
+
+    #[test]
+    fn is_blacklisted_matches_extra_components() {
+        let extra = vec!["internal".to_string(), "generated".to_string()];
+        let path = PathBuf::from("src/generated/proto.rs");
+        assert_eq!(is_blacklisted(&path, &extra), Some("path_blacklist_extra"));
+    }
+
+    #[test]
+    fn is_blacklisted_returns_none_for_real_code() {
+        let path = PathBuf::from("src/lib.rs");
+        assert_eq!(is_blacklisted(&path, &[]), None);
+    }
+
+    #[test]
+    fn is_blacklisted_filename_globs_still_work() {
+        // *_test.rs pattern should still classify as test_dir via is_blacklisted
+        let path = PathBuf::from("src/parser_test.rs");
+        assert_eq!(is_blacklisted(&path, &[]), Some("test_dir"));
     }
 }

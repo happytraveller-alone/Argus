@@ -24,6 +24,7 @@ use anyhow::Result;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
+pub use path_classifier::is_blacklisted;
 pub use sanitizer_sot::lookup_sanitizer;
 pub use types::{CallChain, CallNode, CodeContext, SymbolMatch};
 

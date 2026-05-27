@@ -1420,11 +1420,8 @@ async fn reset_codeql_project_build_plan(
             }
         }
         let Json(resp) =
-            create_static_task_for_engine(state.clone(), payload, StaticEngineKind::Codeql)
-                .await?;
-        resp.get("id")
-            .and_then(Value::as_str)
-            .map(String::from)
+            create_static_task_for_engine(state.clone(), payload, StaticEngineKind::Codeql).await?;
+        resp.get("id").and_then(Value::as_str).map(String::from)
     } else {
         None
     };
@@ -2956,8 +2953,7 @@ async fn update_scan_task_completed(
         record.progress.progress = 100.0;
         record.progress.current_stage = Some("completed".to_string());
         record.progress.message = Some(format!(
-            "codeql scan completed: {} findings in {}ms",
-            findings_count, elapsed_ms
+            "codeql scan completed: {findings_count} findings in {elapsed_ms}ms"
         ));
         record.progress.updated_at = Some(now.clone());
         record
@@ -2966,7 +2962,7 @@ async fn update_scan_task_completed(
             .push(task_state::StaticTaskProgressLogRecord {
                 timestamp: now,
                 stage: "completed".to_string(),
-                message: format!("scan completed: {} findings", findings_count),
+                message: format!("scan completed: {findings_count} findings"),
                 progress: 100.0,
                 level: "info".to_string(),
             });

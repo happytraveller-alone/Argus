@@ -30,7 +30,7 @@ use crate::{
 
 use self::{
     context::{AuditRunContext, AuditStage, PipelineEventSink},
-    quality::{run_stage_with_retry, GateFailure, StageGatesPolicy},
+    quality::{run_stage_with_reflection, run_stage_with_retry, GateFailure, StageGatesPolicy},
     repo::ProjectArchive,
     types::PipelineOutputs,
 };
@@ -57,6 +57,12 @@ pub struct AuditPipelineConfig {
     /// hard-coded values from the spec; tests may override individual stages.
     /// See `audit_pipeline::quality` for semantics.
     pub stage_gates: StageGatesPolicy,
+    /// Extra path prefixes to blacklist during reflection (in addition to any
+    /// built-in defaults). Each entry is matched as a path prefix.
+    pub path_blacklist_extra: Vec<String>,
+    /// Maximum reflection rounds to run before accepting the current finding
+    /// set as-is.
+    pub reflection_iterations: usize,
 }
 
 impl Default for AuditPipelineConfig {
@@ -69,6 +75,8 @@ impl Default for AuditPipelineConfig {
             audit_sandbox_image: std::env::var("AUDIT_SANDBOX_IMAGE")
                 .unwrap_or_else(|_| "argus/audit-sandbox:latest".to_string()),
             stage_gates: StageGatesPolicy::default(),
+            path_blacklist_extra: vec![],
+            reflection_iterations: 5,
         }
     }
 }
@@ -101,6 +109,7 @@ pub async fn run_pipeline(
     .await
 }
 
+#[allow(clippy::field_reassign_with_default)]
 pub async fn run_pipeline_with_config(
     state: &AppState,
     task_id: &str,
@@ -227,16 +236,13 @@ pub async fn run_pipeline_with_config(
             &config.stage_gates.recon,
             AuditStage::Recon,
             &ctx.partial_analysis,
-            &event_sink,
-            |amp| async move { stages::recon::run(&ctx, &event_sink, amp.as_deref()).await },
+            event_sink,
+            |amp| async move { stages::recon::run(ctx, event_sink, amp.as_deref()).await },
             |out: &types::ReconOutput| {
                 if out.initial_tasks.is_empty() {
                     Err(GateFailure::new(
                         "recon produced no initial_tasks",
-                        format!(
-                            "tasks=0 subsystems={}",
-                            out.subsystems.len()
-                        ),
+                        format!("tasks=0 subsystems={}", out.subsystems.len()),
                     ))
                 } else {
                     Ok(())
@@ -248,36 +254,67 @@ pub async fn run_pipeline_with_config(
         // ── Phase 2: hunt → validate → gapfill loop ───────────────────────────────
         let mut hunt_tasks = outputs.recon.initial_tasks.clone();
         let input_task_count = hunt_tasks.len();
-        outputs.hunt = run_stage_with_retry(
+        let path_blacklist_extra = config.path_blacklist_extra.clone();
+        let predicate_blacklist = path_blacklist_extra.clone();
+        let hunt_predicate = move |out: &types::HuntOutput| -> Result<(), GateFailure> {
+            let violations: Vec<String> = out
+                .findings
+                .iter()
+                .filter_map(|f| {
+                    crate::runtime::intelligent::code_intel::is_blacklisted(
+                        std::path::Path::new(&f.file),
+                        &predicate_blacklist,
+                    )
+                    .map(|_| f.file.clone())
+                })
+                .collect();
+            if !violations.is_empty() {
+                let n = violations.len();
+                return Err(GateFailure::new(
+                    quality::BLACKLIST_VIOLATION_REASON,
+                    format!("{n} findings under blacklisted paths"),
+                )
+                .with_metadata(json!({"violated_paths": violations})));
+            }
+            if !out.findings.is_empty() || input_task_count == 0 {
+                Ok(())
+            } else {
+                Err(GateFailure::new(
+                    "hunt produced no findings",
+                    format!("findings=0 input_tasks={input_task_count}"),
+                ))
+            }
+        };
+        let hunt_input_snapshot = hunt_tasks.clone();
+        outputs.hunt = run_stage_with_reflection(
             &config.stage_gates.hunt,
             AuditStage::Hunt,
-            &ctx.partial_analysis,
-            &event_sink,
+            config.reflection_iterations,
+            ctx,
+            event_sink,
+            config.max_tokens_budget,
+            &_token_counter,
             |amp| {
                 let hunt_tasks_ref = &hunt_tasks;
+                let blacklist_ref = &path_blacklist_extra;
                 async move {
                     stages::hunt::run(
-                        &ctx,
+                        ctx,
                         hunt_tasks_ref,
                         config.hunt_concurrency,
-                        &event_sink,
+                        event_sink,
                         amp.as_deref(),
+                        blacklist_ref,
                     )
                     .await
                 }
             },
-            move |out: &types::HuntOutput| {
-                if !out.findings.is_empty() || input_task_count == 0 {
-                    Ok(())
-                } else {
-                    Err(GateFailure::new(
-                        "hunt produced no findings",
-                        format!(
-                            "findings=0 input_tasks={input_task_count}"
-                        ),
-                    ))
-                }
+            move || json!({"tasks": &hunt_input_snapshot}),
+            |_kept_ids: &[String]| {
+                // Hunt input is recon tasks — no per-id prune available.
+                // Reflection amplification carries the blacklist warning forward.
             },
+            hunt_predicate,
         )
         .await?;
         // Flush hunt findings before validate starts (AC6: findings immediately
@@ -285,30 +322,69 @@ pub async fn run_pipeline_with_config(
         let _ = flush_findings_to_record(state, task_id, &outputs.to_incremental_findings()).await;
 
         let hunt_input_findings = outputs.hunt.findings.len();
-        outputs.validate = run_stage_with_retry(
+        let validate_blacklist = config.path_blacklist_extra.clone();
+        let validate_blacklist_for_attempt = validate_blacklist.clone();
+        let validate_predicate_blacklist = validate_blacklist.clone();
+        let validate_predicate = move |out: &types::ValidationOutput| -> Result<(), GateFailure> {
+            let violations: Vec<String> = out
+                .findings
+                .iter()
+                .filter_map(|vf| {
+                    crate::runtime::intelligent::code_intel::is_blacklisted(
+                        std::path::Path::new(&vf.finding.file),
+                        &validate_predicate_blacklist,
+                    )
+                    .map(|_| vf.finding.file.clone())
+                })
+                .collect();
+            if !violations.is_empty() {
+                let n = violations.len();
+                return Err(GateFailure::new(
+                    quality::BLACKLIST_VIOLATION_REASON,
+                    format!("{n} validated findings under blacklisted paths"),
+                )
+                .with_metadata(json!({"violated_paths": violations})));
+            }
+            if out.findings.len() >= hunt_input_findings {
+                Ok(())
+            } else {
+                Err(GateFailure::new(
+                    "validate produced fewer findings than hunt provided",
+                    format!(
+                        "validate_findings={} hunt_findings={hunt_input_findings}",
+                        out.findings.len()
+                    ),
+                ))
+            }
+        };
+        outputs.validate = run_stage_with_reflection(
             &config.stage_gates.validate,
             AuditStage::Validate,
-            &ctx.partial_analysis,
-            &event_sink,
+            config.reflection_iterations,
+            ctx,
+            event_sink,
+            config.max_tokens_budget,
+            &_token_counter,
             |amp| {
                 let outputs_hunt = &outputs.hunt;
+                let blacklist_ref = &validate_blacklist_for_attempt;
                 async move {
-                    stages::validate::run(&ctx, outputs_hunt, &event_sink, amp.as_deref()).await
+                    stages::validate::run(
+                        ctx,
+                        outputs_hunt,
+                        event_sink,
+                        amp.as_deref(),
+                        blacklist_ref,
+                    )
+                    .await
                 }
             },
-            move |out: &types::ValidationOutput| {
-                if out.findings.len() >= hunt_input_findings {
-                    Ok(())
-                } else {
-                    Err(GateFailure::new(
-                        "validate produced fewer findings than hunt provided",
-                        format!(
-                            "validate_findings={} hunt_findings={hunt_input_findings}",
-                            out.findings.len()
-                        ),
-                    ))
-                }
+            || json!({"count": outputs.hunt.findings.len()}),
+            |_kept_ids: &[String]| {
+                // Validate input is hunt's findings — pruning happens upstream
+                // via stage retain. Amplification carries the warning forward.
             },
+            validate_predicate,
         )
         .await?;
 
@@ -333,16 +409,16 @@ pub async fn run_pipeline_with_config(
                 &config.stage_gates.gapfill,
                 AuditStage::Gapfill,
                 &ctx.partial_analysis,
-                &event_sink,
+                event_sink,
                 |amp| {
                     let outputs_recon = &outputs.recon;
                     let outputs_validate = &outputs.validate;
                     async move {
                         stages::gapfill::run(
-                            &ctx,
+                            ctx,
                             outputs_recon,
                             outputs_validate,
-                            &event_sink,
+                            event_sink,
                             amp.as_deref(),
                         )
                         .await
@@ -367,54 +443,95 @@ pub async fn run_pipeline_with_config(
 
             hunt_tasks = outputs.gapfill.new_tasks.clone();
             let gap_input_task_count = hunt_tasks.len();
-            let gap_hunt = run_stage_with_retry(
+            let gap_blacklist = config.path_blacklist_extra.clone();
+            let gap_blacklist_for_attempt = gap_blacklist.clone();
+            let gap_predicate_blacklist = gap_blacklist.clone();
+            let gap_hunt_predicate = move |out: &types::HuntOutput| -> Result<(), GateFailure> {
+                let violations: Vec<String> = out
+                    .findings
+                    .iter()
+                    .filter_map(|f| {
+                        crate::runtime::intelligent::code_intel::is_blacklisted(
+                            std::path::Path::new(&f.file),
+                            &gap_predicate_blacklist,
+                        )
+                        .map(|_| f.file.clone())
+                    })
+                    .collect();
+                if !violations.is_empty() {
+                    let n = violations.len();
+                    return Err(GateFailure::new(
+                        quality::BLACKLIST_VIOLATION_REASON,
+                        format!("{n} gap-hunt findings under blacklisted paths"),
+                    )
+                    .with_metadata(json!({"violated_paths": violations})));
+                }
+                if !out.findings.is_empty() || gap_input_task_count == 0 {
+                    Ok(())
+                } else {
+                    Err(GateFailure::new(
+                        "gapfill-hunt produced no findings",
+                        format!("findings=0 input_tasks={gap_input_task_count}"),
+                    ))
+                }
+            };
+            let gap_hunt_input_snapshot = hunt_tasks.clone();
+            let gap_hunt = run_stage_with_reflection(
                 &config.stage_gates.hunt,
                 AuditStage::Hunt,
-                &ctx.partial_analysis,
-                &event_sink,
+                config.reflection_iterations,
+                ctx,
+                event_sink,
+                config.max_tokens_budget,
+                &_token_counter,
                 |amp| {
                     let hunt_tasks_ref = &hunt_tasks;
+                    let blacklist_ref = &gap_blacklist_for_attempt;
                     async move {
                         stages::hunt::run(
-                            &ctx,
+                            ctx,
                             hunt_tasks_ref,
                             config.hunt_concurrency,
-                            &event_sink,
+                            event_sink,
                             amp.as_deref(),
+                            blacklist_ref,
                         )
                         .await
                     }
                 },
-                move |out: &types::HuntOutput| {
-                    if !out.findings.is_empty() || gap_input_task_count == 0 {
-                        Ok(())
-                    } else {
-                        Err(GateFailure::new(
-                            "gapfill-hunt produced no findings",
-                            format!(
-                                "findings=0 input_tasks={gap_input_task_count}"
-                            ),
-                        ))
-                    }
-                },
+                move || json!({"tasks": &gap_hunt_input_snapshot}),
+                |_kept_ids: &[String]| {},
+                gap_hunt_predicate,
             )
             .await?;
 
             // Merge new findings into the accumulated hunt output.
             outputs.hunt.findings.extend(gap_hunt.findings);
             let gap_validate_input = outputs.hunt.findings.len();
-            outputs.validate = run_stage_with_retry(
-                &config.stage_gates.validate,
-                AuditStage::Validate,
-                &ctx.partial_analysis,
-                &event_sink,
-                |amp| {
-                    let outputs_hunt = &outputs.hunt;
-                    async move {
-                        stages::validate::run(&ctx, outputs_hunt, &event_sink, amp.as_deref()).await
+            let gap_v_blacklist = config.path_blacklist_extra.clone();
+            let gap_v_blacklist_for_attempt = gap_v_blacklist.clone();
+            let gap_v_predicate_blacklist = gap_v_blacklist.clone();
+            let gap_validate_predicate =
+                move |out: &types::ValidationOutput| -> Result<(), GateFailure> {
+                    let violations: Vec<String> = out
+                        .findings
+                        .iter()
+                        .filter_map(|vf| {
+                            crate::runtime::intelligent::code_intel::is_blacklisted(
+                                std::path::Path::new(&vf.finding.file),
+                                &gap_v_predicate_blacklist,
+                            )
+                            .map(|_| vf.finding.file.clone())
+                        })
+                        .collect();
+                    if !violations.is_empty() {
+                        let n = violations.len();
+                        return Err(GateFailure::new(
+                            quality::BLACKLIST_VIOLATION_REASON,
+                            format!("{n} gap-validate findings under blacklisted paths"),
+                        )
+                        .with_metadata(json!({"violated_paths": violations})));
                     }
-                },
-                move |out: &types::ValidationOutput| {
                     if out.findings.len() >= gap_validate_input {
                         Ok(())
                     } else {
@@ -426,7 +543,32 @@ pub async fn run_pipeline_with_config(
                             ),
                         ))
                     }
+                };
+            outputs.validate = run_stage_with_reflection(
+                &config.stage_gates.validate,
+                AuditStage::Validate,
+                config.reflection_iterations,
+                ctx,
+                event_sink,
+                config.max_tokens_budget,
+                &_token_counter,
+                |amp| {
+                    let outputs_hunt = &outputs.hunt;
+                    let blacklist_ref = &gap_v_blacklist_for_attempt;
+                    async move {
+                        stages::validate::run(
+                            ctx,
+                            outputs_hunt,
+                            event_sink,
+                            amp.as_deref(),
+                            blacklist_ref,
+                        )
+                        .await
+                    }
                 },
+                || json!({"count": outputs.hunt.findings.len()}),
+                |_kept_ids: &[String]| {},
+                gap_validate_predicate,
             )
             .await?;
         }
@@ -438,29 +580,75 @@ pub async fn run_pipeline_with_config(
             .iter()
             .filter(|f| f.validation_status == "confirmed")
             .count();
-        outputs.dedupe = run_stage_with_retry(
+        let dedupe_blacklist = config.path_blacklist_extra.clone();
+        let dedupe_blacklist_for_attempt = dedupe_blacklist.clone();
+        let dedupe_predicate_blacklist = dedupe_blacklist.clone();
+        // Build a finding_id -> file lookup so the predicate can map group
+        // members back to their paths for blacklist scanning.
+        let dedupe_id_to_path: std::collections::HashMap<String, String> = outputs
+            .validate
+            .findings
+            .iter()
+            .map(|vf| (vf.finding.finding_id.clone(), vf.finding.file.clone()))
+            .collect();
+        let dedupe_predicate = move |out: &types::DedupeOutput| -> Result<(), GateFailure> {
+            let mut violations: Vec<String> = Vec::new();
+            for group in &out.groups {
+                for fid in &group.finding_ids {
+                    if let Some(path) = dedupe_id_to_path.get(fid) {
+                        if crate::runtime::intelligent::code_intel::is_blacklisted(
+                            std::path::Path::new(path),
+                            &dedupe_predicate_blacklist,
+                        )
+                        .is_some()
+                        {
+                            violations.push(path.clone());
+                        }
+                    }
+                }
+            }
+            if !violations.is_empty() {
+                let n = violations.len();
+                return Err(GateFailure::new(
+                    quality::BLACKLIST_VIOLATION_REASON,
+                    format!("{n} dedupe group members under blacklisted paths"),
+                )
+                .with_metadata(json!({"violated_paths": violations})));
+            }
+            if confirmed_count == 0 || !out.groups.is_empty() {
+                Ok(())
+            } else {
+                Err(GateFailure::new(
+                    "dedupe produced no groups despite confirmed findings",
+                    format!("groups=0 confirmed_findings={confirmed_count}"),
+                ))
+            }
+        };
+        outputs.dedupe = run_stage_with_reflection(
             &config.stage_gates.dedupe,
             AuditStage::Dedupe,
-            &ctx.partial_analysis,
-            &event_sink,
+            config.reflection_iterations,
+            ctx,
+            event_sink,
+            config.max_tokens_budget,
+            &_token_counter,
             |amp| {
                 let outputs_validate = &outputs.validate;
+                let blacklist_ref = &dedupe_blacklist_for_attempt;
                 async move {
-                    stages::dedupe::run(&ctx, outputs_validate, &event_sink, amp.as_deref()).await
+                    stages::dedupe::run(
+                        ctx,
+                        outputs_validate,
+                        event_sink,
+                        amp.as_deref(),
+                        blacklist_ref,
+                    )
+                    .await
                 }
             },
-            move |out: &types::DedupeOutput| {
-                if confirmed_count == 0 || !out.groups.is_empty() {
-                    Ok(())
-                } else {
-                    Err(GateFailure::new(
-                        "dedupe produced no groups despite confirmed findings",
-                        format!(
-                            "groups=0 confirmed_findings={confirmed_count}"
-                        ),
-                    ))
-                }
-            },
+            || json!({"confirmedCount": confirmed_count}),
+            |_kept_ids: &[String]| {},
+            dedupe_predicate,
         )
         .await?;
         let trace_expected = outputs.dedupe.groups.len();
@@ -468,16 +656,16 @@ pub async fn run_pipeline_with_config(
             &config.stage_gates.trace,
             AuditStage::Trace,
             &ctx.partial_analysis,
-            &event_sink,
+            event_sink,
             |amp| {
                 let outputs_dedupe = &outputs.dedupe;
                 let outputs_validate = &outputs.validate;
                 async move {
                     stages::trace::run(
-                        &ctx,
+                        ctx,
                         outputs_dedupe,
                         outputs_validate,
-                        &event_sink,
+                        event_sink,
                         amp.as_deref(),
                     )
                     .await
@@ -489,10 +677,7 @@ pub async fn run_pipeline_with_config(
                 } else {
                     Err(GateFailure::new(
                         "trace produced fewer verdicts than dedupe groups",
-                        format!(
-                            "traces={} expected={trace_expected}",
-                            out.traces.len()
-                        ),
+                        format!("traces={} expected={trace_expected}", out.traces.len()),
                     ))
                 }
             },
@@ -520,11 +705,12 @@ pub async fn run_pipeline_with_config(
                 &config.stage_gates.feedback,
                 AuditStage::Feedback,
                 &ctx.partial_analysis,
-                &event_sink,
+                event_sink,
                 |amp| {
                     let outputs_trace = &outputs.trace;
                     async move {
-                        stages::feedback::run(&ctx, outputs_trace, &event_sink, amp.as_deref()).await
+                        stages::feedback::run(ctx, outputs_trace, event_sink, amp.as_deref())
+                            .await
                     }
                 },
                 |_out: &types::FeedbackOutput| Ok(()),
@@ -543,52 +729,94 @@ pub async fn run_pipeline_with_config(
             );
 
             let fb_input_task_count = outputs.feedback.new_tasks.len();
-            let fb_hunt = run_stage_with_retry(
+            let fb_hunt_blacklist = config.path_blacklist_extra.clone();
+            let fb_hunt_blacklist_for_attempt = fb_hunt_blacklist.clone();
+            let fb_hunt_predicate_blacklist = fb_hunt_blacklist.clone();
+            let fb_hunt_predicate = move |out: &types::HuntOutput| -> Result<(), GateFailure> {
+                let violations: Vec<String> = out
+                    .findings
+                    .iter()
+                    .filter_map(|f| {
+                        crate::runtime::intelligent::code_intel::is_blacklisted(
+                            std::path::Path::new(&f.file),
+                            &fb_hunt_predicate_blacklist,
+                        )
+                        .map(|_| f.file.clone())
+                    })
+                    .collect();
+                if !violations.is_empty() {
+                    let n = violations.len();
+                    return Err(GateFailure::new(
+                        quality::BLACKLIST_VIOLATION_REASON,
+                        format!("{n} feedback-hunt findings under blacklisted paths"),
+                    )
+                    .with_metadata(json!({"violated_paths": violations})));
+                }
+                if !out.findings.is_empty() || fb_input_task_count == 0 {
+                    Ok(())
+                } else {
+                    Err(GateFailure::new(
+                        "feedback-hunt produced no findings",
+                        format!("findings=0 input_tasks={fb_input_task_count}"),
+                    ))
+                }
+            };
+            let fb_hunt_input_snapshot = outputs.feedback.new_tasks.clone();
+            let fb_hunt_pruned = run_stage_with_reflection(
                 &config.stage_gates.hunt,
                 AuditStage::Hunt,
-                &ctx.partial_analysis,
-                &event_sink,
+                config.reflection_iterations,
+                ctx,
+                event_sink,
+                config.max_tokens_budget,
+                &_token_counter,
                 |amp| {
                     let fb_new_tasks = &outputs.feedback.new_tasks;
+                    let blacklist_ref = &fb_hunt_blacklist_for_attempt;
                     async move {
                         stages::hunt::run(
-                            &ctx,
+                            ctx,
                             fb_new_tasks,
                             config.hunt_concurrency,
-                            &event_sink,
+                            event_sink,
                             amp.as_deref(),
+                            blacklist_ref,
                         )
                         .await
                     }
                 },
-                move |out: &types::HuntOutput| {
-                    if !out.findings.is_empty() || fb_input_task_count == 0 {
-                        Ok(())
-                    } else {
-                        Err(GateFailure::new(
-                            "feedback-hunt produced no findings",
-                            format!(
-                                "findings=0 input_tasks={fb_input_task_count}"
-                            ),
-                        ))
-                    }
-                },
+                move || json!({"tasks": &fb_hunt_input_snapshot}),
+                |_kept_ids: &[String]| {},
+                fb_hunt_predicate,
             )
             .await?;
-            outputs.hunt.findings.extend(fb_hunt.findings);
+            // D1: EXTEND pattern — fb_hunt augments outputs.hunt, doesn't replace.
+            outputs.hunt.findings.extend(fb_hunt_pruned.findings);
             let fb_validate_input = outputs.hunt.findings.len();
-            outputs.validate = run_stage_with_retry(
-                &config.stage_gates.validate,
-                AuditStage::Validate,
-                &ctx.partial_analysis,
-                &event_sink,
-                |amp| {
-                    let outputs_hunt = &outputs.hunt;
-                    async move {
-                        stages::validate::run(&ctx, outputs_hunt, &event_sink, amp.as_deref()).await
+            let fb_v_blacklist = config.path_blacklist_extra.clone();
+            let fb_v_blacklist_for_attempt = fb_v_blacklist.clone();
+            let fb_v_predicate_blacklist = fb_v_blacklist.clone();
+            let fb_validate_predicate =
+                move |out: &types::ValidationOutput| -> Result<(), GateFailure> {
+                    let violations: Vec<String> = out
+                        .findings
+                        .iter()
+                        .filter_map(|vf| {
+                            crate::runtime::intelligent::code_intel::is_blacklisted(
+                                std::path::Path::new(&vf.finding.file),
+                                &fb_v_predicate_blacklist,
+                            )
+                            .map(|_| vf.finding.file.clone())
+                        })
+                        .collect();
+                    if !violations.is_empty() {
+                        let n = violations.len();
+                        return Err(GateFailure::new(
+                            quality::BLACKLIST_VIOLATION_REASON,
+                            format!("{n} fb-validate findings under blacklisted paths"),
+                        )
+                        .with_metadata(json!({"violated_paths": violations})));
                     }
-                },
-                move |out: &types::ValidationOutput| {
                     if out.findings.len() >= fb_validate_input {
                         Ok(())
                     } else {
@@ -600,7 +828,32 @@ pub async fn run_pipeline_with_config(
                             ),
                         ))
                     }
+                };
+            outputs.validate = run_stage_with_reflection(
+                &config.stage_gates.validate,
+                AuditStage::Validate,
+                config.reflection_iterations,
+                ctx,
+                event_sink,
+                config.max_tokens_budget,
+                &_token_counter,
+                |amp| {
+                    let outputs_hunt = &outputs.hunt;
+                    let blacklist_ref = &fb_v_blacklist_for_attempt;
+                    async move {
+                        stages::validate::run(
+                            ctx,
+                            outputs_hunt,
+                            event_sink,
+                            amp.as_deref(),
+                            blacklist_ref,
+                        )
+                        .await
+                    }
                 },
+                || json!({"count": outputs.hunt.findings.len()}),
+                |_kept_ids: &[String]| {},
+                fb_validate_predicate,
             )
             .await?;
             let fb_confirmed = outputs
@@ -609,29 +862,73 @@ pub async fn run_pipeline_with_config(
                 .iter()
                 .filter(|f| f.validation_status == "confirmed")
                 .count();
-            outputs.dedupe = run_stage_with_retry(
+            let fb_dedupe_blacklist = config.path_blacklist_extra.clone();
+            let fb_dedupe_blacklist_for_attempt = fb_dedupe_blacklist.clone();
+            let fb_dedupe_predicate_blacklist = fb_dedupe_blacklist.clone();
+            let fb_dedupe_id_to_path: std::collections::HashMap<String, String> = outputs
+                .validate
+                .findings
+                .iter()
+                .map(|vf| (vf.finding.finding_id.clone(), vf.finding.file.clone()))
+                .collect();
+            let fb_dedupe_predicate = move |out: &types::DedupeOutput| -> Result<(), GateFailure> {
+                let mut violations: Vec<String> = Vec::new();
+                for group in &out.groups {
+                    for fid in &group.finding_ids {
+                        if let Some(path) = fb_dedupe_id_to_path.get(fid) {
+                            if crate::runtime::intelligent::code_intel::is_blacklisted(
+                                std::path::Path::new(path),
+                                &fb_dedupe_predicate_blacklist,
+                            )
+                            .is_some()
+                            {
+                                violations.push(path.clone());
+                            }
+                        }
+                    }
+                }
+                if !violations.is_empty() {
+                    let n = violations.len();
+                    return Err(GateFailure::new(
+                        quality::BLACKLIST_VIOLATION_REASON,
+                        format!("{n} fb-dedupe group members under blacklisted paths"),
+                    )
+                    .with_metadata(json!({"violated_paths": violations})));
+                }
+                if fb_confirmed == 0 || !out.groups.is_empty() {
+                    Ok(())
+                } else {
+                    Err(GateFailure::new(
+                        "dedupe produced no groups despite confirmed findings",
+                        format!("groups=0 confirmed_findings={fb_confirmed}"),
+                    ))
+                }
+            };
+            outputs.dedupe = run_stage_with_reflection(
                 &config.stage_gates.dedupe,
                 AuditStage::Dedupe,
-                &ctx.partial_analysis,
-                &event_sink,
+                config.reflection_iterations,
+                ctx,
+                event_sink,
+                config.max_tokens_budget,
+                &_token_counter,
                 |amp| {
                     let outputs_validate = &outputs.validate;
+                    let blacklist_ref = &fb_dedupe_blacklist_for_attempt;
                     async move {
-                        stages::dedupe::run(&ctx, outputs_validate, &event_sink, amp.as_deref()).await
+                        stages::dedupe::run(
+                            ctx,
+                            outputs_validate,
+                            event_sink,
+                            amp.as_deref(),
+                            blacklist_ref,
+                        )
+                        .await
                     }
                 },
-                move |out: &types::DedupeOutput| {
-                    if fb_confirmed == 0 || !out.groups.is_empty() {
-                        Ok(())
-                    } else {
-                        Err(GateFailure::new(
-                            "dedupe produced no groups despite confirmed findings",
-                            format!(
-                                "groups=0 confirmed_findings={fb_confirmed}"
-                            ),
-                        ))
-                    }
-                },
+                || json!({"confirmedCount": fb_confirmed}),
+                |_kept_ids: &[String]| {},
+                fb_dedupe_predicate,
             )
             .await?;
             let fb_trace_expected = outputs.dedupe.groups.len();
@@ -639,16 +936,16 @@ pub async fn run_pipeline_with_config(
                 &config.stage_gates.trace,
                 AuditStage::Trace,
                 &ctx.partial_analysis,
-                &event_sink,
+                event_sink,
                 |amp| {
                     let outputs_dedupe = &outputs.dedupe;
                     let outputs_validate = &outputs.validate;
                     async move {
                         stages::trace::run(
-                            &ctx,
+                            ctx,
                             outputs_dedupe,
                             outputs_validate,
-                            &event_sink,
+                            event_sink,
                             amp.as_deref(),
                         )
                         .await
@@ -660,10 +957,7 @@ pub async fn run_pipeline_with_config(
                     } else {
                         Err(GateFailure::new(
                             "trace produced fewer verdicts than dedupe groups",
-                            format!(
-                                "traces={} expected={fb_trace_expected}",
-                                out.traces.len()
-                            ),
+                            format!("traces={} expected={fb_trace_expected}", out.traces.len()),
                         ))
                     }
                 },
@@ -672,29 +966,30 @@ pub async fn run_pipeline_with_config(
         }
 
         // ── Phase 5: report ───────────────────────────────────────────
-        outputs.report = run_stage_with_retry(
-            &config.stage_gates.report,
-            AuditStage::Report,
-            &ctx.partial_analysis,
-            event_sink,
-            |amp| {
-                let outputs_ref = &outputs;
-                async move {
-                    stages::report::run(ctx, outputs_ref, event_sink, amp.as_deref()).await
-                }
-            },
-            |out: &types::ReportOutput| {
-                if out.summary.trim().len() >= 32 {
-                    Ok(())
-                } else {
-                    Err(GateFailure::new(
-                        "report summary too short",
-                        format!("summary_len={}", out.summary.trim().len()),
-                    ))
-                }
-            },
-        )
-        .await?;
+        outputs.report =
+            run_stage_with_retry(
+                &config.stage_gates.report,
+                AuditStage::Report,
+                &ctx.partial_analysis,
+                event_sink,
+                |amp| {
+                    let outputs_ref = &outputs;
+                    async move {
+                        stages::report::run(ctx, outputs_ref, event_sink, amp.as_deref()).await
+                    }
+                },
+                |out: &types::ReportOutput| {
+                    if out.summary.trim().len() >= 32 {
+                        Ok(())
+                    } else {
+                        Err(GateFailure::new(
+                            "report summary too short",
+                            format!("summary_len={}", out.summary.trim().len()),
+                        ))
+                    }
+                },
+            )
+            .await?;
         Ok(outputs)
     }
     .await;
