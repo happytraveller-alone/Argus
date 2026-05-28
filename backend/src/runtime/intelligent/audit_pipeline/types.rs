@@ -1,8 +1,55 @@
+use std::collections::HashSet;
+
 use serde::{Deserialize, Serialize};
 
 use crate::runtime::intelligent::types::IntelligentTaskFinding;
 
 use super::repo::ArchiveEntry;
+
+/// Rewrite any duplicate or empty `id` values in `findings` so each entry has a
+/// unique, non-empty identifier. The LLM may emit colliding `findingId` strings
+/// across parallel hunt tasks (`HUNT-001`, `f1`, …); without this normalization
+/// the frontend verdict handler — which uses `findIndex` on `id` — would
+/// silently mutate the first matching row when the user clicks a later one.
+///
+/// Renames are conservative: the first occurrence of each original ID keeps
+/// its identity, and rewrite candidates skip over any other row's original ID
+/// so we never steal a real finding's identifier.
+pub fn ensure_unique_finding_ids(findings: &mut [IntelligentTaskFinding]) {
+    // Pre-pass: record which non-empty IDs appear in the input. Used so the
+    // suffixing loop below never picks a candidate that shadows another row's
+    // original identifier.
+    let mut original_ids: HashSet<String> = HashSet::new();
+    for finding in findings.iter() {
+        let trimmed = finding.id.trim();
+        if !trimmed.is_empty() {
+            original_ids.insert(trimmed.to_string());
+        }
+    }
+
+    let mut taken: HashSet<String> = HashSet::new();
+    for (idx, finding) in findings.iter_mut().enumerate() {
+        let trimmed = finding.id.trim();
+        let base: String = if trimmed.is_empty() {
+            format!("finding-{}", idx + 1)
+        } else {
+            trimmed.to_string()
+        };
+        if taken.insert(base.clone()) {
+            finding.id = base;
+            continue;
+        }
+        let mut suffix = 2_usize;
+        loop {
+            let candidate = format!("{base}-{suffix}");
+            if !original_ids.contains(&candidate) && taken.insert(candidate.clone()) {
+                finding.id = candidate;
+                break;
+            }
+            suffix += 1;
+        }
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
@@ -463,7 +510,7 @@ pub struct ReportOutput {
 impl Default for ReportOutput {
     fn default() -> Self {
         Self {
-            summary: "8-agent intelligent audit completed.".to_string(),
+            summary: "智能审计已完成。".to_string(),
             findings: vec![],
             recommendations: vec![],
         }
@@ -484,9 +531,10 @@ pub struct PipelineOutputs {
 
 impl PipelineOutputs {
     /// Convert all current hunt findings to `IntelligentTaskFinding` for
-    /// incremental flush. Unlike `to_task_findings()`, this does NOT filter
-    /// for `validation_status == "confirmed"` — it includes every finding
-    /// produced so far so the frontend can render them immediately after Hunt.
+    /// incremental flush. Findings the validate stage classified as anything
+    /// other than `confirmed` (`rejected` / `needs_more_info`) are discarded so
+    /// the frontend never renders unverified risk points; only the pre-validate
+    /// hunt snapshot keeps un-classified entries (no validation has run yet).
     #[must_use]
     pub fn to_incremental_findings(&self) -> Vec<IntelligentTaskFinding> {
         let deduped_ids: std::collections::HashSet<&str> = self
@@ -502,9 +550,7 @@ impl PipelineOutputs {
             .map(|trace| (trace.finding_id.as_str(), trace))
             .collect::<std::collections::BTreeMap<_, _>>();
 
-        // Use validated findings when available; fall back to raw hunt findings
-        // when validation hasn't run yet.
-        if self.validate.findings.is_empty() {
+        let mut findings: Vec<IntelligentTaskFinding> = if self.validate.findings.is_empty() {
             // Before validate: convert raw hunt findings directly.
             self.hunt
                 .findings
@@ -537,10 +583,20 @@ impl PipelineOutputs {
                 .filter(|vf| {
                     deduped_ids.is_empty() || deduped_ids.contains(vf.finding.finding_id.as_str())
                 })
-                .map(|validated| {
+                .filter(|vf| vf.validation_status == "confirmed")
+                .filter_map(|validated| {
                     let finding = &validated.finding;
                     let trace = trace_by_id.get(finding.finding_id.as_str());
-                    IntelligentTaskFinding {
+                    // Once the trace stage has issued a verdict for this
+                    // finding, drop it if the reachability analysis says the
+                    // sink cannot be triggered. Findings without a trace
+                    // verdict yet (early flushes before trace runs) are kept.
+                    if let Some(t) = trace {
+                        if !t.reachable {
+                            return None;
+                        }
+                    }
+                    Some(IntelligentTaskFinding {
                         id: finding.finding_id.clone(),
                         severity: finding.severity.clone(),
                         summary: finding.description.clone(),
@@ -550,11 +606,7 @@ impl PipelineOutputs {
                         line_end: Some(finding.line_end),
                         vuln_class: Some(finding.vuln_class.clone()),
                         confidence: finding.confidence,
-                        validation_status: if validated.validation_status.is_empty() {
-                            None
-                        } else {
-                            Some(validated.validation_status.clone())
-                        },
+                        validation_status: Some(validated.validation_status.clone()),
                         reachable: trace.map(|trace| trace.reachable),
                         trace_summary: trace.map(|trace| trace.rationale.clone()),
                         poc_result: finding
@@ -562,10 +614,12 @@ impl PipelineOutputs {
                             .as_ref()
                             .map(|p| serde_json::to_value(p).unwrap_or_default()),
                         user_verdict: None,
-                    }
+                    })
                 })
                 .collect()
-        }
+        };
+        ensure_unique_finding_ids(&mut findings);
+        findings
     }
 
     #[must_use]
@@ -576,14 +630,23 @@ impl PipelineOutputs {
             .iter()
             .map(|trace| (trace.finding_id.as_str(), trace))
             .collect::<std::collections::BTreeMap<_, _>>();
-        self.validate
+        let mut findings: Vec<IntelligentTaskFinding> = self
+            .validate
             .findings
             .iter()
             .filter(|finding| finding.validation_status == "confirmed")
-            .map(|validated| {
+            .filter_map(|validated| {
                 let finding = &validated.finding;
                 let trace = trace_by_id.get(finding.finding_id.as_str());
-                IntelligentTaskFinding {
+                // Final task record never carries unreachable risk points: if
+                // trace classified the sink as unreachable, the finding is
+                // discarded for both the persisted record and the UI.
+                if let Some(t) = trace {
+                    if !t.reachable {
+                        return None;
+                    }
+                }
+                Some(IntelligentTaskFinding {
                     id: finding.finding_id.clone(),
                     severity: finding.severity.clone(),
                     summary: finding.description.clone(),
@@ -601,15 +664,64 @@ impl PipelineOutputs {
                         .as_ref()
                         .map(|p| serde_json::to_value(p).unwrap_or_default()),
                     user_verdict: None,
-                }
+                })
             })
-            .collect()
+            .collect();
+        ensure_unique_finding_ids(&mut findings);
+        findings
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::runtime::intelligent::types::IntelligentTaskFinding;
+
+    fn finding_with_id(id: &str) -> IntelligentTaskFinding {
+        IntelligentTaskFinding {
+            id: id.to_string(),
+            severity: "medium".to_string(),
+            summary: String::new(),
+            evidence: String::new(),
+            file: None,
+            line_start: None,
+            line_end: None,
+            vuln_class: None,
+            confidence: None,
+            validation_status: None,
+            reachable: None,
+            trace_summary: None,
+            poc_result: None,
+            user_verdict: None,
+        }
+    }
+
+    #[test]
+    fn ensure_unique_finding_ids_rewrites_duplicates_and_empties() {
+        let mut findings = vec![
+            finding_with_id("HUNT-001"),
+            finding_with_id("HUNT-001"),
+            finding_with_id(""),
+            finding_with_id("HUNT-001"),
+            finding_with_id("HUNT-001-2"), // pre-existing — rewrites must not shadow it
+        ];
+        ensure_unique_finding_ids(&mut findings);
+        let ids: Vec<&str> = findings.iter().map(|f| f.id.as_str()).collect();
+        // First occurrence wins; later duplicates take suffixes that skip past
+        // any other row's original identifier. The pre-existing "HUNT-001-2"
+        // at idx 4 keeps its identity untouched.
+        assert_eq!(ids[0], "HUNT-001");
+        assert_eq!(ids[1], "HUNT-001-3");
+        assert_eq!(ids[2], "finding-3");
+        assert_eq!(ids[3], "HUNT-001-4");
+        assert_eq!(ids[4], "HUNT-001-2");
+        // All IDs must be unique and non-empty.
+        let unique: std::collections::HashSet<&str> = ids.iter().copied().collect();
+        assert_eq!(unique.len(), ids.len(), "ids must be unique: {ids:?}");
+        for id in &ids {
+            assert!(!id.is_empty());
+        }
+    }
 
     /// AC0.G — Back-compat: legacy `AuditFinding` JSON (pre Phase 0) MUST
     /// deserialize cleanly with `dismissal_evidence == None`. No panic, no error.
@@ -1001,10 +1113,8 @@ fn enrich_evidence(finding: &AuditFinding, trace: Option<&TraceResult>) -> Strin
         finding.file, finding.line_start, finding.line_end, finding.vuln_class, finding.evidence
     );
     if let Some(trace) = trace {
-        evidence.push_str(&format!(
-            "\nReachable: {}. {}",
-            trace.reachable, trace.rationale
-        ));
+        let reachable_label = if trace.reachable { "可达" } else { "不可达" };
+        evidence.push_str(&format!("\n可达性：{reachable_label}。{}", trace.rationale));
     }
     evidence
 }

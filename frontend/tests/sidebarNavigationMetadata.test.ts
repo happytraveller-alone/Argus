@@ -20,14 +20,15 @@ test("data management route is grouped under devTest navigation", () => {
 	assert.equal(dataManagementRoute.navGroup, "devTest");
 });
 
-test("home route remains a hidden redirect to the visible dashboard page", () => {
+test("home route is the visible scan launcher while dashboard stays visible", () => {
 	const homeRoute = routes.find((route) => route.path === "/");
 	const dashboardRoute = routes.find((route) => route.path === "/dashboard");
 
 	assert.ok(homeRoute);
 	assert.ok(dashboardRoute);
-	assert.equal(homeRoute.visible, false);
-	assert.equal(homeRoute.navVisible, false);
+	assert.equal(homeRoute.visible, true);
+	assert.equal(homeRoute.navVisible, true);
+	assert.equal(homeRoute.navGroup, "main");
 	assert.equal(dashboardRoute.visible, true);
 	assert.equal(dashboardRoute.navVisible, true);
 });

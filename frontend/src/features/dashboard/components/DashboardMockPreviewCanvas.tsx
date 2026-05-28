@@ -78,6 +78,10 @@ export const HORIZONTAL_STATS_META_LEGEND_CLASSNAME =
 	"flex flex-wrap justify-start gap-2 sm:justify-end";
 export const TOP_STATS_GRID_CLASSNAME =
 	"grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5";
+export const DASHBOARD_PREVIEW_CHART_INITIAL_DIMENSION = {
+	width: 960,
+	height: 320,
+} as const;
 const SUMMARY_CARD_LABEL_CLASSNAME =
 	"text-sm uppercase tracking-[0.12em] text-slate-400";
 
@@ -328,7 +332,11 @@ function TrendPanel() {
 					</div>
 				</div>
 				<div className="h-[calc(100%-52px)] w-full">
-					<ResponsiveContainer width="100%" height="100%">
+					<ResponsiveContainer
+						width="100%"
+						height="100%"
+						initialDimension={DASHBOARD_PREVIEW_CHART_INITIAL_DIMENSION}
+					>
 						<ComposedChart
 							data={trendRows}
 							margin={{ top: 12, right: 12, left: -10, bottom: 0 }}
@@ -534,7 +542,11 @@ function HorizontalStatsChart({
 					</div>
 				</div>
 				<div style={{ height: chartHeight }} className="w-full">
-					<ResponsiveContainer width="100%" height="100%">
+					<ResponsiveContainer
+						width="100%"
+						height="100%"
+						initialDimension={DASHBOARD_PREVIEW_CHART_INITIAL_DIMENSION}
+					>
 						<BarChart
 							data={chartRows}
 							layout="vertical"

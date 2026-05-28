@@ -2,6 +2,10 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import React, { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import {
+	RECHARTS_DIMENSION_WARNING,
+	assertNoConsoleWarning,
+} from "./consoleWarningCapture.ts";
 
 globalThis.React = React;
 
@@ -56,6 +60,16 @@ test("DashboardMockPreview renders single-page command center with sidebar and t
 	assert.doesNotMatch(markup, /PROJECT_RISK_ROWS/);
 	assert.doesNotMatch(markup, /LANGUAGE_RISK_ROWS/);
 	assert.doesNotMatch(markup, /VULNERABILITY_TYPE_ROWS/);
+});
+
+test("DashboardMockPreview renders charts without Recharts dimension warnings", async () => {
+	const module = await importOrFail<any>(
+		"../src/pages/DashboardMockPreview.tsx",
+	);
+
+	assertNoConsoleWarning(() => {
+		renderToStaticMarkup(createElement(module.default));
+	}, RECHARTS_DIMENSION_WARNING);
 });
 
 test("dashboard mock preview model exposes five switchable views with sorted chart data", async () => {
@@ -137,6 +151,10 @@ test("dashboard mock preview chart sizing uses compact rows", async () => {
 	assert.equal(module.HORIZONTAL_STATS_BAR_SIZE, 9);
 	assert.equal(module.HORIZONTAL_STATS_ROW_HEIGHT, 34);
 	assert.equal(module.HORIZONTAL_STATS_BAR_CATEGORY_GAP, 2);
+	assert.deepEqual(module.DASHBOARD_PREVIEW_CHART_INITIAL_DIMENSION, {
+		width: 960,
+		height: 320,
+	});
 	assert.equal(
 		module.HORIZONTAL_STATS_META_ROW_CLASSNAME,
 		"mb-3 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between",

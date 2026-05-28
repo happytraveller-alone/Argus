@@ -79,11 +79,33 @@ pub async fn run(
         .iter()
         .filter(|finding| finding.validation_status == "confirmed")
         .count();
+    let rejected = output.findings.len().saturating_sub(confirmed);
+    // Audit-trail event for every non-confirmed finding. The findings stay in
+    // pipeline state (so the validate quality gate keeps comparing counts
+    // against the hunt input), but `PipelineOutputs::to_incremental_findings`
+    // and `to_task_findings` will drop them on the way out so the task record
+    // and frontend never expose unverified risk points.
+    for vf in &output.findings {
+        if vf.validation_status != "confirmed" {
+            events.emit(
+                crate::runtime::intelligent::types::IntelligentTaskEvent::new(
+                    "finding_discarded",
+                )
+                .with_data(serde_json::json!({
+                    "stage": stage.as_str(),
+                    "findingId": vf.finding.finding_id,
+                    "validationStatus": vf.validation_status,
+                    "rationale": vf.validation_rationale,
+                })),
+            );
+        }
+    }
     events.stage_completed(
         stage,
         json!({
             "confirmedCount": confirmed,
-            "rejectedCount": output.findings.len().saturating_sub(confirmed),
+            "rejectedCount": rejected,
+            "discardedCount": rejected,
         }),
     );
     Ok(output)

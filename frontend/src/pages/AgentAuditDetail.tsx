@@ -1,5 +1,5 @@
 import { ArrowLeft, RefreshCw, Terminal } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 import {
@@ -38,6 +38,8 @@ const TERMINAL_STATUSES: Set<IntelligentTaskStatus> = new Set([
 	"failed",
 	"cancelled",
 ]);
+const LIVE_REFRESH_INTERVAL_MS = 5000;
+const TIMELINE_CACHE_LIMIT = 1000;
 
 function isTerminal(status: string): boolean {
 	return TERMINAL_STATUSES.has(status as IntelligentTaskStatus);
@@ -51,6 +53,150 @@ function formatDuration(durationMs?: number): string {
 	const minutes = Math.floor(seconds / 60);
 	const restSeconds = seconds % 60;
 	return `${minutes}m ${restSeconds}s`;
+}
+
+function parseTimestampMs(value?: string | null): number | null {
+	if (!value) return null;
+	const timestamp = Date.parse(value);
+	return Number.isFinite(timestamp) ? timestamp : null;
+}
+
+function getRuntimeDurationMs(
+	record: IntelligentTaskRecord,
+	nowMs: number,
+): number | undefined {
+	if (isTerminal(record.status)) {
+		if (record.durationMs !== undefined) return record.durationMs;
+		const startedAt = parseTimestampMs(record.startedAt);
+		const completedAt = parseTimestampMs(record.completedAt);
+		if (startedAt !== null && completedAt !== null) {
+			return Math.max(0, completedAt - startedAt);
+		}
+	}
+
+	const startedAt =
+		parseTimestampMs(record.startedAt) ?? parseTimestampMs(record.createdAt);
+	return startedAt === null ? record.durationMs : Math.max(0, nowMs - startedAt);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function toSseEvent(event: IntelligentTaskEventLogEntry): SseEvent {
+	return {
+		kind: event.kind,
+		timestamp: event.timestamp,
+		message: event.message,
+		data: isRecord(event.data) ? event.data : undefined,
+	};
+}
+
+function stableStringify(value: unknown): string {
+	if (Array.isArray(value)) {
+		return `[${value.map((item) => stableStringify(item)).join(",")}]`;
+	}
+	if (isRecord(value)) {
+		return `{${Object.keys(value)
+			.sort()
+			.map((key) => `${JSON.stringify(key)}:${stableStringify(value[key])}`)
+			.join(",")}}`;
+	}
+	return JSON.stringify(value) ?? String(value);
+}
+
+function timelineEventKey(event: SseEvent): string {
+	return [
+		event.timestamp,
+		event.kind,
+		event.message ?? "",
+		stableStringify(event.data ?? null),
+	].join("\u001f");
+}
+
+function mergeTimelineEvents(...eventGroups: SseEvent[][]): SseEvent[] {
+	const merged: SseEvent[] = [];
+	const indexByKey = new Map<string, number>();
+
+	for (const group of eventGroups) {
+		for (const event of group) {
+			const key = timelineEventKey(event);
+			const existingIndex = indexByKey.get(key);
+			if (existingIndex !== undefined) {
+				const existing = merged[existingIndex];
+				merged[existingIndex] = {
+					...existing,
+					...event,
+					message: event.message ?? existing.message,
+					data: event.data ?? existing.data,
+				};
+				continue;
+			}
+			indexByKey.set(key, merged.length);
+			merged.push(event);
+		}
+	}
+
+	return merged
+		.map((event, index) => ({ event, index }))
+		.sort((left, right) => {
+			const leftTime = parseTimestampMs(left.event.timestamp) ?? 0;
+			const rightTime = parseTimestampMs(right.event.timestamp) ?? 0;
+			return leftTime - rightTime || left.index - right.index;
+		})
+		.slice(-TIMELINE_CACHE_LIMIT)
+		.map(({ event }) => event);
+}
+
+function areTimelineEventsEqual(left: SseEvent[], right: SseEvent[]): boolean {
+	return (
+		left.length === right.length &&
+		left.every((event, index) => timelineEventKey(event) === timelineEventKey(right[index]))
+	);
+}
+
+function coerceTimelineEvent(value: unknown): SseEvent | null {
+	if (!isRecord(value)) return null;
+	const { kind, timestamp, message, data } = value;
+	if (typeof kind !== "string" || typeof timestamp !== "string") return null;
+	return {
+		kind,
+		timestamp,
+		message: typeof message === "string" ? message : undefined,
+		data: isRecord(data) ? data : undefined,
+	};
+}
+
+function timelineCacheKey(taskId: string): string {
+	return `argus:intelligent-task-events:${taskId}`;
+}
+
+function readCachedTimelineEvents(taskId: string): SseEvent[] {
+	if (typeof window === "undefined") return [];
+	try {
+		const raw = window.sessionStorage.getItem(timelineCacheKey(taskId));
+		if (!raw) return [];
+		const parsed = JSON.parse(raw) as unknown;
+		if (!Array.isArray(parsed)) return [];
+		return parsed.flatMap((item) => {
+			const event = coerceTimelineEvent(item);
+			return event ? [event] : [];
+		});
+	} catch {
+		return [];
+	}
+}
+
+function writeCachedTimelineEvents(taskId: string, events: SseEvent[]): void {
+	if (typeof window === "undefined") return;
+	try {
+		window.sessionStorage.setItem(
+			timelineCacheKey(taskId),
+			JSON.stringify(events),
+		);
+	} catch {
+		// Session storage is a best-effort continuity cache; live polling/SSE still work.
+	}
 }
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
@@ -375,11 +521,16 @@ export default function AgentAuditDetail() {
 	const [cancelling, setCancelling] = useState(false);
 	const [tableState, setTableState] = useState<DataTableQueryState>(() =>
 		createDefaultDataTableState({
-			pagination: { pageIndex: 0, pageSize: 15 },
+			pagination: { pageIndex: 0, pageSize: 10 },
 		}),
 	);
 	const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 	const [showLlmLog, setShowLlmLog] = useState(false);
+	const [durationNowMs, setDurationNowMs] = useState(() => Date.now());
+	const [timelineState, setTimelineState] = useState<{
+		taskId: string | null;
+		events: SseEvent[];
+	}>({ taskId: null, events: [] });
 
 	const taskTerminal = record ? isTerminal(record.status) : false;
 	const sseUrl = taskId
@@ -388,6 +539,10 @@ export default function AgentAuditDetail() {
 	const { events: sseEvents } = useSseStream(sseUrl, {
 		enabled: Boolean(taskId) && !taskTerminal,
 	});
+	const replayEvents = useMemo(
+		() => (Array.isArray(record?.eventLog) ? record.eventLog.map(toSseEvent) : []),
+		[record?.eventLog],
+	);
 
 	const fetchRecord = useCallback(async () => {
 		if (!taskId) return;
@@ -417,7 +572,7 @@ export default function AgentAuditDetail() {
 		}
 		pollingRef.current = setInterval(() => {
 			void fetchRecord();
-		}, 5000);
+		}, LIVE_REFRESH_INTERVAL_MS);
 		return () => {
 			if (pollingRef.current) {
 				clearInterval(pollingRef.current);
@@ -425,6 +580,46 @@ export default function AgentAuditDetail() {
 			}
 		};
 	}, [fetchRecord, record]);
+
+	useEffect(() => {
+		if (!record || isTerminal(record.status)) return undefined;
+		setDurationNowMs(Date.now());
+		const timer = setInterval(() => {
+			setDurationNowMs(Date.now());
+		}, LIVE_REFRESH_INTERVAL_MS);
+		return () => clearInterval(timer);
+	}, [record]);
+
+	useEffect(() => {
+		if (!taskId) {
+			setTimelineState({ taskId: null, events: [] });
+			return;
+		}
+		setTimelineState({
+			taskId,
+			events: readCachedTimelineEvents(taskId),
+		});
+	}, [taskId]);
+
+	useEffect(() => {
+		if (!taskId) return;
+		setTimelineState((previous) => {
+			const baseEvents =
+				previous.taskId === taskId
+					? previous.events
+					: readCachedTimelineEvents(taskId);
+			const merged = mergeTimelineEvents(baseEvents, replayEvents, sseEvents);
+			if (previous.taskId === taskId && areTimelineEventsEqual(baseEvents, merged)) {
+				return previous;
+			}
+			return { taskId, events: merged };
+		});
+	}, [replayEvents, sseEvents, taskId]);
+
+	useEffect(() => {
+		if (!timelineState.taskId || timelineState.events.length === 0) return;
+		writeCachedTimelineEvents(timelineState.taskId, timelineState.events);
+	}, [timelineState]);
 
 	const handleVerdict = useCallback(
 		(findingId: string, verdict: string | null) => {
@@ -502,21 +697,14 @@ export default function AgentAuditDetail() {
 	const canCancel = record.status === "pending" || record.status === "running";
 
 	const findings = Array.isArray(record.findings) ? record.findings : [];
-	const eventLog = Array.isArray(record.eventLog) ? record.eventLog : [];
-	const replayEvents: SseEvent[] = eventLog.map((event) => ({
-		kind: event.kind,
-		timestamp: event.timestamp,
-		message: event.message,
-		data:
-			event.data && typeof event.data === "object" && !Array.isArray(event.data)
-				? (event.data as Record<string, unknown>)
-				: undefined,
-	}));
-	const activeEvents: SseEvent[] =
-		sseEvents.length > 0 ? sseEvents : replayEvents;
+	const activeEvents =
+		timelineState.taskId === taskId && timelineState.events.length > 0
+			? timelineState.events
+			: replayEvents;
+	const runtimeDurationMs = getRuntimeDurationMs(record, durationNowMs);
 	const headerTags = [
 		record.projectName?.trim() || record.projectId || "-",
-		formatDuration(record.durationMs),
+		`运行时长 ${formatDuration(runtimeDurationMs)}`,
 		`发现问题 ${findings.length.toLocaleString()}`,
 	];
 

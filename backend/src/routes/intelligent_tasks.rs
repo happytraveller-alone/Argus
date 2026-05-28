@@ -16,7 +16,7 @@ use crate::{
     db::{intelligent_task_state, projects},
     error::ApiError,
     runtime::intelligent::{
-        audit_pipeline::types::AuditConfigOverride,
+        audit_pipeline::types::{ensure_unique_finding_ids, AuditConfigOverride},
         types::{IntelligentTaskFinding, IntelligentTaskRecord},
     },
     state::AppState,
@@ -241,6 +241,11 @@ async fn set_finding_verdict(
     }
 
     let updated = intelligent_task_state::update_record(&state, &task_id, |record| {
+        // Normalize finding IDs before matching. Records created prior to the
+        // ID-uniqueness fix may still contain colliding LLM-emitted IDs; without
+        // this self-heal step the verdict would silently land on the first
+        // duplicate (i.e., clicking row 3 would mutate row 1 in the UI).
+        ensure_unique_finding_ids(&mut record.findings);
         for finding in &mut record.findings {
             if finding.id == finding_id {
                 finding.user_verdict = payload.verdict.clone();
@@ -298,5 +303,9 @@ async fn bind_project_name(
             Some("<项目已删除>".to_string())
         }
     };
+    // Self-heal historical records whose persisted findings may share LLM-
+    // emitted `id` values across rows. Matches the write-side normalization in
+    // `set_finding_verdict` so the frontend always sees unique IDs.
+    ensure_unique_finding_ids(&mut record.findings);
     Ok(record)
 }

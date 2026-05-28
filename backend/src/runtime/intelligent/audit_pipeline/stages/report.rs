@@ -24,8 +24,8 @@ pub async fn run(
         "dedupe": outputs.dedupe,
         "trace": outputs.trace,
         "feedback": outputs.feedback,
-        "instruction": "Produce the final structured report summary for the Argus intelligent task detail page.",
-        "requiredOutput": {"summary":"string", "findings": [], "recommendations": ["string"]}
+        "instruction": "为 Argus 智能审计任务详情页生成最终的结构化报告摘要。所有自然语言字段必须使用简体中文撰写（summary、recommendations，以及 findings 中的 description / evidence / 说明等）；技术标识符、文件路径、JSON 键、代码片段保持原样。",
+        "requiredOutput": {"summary": "string (简体中文)", "findings": [], "recommendations": ["string (简体中文)"]}
     });
     let mut prompt = stage_prompt(stage, &payload);
     if let Some(amp) = amplification {
@@ -42,14 +42,13 @@ pub async fn run(
             .iter()
             .filter(|finding| finding.validation_status == "confirmed")
             .count();
-        output.summary =
-            format!("8-agent intelligent audit completed with {confirmed} confirmed findings.");
+        output.summary = format!("智能审计已完成，共确认 {confirmed} 个高置信度风险点。");
     }
     // AC8: when any upstream stage soft-degraded via the quality gate, mark
     // the report summary so users see partial coverage explicitly.
-    if ctx.partial_analysis.load(Ordering::Relaxed) && !output.summary.contains("partial coverage")
-    {
-        output.summary = format!("[partial coverage] {}", output.summary);
+    const PARTIAL_PREFIX: &str = "[部分覆盖] ";
+    if ctx.partial_analysis.load(Ordering::Relaxed) && !output.summary.starts_with(PARTIAL_PREFIX) {
+        output.summary = format!("{PARTIAL_PREFIX}{}", output.summary);
     }
     events.stage_completed(
         stage,

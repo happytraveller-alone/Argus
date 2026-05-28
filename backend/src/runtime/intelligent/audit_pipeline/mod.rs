@@ -1126,6 +1126,15 @@ pub fn stage_prompt(stage: AuditStage, payload: &serde_json::Value) -> String {
 
 {}
 
+Language requirement — MUST FOLLOW:
+- Write every natural-language field (description, evidence, rationale, summary, \
+validationRationale, traceSummary, rootCause, recommendations, narrative explanations, \
+等) in Simplified Chinese (简体中文).
+- Keep technical identifiers untranslated: findingId, file paths, line numbers, \
+vulnClass tags, severity enum values (critical/high/medium/low), JSON keys, \
+function/class names quoted from source code, and verbatim code snippets.
+- 若需引用代码，请保持原样不要翻译；解释和说明部分使用中文。
+
 Return only one JSON object matching the requested schema. Do not use markdown fences.
 
 Input:

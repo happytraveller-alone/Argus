@@ -117,11 +117,30 @@ pub async fn run(
     }
 
     let reachable = traces.iter().filter(|trace| trace.reachable).count();
+    let unreachable = traces.len().saturating_sub(reachable);
+    // Audit-trail event for every unreachable verdict. The trace results stay
+    // in pipeline state (so the trace quality gate keeps comparing counts
+    // against dedupe groups), but `PipelineOutputs::to_incremental_findings`
+    // and `to_task_findings` will drop these findings on the way out so the
+    // task record and frontend never expose unreachable risk points.
+    for trace in &traces {
+        if !trace.reachable {
+            events.emit(
+                IntelligentTaskEvent::new("finding_discarded").with_data(json!({
+                    "stage": stage.as_str(),
+                    "findingId": trace.finding_id,
+                    "reason": "unreachable",
+                    "rationale": trace.rationale,
+                })),
+            );
+        }
+    }
     events.stage_completed(
         stage,
         json!({
             "reachableCount": reachable,
             "traceCount": traces.len(),
+            "discardedCount": unreachable,
         }),
     );
     Ok(TraceOutput { traces })
@@ -507,8 +526,7 @@ async fn single_pass_for_finding(
             finding_id: finding.finding_id.clone(),
             reachable: false,
             confidence: Some(0.0),
-            rationale: "single-pass LLM returned no matching trace; defaulting to unreachable"
-                .to_string(),
+            rationale: "单轮 LLM 未返回匹配的可达性结论，默认按不可达处理。".to_string(),
         });
     Ok(trace)
 }
@@ -527,8 +545,7 @@ async fn single_pass_for_id(
         finding_id: finding_id.to_string(),
         reachable: false,
         confidence: Some(0.0),
-        rationale: "no validated finding metadata available for trace; defaulting to unreachable"
-            .to_string(),
+        rationale: "无对应验证阶段元数据，默认按不可达处理。".to_string(),
     })
 }
 

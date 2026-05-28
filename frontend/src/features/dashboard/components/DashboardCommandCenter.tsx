@@ -233,6 +233,10 @@ export const DASHBOARD_VIEW_RAIL_CLASSNAME =
 export const DASHBOARD_VIEW_RAIL_LIST_CLASSNAME =
 	"grid gap-2 sm:grid-cols-2 xl:grid-cols-5";
 export const DASHBOARD_RECENT_TASKS_LIMIT = 3;
+export const DASHBOARD_CHART_INITIAL_DIMENSION = {
+	width: 960,
+	height: 320,
+} as const;
 const DASHBOARD_PANEL_CLASSNAME =
 	"rounded-sm border border-border bg-card text-card-foreground shadow-sm";
 const DASHBOARD_PANEL_TITLE_CLASSNAME =
@@ -1072,7 +1076,11 @@ function TrendPanel({ snapshot }: { snapshot: DashboardSnapshotResponse }) {
 					</div>
 				</div>
 				<div className="h-[calc(100%-52px)] w-full">
-					<ResponsiveContainer width="100%" height="100%">
+					<ResponsiveContainer
+						width="100%"
+						height="100%"
+						initialDimension={DASHBOARD_CHART_INITIAL_DIMENSION}
+					>
 						<ComposedChart
 							data={trendRows}
 							margin={{ top: 12, right: 12, left: -10, bottom: 0 }}
@@ -1214,7 +1222,11 @@ function HorizontalStatsChart({
 					</div>
 				</div>
 				<div style={{ height: chartHeight }} className="w-full">
-					<ResponsiveContainer width="100%" height="100%">
+					<ResponsiveContainer
+						width="100%"
+						height="100%"
+						initialDimension={DASHBOARD_CHART_INITIAL_DIMENSION}
+					>
 						<BarChart
 							data={rows}
 							layout="vertical"

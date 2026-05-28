@@ -2,6 +2,10 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import React, { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import {
+	RECHARTS_DIMENSION_WARNING,
+	assertNoConsoleWarning,
+} from "./consoleWarningCapture.ts";
 
 globalThis.React = React;
 
@@ -301,6 +305,22 @@ test("DashboardCommandCenter renders the live single-page dashboard layout", asy
 	assert.doesNotMatch(markup, /第 \d+ \/ \d+ 页/);
 	assert.doesNotMatch(markup, /排行榜/);
 	assert.doesNotMatch(markup, /等待中/);
+});
+
+test("DashboardCommandCenter renders charts without Recharts dimension warnings", async () => {
+	const module = await importOrFail<any>(
+		"../src/features/dashboard/components/DashboardCommandCenter.tsx",
+	);
+
+	assertNoConsoleWarning(() => {
+		renderToStaticMarkup(
+			createElement(module.default, {
+				snapshot: createSnapshotFixture(),
+				rangeDays: 14,
+				onRangeDaysChange: () => {},
+			}),
+		);
+	}, RECHARTS_DIMENSION_WARNING);
 });
 
 test("DashboardCommandCenter cumulative vulnerability card uses the verified-only backend total", async () => {
@@ -737,6 +757,10 @@ test("DashboardCommandCenter uses compact chart spacing constants", async () => 
 	assert.equal(module.HORIZONTAL_STATS_BAR_SIZE, 9);
 	assert.equal(module.HORIZONTAL_STATS_ROW_HEIGHT, 34);
 	assert.equal(module.HORIZONTAL_STATS_BAR_CATEGORY_GAP, 2);
+	assert.deepEqual(module.DASHBOARD_CHART_INITIAL_DIMENSION, {
+		width: 960,
+		height: 320,
+	});
 	assert.deepEqual(module.HORIZONTAL_STATS_CHART_MARGIN, {
 		top: 4,
 		right: 16,
