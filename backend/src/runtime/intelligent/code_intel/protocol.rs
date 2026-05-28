@@ -8,10 +8,10 @@
 //! so the conversion layer in `codegraph_client.rs` can normalize CLI output
 //! into the trait-facing representation.
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 /// `codegraph query <pattern> -j` response — array of matched nodes with scores.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct CgQueryItem {
     pub node: CgNode,
     #[serde(default)]
@@ -65,7 +65,7 @@ pub struct CgCallEdge {
 }
 
 /// Full node shape used by `query` (verbose schema with positional metadata).
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct CgNode {
     #[serde(default)]
     pub id: String,

@@ -459,7 +459,7 @@ async fn enrich_dismissal_two_pass(
         "lineEnd": finding.line_end,
         "vulnClass": finding.vuln_class,
         "description": finding.description,
-        "evidence": finding.evidence,
+        "evidence": truncate_evidence(&finding.evidence),
     });
 
     // ── Pass 1: ask LLM which queries to run ───────────────────────────────
@@ -846,6 +846,23 @@ fn emit_fallback(events: &PipelineEventSink, finding_id: &str, reason: &str) {
         "findingId": finding_id,
         "reason": reason,
     })));
+}
+
+/// Cap on the `evidence` field that flows into Hunt Pass 1 prompts. Mirrors the
+/// trace.rs cap; raised together if the model context window changes.
+const EVIDENCE_PROMPT_CAP_CHARS: usize = 1500;
+
+fn truncate_evidence(s: &str) -> String {
+    // Byte-length pre-check skips the O(n) UTF-8 scan on the common case.
+    if s.len() <= EVIDENCE_PROMPT_CAP_CHARS {
+        return s.to_string();
+    }
+    let total = s.chars().count();
+    if total <= EVIDENCE_PROMPT_CAP_CHARS {
+        return s.to_string();
+    }
+    let head: String = s.chars().take(EVIDENCE_PROMPT_CAP_CHARS).collect();
+    format!("{head}\n…[truncated; original {total} chars]")
 }
 
 /// LLM Pass 1 output: list of structural query requests.

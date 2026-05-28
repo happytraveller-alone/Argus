@@ -16,6 +16,7 @@ pub mod codegraph_client;
 pub mod dead_code;
 pub mod path_classifier;
 pub mod protocol;
+pub mod query_cache;
 pub mod sanitizer_sot;
 pub mod staging;
 pub mod types;

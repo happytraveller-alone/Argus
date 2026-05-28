@@ -14,11 +14,13 @@
 //!
 //! See `.omc/plans/ralplan-codegraph-integration-v2.md` §Phase 2.
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use anyhow::{anyhow, bail, Context, Result};
 use async_trait::async_trait;
+use tokio::sync::OnceCell;
 use tracing::{debug, warn};
 
 use crate::runtime::intelligent::agent_runner::podman::PodmanSession;
@@ -27,10 +29,16 @@ use super::cache::CodeGraphCache;
 use super::protocol::{
     CgCallEdge, CgCalleesResponse, CgCallersResponse, CgFileEntry, CgNode, CgQueryItem,
 };
+use super::query_cache::QueryCache;
 use super::staging::{self, StagingDir};
 use super::{
     CallChain, CallNode, CodeContext, CodeIntelligence, SymbolMatch, TaintNode, TaintSearchResult,
 };
+
+/// Max symbols pulled in the one-shot project-wide index build. The old
+/// `resolve_symbol_at` capped at 200 — far below real-world projects — which
+/// was the root cause of 100% `pre_resolve_failed` events in production logs.
+const PROJECT_INDEX_LIMIT: usize = 50_000;
 
 /// BFS hard cap on `max_hops` for [`CodeGraphClient::find_taint_through`].
 /// Beyond 5 the cross-product of caller/callee lookups makes Pass 2 unstable.
@@ -62,7 +70,6 @@ pub struct CodeGraphClient {
     /// Long-lived session bound to the bind-mounted source + writable index dir.
     pub(crate) session: Arc<PodmanSession>,
     /// SHA256 of the source archive — used as the cache key.
-    #[allow(dead_code)]
     pub(crate) archive_sha256: String,
     /// Languages detected by codegraph during init.
     pub(crate) languages: Vec<String>,
@@ -77,6 +84,87 @@ pub struct CodeGraphClient {
     /// Host-side path of the index dir bind-mounted at `/codegraph/index`.
     #[allow(dead_code)]
     pub(crate) index_host_path: PathBuf,
+    /// Lazily-built project-wide symbol index — populated on the first
+    /// `resolve_symbol_at` / `get_context` call, then reused for every
+    /// subsequent in-memory lookup. Persisted to disk per `archive_sha256`
+    /// so subsequent runs of the same archive skip the codegraph CLI entirely.
+    pub(crate) project_index: OnceCell<Arc<ProjectSymbolIndex>>,
+    /// Per-CLI-call result cache (callers / callees / search_symbol / call_chain).
+    /// Keyed by (archive_sha, tool, sha256(args)). Falls through to the CLI on miss.
+    pub(crate) query_cache: QueryCache,
+}
+
+/// In-memory + on-disk index of every symbol in the archive, keyed by
+/// normalized file path. Built once from `codegraph query '*'` and consulted
+/// for all subsequent file:line lookups.
+pub(crate) struct ProjectSymbolIndex {
+    /// All symbols, keyed by normalized file path.
+    by_file: HashMap<String, Vec<CgQueryItem>>,
+}
+
+impl ProjectSymbolIndex {
+    fn from_items(items: Vec<CgQueryItem>) -> Self {
+        let mut by_file: HashMap<String, Vec<CgQueryItem>> = HashMap::new();
+        for it in items {
+            let key = normalize_path(&it.node.file_path);
+            by_file.entry(key).or_default().push(it);
+        }
+        Self { by_file }
+    }
+
+    fn lookup_at(&self, file: &str, line: u32) -> Option<&CgQueryItem> {
+        let key = normalize_path(file);
+        let bucket = self.by_file.get(&key)?;
+        // Among symbols whose range contains the line, prefer the tightest
+        // (smallest end-start) — that's the innermost symbol (method/function)
+        // rather than its enclosing class/module.
+        bucket
+            .iter()
+            .filter(|it| range_contains(&it.node, line))
+            .min_by_key(|it| {
+                let n = &it.node;
+                let end = if n.end_line == 0 {
+                    n.start_line
+                } else {
+                    n.end_line
+                };
+                end.saturating_sub(n.start_line)
+            })
+    }
+
+    fn items_in_file(&self, file: &str) -> &[CgQueryItem] {
+        let key = normalize_path(file);
+        self.by_file
+            .get(&key)
+            .map(|v| v.as_slice())
+            .unwrap_or(&[])
+    }
+}
+
+/// Normalize a codegraph or finding-reported file path so equality holds across
+/// variants like `"src/foo.rs"`, `"./src/foo.rs"`, `"/codegraph/src/src/foo.rs"`,
+/// or Windows-flavored `"src\\foo.rs"` (scanner findings ingested cross-platform).
+pub(crate) fn normalize_path(s: &str) -> String {
+    // Backslash → forward-slash first so subsequent prefix-stripping works on
+    // Windows-reported paths.
+    let unified = s.trim().replace('\\', "/");
+    let mut p: &str = unified.as_str();
+    // Loop the container-mount strip in case the path was joined twice.
+    loop {
+        if let Some(rest) = p.strip_prefix("/codegraph/src/") {
+            p = rest;
+        } else if let Some(rest) = p.strip_prefix("/codegraph/src") {
+            p = rest;
+        } else {
+            break;
+        }
+    }
+    // Strip leading "./" repeatedly.
+    while let Some(rest) = p.strip_prefix("./") {
+        p = rest;
+    }
+    // Strip leading "/" so equality holds for "src/foo.rs" vs "/src/foo.rs".
+    p.trim_start_matches('/').to_string()
 }
 
 impl CodeGraphClient {
@@ -210,6 +298,7 @@ impl CodeGraphClient {
             Vec::new()
         });
 
+        let query_cache = QueryCache::new(query_cache_root(), archive_sha256.clone());
         Ok(Self {
             session,
             archive_sha256,
@@ -218,6 +307,8 @@ impl CodeGraphClient {
             staging_dir,
             cache,
             index_host_path,
+            project_index: OnceCell::new(),
+            query_cache,
         })
     }
 
@@ -243,32 +334,43 @@ impl CodeIntelligence for CodeGraphClient {
     async fn get_callers(&self, symbol: &str, depth: u32) -> Result<Vec<CallNode>> {
         self.ready_check()?;
         let depth = depth.min(MAX_DEPTH).max(1);
+        // Cache key uses the requested depth, not the effective depth (1 at MVP).
+        // When MAX_DEPTH widens to honor multi-hop traversal, callers won't be
+        // served stale depth=1 results under the same key.
+        let args = (symbol, depth);
+        if let Some(cached) = self.query_cache.get::<Vec<CallNode>, _>("callers", &args).await {
+            return Ok(cached);
+        }
         let cmd = format!(
             "codegraph callers {} --path {CONTAINER_SRC} -j -l {}",
             sh_quote(symbol),
             MAX_RESULTS,
         );
         let resp: CgCallersResponse = run_json(&self.session, &cmd).await?;
-        // codegraph `callers` returns direct callers only; deeper hops require
-        // iterative invocation. MVP returns depth=1 only and tags the depth on
-        // each node so callers can decide whether to traverse further.
         if depth > 1 {
             debug!(
                 requested_depth = depth,
                 "codegraph callers returns direct edges only; deeper depth ignored at MVP",
             );
         }
-        Ok(resp
+        let result: Vec<CallNode> = resp
             .callers
             .into_iter()
             .take(MAX_RESULTS)
             .map(|e| call_edge_to_node(e, 1))
-            .collect())
+            .collect();
+        self.query_cache.put("callers", &args, &result).await;
+        Ok(result)
     }
 
     async fn get_callees(&self, symbol: &str, depth: u32) -> Result<Vec<CallNode>> {
         self.ready_check()?;
         let depth = depth.min(MAX_DEPTH).max(1);
+        // See get_callers for rationale on using requested depth as the cache key.
+        let args = (symbol, depth);
+        if let Some(cached) = self.query_cache.get::<Vec<CallNode>, _>("callees", &args).await {
+            return Ok(cached);
+        }
         let cmd = format!(
             "codegraph callees {} --path {CONTAINER_SRC} -j -l {}",
             sh_quote(symbol),
@@ -281,66 +383,77 @@ impl CodeIntelligence for CodeGraphClient {
                 "codegraph callees returns direct edges only; deeper depth ignored at MVP",
             );
         }
-        Ok(resp
+        let result: Vec<CallNode> = resp
             .callees
             .into_iter()
             .take(MAX_RESULTS)
             .map(|e| call_edge_to_node(e, 1))
-            .collect())
+            .collect();
+        self.query_cache.put("callees", &args, &result).await;
+        Ok(result)
     }
 
     async fn get_context(&self, file: &str, line: u32) -> Result<CodeContext> {
         self.ready_check()?;
-        // No direct codegraph subcommand for file:line context; query everything
-        // and locally filter by file_path + line range.
-        let cmd = format!(
-            "codegraph query '*' --path {CONTAINER_SRC} -j -l {}",
-            MAX_RESULTS * 2,
-        );
-        let items: Vec<CgQueryItem> = run_json(&self.session, &cmd).await?;
-        let best = items
-            .iter()
-            .find(|it| it.node.file_path == file && range_contains(&it.node, line))
-            .cloned();
+        // Cache the structured CodeContext per (normalized_file, line).
+        let norm_file = normalize_path(file);
+        let args = (norm_file.as_str(), line);
+        if let Some(cached) = self
+            .query_cache
+            .get::<CodeContext, _>("get_context", &args)
+            .await
+        {
+            return Ok(cached);
+        }
 
-        let related: Vec<SymbolMatch> = items
-            .into_iter()
-            .filter(|it| it.node.file_path == file)
+        let index = self.ensure_project_index().await?;
+        let best = index.lookup_at(file, line).cloned();
+        let related: Vec<SymbolMatch> = index
+            .items_in_file(file)
+            .iter()
             .take(MAX_RESULTS)
-            .map(|it| node_to_symbol(it.node))
+            .map(|it| node_to_symbol(it.node.clone()))
             .collect();
 
-        Ok(CodeContext {
+        let ctx = CodeContext {
             file: file.to_string(),
             line,
             function_body: best.and_then(|it| it.node.signature),
             imports: Vec::new(),
             related_symbols: related,
-        })
+        };
+        self.query_cache.put("get_context", &args, &ctx).await;
+        Ok(ctx)
     }
 
     async fn search_symbol(&self, name: &str) -> Result<Vec<SymbolMatch>> {
         self.ready_check()?;
+        let args = name;
+        if let Some(cached) = self
+            .query_cache
+            .get::<Vec<SymbolMatch>, _>("search_symbol", &args)
+            .await
+        {
+            return Ok(cached);
+        }
         let cmd = format!(
             "codegraph query {} --path {CONTAINER_SRC} -j -l 50",
             sh_quote(name),
         );
         let items: Vec<CgQueryItem> = run_json(&self.session, &cmd).await?;
-        Ok(items
+        let result: Vec<SymbolMatch> = items
             .into_iter()
             .take(MAX_RESULTS)
             .map(|it| node_to_symbol(it.node))
-            .collect())
+            .collect();
+        self.query_cache.put("search_symbol", &args, &result).await;
+        Ok(result)
     }
 
     async fn resolve_symbol_at(&self, file: &str, line: u32) -> Result<Option<SymbolMatch>> {
         self.ready_check()?;
-        let cmd = format!("codegraph query '*' --path {CONTAINER_SRC} -j -l 200",);
-        let items: Vec<CgQueryItem> = run_json(&self.session, &cmd).await?;
-        Ok(items
-            .into_iter()
-            .find(|it| it.node.file_path == file && range_contains(&it.node, line))
-            .map(|it| node_to_symbol(it.node)))
+        let index = self.ensure_project_index().await?;
+        Ok(index.lookup_at(file, line).map(|it| node_to_symbol(it.node.clone())))
     }
 
     async fn get_call_chain(
@@ -443,6 +556,67 @@ impl CodeGraphClient {
         }
         Ok(())
     }
+
+    /// Build (or restore from disk) the full project symbol index. Subsequent
+    /// callers reuse the cached value via `OnceCell` — at most one `codegraph
+    /// query '*'` CLI call per `CodeGraphClient` lifetime.
+    pub(crate) async fn ensure_project_index(&self) -> Result<Arc<ProjectSymbolIndex>> {
+        self.project_index
+            .get_or_try_init(|| async {
+                // 1. Try host-side persistent cache first (cross-run reuse).
+                let disk_path = symbol_index_path(&self.archive_sha256);
+                if let Ok(raw) = tokio::fs::read_to_string(&disk_path).await {
+                    if let Ok(items) = serde_json::from_str::<Vec<CgQueryItem>>(&raw) {
+                        debug!(
+                            sha = %self.archive_sha256,
+                            count = items.len(),
+                            "project symbol index restored from disk",
+                        );
+                        return Ok(Arc::new(ProjectSymbolIndex::from_items(items)));
+                    }
+                }
+
+                // 2. Cold path: pull every symbol via one big `codegraph query '*'`.
+                let cmd = format!(
+                    "codegraph query '*' --path {CONTAINER_SRC} -j -l {}",
+                    PROJECT_INDEX_LIMIT,
+                );
+                let items: Vec<CgQueryItem> = run_json(&self.session, &cmd).await?;
+                debug!(
+                    sha = %self.archive_sha256,
+                    count = items.len(),
+                    "project symbol index built via codegraph CLI",
+                );
+
+                // Persist for the next run (best-effort).
+                if let Some(parent) = disk_path.parent() {
+                    if let Err(e) = tokio::fs::create_dir_all(parent).await {
+                        debug!(parent = %parent.display(), error = %e, "symbol-index mkdir failed; skipping persist");
+                    } else if let Ok(serialized) = serde_json::to_vec(&items) {
+                        let tmp = disk_path.with_extension("tmp");
+                        if tokio::fs::write(&tmp, &serialized).await.is_ok() {
+                            let _ = tokio::fs::rename(&tmp, &disk_path).await;
+                        }
+                    }
+                }
+
+                Ok(Arc::new(ProjectSymbolIndex::from_items(items)))
+            })
+            .await
+            .cloned()
+    }
+}
+
+/// Root directory for the per-query disk cache (separate from the SQLite index cache).
+fn query_cache_root() -> PathBuf {
+    codegraph_data_root().join("query-cache")
+}
+
+/// On-disk persistence path for the project symbol index, keyed by archive sha.
+fn symbol_index_path(sha: &str) -> PathBuf {
+    codegraph_data_root()
+        .join("symbol-index")
+        .join(format!("{sha}.json"))
 }
 
 // ---------------------------------------------------------------------------

@@ -270,7 +270,7 @@ async fn two_pass_for_finding(
         "lineEnd": finding.line_end,
         "vulnClass": finding.vuln_class,
         "description": finding.description,
-        "evidence": finding.evidence,
+        "evidence": truncate_evidence(&finding.evidence),
     });
 
     // ── Pass 1: ask the LLM which queries to run ───────────────────────────────
@@ -505,7 +505,7 @@ async fn single_pass_for_finding(
                 "lineEnd": finding.line_end,
                 "vulnClass": finding.vuln_class,
                 "description": finding.description,
-                "evidence": finding.evidence,
+                "evidence": truncate_evidence(&finding.evidence),
             }
         }],
         "instruction": "For the canonical finding, decide whether attacker-controlled input can reach the sink. Use unknown/false only with rationale.",
@@ -566,6 +566,27 @@ fn emit_fallback(events: &PipelineEventSink, finding_id: &str, reason: &str) {
             "reason": reason,
         })),
     );
+}
+
+/// Cap on the `evidence` field that flows into Trace single-pass / Pass 1
+/// prompts. Audit logs showed 14 KB+ prompts and 2 HTTP body decode failures
+/// driven by un-truncated evidence blobs. Tail-truncated with a marker so the
+/// LLM knows the content was abridged.
+const EVIDENCE_PROMPT_CAP_CHARS: usize = 1500;
+
+fn truncate_evidence(s: &str) -> String {
+    // Byte-length pre-check: a Rust `char` is at most 4 bytes, so when
+    // `s.len()` (bytes) ≤ cap there's no possible way `chars().count()` exceeds
+    // it. Skips an O(n) UTF-8 scan on the common short-evidence path.
+    if s.len() <= EVIDENCE_PROMPT_CAP_CHARS {
+        return s.to_string();
+    }
+    let total = s.chars().count();
+    if total <= EVIDENCE_PROMPT_CAP_CHARS {
+        return s.to_string();
+    }
+    let head: String = s.chars().take(EVIDENCE_PROMPT_CAP_CHARS).collect();
+    format!("{head}\n…[truncated; original {total} chars]")
 }
 
 /// LLM Pass 1 output: a list of structural query requests.
