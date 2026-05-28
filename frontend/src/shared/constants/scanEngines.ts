@@ -41,3 +41,15 @@ export function getScanEngineDisplayName(value: ScanEngineTab): string {
 export function buildScanEngineConfigRoute(value: ScanEngineTab): string {
   return `/scan-config/engines?tab=${value}`;
 }
+
+export interface ScanEngineTabMeta {
+  value: ScanEngineTab;
+  label: string;
+  requiresCppProject: boolean;
+}
+
+export const SCAN_ENGINE_TAB_META: Record<ScanEngineTab, ScanEngineTabMeta> = {
+  opengrep: { value: "opengrep", label: "Opengrep", requiresCppProject: false },
+  codeql: { value: "codeql", label: "CodeQL", requiresCppProject: true },
+  joern: { value: "joern", label: "Joern", requiresCppProject: true },
+};

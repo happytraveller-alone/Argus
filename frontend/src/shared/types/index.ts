@@ -79,6 +79,8 @@ export interface Project {
   repository_type?: RepositoryPlatform;  // 仓库平台: github, gitlab, other
   default_branch: string;
   programming_languages: string;
+  language_info: string;
+  info_status: string;
   is_active: boolean;
   created_at: string;
   updated_at: string;

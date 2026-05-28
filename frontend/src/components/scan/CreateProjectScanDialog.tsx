@@ -22,8 +22,12 @@ import {
 import { normalizeCodeqlLanguages } from "@/shared/utils/programmingLanguages";
 import type { StaticTool } from "@/components/agent/AgentModeSelector";
 import CreateProjectScanDialogContent from "./create-project-scan/Content";
-import { buildScanEngineConfigRoute } from "@/shared/constants/scanEngines";
+import {
+	buildScanEngineConfigRoute,
+	SCAN_ENGINE_TAB_META,
+} from "@/shared/constants/scanEngines";
 import { hasSelectedPrimaryStaticEngine } from "@/shared/utils/staticEngineSelection";
+import { isCppProject } from "@/shared/utils/projectLanguage";
 import {
 	paginateProjectCards,
 	resolveProjectPageAfterSearchChange,
@@ -128,6 +132,29 @@ export default function CreateProjectScanDialog({
 	const selectedProject = activeProjects.find(
 		(project) => project.id === selectedProjectId,
 	);
+
+	const cppGate = useMemo(
+		() =>
+			selectedProject
+				? isCppProject(selectedProject)
+				: { qualifies: false, reason: "pending" as const },
+		[selectedProject],
+	);
+
+	useEffect(() => {
+		if (cppGate.qualifies) return;
+		if (codeqlEnabled) {
+			setCodeqlEnabled(false);
+			setOpengrepEnabled(true);
+		}
+		if (joernEnabled) {
+			setJoernEnabled(false);
+			setOpengrepEnabled(true);
+		}
+		setConfigEngine((prev) =>
+			prev && SCAN_ENGINE_TAB_META[prev].requiresCppProject ? null : prev,
+		);
+	}, [cppGate.qualifies, codeqlEnabled, joernEnabled]);
 
 	const dialogTitle = useMemo(() => {
 		if (!lockMode) return "创建扫描";
@@ -536,6 +563,7 @@ export default function CreateProjectScanDialog({
 			activeTab={activeTab}
 			setActiveTab={setActiveTab}
 			handleIntelligentCreate={handleIntelligentCreate}
+			cppGate={cppGate}
 		/>
 	);
 }

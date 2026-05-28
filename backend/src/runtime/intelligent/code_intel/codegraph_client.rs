@@ -589,14 +589,25 @@ fn truncate_json_tail(json: &str) -> String {
 async fn detect_languages(session: &PodmanSession) -> Result<Vec<String>> {
     let cmd = format!("codegraph files -j --path {CONTAINER_SRC}");
     let files: Vec<CgFileEntry> = run_json(session, &cmd).await?;
-    let mut langs: Vec<String> = files
-        .into_iter()
-        .map(|f| f.language)
-        .filter(|l| !l.is_empty())
-        .collect();
-    langs.sort();
-    langs.dedup();
-    Ok(langs)
+    Ok(sort_languages_by_frequency(files.into_iter().map(|f| f.language)))
+}
+
+// Languages ordered by descending file count; ties broken by first occurrence.
+fn sort_languages_by_frequency(langs: impl IntoIterator<Item = String>) -> Vec<String> {
+    use std::collections::HashMap;
+    let mut counts: HashMap<String, usize> = HashMap::new();
+    let mut first_seen: HashMap<String, usize> = HashMap::new();
+    for (idx, lang) in langs.into_iter().filter(|l| !l.is_empty()).enumerate() {
+        *counts.entry(lang.clone()).or_insert(0) += 1;
+        first_seen.entry(lang).or_insert(idx);
+    }
+    let mut out: Vec<String> = counts.keys().cloned().collect();
+    out.sort_by(|a, b| {
+        counts[b]
+            .cmp(&counts[a])
+            .then_with(|| first_seen[a].cmp(&first_seen[b]))
+    });
+    out
 }
 
 fn call_edge_to_node(edge: CgCallEdge, depth: u32) -> CallNode {
@@ -1034,5 +1045,40 @@ mod tests {
             .expect("bfs");
         assert!(!result.sink_reached);
         assert!(result.truncated);
+    }
+
+    #[test]
+    fn sort_languages_by_frequency_descending() {
+        let input = vec!["cpp", "cpp", "python", "cpp", "python", "javascript"]
+            .into_iter()
+            .map(String::from);
+        assert_eq!(
+            sort_languages_by_frequency(input),
+            vec!["cpp".to_string(), "python".to_string(), "javascript".to_string()]
+        );
+    }
+
+    #[test]
+    fn sort_languages_by_frequency_tie_first_seen() {
+        let input = vec!["a", "b", "a", "b"].into_iter().map(String::from);
+        assert_eq!(
+            sort_languages_by_frequency(input),
+            vec!["a".to_string(), "b".to_string()]
+        );
+    }
+
+    #[test]
+    fn sort_languages_by_frequency_empty() {
+        let input: Vec<String> = vec![];
+        assert!(sort_languages_by_frequency(input).is_empty());
+    }
+
+    #[test]
+    fn sort_languages_by_frequency_filters_empty_strings() {
+        let input = vec!["cpp", "", "cpp", ""].into_iter().map(String::from);
+        assert_eq!(
+            sort_languages_by_frequency(input),
+            vec!["cpp".to_string()]
+        );
     }
 }

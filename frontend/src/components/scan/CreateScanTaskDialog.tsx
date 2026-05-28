@@ -69,7 +69,14 @@ import {
 } from "@/shared/utils/staticScanBatch";
 import { normalizeCodeqlLanguages } from "@/shared/utils/programmingLanguages";
 import StaticEngineConfigDialog from "@/components/scan/create-scan-task/StaticEngineConfigDialog";
-import { buildScanEngineConfigRoute } from "@/shared/constants/scanEngines";
+import {
+	buildScanEngineConfigRoute,
+	SCAN_ENGINE_TAB_META,
+} from "@/shared/constants/scanEngines";
+import {
+	CPP_GATE_COPY,
+	isCppProject,
+} from "@/shared/utils/projectLanguage";
 import {
 	hasSelectedPrimaryStaticEngine,
 	isPrimaryStaticEngine,
@@ -133,6 +140,44 @@ export default function CreateScanTaskDialog({
 	const { projects, loading, loadProjects } = useProjects();
 	const selectedProject = projects.find((p) => p.id === selectedProjectId);
 	const zipState = useZipFile(selectedProject, projects);
+
+	const cppGate = useMemo(
+		() =>
+			selectedProject
+				? isCppProject(selectedProject)
+				: { qualifies: false, reason: "pending" as const },
+		[selectedProject],
+	);
+	const cppGateBlockedReason =
+		cppGate.reason === "qualifies" ? null : CPP_GATE_COPY[cppGate.reason];
+	const disabledStaticTools = useMemo(
+		() => ({
+			opengrep: false,
+			codeql: !cppGate.qualifies,
+			joern: !cppGate.qualifies,
+		}),
+		[cppGate.qualifies],
+	);
+	const blockedStaticToolMessages = useMemo(
+		() => ({
+			codeql: cppGateBlockedReason ?? undefined,
+			joern: cppGateBlockedReason ?? undefined,
+		}),
+		[cppGateBlockedReason],
+	);
+
+	// Force-disable gated static tools when the selected project does not qualify.
+	useEffect(() => {
+		if (cppGate.qualifies) return;
+		setStaticTools((prev) => {
+			if (!prev.codeql && !prev.joern) return prev;
+			return { opengrep: true, codeql: false, joern: false };
+		});
+		// Auto-selected engine must fall back to opengrep on first render.
+		setConfigEngine((prev) =>
+			prev && SCAN_ENGINE_TAB_META[prev].requiresCppProject ? null : prev,
+		);
+	}, [cppGate.qualifies]);
 
 	const filteredProjects = useMemo(() => {
 		const visibleProjects = projects.filter((project) => isZipProject(project));
@@ -703,6 +748,8 @@ export default function CreateScanTaskDialog({
 								staticTools={staticTools}
 								onStaticToolsChange={handleStaticToolsChange}
 								onOpenStaticToolConfig={handleOpenEngineConfig}
+								disabledStaticTools={disabledStaticTools}
+								blockedStaticToolMessages={blockedStaticToolMessages}
 							/>
 						)}
 
@@ -823,7 +870,11 @@ export default function CreateScanTaskDialog({
 				scanMode="static"
 				enabled={configEngine ? staticTools[configEngine] : false}
 				creating={creating}
-				blockedReason={null}
+				blockedReason={
+					configEngine && SCAN_ENGINE_TAB_META[configEngine].requiresCppProject
+						? cppGateBlockedReason
+						: null
+				}
 				opengrepSandbox={opengrepSandbox}
 				onOpengrepSandboxChange={setOpengrepSandbox}
 				onNavigateToEngineConfig={(engine) => handleNavigateToEngineConfig(engine)}

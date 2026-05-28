@@ -15,6 +15,11 @@ import { SUPPORTED_ARCHIVE_INPUT_ACCEPT } from "@/features/projects/services/rep
 import type { StaticTool } from "@/components/agent/AgentModeSelector";
 import type { OpengrepSandboxMode } from "@/shared/api/opengrep";
 import StaticEngineConfigDialog from "@/components/scan/create-scan-task/StaticEngineConfigDialog";
+import { SCAN_ENGINE_TAB_META } from "@/shared/constants/scanEngines";
+import {
+	CPP_GATE_COPY,
+	type CppGateResult,
+} from "@/shared/utils/projectLanguage";
 
 type StaticEngineItem = {
 	key: StaticTool;
@@ -68,6 +73,7 @@ export default function CreateProjectScanDialogContent({
 	activeTab,
 	setActiveTab,
 	handleIntelligentCreate,
+	cppGate,
 }: {
 	open: boolean;
 	onOpenChange: (open: boolean) => void;
@@ -114,6 +120,7 @@ export default function CreateProjectScanDialogContent({
 	activeTab: "static" | "intelligent";
 	setActiveTab: (tab: "static" | "intelligent") => void;
 	handleIntelligentCreate: () => void | Promise<void>;
+	cppGate: CppGateResult;
 }) {
 	const staticEngineItems: StaticEngineItem[] = [
 		{
@@ -135,6 +142,12 @@ export default function CreateProjectScanDialogContent({
 			setChecked: setJoernEnabled,
 		},
 	];
+
+	const cppGateBlockedReason =
+		cppGate.reason === "qualifies" ? null : CPP_GATE_COPY[cppGate.reason];
+
+	const isEngineGated = (key: StaticTool) =>
+		SCAN_ENGINE_TAB_META[key].requiresCppProject && !cppGate.qualifies;
 
 	const canIntelligentCreate = Boolean(selectedProjectId);
 
@@ -346,35 +359,52 @@ export default function CreateProjectScanDialogContent({
 										</p>
 									</div>
 									<div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-										{staticEngineItems.map((item) => (
-											<div
-												key={item.key}
-												className="border border-border rounded p-3 flex items-center justify-between gap-3 hover:border-sky-500/30"
-											>
-												<label className="flex min-w-0 items-center gap-3 cursor-pointer">
-													<Checkbox
-														checked={item.checked}
-														onCheckedChange={(checked) => item.setChecked(Boolean(checked))}
-														disabled={creating}
-														className="data-[state=checked]:bg-sky-500 data-[state=checked]:border-sky-500"
-													/>
-													<p className="text-sm text-foreground font-semibold">
-														{item.title}
-													</p>
-												</label>
-												<Button
-													type="button"
-													variant="ghost"
-													size="icon"
-													className="h-8 w-8 shrink-0 text-muted-foreground hover:text-foreground hover:bg-sky-500/10"
-													onClick={() => setConfigEngine(item.key)}
-													disabled={creating}
-													aria-label={`配置 ${item.title} 引擎`}
+										{staticEngineItems.map((item) => {
+											const gated = isEngineGated(item.key);
+											const gateTitle = gated ? cppGateBlockedReason ?? undefined : undefined;
+											return (
+												<div
+													key={item.key}
+													aria-disabled={gated || undefined}
+													title={gateTitle}
+													className={`border border-border rounded p-3 flex items-center justify-between gap-3 ${
+														gated
+															? "opacity-50 cursor-not-allowed"
+															: "hover:border-sky-500/30"
+													}`}
 												>
-													<Settings2 className="h-4 w-4" />
-												</Button>
-											</div>
-										))}
+													<label
+														className={`flex min-w-0 items-center gap-3 ${
+															gated ? "cursor-not-allowed" : "cursor-pointer"
+														}`}
+													>
+														<Checkbox
+															checked={item.checked}
+															onCheckedChange={(checked) => {
+																if (gated) return;
+																item.setChecked(Boolean(checked));
+															}}
+															disabled={creating || gated}
+															className="data-[state=checked]:bg-sky-500 data-[state=checked]:border-sky-500"
+														/>
+														<p className="text-sm text-foreground font-semibold">
+															{item.title}
+														</p>
+													</label>
+													<Button
+														type="button"
+														variant="ghost"
+														size="icon"
+														className="h-8 w-8 shrink-0 text-muted-foreground hover:text-foreground hover:bg-sky-500/10"
+														onClick={() => setConfigEngine(item.key)}
+														disabled={creating}
+														aria-label={`配置 ${item.title} 引擎`}
+													>
+														<Settings2 className="h-4 w-4" />
+													</Button>
+												</div>
+											);
+										})}
 									</div>
 								</div>
 							</>
@@ -543,7 +573,11 @@ export default function CreateProjectScanDialogContent({
 						: false
 				}
 				creating={creating}
-				blockedReason={null}
+				blockedReason={
+					configEngine && SCAN_ENGINE_TAB_META[configEngine].requiresCppProject
+						? cppGateBlockedReason
+						: null
+				}
 				opengrepSandbox={opengrepSandbox}
 				onOpengrepSandboxChange={setOpengrepSandbox}
 				onNavigateToEngineConfig={onNavigateToEngineConfig}

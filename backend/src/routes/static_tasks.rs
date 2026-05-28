@@ -1000,6 +1000,19 @@ async fn create_static_task_for_engine(
         )));
     };
 
+    if matches!(engine, StaticEngineKind::Codeql | StaticEngineKind::Joern) {
+        if let Err(failure) = is_cpp_project(&project) {
+            return Err(ApiError::BadRequest(
+                serde_json::json!({
+                    "error": failure.error_code(),
+                    "sub_reason": failure.sub_reason(),
+                    "message": failure.user_message(),
+                })
+                .to_string(),
+            ));
+        }
+    }
+
     let mut record = task_state::StaticTaskRecord {
         id: task_id.clone(),
         engine: engine_name.to_string(),
@@ -3016,6 +3029,89 @@ fn is_supported_codeql_language(language: &str) -> bool {
         language,
         "cpp" | "javascript-typescript" | "python" | "java" | "go"
     )
+}
+
+/// Pure: returns parsed threshold for the given env-var value, or 0.5 on
+/// missing/invalid. Emits a `warn!` log on invalid (non-empty, non-parseable
+/// or out-of-range) input. Empty/None is the normal "unset" case — no log.
+fn cpp_project_threshold_from(env: Option<&str>) -> f64 {
+    let Some(raw) = env else { return 0.5; };
+    let s = raw.trim();
+    if s.is_empty() {
+        return 0.5;
+    }
+    match s.parse::<f64>() {
+        Ok(v) if (0.0..=1.0).contains(&v) => v,
+        _ => {
+            tracing::warn!(threshold = %raw, "ARGUS_CPP_PROJECT_THRESHOLD invalid; falling back to 0.5");
+            0.5
+        }
+    }
+}
+
+fn cpp_project_threshold() -> f64 {
+    cpp_project_threshold_from(std::env::var("ARGUS_CPP_PROJECT_THRESHOLD").ok().as_deref())
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum ProjectGateFailure {
+    LanguageDetectionPending,
+    NotCppProject,
+}
+
+impl ProjectGateFailure {
+    fn error_code(&self) -> &'static str {
+        "engine_not_supported_for_project_language"
+    }
+
+    fn sub_reason(&self) -> &'static str {
+        match self {
+            Self::LanguageDetectionPending => "language_detection_pending",
+            Self::NotCppProject => "not_cpp_project",
+        }
+    }
+
+    fn user_message(&self) -> &'static str {
+        match self {
+            Self::LanguageDetectionPending => "项目语言检测未完成，完成后才可使用",
+            Self::NotCppProject => "当前功能仅支持 C/C++ 项目",
+        }
+    }
+}
+
+fn is_cpp_project(project: &crate::state::StoredProject) -> Result<(), ProjectGateFailure> {
+    if project.info_status != "completed" {
+        return Err(ProjectGateFailure::LanguageDetectionPending);
+    }
+    let langs_ok = serde_json::from_str::<Vec<String>>(&project.programming_languages_json)
+        .map(|v| !v.is_empty())
+        .unwrap_or(false);
+    if !langs_ok {
+        return Err(ProjectGateFailure::LanguageDetectionPending);
+    }
+    let info: serde_json::Value = match serde_json::from_str(&project.language_info) {
+        Ok(v) => v,
+        Err(_) => return Err(ProjectGateFailure::LanguageDetectionPending),
+    };
+    let Some(languages) = info.get("languages").and_then(|v| v.as_object()) else {
+        return Err(ProjectGateFailure::LanguageDetectionPending);
+    };
+    if languages.is_empty() {
+        return Err(ProjectGateFailure::LanguageDetectionPending);
+    }
+    let prop = |key: &str| -> f64 {
+        languages
+            .get(key)
+            .and_then(|v| v.get("proportion"))
+            .and_then(|v| v.as_f64())
+            .unwrap_or(0.0)
+    };
+    let sum = prop("C") + prop("C++");
+    if sum >= cpp_project_threshold() {
+        Ok(())
+    } else {
+        Err(ProjectGateFailure::NotCppProject)
+    }
 }
 
 fn extract_codeql_task_options(payload: &Value) -> CodeqlTaskOptions {
@@ -6442,5 +6538,180 @@ rules:
         );
         assert!(error.contains("SIGPIPE signal intercepted"), "{error}");
         assert!(error.contains("Common.UnixExit(-141)"), "{error}");
+    }
+
+    mod gate_tests {
+        use crate::routes::static_tasks::{
+            cpp_project_threshold, cpp_project_threshold_from, is_cpp_project, ProjectGateFailure,
+        };
+        use crate::state::StoredProject;
+        use std::sync::{LazyLock, Mutex};
+
+        static ENV_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
+
+        struct EnvGuard {
+            previous: Option<String>,
+        }
+        impl EnvGuard {
+            fn set(value: &str) -> Self {
+                let previous = std::env::var("ARGUS_CPP_PROJECT_THRESHOLD").ok();
+                std::env::set_var("ARGUS_CPP_PROJECT_THRESHOLD", value);
+                Self { previous }
+            }
+            fn unset() -> Self {
+                let previous = std::env::var("ARGUS_CPP_PROJECT_THRESHOLD").ok();
+                std::env::remove_var("ARGUS_CPP_PROJECT_THRESHOLD");
+                Self { previous }
+            }
+        }
+        impl Drop for EnvGuard {
+            fn drop(&mut self) {
+                if let Some(v) = &self.previous {
+                    std::env::set_var("ARGUS_CPP_PROJECT_THRESHOLD", v);
+                } else {
+                    std::env::remove_var("ARGUS_CPP_PROJECT_THRESHOLD");
+                }
+            }
+        }
+
+        fn project(
+            info_status: &str,
+            programming_languages_json: &str,
+            language_info: &str,
+        ) -> StoredProject {
+            StoredProject {
+                id: "p1".into(),
+                name: "p".into(),
+                description: String::new(),
+                source_type: "upload".into(),
+                repository_type: String::new(),
+                default_branch: String::new(),
+                programming_languages_json: programming_languages_json.into(),
+                is_active: true,
+                created_at: "2026-05-28T00:00:00Z".into(),
+                updated_at: "2026-05-28T00:00:00Z".into(),
+                language_info: language_info.into(),
+                info_status: info_status.into(),
+                archive: None,
+            }
+        }
+
+        #[test]
+        fn cpp_project_threshold_from_none() {
+            assert_eq!(cpp_project_threshold_from(None), 0.5);
+        }
+        #[test]
+        fn cpp_project_threshold_from_empty() {
+            assert_eq!(cpp_project_threshold_from(Some("")), 0.5);
+        }
+        #[test]
+        fn cpp_project_threshold_from_whitespace() {
+            assert_eq!(cpp_project_threshold_from(Some("   ")), 0.5);
+        }
+        #[test]
+        fn cpp_project_threshold_from_valid_07() {
+            assert_eq!(cpp_project_threshold_from(Some("0.7")), 0.7);
+        }
+        #[test]
+        fn cpp_project_threshold_from_zero() {
+            assert_eq!(cpp_project_threshold_from(Some("0.0")), 0.0);
+        }
+        #[test]
+        fn cpp_project_threshold_from_one() {
+            assert_eq!(cpp_project_threshold_from(Some("1.0")), 1.0);
+        }
+        #[test]
+        fn cpp_project_threshold_from_garbage() {
+            assert_eq!(cpp_project_threshold_from(Some("abc")), 0.5);
+        }
+        #[test]
+        fn cpp_project_threshold_from_negative() {
+            assert_eq!(cpp_project_threshold_from(Some("-0.1")), 0.5);
+        }
+        #[test]
+        fn cpp_project_threshold_from_too_large() {
+            assert_eq!(cpp_project_threshold_from(Some("1.5")), 0.5);
+        }
+        #[test]
+        fn cpp_project_threshold_env_unset_default() {
+            let _lock = ENV_LOCK.lock().unwrap();
+            let _g = EnvGuard::unset();
+            assert_eq!(cpp_project_threshold(), 0.5);
+        }
+
+        #[test]
+        fn is_cpp_project_pending_status() {
+            let _lock = ENV_LOCK.lock().unwrap();
+            let _g = EnvGuard::unset();
+            let p = project("pending", "[\"C\"]", "{\"languages\":{\"C\":{\"proportion\":0.9}}}");
+            assert_eq!(
+                is_cpp_project(&p),
+                Err(ProjectGateFailure::LanguageDetectionPending)
+            );
+        }
+        #[test]
+        fn is_cpp_project_empty_programming_languages() {
+            let _lock = ENV_LOCK.lock().unwrap();
+            let _g = EnvGuard::unset();
+            let p = project("completed", "[]", "{\"languages\":{\"C\":{\"proportion\":0.9}}}");
+            assert_eq!(
+                is_cpp_project(&p),
+                Err(ProjectGateFailure::LanguageDetectionPending)
+            );
+        }
+        #[test]
+        fn is_cpp_project_empty_language_info_object() {
+            let _lock = ENV_LOCK.lock().unwrap();
+            let _g = EnvGuard::unset();
+            let p = project("completed", "[\"C\"]", "{}");
+            assert_eq!(
+                is_cpp_project(&p),
+                Err(ProjectGateFailure::LanguageDetectionPending)
+            );
+        }
+        #[test]
+        fn is_cpp_project_c_majority_passes_default_threshold() {
+            let _lock = ENV_LOCK.lock().unwrap();
+            let _g = EnvGuard::unset();
+            let p = project(
+                "completed",
+                "[\"C\",\"Python\"]",
+                "{\"languages\":{\"C\":{\"proportion\":0.6},\"Python\":{\"proportion\":0.4}}}",
+            );
+            assert_eq!(is_cpp_project(&p), Ok(()));
+        }
+        #[test]
+        fn is_cpp_project_below_threshold_fails() {
+            let _lock = ENV_LOCK.lock().unwrap();
+            let _g = EnvGuard::unset();
+            let p = project(
+                "completed",
+                "[\"Python\",\"C\",\"C++\"]",
+                "{\"languages\":{\"C\":{\"proportion\":0.2},\"C++\":{\"proportion\":0.1},\"Python\":{\"proportion\":0.7}}}",
+            );
+            assert_eq!(is_cpp_project(&p), Err(ProjectGateFailure::NotCppProject));
+        }
+        #[test]
+        fn is_cpp_project_c_plus_cpp_sum_passes() {
+            let _lock = ENV_LOCK.lock().unwrap();
+            let _g = EnvGuard::unset();
+            let p = project(
+                "completed",
+                "[\"C\",\"C++\",\"Rust\"]",
+                "{\"languages\":{\"C\":{\"proportion\":0.3},\"C++\":{\"proportion\":0.3},\"Rust\":{\"proportion\":0.4}}}",
+            );
+            assert_eq!(is_cpp_project(&p), Ok(()));
+        }
+        #[test]
+        fn is_cpp_project_env_threshold_07_fails_at_06() {
+            let _lock = ENV_LOCK.lock().unwrap();
+            let _g = EnvGuard::set("0.7");
+            let p = project(
+                "completed",
+                "[\"C\"]",
+                "{\"languages\":{\"C\":{\"proportion\":0.6},\"C++\":{\"proportion\":0.0}}}",
+            );
+            assert_eq!(is_cpp_project(&p), Err(ProjectGateFailure::NotCppProject));
+        }
     }
 }
