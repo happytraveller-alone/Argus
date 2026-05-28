@@ -112,7 +112,7 @@ fn deterministic_dismissal_for(case: &FixtureCase) -> Option<DismissalEvidence> 
     let path_verdict = match cat {
         PathCategory::Test => Some((DismissalCategory::Test, pat)),
         PathCategory::Vendor => Some((DismissalCategory::Vendor, pat)),
-        PathCategory::RealCode => None,
+        PathCategory::Blacklisted(_) | PathCategory::RealCode => None,
     };
 
     // 2. SoT — scan the fixture's expected_call_chain (a stand-in for what

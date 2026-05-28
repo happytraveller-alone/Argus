@@ -32,6 +32,7 @@ RUN set -eux; \
 
 COPY backend/Cargo.toml backend/Cargo.lock ./
 COPY backend/src ./src
+COPY backend/assets/cwe_catalog ./assets/cwe_catalog
 
 RUN CARGO_HTTP_TIMEOUT="${BACKEND_CARGO_HTTP_TIMEOUT_SECONDS}" \
   CARGO_NET_RETRY="${BACKEND_CARGO_NET_RETRY}" \

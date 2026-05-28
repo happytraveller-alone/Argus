@@ -92,6 +92,7 @@ RUN set -eux; \
 COPY backend/Cargo.toml backend/Cargo.lock ./
 COPY backend/src ./src
 COPY backend/tests ./tests
+COPY backend/assets/cwe_catalog ./assets/cwe_catalog
 
 RUN --mount=type=cache,id=argus-backend-cargo-registry,target=/usr/local/cargo/registry,sharing=locked \
   --mount=type=cache,id=argus-backend-cargo-git,target=/usr/local/cargo/git,sharing=locked \

@@ -203,7 +203,7 @@ async fn run_pipeline(scope: &str) -> IntelligentTaskRecord {
 
     let manager = Arc::clone(&state.intelligent_task_manager);
     let submitted = manager
-        .submit(state.clone(), project_id.clone())
+        .submit(state.clone(), project_id.clone(), None)
         .await
         .expect("submit should succeed");
 
