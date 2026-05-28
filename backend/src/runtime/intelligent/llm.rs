@@ -405,19 +405,24 @@ impl HttpIntelligentLlmInvoker {
             // the body before yielding its opaque "error decoding response
             // body" message — the actual root cause (HTML error page, empty
             // body, partial chunk, content-type mismatch) becomes invisible.
+            //
+            // Body-stream failures (chunk read timeout, premature EOF, h2
+            // RST_STREAM, brotli/gzip decode error) are transient: the gateway
+            // accepted the request and started streaming, then the connection
+            // dropped. Treat them like 429/5xx and retry instead of failing
+            // the whole stage on the first hiccup.
             let bytes = match response.bytes().await {
                 Ok(b) => b,
                 Err(e) => {
-                    return AttemptOutcome {
-                        content: String::new(),
-                        raw_body_preview: None,
-                        http_status: last_status,
-                        attempts,
-                        error: Some(redact_for_logging(
-                            &format!("HTTP body read failed: {e}"),
-                            config,
-                        )),
-                    };
+                    last_err = format!("HTTP body read failed: {e}");
+                    tracing::warn!(
+                        attempt,
+                        error = %e,
+                        "invoke_openai: body read failed; retrying"
+                    );
+                    let wait = compute_retry_wait(attempt, None);
+                    tokio::time::sleep(wait).await;
+                    continue;
                 }
             };
 
@@ -499,7 +504,6 @@ impl HttpIntelligentLlmInvoker {
         let mut last_err = String::new();
         let mut last_status: Option<u16> = None;
         let mut attempts: u32 = 0;
-        let mut response_opt: Option<reqwest::Response> = None;
         for attempt in 0..MAX_HTTP_ATTEMPTS {
             attempts = attempt + 1;
             let response = match self
@@ -544,46 +548,26 @@ impl HttpIntelligentLlmInvoker {
                 continue;
             }
 
-            response_opt = Some(response);
-            break;
-        }
+            // Body-stream failures (chunk read timeout, premature EOF, h2
+            // RST_STREAM, brotli/gzip decode error) are transient — retry
+            // rather than failing the whole stage on the first hiccup.
+            let bytes = match response.bytes().await {
+                Ok(b) => b,
+                Err(e) => {
+                    last_err = format!("HTTP body read failed: {e}");
+                    tracing::warn!(
+                        attempt,
+                        error = %e,
+                        "invoke_anthropic: body read failed; retrying"
+                    );
+                    let wait = compute_retry_wait(attempt, None);
+                    tokio::time::sleep(wait).await;
+                    continue;
+                }
+            };
+            let raw_preview = build_body_preview(&bytes);
 
-        let final_response = match response_opt {
-            Some(r) => r,
-            None => {
-                return AttemptOutcome {
-                    content: String::new(),
-                    raw_body_preview: None,
-                    http_status: last_status,
-                    attempts,
-                    error: Some(if last_err.is_empty() {
-                        "exhausted HTTP retries".to_string()
-                    } else {
-                        last_err
-                    }),
-                };
-            }
-        };
-
-        let bytes = match final_response.bytes().await {
-            Ok(b) => b,
-            Err(e) => {
-                return AttemptOutcome {
-                    content: String::new(),
-                    raw_body_preview: None,
-                    http_status: last_status,
-                    attempts,
-                    error: Some(redact_for_logging(
-                        &format!("HTTP body read failed: {e}"),
-                        config,
-                    )),
-                };
-            }
-        };
-        let raw_preview = build_body_preview(&bytes);
-
-        if let Some(status) = last_status {
-            if !(200..300).contains(&status) {
+            if !status.is_success() {
                 return AttemptOutcome {
                     content: String::new(),
                     raw_body_preview: Some(raw_preview),
@@ -592,85 +576,97 @@ impl HttpIntelligentLlmInvoker {
                     error: Some(format!("HTTP {status}")),
                 };
             }
-        }
 
-        let json: serde_json::Value = match serde_json::from_slice(&bytes) {
-            Ok(v) => v,
-            Err(e) => {
-                return AttemptOutcome {
-                    content: String::new(),
-                    raw_body_preview: Some(raw_preview),
-                    http_status: last_status,
-                    attempts,
-                    error: Some(redact_for_logging(
-                        &format!("error decoding response body: {e}"),
-                        config,
-                    )),
-                };
-            }
-        };
+            let json: serde_json::Value = match serde_json::from_slice(&bytes) {
+                Ok(v) => v,
+                Err(e) => {
+                    return AttemptOutcome {
+                        content: String::new(),
+                        raw_body_preview: Some(raw_preview),
+                        http_status: last_status,
+                        attempts,
+                        error: Some(redact_for_logging(
+                            &format!("error decoding response body: {e}"),
+                            config,
+                        )),
+                    };
+                }
+            };
 
-        let content_array = json.get("content").and_then(|c| c.as_array());
+            let content_array = json.get("content").and_then(|c| c.as_array());
 
-        // Primary: extract first non-empty text block
-        let text_content = content_array
-            .and_then(|arr| {
-                arr.iter()
-                    .filter(|item| item.get("type").and_then(|t| t.as_str()) == Some("text"))
-                    .find_map(|item| {
-                        let t = item.get("text").and_then(|t| t.as_str()).unwrap_or("");
-                        if t.trim().is_empty() {
-                            None
-                        } else {
-                            Some(t.to_string())
-                        }
-                    })
-            })
-            .unwrap_or_default();
-
-        // Fallback: if proxy injected tools and model put output in tool_use input
-        let content_raw = if text_content.is_empty() {
-            let tool_content = content_array
+            // Primary: extract first non-empty text block
+            let text_content = content_array
                 .and_then(|arr| {
                     arr.iter()
-                        .filter(|item| {
-                            item.get("type").and_then(|t| t.as_str()) == Some("tool_use")
-                        })
+                        .filter(|item| item.get("type").and_then(|t| t.as_str()) == Some("text"))
                         .find_map(|item| {
-                            let input = item.get("input")?;
-                            if input.is_object() || input.is_array() {
-                                Some(serde_json::to_string(input).unwrap_or_default())
+                            let t = item.get("text").and_then(|t| t.as_str()).unwrap_or("");
+                            if t.trim().is_empty() {
+                                None
                             } else {
-                                input.as_str().map(|s| s.to_string())
+                                Some(t.to_string())
                             }
                         })
                 })
                 .unwrap_or_default();
-            if tool_content.is_empty() {
-                tracing::warn!(
-                    stage = "anthropic_empty_response",
-                    content_array_len = content_array.map(|a| a.len()),
-                    stop_reason = ?json.get("stop_reason"),
-                    "invoke_anthropic: no usable content in response"
-                );
-            }
-            tool_content
-        } else {
-            text_content
-        };
 
-        // Anthropic prefill mode: we sent assistant `{` as the seed turn; the
-        // model continues from there and typically does NOT echo the brace.
-        // Restore it here so downstream `parse_json` sees a complete object.
-        // Idempotent for the (1) already-object and (2) double-encoded shapes.
-        let content = stitch_prefill(content_raw);
+            // Fallback: if proxy injected tools and model put output in tool_use input
+            let content_raw = if text_content.is_empty() {
+                let tool_content = content_array
+                    .and_then(|arr| {
+                        arr.iter()
+                            .filter(|item| {
+                                item.get("type").and_then(|t| t.as_str()) == Some("tool_use")
+                            })
+                            .find_map(|item| {
+                                let input = item.get("input")?;
+                                if input.is_object() || input.is_array() {
+                                    Some(serde_json::to_string(input).unwrap_or_default())
+                                } else {
+                                    input.as_str().map(|s| s.to_string())
+                                }
+                            })
+                    })
+                    .unwrap_or_default();
+                if tool_content.is_empty() {
+                    tracing::warn!(
+                        stage = "anthropic_empty_response",
+                        content_array_len = content_array.map(|a| a.len()),
+                        stop_reason = ?json.get("stop_reason"),
+                        "invoke_anthropic: no usable content in response"
+                    );
+                }
+                tool_content
+            } else {
+                text_content
+            };
+
+            // Anthropic prefill mode: we sent assistant `{` as the seed turn; the
+            // model continues from there and typically does NOT echo the brace.
+            // Restore it here so downstream `parse_json` sees a complete object.
+            // Idempotent for the (1) already-object and (2) double-encoded shapes.
+            let content = stitch_prefill(content_raw);
+
+            return AttemptOutcome {
+                content,
+                raw_body_preview: Some(raw_preview),
+                http_status: last_status,
+                attempts,
+                error: None,
+            };
+        }
 
         AttemptOutcome {
-            content,
-            raw_body_preview: Some(raw_preview),
+            content: String::new(),
+            raw_body_preview: None,
             http_status: last_status,
             attempts,
-            error: None,
+            error: Some(if last_err.is_empty() {
+                "exhausted HTTP retries".to_string()
+            } else {
+                last_err
+            }),
         }
     }
 }

@@ -13,13 +13,24 @@ export function buildProjectDetailAgentFindingSnapshot(
 	finding: IntelligentTaskFinding,
 	record: IntelligentTaskRecord,
 ): AgentFinding {
-	const evidence = String(finding.evidenceProse ?? finding.evidence ?? "").trim();
+	// Root-cause body precedence:
+	//   1. evidenceProse — clean prose written by the hunt LLM (no path:line tokens).
+	//   2. summary       — the hunt prompt's `description` field, also clean prose.
+	//   3. evidence      — last-resort fallback. Backend's `enrich_evidence()` prepends
+	//                      "{file}:{line_start}-{line_end} [{vuln_class}]" which the
+	//                      viewModel's stripPathSentences erases sentence-by-sentence,
+	//                      so this path tends to render blank — preferred over silently
+	//                      losing data, but #1/#2 should usually win.
+	const evidenceProse = String(finding.evidenceProse ?? "").trim();
+	const summary = String(finding.summary ?? "").trim();
+	const evidenceFallback = String(finding.evidence ?? "").trim();
+	const rootCauseBody = evidenceProse || summary || evidenceFallback;
 	const traceSummary = String(finding.traceSummary ?? "").trim();
 	const validationStatus = String(finding.validationStatus ?? "").trim();
 	const isFalsePositive = finding.userVerdict === "false_positive";
 
 	const sections: string[] = [];
-	if (evidence) sections.push(`### 根因解释\n${evidence}`);
+	if (rootCauseBody) sections.push(`### 根因解释\n${rootCauseBody}`);
 	const verificationParts: string[] = [];
 	if (traceSummary) verificationParts.push(traceSummary);
 	if (validationStatus) verificationParts.push(`验证状态：${validationStatus}`);
@@ -39,19 +50,20 @@ export function buildProjectDetailAgentFindingSnapshot(
 		severity: finding.severity ?? null,
 		title: finding.summary ?? null,
 		display_title: finding.summary ?? null,
-		description: evidence || null,
-		description_markdown: descriptionMarkdown || evidence || null,
+		description: rootCauseBody || null,
+		description_markdown: descriptionMarkdown || rootCauseBody || null,
 		file_path: finding.file ?? null,
 		line_start: finding.lineStart ?? null,
 		line_end: finding.lineEnd ?? null,
 		code_snippet: null,
 		code_context: null,
+		cwe_id: finding.cweId ?? null,
 		confidence: finding.confidence ?? null,
 		ai_confidence: finding.confidence ?? null,
 		verdict: finding.userVerdict ?? null,
 		status: isFalsePositive ? "false_positive" : validationStatus || null,
 		authenticity: isFalsePositive ? "false_positive" : null,
-		verification_evidence: traceSummary || evidence || null,
+		verification_evidence: traceSummary || rootCauseBody || null,
 		projectId: record.projectId,
 		projectName: record.projectName ?? null,
 		llmModel: record.llmModel,

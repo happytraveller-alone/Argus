@@ -282,13 +282,20 @@ function buildAgentFindingSnapshot(
 	finding: IntelligentTaskFinding,
 	record: IntelligentTaskRecord,
 ): AgentFinding {
-	const evidence = String(finding.evidenceProse ?? finding.evidence ?? "").trim();
+	// Mirror intelligentFindingSnapshot.ts root-cause precedence:
+	// evidenceProse → summary → enriched-evidence fallback. Sidesteps
+	// stripPathSentences erasing the only line of text when the LLM omits
+	// evidence_prose and the backend falls back to "file:line [class] …".
+	const evidenceProse = String(finding.evidenceProse ?? "").trim();
+	const summary = String(finding.summary ?? "").trim();
+	const evidenceFallback = String(finding.evidence ?? "").trim();
+	const rootCauseBody = evidenceProse || summary || evidenceFallback;
 	const traceSummary = String(finding.traceSummary ?? "").trim();
 	const validationStatus = String(finding.validationStatus ?? "").trim();
 	const isFalsePositive = finding.userVerdict === "false_positive";
 
 	const sections: string[] = [];
-	if (evidence) sections.push(`### 根因解释\n${evidence}`);
+	if (rootCauseBody) sections.push(`### 根因解释\n${rootCauseBody}`);
 	const verificationParts: string[] = [];
 	if (traceSummary) verificationParts.push(traceSummary);
 	if (validationStatus) verificationParts.push(`验证状态：${validationStatus}`);
@@ -307,19 +314,20 @@ function buildAgentFindingSnapshot(
 		severity: finding.severity ?? null,
 		title: finding.summary ?? null,
 		display_title: finding.summary ?? null,
-		description: evidence || null,
-		description_markdown: descriptionMarkdown || evidence || null,
+		description: rootCauseBody || null,
+		description_markdown: descriptionMarkdown || rootCauseBody || null,
 		file_path: finding.file ?? null,
 		line_start: finding.lineStart ?? null,
 		line_end: finding.lineEnd ?? null,
 		code_snippet: null,
 		code_context: null,
+		cwe_id: finding.cweId ?? null,
 		confidence: finding.confidence ?? null,
 		ai_confidence: finding.confidence ?? null,
 		verdict: finding.userVerdict ?? null,
 		status: isFalsePositive ? "false_positive" : (validationStatus || null),
 		authenticity: isFalsePositive ? "false_positive" : null,
-		verification_evidence: traceSummary || evidence || null,
+		verification_evidence: traceSummary || rootCauseBody || null,
 		projectId: record.projectId,
 		projectName: record.projectName ?? null,
 		llmModel: record.llmModel,

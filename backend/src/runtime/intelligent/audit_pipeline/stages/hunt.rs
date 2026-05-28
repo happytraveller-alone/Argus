@@ -41,10 +41,11 @@ use super::super::{
     context::{AuditRunContext, AuditStage, PipelineEventSink},
     json::invoke_json,
     prompts::{HUNT_PASS1_PROMPT, HUNT_PASS2_PROMPT},
-    repo::source_snippets,
+    repo::{source_snippets, ProjectArchive},
     stage_prompt,
     types::{
-        AuditFinding, ConfidenceSource, DismissalCategory, DismissalEvidence, HuntOutput, HuntTask,
+        AuditFinding, ConfidenceSource, DismissalCategory, DismissalEvidence, EvidenceCodeSnippet,
+        HuntOutput, HuntTask,
     },
 };
 
@@ -134,6 +135,18 @@ pub async fn run(
                 // Phase 0 path-pattern path_classifier verdict (single-target only).
                 let path_verdict = path_classify_for_task(&task.target_files);
                 normalize_finding(finding, &task.target_files, path_verdict.as_ref());
+
+                // When the hunt LLM omits `evidence_code_snippets` (frequent in
+                // practice, especially when it stuffs everything into
+                // `evidence_prose`), synthesize ONE snippet from the archive at
+                // the finding's anchor so the frontend's 关联代码 panel always
+                // renders the actual source — path + line range + code — instead
+                // of an empty section.
+                if finding.evidence_code_snippets.is_empty() {
+                    if let Some(snippet) = synthesize_evidence_snippet(&ctx.archive, finding) {
+                        finding.evidence_code_snippets.push(snippet);
+                    }
+                }
 
                 // Phase 1 two-pass dismissal enrichment. Best-effort: errors
                 // here are reported as fallback events but never bubble — the
@@ -281,6 +294,62 @@ fn normalize_finding(
 // ---------------------------------------------------------------------------
 // Two-pass dismissal enrichment (Plan Phase 1 / AC1.C)
 // ---------------------------------------------------------------------------
+
+/// Hard cap on bytes pulled from the archive for snippet synthesis. Keeps a
+/// rogue line_end far past EOF from streaming a multi-MB file into the event log.
+const SNIPPET_READ_CAP_BYTES: usize = 256 * 1024;
+
+/// Padding lines added around the LLM-anchored range so the rendered snippet
+/// shows enough surrounding context for a reviewer to understand the flow.
+const SNIPPET_CONTEXT_PADDING: u32 = 3;
+
+/// Read `finding.file` from the archive and slice the lines that the finding
+/// anchors. Returns `None` when the file is unreadable (binary, missing,
+/// outside archive) or the line range is empty after clamping — caller must
+/// be ready to leave `evidence_code_snippets` empty in that case.
+fn synthesize_evidence_snippet(
+    archive: &ProjectArchive,
+    finding: &AuditFinding,
+) -> Option<EvidenceCodeSnippet> {
+    let path = finding.file.trim();
+    if path.is_empty() {
+        return None;
+    }
+    let source = archive
+        .read_text_file(path, SNIPPET_READ_CAP_BYTES)
+        .ok()
+        .flatten()?;
+    let total_lines = source.lines().count() as u32;
+    if total_lines == 0 {
+        return None;
+    }
+    let anchor_start = finding.line_start.max(1);
+    let anchor_end = finding.line_end.max(anchor_start);
+    let snippet_start = anchor_start.saturating_sub(SNIPPET_CONTEXT_PADDING).max(1);
+    let snippet_end = anchor_end
+        .saturating_add(SNIPPET_CONTEXT_PADDING)
+        .min(total_lines);
+    if snippet_end < snippet_start {
+        return None;
+    }
+    let lines: Vec<&str> = source
+        .lines()
+        .skip((snippet_start - 1) as usize)
+        .take((snippet_end - snippet_start + 1) as usize)
+        .collect();
+    if lines.is_empty() {
+        return None;
+    }
+    let code = lines.join("\n");
+    let language = map_extension_to_language(path);
+    Some(EvidenceCodeSnippet {
+        file: Some(path.to_string()),
+        line_start: Some(snippet_start),
+        line_end: Some(snippet_end),
+        code,
+        language,
+    })
+}
 
 /// Resolved language for a finding's file extension. Mirrors trace.rs map.
 fn map_extension_to_language(file: &str) -> Option<String> {
