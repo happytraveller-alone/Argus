@@ -312,6 +312,7 @@ export default function StaticAnalysis() {
           rows={unifiedRows}
           state={tableState}
           showEngineColumn={!isSingleEngineDetail}
+          projectName={headerSummary.projectName}
           onStateChange={setTableState}
           updatingKey={updatingKey}
           onToggleStatus={handleToggleStatus}

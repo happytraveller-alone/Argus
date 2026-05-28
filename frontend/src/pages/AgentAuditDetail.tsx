@@ -32,6 +32,7 @@ import {
 	buildFindingDetailLocationState,
 	buildFindingDetailPath,
 } from "@/shared/utils/findingRoute";
+import { buildCanonicalDisplay } from "@/pages/finding-detail/viewModel";
 
 const TERMINAL_STATUSES: Set<IntelligentTaskStatus> = new Set([
 	"completed",
@@ -318,6 +319,10 @@ function buildAgentFindingSnapshot(
 		status: isFalsePositive ? "false_positive" : (validationStatus || null),
 		authenticity: isFalsePositive ? "false_positive" : null,
 		verification_evidence: traceSummary || evidence || null,
+		projectId: record.projectId,
+		projectName: record.projectName ?? null,
+		llmModel: record.llmModel,
+		projectRoot: record.projectRoot ?? null,
 	};
 }
 
@@ -402,6 +407,54 @@ function buildFindingColumns(
 				1,
 		},
 		{
+			id: "name",
+			accessorFn: (row) => row.summary,
+			header: "名称",
+			enableSorting: false,
+			enableColumnFilter: false,
+			meta: { label: "名称", minWidth: 180, plainHeader: true },
+			cell: ({ row }) => {
+				const canonical = buildCanonicalDisplay({
+					rawFinding: row.original,
+					projectName: record?.projectName,
+					auditType: "智能审计",
+					engineLabel: record?.llmModel ?? "未知模型",
+					scopeType: row.original.scopeType,
+					module: row.original.module,
+					projectRoot: record?.projectRoot,
+				});
+				return (
+					<span className="font-mono text-[11px]">
+						{canonical.name}
+					</span>
+				);
+			},
+		},
+		{
+			id: "typeLabel",
+			accessorFn: (row) => row.vulnClass,
+			header: "漏洞类型",
+			enableSorting: false,
+			enableColumnFilter: false,
+			meta: { label: "漏洞类型", minWidth: 140, plainHeader: true },
+			cell: ({ row }) => {
+				const canonical = buildCanonicalDisplay({
+					rawFinding: row.original,
+					projectName: record?.projectName,
+					auditType: "智能审计",
+					engineLabel: record?.llmModel ?? "未知模型",
+					scopeType: row.original.scopeType,
+					module: row.original.module,
+					projectRoot: record?.projectRoot,
+				});
+				return (
+					<span className="font-mono text-[11px] text-muted-foreground">
+						{canonical.typeLabel}
+					</span>
+				);
+			},
+		},
+		{
 			id: "severity",
 			accessorFn: (row) => row.severity,
 			header: "危害",
@@ -430,7 +483,16 @@ function buildFindingColumns(
 			enableColumnFilter: false,
 			meta: { label: "位置", minWidth: 260, plainHeader: true },
 			cell: ({ row }) => {
-				const loc = formatLocation(row.original);
+				const canonical = buildCanonicalDisplay({
+					rawFinding: row.original,
+					projectName: record?.projectName,
+					auditType: "智能审计",
+					engineLabel: record?.llmModel ?? "未知模型",
+					scopeType: row.original.scopeType,
+					module: row.original.module,
+					projectRoot: record?.projectRoot,
+				});
+				const loc = canonical.locationLabel;
 				return (
 					<button
 						type="button"

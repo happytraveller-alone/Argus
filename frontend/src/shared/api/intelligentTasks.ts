@@ -37,6 +37,11 @@ export interface IntelligentTaskFinding {
 	coverageMatrix?: Record<string, unknown> | null;
 	/** User verdict: null=pending, "verified"=true positive, "false_positive"=false positive */
 	userVerdict?: string | null;
+	/** Phase D: camelCase fields from backend serde output */
+	cweId?: string | null;
+	scopeType?: "file" | "module";
+	module?: string | null;
+	resolvedFilePath?: string | null;
 }
 
 export interface IntelligentTaskEventLogEntry {
@@ -50,6 +55,7 @@ export interface IntelligentTaskRecord {
 	taskId: string;
 	projectId: string;
 	projectName?: string | null;
+	projectRoot?: string | null;
 	status: IntelligentTaskStatus;
 	createdAt: string;
 	startedAt?: string;

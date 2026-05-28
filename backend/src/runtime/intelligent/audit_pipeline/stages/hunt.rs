@@ -93,7 +93,20 @@ pub async fn run(
                 "architectureSummary": "",
                 "snippets": snippets,
                 "requiredOutput": {
-                    "findings": [{"findingId":"string","file":"string","lineStart":1,"lineEnd":1,"vulnClass":"string","severity":"low|medium|high|critical","description":"string","evidence":"string","confidence":0.0}]
+                    "findings": [{
+                        "findingId":"string",
+                        "file":"string (project-root-relative path when scopeType=file)",
+                        "cweId":"string (format 'CWE-{digits}'; omit field entirely if cannot determine)",
+                        "scopeType":"string ('file' or 'module')",
+                        "module":"string (required when scopeType='module')",
+                        "lineStart":1,
+                        "lineEnd":1,
+                        "vulnClass":"string",
+                        "severity":"low|medium|high|critical",
+                        "description":"string",
+                        "evidence":"string",
+                        "confidence":0.0
+                    }]
                 }
             });
             let mut prompt = stage_prompt(stage, &payload);

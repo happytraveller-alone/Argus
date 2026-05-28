@@ -46,7 +46,10 @@ Output format — JSON object with this exact schema:
   "findings": [
     {
       "findingId": "string (unique, e.g. HUNT-001)",
-      "file": "string (relative path)",
+      "file": "string (project-root-relative path when scopeType=file)",
+      "cweId": "string (format 'CWE-{digits}'; omit field entirely if cannot determine)",
+      "scopeType": "string ('file' or 'module')",
+      "module": "string (required when scopeType='module')",
       "lineStart": number,
       "lineEnd": number,
       "vulnClass": "string (e.g. sql-injection, path-traversal, rce)",
@@ -59,6 +62,8 @@ Output format — JSON object with this exact schema:
     }
   ]
 }
+
+Each finding MUST include cweId (format 'CWE-{digits}') and scopeType ('file' or 'module'); when scopeType='module', module must be non-empty. If you cannot determine the CWE confidently, OMIT the cweId field — DO NOT invent a sentinel string. The validator will mark it as 'CWE 未识别' downstream.
 
 Constraints: stay inside the assigned attack_class and target_files; zero findings is valid and preferred over false positives; output only JSON."#;
 

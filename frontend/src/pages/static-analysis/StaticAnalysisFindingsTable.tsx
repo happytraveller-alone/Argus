@@ -12,6 +12,7 @@ import {
 	appendReturnTo,
 	buildFindingDetailPath,
 } from "@/shared/utils/findingRoute";
+import { buildCanonicalDisplay } from "@/pages/finding-detail/viewModel";
 import type { FindingStatus, UnifiedFindingRow } from "./viewModel";
 import {
 	getStaticAnalysisConfidenceBadgeClass,
@@ -53,6 +54,7 @@ function getEngineBadgeClass(engine: UnifiedFindingRow["engine"]) {
 export function getColumns(input: {
 	currentRoute: string;
 	showEngineColumn?: boolean;
+	projectName?: string | null;
 	updatingKey: string | null;
 	onToggleStatus: (row: UnifiedFindingRow, target: FindingStatus) => void;
 }): AppColumnDef<UnifiedFindingRow, unknown>[] {
@@ -101,13 +103,70 @@ export function getColumns(input: {
 			),
 		},
 		{
-			id: "rule",
+			id: "name",
 			accessorFn: (row) => row.rule,
-			header: "命中规则",
+			header: "名称",
 			enableSorting: false,
 			enableHiding: false,
 			meta: {
-				label: "命中规则",
+				label: "名称",
+				align: "left",
+				minWidth: 180,
+				maxWidth: 300,
+			},
+			cell: ({ row }) => {
+				const engineLabel = getEngineLabel(row.original.engine);
+				const canonical = buildCanonicalDisplay({
+					rawFinding: { file_path: row.original.filePath, resolved_file_path: row.original.resolvedFilePath, line_start: row.original.line, cwe: row.original.cwe } as unknown as Parameters<typeof buildCanonicalDisplay>[0]["rawFinding"],
+					projectName: input.projectName,
+					auditType: "静态审计",
+					engineLabel,
+				});
+				return (
+					<span
+						className="block max-w-full truncate text-sm"
+						title={canonical.name}
+					>
+						{canonical.name}
+					</span>
+				);
+			},
+		},
+		{
+			id: "typeLabel",
+			accessorFn: (row) => row.rule,
+			header: "漏洞类型",
+			enableSorting: false,
+			enableHiding: false,
+			meta: {
+				label: "漏洞类型",
+				align: "left",
+				minWidth: 140,
+				maxWidth: 220,
+			},
+			cell: ({ row }) => {
+				const engineLabel = getEngineLabel(row.original.engine);
+				const canonical = buildCanonicalDisplay({
+					rawFinding: { file_path: row.original.filePath, resolved_file_path: row.original.resolvedFilePath, line_start: row.original.line, cwe: row.original.cwe } as unknown as Parameters<typeof buildCanonicalDisplay>[0]["rawFinding"],
+					projectName: input.projectName,
+					auditType: "静态审计",
+					engineLabel,
+				});
+				return (
+					<span className="text-sm text-muted-foreground">
+						{canonical.typeLabel}
+					</span>
+				);
+			},
+		},
+		{
+			id: "rule",
+			accessorFn: (row) => row.rule,
+			header: "规则",
+			enableSorting: false,
+			enableHiding: true,
+			meta: {
+				label: "规则",
 				align: "left",
 				width: 220,
 				minWidth: 180,
@@ -116,10 +175,10 @@ export function getColumns(input: {
 			},
 			cell: ({ row }) => (
 				<span
-					className="block max-w-full truncate text-sm"
-					title={row.original.rule || undefined}
+					className="block max-w-full truncate text-sm font-mono"
+					title={row.original.rule ?? undefined}
 				>
-					{row.original.rule || "-"}
+					{row.original.rule}
 				</span>
 			),
 		},
@@ -143,12 +202,20 @@ export function getColumns(input: {
 				align: "left",
 				minWidth: 350,
 			},
-			cell: ({ row }) => (
-				<span className="font-mono text-sm break-all">
-					{row.original.filePath}
-					{row.original.line ? `:${row.original.line}` : ""}
-				</span>
-			),
+			cell: ({ row }) => {
+				const engineLabel = getEngineLabel(row.original.engine);
+				const canonical = buildCanonicalDisplay({
+					rawFinding: { file_path: row.original.filePath, resolved_file_path: row.original.resolvedFilePath, line_start: row.original.line, cwe: row.original.cwe } as unknown as Parameters<typeof buildCanonicalDisplay>[0]["rawFinding"],
+					projectName: input.projectName,
+					auditType: "静态审计",
+					engineLabel,
+				});
+				return (
+					<span className="font-mono text-sm break-all">
+						{canonical.locationLabel}
+					</span>
+				);
+			},
 		},
 		{
 			id: "severity",
@@ -365,6 +432,7 @@ export default function StaticAnalysisFindingsTable({
 	rows,
 	state,
 	showEngineColumn = true,
+	projectName,
 	onStateChange,
 	updatingKey,
 	onToggleStatus,
@@ -374,6 +442,7 @@ export default function StaticAnalysisFindingsTable({
 	rows: UnifiedFindingRow[];
 	state: DataTableQueryState;
 	showEngineColumn?: boolean;
+	projectName?: string | null;
 	onStateChange: (state: DataTableQueryState) => void;
 	updatingKey: string | null;
 	onToggleStatus: (row: UnifiedFindingRow, target: FindingStatus) => void;
@@ -381,6 +450,7 @@ export default function StaticAnalysisFindingsTable({
 	const columns = getColumns({
 		currentRoute,
 		showEngineColumn,
+		projectName,
 		updatingKey,
 		onToggleStatus,
 	}) as ColumnDef<UnifiedFindingRow>[];

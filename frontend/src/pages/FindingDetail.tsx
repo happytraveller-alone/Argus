@@ -212,6 +212,13 @@ export default function FindingDetail() {
           }
         } else if (agentFindingSnapshot) {
           setAgentFinding(agentFindingSnapshot);
+          // Defensive fallback: if snapshot lacks projectName but carries projectId,
+          // fetch project so the model can display correct project label and path.
+          // Phase F builders will embed projectName directly; this handles old snapshots.
+          if (!agentFindingSnapshot.projectName && agentFindingSnapshot.projectId) {
+            const nextProject = await databaseApi.getProjectById(agentFindingSnapshot.projectId);
+            if (!cancelled) setProject(nextProject);
+          }
         } else {
           setError("智能审计详情接口已退役，仅支持从历史任务列表携带快照打开。");
         }
@@ -238,9 +245,11 @@ export default function FindingDetail() {
         finding: agentFinding,
         taskId,
         findingId,
-        projectId: project?.id,
+        projectId: agentFinding.projectId ?? project?.id,
         projectSourceType: project?.source_type,
-        projectName: project?.name,
+        projectName: agentFinding.projectName ?? project?.name,
+        llmModel: agentFinding.llmModel,
+        projectRoot: agentFinding.projectRoot,
       });
     }
 
@@ -286,6 +295,10 @@ export default function FindingDetail() {
     return null;
   }, [
     agentFinding,
+    agentFinding?.llmModel,
+    agentFinding?.projectId,
+    agentFinding?.projectName,
+    agentFinding?.projectRoot,
     findingId,
     project?.id,
     project?.name,

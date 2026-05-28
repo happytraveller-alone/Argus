@@ -214,3 +214,52 @@ test("AgentAuditDetail handles fetch error state with retry button", () => {
 	assert.match(source, /fetchError/);
 	assert.match(source, /重试/);
 });
+
+// ---------------------------------------------------------------------------
+// agentTable.canonical  (AC8)
+// Table column renderers consume buildCanonicalDisplay — assert usage pattern
+// ---------------------------------------------------------------------------
+
+test("agentTable.canonical — 名称 column uses canonical.name from buildCanonicalDisplay", () => {
+	// The column renderer must call buildCanonicalDisplay and use canonical.name
+	assert.match(source, /buildCanonicalDisplay/);
+	assert.match(source, /canonical\.name/);
+});
+
+test("agentTable.canonical — 漏洞类型 column uses canonical.typeLabel", () => {
+	assert.match(source, /canonical\.typeLabel/);
+});
+
+test("agentTable.canonical — 文件位置 column uses canonical.locationLabel", () => {
+	assert.match(source, /canonical\.locationLabel/);
+});
+
+test("agentTable.canonical — buildCanonicalDisplay receives auditType 智能审计", () => {
+	assert.match(source, /"智能审计"/);
+});
+
+test("agentTable.canonical — buildCanonicalDisplay receives record.llmModel as engineLabel", () => {
+	assert.match(source, /record\?\.llmModel/);
+});
+
+test("agentTable.canonical — buildCanonicalDisplay receives record.projectName", () => {
+	assert.match(source, /record\?\.projectName/);
+});
+
+// ---------------------------------------------------------------------------
+// agentSnapshot.projectName  (AC12)
+// buildAgentFindingSnapshot passes projectName/llmModel/projectRoot into state
+// ---------------------------------------------------------------------------
+
+test("agentSnapshot.projectName — snapshot builder passes projectName into navigation state", () => {
+	assert.match(source, /buildAgentFindingSnapshot/);
+	assert.match(source, /record\.projectName/);
+});
+
+test("agentSnapshot.projectName — snapshot builder passes llmModel into navigation state", () => {
+	assert.match(source, /record\.llmModel/);
+});
+
+test("agentSnapshot.projectName — snapshot builder passes projectRoot into navigation state", () => {
+	assert.match(source, /record\.projectRoot/);
+});

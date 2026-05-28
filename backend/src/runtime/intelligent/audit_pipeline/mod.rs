@@ -17,7 +17,7 @@ use anyhow::{Context as AnyhowContext, Result};
 use serde_json::json;
 
 use crate::{
-    db::projects,
+    db::{intelligent_task_state, projects},
     runtime::intelligent::{
         code_intel::{cache::CodeGraphCache, codegraph_client::CodeGraphClient, CodeIntelligence},
         config::IntelligentLlmConfig,
@@ -132,6 +132,28 @@ pub async fn run_pipeline_with_config(
         archive_meta.storage_path.clone(),
         archive_meta.original_filename.clone(),
     );
+    // Anchor used by finalize-stage normalization (Phase B / AC7). The archive
+    // storage path is the project root for sandbox-mounted code; emitting it
+    // here lets `normalize_resolved_path` strip the prefix from finding files.
+    let project_root_anchor: String = archive_meta.storage_path.clone();
+    // Persist project_root onto the task record so the route layer (Phase C)
+    // and frontend (Phase D-F) can render canonical paths. Best-effort — a
+    // missing record shouldn't fail the pipeline.
+    {
+        let task_id_owned = task_id.to_string();
+        let anchor_clone = project_root_anchor.clone();
+        if let Err(err) = intelligent_task_state::update_record(state, &task_id_owned, move |rec| {
+            rec.project_root = Some(anchor_clone);
+        })
+        .await
+        {
+            tracing::warn!(
+                task_id = %task_id,
+                error = %err,
+                "failed to persist project_root onto task record; finalize will still normalize via outputs anchor"
+            );
+        }
+    }
     let entries = archive
         .list_entries()
         .with_context(|| format!("failed to list archive for project {project_id}"))?;
@@ -232,6 +254,7 @@ pub async fn run_pipeline_with_config(
 
         // ── Phase 1: recon ────────────────────────────────────────────────
         let mut outputs = PipelineOutputs::default();
+        outputs.set_project_root(Some(project_root_anchor.clone()));
         outputs.recon = run_stage_with_retry(
             &config.stage_gates.recon,
             AuditStage::Recon,

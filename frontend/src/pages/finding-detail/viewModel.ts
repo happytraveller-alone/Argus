@@ -1,6 +1,7 @@
 import type { FindingNarrativeInput } from "@/pages/AgentAudit/components/findingNarrative";
 import type { FindingCodeWindowDisplayLine } from "@/pages/AgentAudit/components/FindingCodeWindow";
 import type { AgentFinding } from "@/shared/api/agentTasks";
+import type { IntelligentTaskFinding } from "@/shared/api/intelligentTasks";
 import type {
   DismissalEvidence,
   OpengrepFinding,
@@ -194,24 +195,6 @@ function buildCodeBrowserTarget(params: {
   };
 }
 
-function formatLocation(params: {
-  filePath?: string | null;
-  lineStart?: number | null;
-  lineEnd?: number | null;
-}): string | null {
-  const filePath = String(params.filePath || "").trim();
-  if (!filePath) return null;
-  const lineStart = isFiniteLineNumber(params.lineStart) ? params.lineStart : null;
-  const lineEnd = isFiniteLineNumber(params.lineEnd) ? params.lineEnd : null;
-  if (lineStart !== null && lineEnd !== null && lineEnd > lineStart) {
-    return `${filePath}:${lineStart}-${lineEnd}`;
-  }
-  if (lineStart !== null) {
-    return `${filePath}:${lineStart}`;
-  }
-  return filePath;
-}
-
 function resolvePreferredFilePath(
   rawFilePath: string | null | undefined,
   resolvedFilePath?: string | null,
@@ -230,6 +213,125 @@ function resolvePreferredLineStart(
     return resolvedLineStart;
   }
   return isFiniteLineNumber(fallbackLineStart) ? fallbackLineStart : null;
+}
+
+export type CanonicalAuditType = "静态审计" | "智能审计";
+
+export interface CanonicalDisplayInput {
+  rawFinding: OpengrepFinding | IntelligentTaskFinding | AgentFinding;
+  projectName: string | null | undefined;
+  auditType: CanonicalAuditType;
+  engineLabel: string;
+  scopeType?: "file" | "module";
+  module?: string | null;
+  projectRoot?: string | null;
+}
+
+export interface CanonicalDisplayOutput {
+  name: string;
+  typeLabel: string;
+  sourceLabel: string;
+  locationLabel: string;
+}
+
+export function buildCanonicalDisplay(input: CanonicalDisplayInput): CanonicalDisplayOutput {
+  const { rawFinding, projectName, auditType, engineLabel } = input;
+
+  // CWE extraction: prefer cweId (IntelligentTaskFinding camelCase), then cwe_id (AgentFinding),
+  // then cwe[0] (OpengrepFinding array)
+  let rawCwe: string | null = null;
+  if ("cweId" in rawFinding && typeof rawFinding.cweId === "string" && rawFinding.cweId.trim()) {
+    rawCwe = rawFinding.cweId.trim();
+  } else if ("cwe_id" in rawFinding && typeof rawFinding.cwe_id === "string" && rawFinding.cwe_id.trim()) {
+    rawCwe = rawFinding.cwe_id.trim();
+  } else if ("cwe" in rawFinding && Array.isArray(rawFinding.cwe) && rawFinding.cwe.length > 0) {
+    const first = rawFinding.cwe[0];
+    if (typeof first === "string" && first.trim()) {
+      rawCwe = first.trim();
+    }
+  }
+
+  // CWE display label
+  // Pre-normalize digit-only values (e.g. "89" → "CWE-89") before catalog lookup
+  // so that OpengrepFinding.cwe entries stored as bare integers resolve correctly.
+  let typeLabel: string;
+  if (rawCwe) {
+    const normalizedCwe = /^\d+$/.test(rawCwe) ? `CWE-${rawCwe}` : rawCwe;
+    const cweDisplay = resolveCweDisplay({ cwe: normalizedCwe });
+    if (cweDisplay.cweId && cweDisplay.label && cweDisplay.label !== "-") {
+      typeLabel = cweDisplay.label;
+    } else {
+      typeLabel = normalizedCwe;
+    }
+  } else {
+    typeLabel = "CWE 未识别";
+  }
+
+  // Scope decision: module vs file
+  const useModule = input.scopeType === "module" && Boolean(String(input.module || "").trim());
+  const moduleStr = String(input.module || "").trim();
+
+  // Resolved file path for file scope
+  let resolvedPath: string | null = null;
+  if (!useModule) {
+    if ("resolvedFilePath" in rawFinding && typeof rawFinding.resolvedFilePath === "string" && rawFinding.resolvedFilePath.trim()) {
+      resolvedPath = rawFinding.resolvedFilePath.trim();
+    } else if ("resolved_file_path" in rawFinding && typeof rawFinding.resolved_file_path === "string" && rawFinding.resolved_file_path.trim()) {
+      resolvedPath = rawFinding.resolved_file_path.trim();
+    } else if ("file_path" in rawFinding && typeof rawFinding.file_path === "string" && rawFinding.file_path.trim()) {
+      resolvedPath = rawFinding.file_path.trim();
+    } else if ("file" in rawFinding && typeof rawFinding.file === "string" && rawFinding.file.trim()) {
+      resolvedPath = rawFinding.file.trim();
+    }
+    if (resolvedPath) {
+      resolvedPath = buildDisplayFilePath(resolvedPath, projectName);
+    }
+  }
+
+  // Line numbers for file scope
+  let lineStart: number | null = null;
+  let lineEnd: number | null = null;
+  if (!useModule) {
+    if ("lineStart" in rawFinding && isFiniteLineNumber(rawFinding.lineStart as number | null | undefined)) {
+      lineStart = rawFinding.lineStart as number;
+    } else if ("line_start" in rawFinding && isFiniteLineNumber((rawFinding as { line_start?: number | null }).line_start)) {
+      lineStart = (rawFinding as { line_start?: number | null }).line_start as number;
+    } else if ("resolved_line_start" in rawFinding && isFiniteLineNumber((rawFinding as { resolved_line_start?: number | null }).resolved_line_start)) {
+      lineStart = (rawFinding as { resolved_line_start?: number | null }).resolved_line_start as number;
+    } else if ("start_line" in rawFinding && isFiniteLineNumber((rawFinding as { start_line?: number | null }).start_line)) {
+      lineStart = (rawFinding as { start_line?: number | null }).start_line as number;
+    }
+    if ("lineEnd" in rawFinding && isFiniteLineNumber(rawFinding.lineEnd as number | null | undefined)) {
+      lineEnd = rawFinding.lineEnd as number;
+    } else if ("line_end" in rawFinding && isFiniteLineNumber((rawFinding as { line_end?: number | null }).line_end)) {
+      lineEnd = (rawFinding as { line_end?: number | null }).line_end as number;
+    }
+  }
+
+  // vulnSubject token for name
+  const vulnSubject = useModule ? `${moduleStr}模块` : `${resolvedPath ?? "未定位文件"}文件`;
+
+  // locationLabel
+  let locationLabel: string;
+  if (useModule) {
+    locationLabel = moduleStr;
+  } else {
+    const filePart = resolvedPath ?? "未定位文件";
+    if (lineStart !== null && lineEnd !== null && lineEnd > lineStart) {
+      locationLabel = `${filePart}:${lineStart}-${lineEnd}`;
+    } else if (lineStart !== null) {
+      locationLabel = `${filePart}:${lineStart}`;
+    } else {
+      locationLabel = filePart;
+    }
+  }
+
+  const projectLabel = String(projectName || "").trim() || "未知项目";
+  const enginePart = String(engineLabel || "").trim() || "未知引擎";
+  const sourceLabel = `${projectLabel}-${auditType}-${enginePart}`;
+  const name = `${projectLabel}项目${vulnSubject}存在${typeLabel}漏洞`;
+
+  return { name, typeLabel, sourceLabel, locationLabel };
 }
 
 function buildTrackingItems(params: {
@@ -481,8 +583,8 @@ function buildAgentMarkdownNarrativeSections(
   return narrativeSections;
 }
 
-function buildIntelligentAuditSourceItems(finding: AgentFinding): FindingDetailTrackingItem[] {
-  const items: FindingDetailTrackingItem[] = [{ label: "来源", value: "智能审计" }];
+function buildIntelligentAuditSourceItems(finding: AgentFinding, sourceLabel: string): FindingDetailTrackingItem[] {
+  const items: FindingDetailTrackingItem[] = [{ label: "来源", value: sourceLabel }];
   const nodeName = String(finding.source_node_name || finding.source_node_id || "").trim();
   if (nodeName) {
     items.push({ label: "来源节点", value: nodeName, mono: Boolean(finding.source_node_id) });
@@ -862,29 +964,36 @@ export function buildAgentFindingDetailModel(params: {
   projectId?: string | null;
   projectSourceType?: ProjectSourceType | null;
   projectName?: string | null;
+  llmModel?: string | null;
+  projectRoot?: string | null;
 }): FindingDetailPageModel {
   const { finding } = params;
   const isFalsePositive = isAgentFalsePositiveFinding(finding);
   const severity = resolveSeverityDisplay(finding.severity);
   const confidence = resolveNumericConfidenceDisplay(resolveAgentConfidenceValue(finding));
-  const location = formatLocation({
-    filePath: resolvePreferredFilePath(finding.file_path, finding.resolved_file_path),
-    lineStart: resolvePreferredLineStart(finding.line_start, finding.resolved_line_start),
-    lineEnd: finding.line_end,
-  });
   const typeDisplay = resolveCweDisplay({
     cwe: finding.cwe_id,
     fallbackLabel: String(finding.vulnerability_type || "").trim() || MISSING_VALUE,
   });
+
+  const canonical = buildCanonicalDisplay({
+    rawFinding: finding,
+    projectName: params.projectName,
+    auditType: "智能审计",
+    engineLabel: String(params.llmModel || "").trim(),
+    scopeType: "file",
+    projectRoot: params.projectRoot,
+  });
+
   const trackingItems = [
     ...buildTrackingItems({
-      sourceLabel: "智能审计",
+      sourceLabel: canonical.sourceLabel,
       taskId: params.taskId,
       findingId: params.findingId,
-      location,
+      location: canonical.locationLabel,
       includeSource: false,
     }),
-    ...buildIntelligentAuditSourceItems(finding),
+    ...buildIntelligentAuditSourceItems(finding, canonical.sourceLabel),
   ];
   const overviewTrackingItems = trackingItems.filter((item) => item.label !== "来源");
   const codeSections = buildFindingDetailCodeSections(buildAgentFindingCodeViews(finding));
@@ -892,7 +1001,7 @@ export function buildAgentFindingDetailModel(params: {
   if (isFalsePositive) {
     const statusLabel = buildStatusLabel(finding.status || "false_positive");
     const summaryStats: FindingDetailSummaryStat[] = [
-      { label: "漏洞类型", value: typeDisplay.label, tone: "info" },
+      { label: "漏洞类型", value: canonical.typeLabel, tone: "info" },
       { label: "漏洞危害", value: severity.label, tone: severity.tone },
       { label: "漏洞置信度", value: confidence.label, tone: confidence.tone },
     ];
@@ -912,10 +1021,7 @@ export function buildAgentFindingDetailModel(params: {
       ],
       trackingItems,
       overviewItems: buildMergedOverviewItems({
-        name:
-          String(finding.display_title || "").trim() ||
-          String(finding.title || "").trim() ||
-          "该问题已在验证阶段判定为误报",
+        name: canonical.name,
         overviewItems: [
           { label: "状态", value: statusLabel },
           ...buildOverviewItems({
@@ -949,13 +1055,10 @@ export function buildAgentFindingDetailModel(params: {
     narrativeSections: buildAgentMarkdownNarrativeSections(finding),
     trackingItems,
     overviewItems: buildMergedOverviewItems({
-      name:
-        String(finding.display_title || "").trim() ||
-        String(finding.title || "").trim() ||
-        typeDisplay.label,
+      name: canonical.name,
       overviewItems: buildOverviewItems({
         headlineLabel: "漏洞类型",
-        headlineValue: typeDisplay.label,
+        headlineValue: canonical.typeLabel,
         headlineTitle: typeDisplay.tooltip,
         summaryStats,
       }),
@@ -982,10 +1085,13 @@ export function buildOpengrepFindingDetailModel(params: {
   projectSourceType?: ProjectSourceType | null;
   projectName?: string | null;
 }): FindingDetailPageModel {
-  return buildStaticFindingDetailModel({
-    ...params,
-    sourceLabel: "静态审计 · Opengrep",
+  const canonical = buildCanonicalDisplay({
+    rawFinding: params.finding,
+    projectName: params.projectName,
+    auditType: "静态审计",
+    engineLabel: "Opengrep",
   });
+  return buildStaticFindingDetailModel({ ...params, canonical });
 }
 
 export function buildCodeqlFindingDetailModel(params: {
@@ -998,10 +1104,13 @@ export function buildCodeqlFindingDetailModel(params: {
   projectSourceType?: ProjectSourceType | null;
   projectName?: string | null;
 }): FindingDetailPageModel {
-  return buildStaticFindingDetailModel({
-    ...params,
-    sourceLabel: "静态审计 · CodeQL",
+  const canonical = buildCanonicalDisplay({
+    rawFinding: params.finding,
+    projectName: params.projectName,
+    auditType: "静态审计",
+    engineLabel: "CodeQL",
   });
+  return buildStaticFindingDetailModel({ ...params, canonical });
 }
 
 export function buildJoernFindingDetailModel(params: {
@@ -1014,10 +1123,13 @@ export function buildJoernFindingDetailModel(params: {
   projectSourceType?: ProjectSourceType | null;
   projectName?: string | null;
 }): FindingDetailPageModel {
-  return buildStaticFindingDetailModel({
-    ...params,
-    sourceLabel: "静态审计 · Joern",
+  const canonical = buildCanonicalDisplay({
+    rawFinding: params.finding,
+    projectName: params.projectName,
+    auditType: "静态审计",
+    engineLabel: "Joern",
   });
+  return buildStaticFindingDetailModel({ ...params, canonical });
 }
 
 function buildStaticFindingDetailModel(params: {
@@ -1029,16 +1141,11 @@ function buildStaticFindingDetailModel(params: {
   projectId?: string | null;
   projectSourceType?: ProjectSourceType | null;
   projectName?: string | null;
-  sourceLabel: string;
+  canonical: CanonicalDisplayOutput;
 }): FindingDetailPageModel {
-  const { finding } = params;
+  const { finding, canonical } = params;
   const severity = resolveSeverityDisplay(finding.severity);
   const confidence = resolveTextConfidenceDisplay(finding.confidence);
-  const location = formatLocation({
-    filePath: resolvePreferredFilePath(finding.file_path, finding.resolved_file_path),
-    lineStart: resolvePreferredLineStart(finding.start_line ?? null, finding.resolved_line_start),
-    lineEnd: parseStaticEndLine(finding),
-  });
   const typeDisplay = resolveCweDisplay({
     cwe: finding.cwe,
     fallbackLabel: String(finding.rule_name || "").trim() || "unknown-rule",
@@ -1048,11 +1155,11 @@ function buildStaticFindingDetailModel(params: {
     { label: "漏洞置信度", value: confidence.label, tone: confidence.tone },
   ];
   const trackingItems = buildTrackingItems({
-    sourceLabel: params.sourceLabel,
+    sourceLabel: canonical.sourceLabel,
     taskId: params.taskId,
     findingId: params.findingId,
     taskName: params.taskName,
-    location,
+    location: canonical.locationLabel,
   });
   const ruleName = String(finding.rule_name || "").trim();
   if (ruleName) {
@@ -1072,10 +1179,10 @@ function buildStaticFindingDetailModel(params: {
     ],
     trackingItems,
     overviewItems: buildMergedOverviewItems({
-      name: typeDisplay.label,
+      name: canonical.name,
       overviewItems: buildOverviewItems({
         headlineLabel: "漏洞类型",
-        headlineValue: typeDisplay.label,
+        headlineValue: canonical.typeLabel,
         headlineTitle: typeDisplay.tooltip,
         summaryStats,
       }),

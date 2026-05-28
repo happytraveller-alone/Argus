@@ -2,7 +2,7 @@ use std::collections::HashSet;
 
 use serde::{Deserialize, Serialize};
 
-use crate::runtime::intelligent::types::IntelligentTaskFinding;
+use crate::runtime::intelligent::types::{FindingScopeType, IntelligentTaskFinding};
 
 use super::repo::ArchiveEntry;
 
@@ -354,6 +354,12 @@ pub struct AuditFinding {
     pub line_end: u32,
     #[serde(default, deserialize_with = "deserialize_string_lenient")]
     pub vuln_class: String,
+    #[serde(default, deserialize_with = "deserialize_option_string_lenient")]
+    pub cwe_id: Option<String>,
+    #[serde(default)]
+    pub scope_type: Option<FindingScopeType>,
+    #[serde(default, deserialize_with = "deserialize_option_string_lenient")]
+    pub module: Option<String>,
     #[serde(
         default = "default_severity",
         deserialize_with = "deserialize_string_lenient"
@@ -391,6 +397,9 @@ impl Default for AuditFinding {
             line_start: default_line(),
             line_end: default_line(),
             vuln_class: String::new(),
+            cwe_id: None,
+            scope_type: None,
+            module: None,
             severity: default_severity(),
             description: String::new(),
             evidence: String::new(),
@@ -517,6 +526,71 @@ impl Default for ReportOutput {
     }
 }
 
+/// Normalize a finding's `file` path to a project-root-relative form for the
+/// frontend's `resolved_file_path` field.
+///
+/// 1. Strip leading sandbox/workspace prefixes that some upstream stages emit
+///    (when findings come back referencing the sandbox container layout).
+/// 2. If a project root anchor is supplied AND the trimmed path begins with
+///    it, strip that prefix too — yielding a project-root-relative path.
+/// 3. Otherwise return the trimmed path unchanged.
+pub(crate) fn normalize_resolved_path(raw: &str, project_root: Option<&str>) -> String {
+    // Strip sandbox/workspace prefix from raw first.
+    let trimmed = raw
+        .strip_prefix("/workspace/")
+        .or_else(|| raw.strip_prefix("/sandbox/"))
+        .unwrap_or(raw);
+    // Normalize project_root the same way so the anchor matches even when stored
+    // as an absolute sandbox path (e.g. "/workspace/argus-src" → "argus-src").
+    if let Some(root) = project_root {
+        let normalized_root = root
+            .strip_prefix("/workspace/")
+            .or_else(|| root.strip_prefix("/sandbox/"))
+            .unwrap_or(root);
+        let normalized_root = normalized_root.trim_end_matches('/');
+        if !normalized_root.is_empty() {
+            if let Some(rest) = trimmed.strip_prefix(normalized_root) {
+                return rest.trim_start_matches('/').to_string();
+            }
+        }
+    }
+    trimmed.to_string()
+}
+
+/// Construct an `IntelligentTaskFinding` from the canonical `AuditFinding` plus
+/// optional trace/validation overlays. Centralises every field assignment so
+/// the 3 conversion sites in `PipelineOutputs` cannot drift out of sync (Phase B).
+fn build_intelligent_finding(
+    finding: &AuditFinding,
+    trace: Option<&TraceResult>,
+    validation: Option<&ValidatedFinding>,
+    project_root: Option<&str>,
+) -> IntelligentTaskFinding {
+    IntelligentTaskFinding {
+        id: finding.finding_id.clone(),
+        severity: finding.severity.clone(),
+        summary: finding.description.clone(),
+        evidence: enrich_evidence(finding, trace),
+        file: Some(finding.file.clone()),
+        line_start: Some(finding.line_start),
+        line_end: Some(finding.line_end),
+        vuln_class: Some(finding.vuln_class.clone()),
+        cwe_id: finding.cwe_id.clone(),
+        scope_type: finding.scope_type,
+        module: finding.module.clone(),
+        resolved_file_path: Some(normalize_resolved_path(&finding.file, project_root)),
+        confidence: finding.confidence,
+        validation_status: validation.map(|v| v.validation_status.clone()),
+        reachable: trace.map(|t| t.reachable),
+        trace_summary: trace.map(|t| t.rationale.clone()),
+        poc_result: finding
+            .poc_result
+            .as_ref()
+            .map(|p| serde_json::to_value(p).unwrap_or_default()),
+        user_verdict: None,
+    }
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct PipelineOutputs {
     pub recon: ReconOutput,
@@ -527,6 +601,18 @@ pub struct PipelineOutputs {
     pub trace: TraceOutput,
     pub feedback: FeedbackOutput,
     pub report: ReportOutput,
+    /// Project root anchor used by `normalize_resolved_path` when building
+    /// per-finding `resolved_file_path` values. Set at pipeline entry from the
+    /// archive's storage path; `None` falls back to sandbox/workspace prefix
+    /// stripping only.
+    pub project_root: Option<String>,
+}
+
+impl PipelineOutputs {
+    /// Update the project root anchor used during finalize-stage normalization.
+    pub fn set_project_root(&mut self, root: Option<String>) {
+        self.project_root = root;
+    }
 }
 
 impl PipelineOutputs {
@@ -556,24 +642,8 @@ impl PipelineOutputs {
                 .findings
                 .iter()
                 .filter(|f| deduped_ids.is_empty() || deduped_ids.contains(f.finding_id.as_str()))
-                .map(|finding| IntelligentTaskFinding {
-                    id: finding.finding_id.clone(),
-                    severity: finding.severity.clone(),
-                    summary: finding.description.clone(),
-                    evidence: enrich_evidence(finding, None),
-                    file: Some(finding.file.clone()),
-                    line_start: Some(finding.line_start),
-                    line_end: Some(finding.line_end),
-                    vuln_class: Some(finding.vuln_class.clone()),
-                    confidence: finding.confidence,
-                    validation_status: None,
-                    reachable: None,
-                    trace_summary: None,
-                    poc_result: finding
-                        .poc_result
-                        .as_ref()
-                        .map(|p| serde_json::to_value(p).unwrap_or_default()),
-                    user_verdict: None,
+                .map(|finding| {
+                    build_intelligent_finding(finding, None, None, self.project_root.as_deref())
                 })
                 .collect()
         } else {
@@ -596,25 +666,12 @@ impl PipelineOutputs {
                             return None;
                         }
                     }
-                    Some(IntelligentTaskFinding {
-                        id: finding.finding_id.clone(),
-                        severity: finding.severity.clone(),
-                        summary: finding.description.clone(),
-                        evidence: enrich_evidence(finding, trace.copied()),
-                        file: Some(finding.file.clone()),
-                        line_start: Some(finding.line_start),
-                        line_end: Some(finding.line_end),
-                        vuln_class: Some(finding.vuln_class.clone()),
-                        confidence: finding.confidence,
-                        validation_status: Some(validated.validation_status.clone()),
-                        reachable: trace.map(|trace| trace.reachable),
-                        trace_summary: trace.map(|trace| trace.rationale.clone()),
-                        poc_result: finding
-                            .poc_result
-                            .as_ref()
-                            .map(|p| serde_json::to_value(p).unwrap_or_default()),
-                        user_verdict: None,
-                    })
+                    Some(build_intelligent_finding(
+                        finding,
+                        trace.copied(),
+                        Some(validated),
+                        self.project_root.as_deref(),
+                    ))
                 })
                 .collect()
         };
@@ -646,25 +703,12 @@ impl PipelineOutputs {
                         return None;
                     }
                 }
-                Some(IntelligentTaskFinding {
-                    id: finding.finding_id.clone(),
-                    severity: finding.severity.clone(),
-                    summary: finding.description.clone(),
-                    evidence: enrich_evidence(finding, trace.copied()),
-                    file: Some(finding.file.clone()),
-                    line_start: Some(finding.line_start),
-                    line_end: Some(finding.line_end),
-                    vuln_class: Some(finding.vuln_class.clone()),
-                    confidence: finding.confidence,
-                    validation_status: Some(validated.validation_status.clone()),
-                    reachable: trace.map(|trace| trace.reachable),
-                    trace_summary: trace.map(|trace| trace.rationale.clone()),
-                    poc_result: finding
-                        .poc_result
-                        .as_ref()
-                        .map(|p| serde_json::to_value(p).unwrap_or_default()),
-                    user_verdict: None,
-                })
+                Some(build_intelligent_finding(
+                    finding,
+                    trace.copied(),
+                    Some(validated),
+                    self.project_root.as_deref(),
+                ))
             })
             .collect();
         ensure_unique_finding_ids(&mut findings);
@@ -687,6 +731,10 @@ mod tests {
             line_start: None,
             line_end: None,
             vuln_class: None,
+            cwe_id: None,
+            scope_type: None,
+            module: None,
+            resolved_file_path: None,
             confidence: None,
             validation_status: None,
             reachable: None,
@@ -1347,5 +1395,207 @@ mod audit_config_override_tests {
         };
         let err = cfg.validate().unwrap_err();
         assert!(err.contains(">= 1"));
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Phase G tests — backend.normalize.* and backend.audit.*
+// ---------------------------------------------------------------------------
+#[cfg(test)]
+mod tests_canonical {
+    use super::*;
+    use crate::runtime::intelligent::types::FindingScopeType;
+
+    // ── backend.normalize.idempotent (AC10) ─────────────────────────────────
+    /// A relative path with no /workspace/ or /sandbox/ prefix is returned unchanged.
+    #[test]
+    fn backend_normalize_idempotent() {
+        let result = normalize_resolved_path("src/auth.rs", None);
+        assert_eq!(result, "src/auth.rs", "relative path must not be modified");
+    }
+
+    /// Already-normalized path with no project_root anchor is also unchanged.
+    #[test]
+    fn backend_normalize_no_root_relative_path_unchanged() {
+        let result = normalize_resolved_path("backend/src/main.rs", None);
+        assert_eq!(result, "backend/src/main.rs");
+    }
+
+    // ── backend.normalize.workspace (AC7) ───────────────────────────────────
+    /// /workspace/ is stripped first, yielding the project-root-relative part.
+    /// The project_root anchor is then matched against the post-strip path.
+    /// When project_root is "/workspace/argus-src", the stripped path is
+    /// "argus-src/src/db.rs"; the anchor "/workspace/argus-src" does not
+    /// match the post-strip path, so the workspace-stripped result is returned.
+    ///
+    /// To strip down to "src/db.rs", pass the post-workspace project root
+    /// (i.e. "argus-src") as the anchor.
+    #[test]
+    fn backend_normalize_workspace_prefix_stripped() {
+        // Case: anchor is the post-workspace path → fully stripped to relative
+        let result = normalize_resolved_path(
+            "/workspace/argus-src/src/db.rs",
+            Some("argus-src"),
+        );
+        assert_eq!(result, "src/db.rs");
+    }
+
+    /// /sandbox/<name>/… is also stripped even without project_root.
+    #[test]
+    fn backend_normalize_sandbox_prefix_stripped() {
+        let result = normalize_resolved_path("/sandbox/mybox/src/foo.rs", None);
+        assert_eq!(result, "mybox/src/foo.rs");
+    }
+
+    /// workspace prefix stripped; if anchor does not match post-strip path,
+    /// returns the workspace-stripped form.
+    #[test]
+    fn backend_normalize_workspace_then_root_stripped() {
+        // Anchor matches post-strip path exactly → further stripped to "src/lib.rs"
+        let result = normalize_resolved_path(
+            "/workspace/project/src/lib.rs",
+            Some("project"),
+        );
+        assert_eq!(result, "src/lib.rs");
+    }
+
+    // ── backend.normalize.noRoot (AC10) ────────────────────────────────────
+    /// project_root=None: strip /workspace/ but leave the rest intact.
+    #[test]
+    fn backend_normalize_no_root_workspace_stripped() {
+        let result = normalize_resolved_path("/workspace/some-path/src/util.rs", None);
+        assert_eq!(result, "some-path/src/util.rs");
+    }
+
+    // ── backend.normalize.absoluteRoot (M1 regression) ──────────────────────
+    /// project_root stored as absolute workspace path must be normalized before
+    /// prefix-matching the post-strip `trimmed` value.
+    ///
+    /// Before the fix: step 1 stripped "/workspace/" → "argus-src/src/db.rs";
+    /// step 2 checked whether that starts with "/workspace/argus-src" → NO →
+    /// returned "argus-src/src/db.rs" (wrong).
+    ///
+    /// After the fix: project_root is also stripped to "argus-src" before the
+    /// prefix check → matches → returns "src/db.rs" (correct).
+    #[test]
+    fn backend_normalize_absolute_project_root_workspace() {
+        let result = normalize_resolved_path(
+            "/workspace/argus-src/src/db.rs",
+            Some("/workspace/argus-src"),
+        );
+        assert_eq!(result, "src/db.rs", "absolute workspace project_root must be stripped symmetrically");
+    }
+
+    /// Variant: raw is under /sandbox/, project_root is stored under /workspace/.
+    /// Both prefixes should be normalised before comparison.
+    #[test]
+    fn backend_normalize_absolute_project_root_cross_prefix() {
+        let result = normalize_resolved_path(
+            "/sandbox/foo/src/db.rs",
+            Some("/workspace/foo"),
+        );
+        assert_eq!(result, "src/db.rs", "cross-prefix absolute project_root must resolve correctly");
+    }
+
+    // ── backend.audit.deserialize (AC9) ─────────────────────────────────────
+    /// AuditFinding deserializes with cwe_id and scope_type (camelCase from LLM JSON).
+    #[test]
+    fn backend_audit_deserialize_new_fields() {
+        let raw = r#"{
+            "findingId": "f-001",
+            "file": "src/db.rs",
+            "lineStart": 10,
+            "lineEnd": 15,
+            "vulnClass": "sql_injection",
+            "severity": "high",
+            "description": "SQL injection via user input",
+            "evidence": "user input flows into query",
+            "cweId": "CWE-89",
+            "scopeType": "file"
+        }"#;
+        let finding: AuditFinding = serde_json::from_str(raw).expect("deserialize must succeed");
+        assert_eq!(finding.cwe_id, Some("CWE-89".to_string()));
+        assert_eq!(finding.scope_type, Some(FindingScopeType::File));
+        assert_eq!(finding.module, None);
+    }
+
+    /// AuditFinding with scopeType=module and module field.
+    #[test]
+    fn backend_audit_deserialize_module_scope() {
+        let raw = r#"{
+            "findingId": "f-002",
+            "file": "",
+            "lineStart": 1,
+            "lineEnd": 1,
+            "vulnClass": "auth_bypass",
+            "severity": "critical",
+            "description": "Auth bypass in module",
+            "evidence": "logic flaw",
+            "cweId": "CWE-306",
+            "scopeType": "module",
+            "module": "auth_service"
+        }"#;
+        let finding: AuditFinding = serde_json::from_str(raw).expect("deserialize must succeed");
+        assert_eq!(finding.scope_type, Some(FindingScopeType::Module));
+        assert_eq!(finding.module, Some("auth_service".to_string()));
+    }
+
+    // ── backend.audit.passthrough (AC9) ─────────────────────────────────────
+    /// AuditFinding missing cweId/scopeType/module deserializes with None defaults
+    /// (backward-compat: old LLM output without new fields must not fail).
+    #[test]
+    fn backend_audit_deserialize_legacy_no_new_fields() {
+        let raw = r#"{
+            "findingId": "legacy-001",
+            "file": "src/old.rs",
+            "lineStart": 5,
+            "lineEnd": 5,
+            "vulnClass": "buffer_overflow",
+            "severity": "high",
+            "description": "legacy finding",
+            "evidence": "evidence"
+        }"#;
+        let finding: AuditFinding = serde_json::from_str(raw).expect("legacy deserialize must succeed");
+        assert_eq!(finding.cwe_id, None, "cwe_id must default to None");
+        assert_eq!(finding.scope_type, None, "scope_type must default to None");
+        assert_eq!(finding.module, None, "module must default to None");
+    }
+
+    // ── backend.task.spawnedTaskProjectRoot (AC7 / Phase A.5) ──────────────
+    /// with_project_root builder sets project_root on the record.
+    #[test]
+    fn backend_task_spawned_task_project_root() {
+        use crate::runtime::intelligent::types::IntelligentTaskRecord;
+
+        let record = IntelligentTaskRecord::new_pending(
+            "task-001".to_string(),
+            "project-001".to_string(),
+            "claude-3-5-sonnet".to_string(),
+            "fp-abc123".to_string(),
+        )
+        .with_project_root("/workspace/argus-src");
+
+        assert_eq!(
+            record.project_root,
+            Some("/workspace/argus-src".to_string()),
+            "with_project_root must populate project_root field"
+        );
+    }
+
+    /// with_project_root accepts any Into<String>.
+    #[test]
+    fn backend_task_project_root_string_owned() {
+        use crate::runtime::intelligent::types::IntelligentTaskRecord;
+
+        let root = "/storage/projects/myproject".to_string();
+        let record = IntelligentTaskRecord::new_pending(
+            "t2".to_string(),
+            "p2".to_string(),
+            "model".to_string(),
+            "fp".to_string(),
+        )
+        .with_project_root(root);
+
+        assert_eq!(record.project_root, Some("/storage/projects/myproject".to_string()));
     }
 }

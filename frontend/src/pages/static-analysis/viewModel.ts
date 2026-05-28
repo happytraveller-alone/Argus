@@ -244,6 +244,8 @@ export type UnifiedFindingRow = {
   status: string;
   dismissalCategory: DismissalCategory | null;
   dismissalEvidence: DismissalEvidence | null;
+  cwe?: string[] | null;
+  resolvedFilePath?: string | null;
 };
 
 type MinimalOpengrepFinding = {
@@ -252,11 +254,13 @@ type MinimalOpengrepFinding = {
   severity?: string | null;
   confidence?: string | null;
   file_path?: string | null;
+  resolved_file_path?: string | null;
   start_line?: unknown;
   status?: string | null;
   rule_name?: string | null;
   rule?: Record<string, unknown> | null;
   dismissalEvidence?: DismissalEvidence | null;
+  cwe?: string[] | null;
 };
 
 const SEVERITY_SCORE: Record<NormalizedSeverity, number> = {
@@ -976,6 +980,8 @@ export function buildUnifiedFindingRows(input: {
       status: String(finding.status || "open").trim().toLowerCase(),
       dismissalCategory: dismissalEvidence?.category ?? null,
       dismissalEvidence,
+      cwe: finding.cwe ?? null,
+      resolvedFilePath: finding.resolved_file_path ?? null,
     };
   });
   return [

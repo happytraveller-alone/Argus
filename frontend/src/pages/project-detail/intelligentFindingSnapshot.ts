@@ -52,5 +52,9 @@ export function buildProjectDetailAgentFindingSnapshot(
 		status: isFalsePositive ? "false_positive" : validationStatus || null,
 		authenticity: isFalsePositive ? "false_positive" : null,
 		verification_evidence: traceSummary || evidence || null,
+		projectId: record.projectId,
+		projectName: record.projectName ?? null,
+		llmModel: record.llmModel,
+		projectRoot: record.projectRoot ?? null,
 	};
 }

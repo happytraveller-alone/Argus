@@ -1,6 +1,13 @@
 use serde::{Deserialize, Serialize};
 use time::{format_description::well_known::Rfc3339, OffsetDateTime};
 
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum FindingScopeType {
+    File,
+    Module,
+}
+
 pub fn now_rfc3339() -> String {
     OffsetDateTime::now_utc()
         .format(&Rfc3339)
@@ -84,6 +91,14 @@ pub struct IntelligentTaskFinding {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub vuln_class: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub cwe_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scope_type: Option<FindingScopeType>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub module: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub resolved_file_path: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub confidence: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub validation_status: Option<String>,
@@ -106,6 +121,8 @@ pub struct IntelligentTaskRecord {
     pub project_id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub project_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub project_root: Option<String>,
     pub status: IntelligentTaskStatus,
     pub created_at: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -142,6 +159,7 @@ impl IntelligentTaskRecord {
             task_id,
             project_id,
             project_name: None,
+            project_root: None,
             status: IntelligentTaskStatus::Pending,
             created_at: now_rfc3339(),
             started_at: None,
@@ -157,6 +175,12 @@ impl IntelligentTaskRecord {
             failure_stage: None,
             partial_analysis: false,
         }
+    }
+
+    #[must_use]
+    pub fn with_project_root(mut self, root: impl Into<String>) -> Self {
+        self.project_root = Some(root.into());
+        self
     }
 
     pub fn mark_running(&mut self) {

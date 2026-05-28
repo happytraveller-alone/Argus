@@ -112,5 +112,10 @@ export interface AgentFinding {
 	source_node_id?: string | null;
 	source_node_name?: string | null;
 	created_at?: string | null;
+	// Navigation-snapshot fields populated by Phase F builders
+	projectId?: string | null;
+	projectName?: string | null;
+	llmModel?: string | null;
+	projectRoot?: string | null;
 	[key: string]: unknown;
 }
