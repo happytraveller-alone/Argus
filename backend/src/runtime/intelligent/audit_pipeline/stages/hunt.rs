@@ -917,6 +917,7 @@ mod tests {
             stream_timeout_seconds: 10,
             custom_header_names: vec![],
             auth_kind: "openai_compatible_bearer",
+            preview_chars: 16_384,
         }
     }
 

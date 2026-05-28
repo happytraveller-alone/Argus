@@ -329,4 +329,135 @@ mod tests {
         let value = extract_json_value(double_encoded).expect("must unwrap");
         assert!(value.is_array(), "expected array, got: {value:?}");
     }
+
+    // ── Plan Step 10 — Test 6 ──────────────────────────────────────────────
+
+    use crate::runtime::intelligent::audit_pipeline::context::{
+        AuditStage, PipelineEventSink,
+    };
+    use crate::runtime::intelligent::config::{IntelligentLlmConfig, IntelligentLlmProvider};
+    use crate::runtime::intelligent::llm::{
+        IntelligentLlmInvocation, IntelligentLlmInvocationError, IntelligentLlmInvoker,
+    };
+    use crate::runtime::intelligent::types::{now_rfc3339, IntelligentTaskEvent};
+    use async_trait::async_trait;
+    use std::sync::{Arc, Mutex};
+    use tokio::sync::broadcast;
+
+    /// Stub invoker that returns the same un-parseable content on every call,
+    /// so both the first-shot and the repair-shot exhaust every fallback tier
+    /// (plain / fenced / balanced) inside `extract_json_value`. Drives the
+    /// `emit_parse_failure` path on both shots.
+    struct UnparseableStubInvoker {
+        content: String,
+        calls: Arc<Mutex<u32>>,
+    }
+
+    #[async_trait]
+    impl IntelligentLlmInvoker for UnparseableStubInvoker {
+        async fn invoke(
+            &self,
+            _prompt: &str,
+            _config: &IntelligentLlmConfig,
+        ) -> Result<IntelligentLlmInvocation, IntelligentLlmInvocationError> {
+            *self.calls.lock().unwrap() += 1;
+            Ok(IntelligentLlmInvocation {
+                content: self.content.clone(),
+                finished_at: now_rfc3339(),
+                attempt_event: IntelligentTaskEvent::new("llm_attempt"),
+            })
+        }
+    }
+
+    fn test_llm_config() -> IntelligentLlmConfig {
+        use reqwest::Url;
+        IntelligentLlmConfig {
+            row_id: "test".to_string(),
+            provider: IntelligentLlmProvider::OpenAiCompatible,
+            model: "gpt-test".to_string(),
+            base_url: Url::parse("https://api.example.com/v1/").unwrap(),
+            api_key: "sk-test".to_string(),
+            fingerprint: "sha256:test".to_string(),
+            timeout_ms: 30_000,
+            temperature: 0.0,
+            max_tokens_per_call: 1024,
+            first_token_timeout_seconds: 30,
+            stream_timeout_seconds: 60,
+            custom_header_names: vec![],
+            auth_kind: "openai_compatible_bearer",
+            preview_chars: 16_384,
+        }
+    }
+
+    #[derive(serde::Deserialize)]
+    struct TinyStruct {
+        #[allow(dead_code)]
+        ok: bool,
+    }
+
+    /// Test 6 — When `extract_json_value` exhausts every fallback tier on both
+    /// the first shot and the repair shot, `invoke_json` emits a
+    /// `parse_failure` event for each terminal failure with
+    /// `data.fallbackTier == "all_exhausted"`. Verifies the new
+    /// `emit_parse_failure` observability surface from AC2.5.
+    #[tokio::test]
+    async fn parse_failure_emitted_on_extraction_exhausted() {
+        let (broadcast_tx, _broadcast_rx) = broadcast::channel(64);
+        let (sink, mut collect_rx) = PipelineEventSink::new(broadcast_tx);
+
+        let invoker = UnparseableStubInvoker {
+            // Plain prose, no fence, no balanced `{…}` — every tier fails.
+            content: "i am not json".to_string(),
+            calls: Arc::new(Mutex::new(0)),
+        };
+        let config = test_llm_config();
+
+        let result = invoke_json::<TinyStruct>(
+            &invoker,
+            AuditStage::Hunt,
+            "prompt",
+            &config,
+            &sink,
+        )
+        .await;
+        assert!(result.is_err(), "expected Err after both shots fail");
+
+        // Drain emitted events. Drop the sink first so the channel closes.
+        drop(sink);
+        let mut events = Vec::new();
+        while let Some(ev) = collect_rx.recv().await {
+            events.push(ev);
+        }
+
+        // Two llm_attempt (first + repair) + two parse_failure (first_shot +
+        // repair_shot).
+        let parse_failures: Vec<&IntelligentTaskEvent> =
+            events.iter().filter(|e| e.kind == "parse_failure").collect();
+        assert_eq!(
+            parse_failures.len(),
+            2,
+            "expected two parse_failure events (first_shot + repair_shot), got {}: {:?}",
+            parse_failures.len(),
+            events.iter().map(|e| e.kind.as_str()).collect::<Vec<_>>()
+        );
+
+        // first_shot parse_failure carries the stage discriminator and the
+        // all-tiers-exhausted marker.
+        let first = parse_failures[0];
+        let data = first
+            .data
+            .as_ref()
+            .expect("parse_failure must carry data");
+        assert_eq!(data["stage"], "first_shot");
+        assert_eq!(data["fallbackTier"], "all_exhausted");
+        assert!(
+            data.get("errorSummary").is_some(),
+            "parse_failure must include errorSummary"
+        );
+
+        let repair = parse_failures[1];
+        let repair_data = repair.data.as_ref().expect("data");
+        assert_eq!(repair_data["stage"], "repair_shot");
+        assert_eq!(repair_data["fallbackTier"], "all_exhausted");
+    }
 }

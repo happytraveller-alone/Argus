@@ -66,20 +66,6 @@ fn is_retryable_status(status: reqwest::StatusCode) -> bool {
     status.as_u16() == 429 || status.is_server_error()
 }
 
-/// Stitch the leading `{` back onto an Anthropic prefill response if the model
-/// continued the prefill without re-emitting the brace. Idempotent across three
-/// shapes:
-///   1. Content already starts with `{` → return as-is (already object-shaped).
-///   2. Content starts AND ends with `"` (a string-encoded / double-encoded
-///      JSON literal such as `"{\"k\":1}"`) → return as-is so downstream
-///      `unwrap_stringified_json` still applies.
-///   3. Otherwise the model continued the prefill `{` without echoing it →
-///      prepend `{`. This is the common case for Anthropic prefill: the
-///      assistant turn ends with `{`, and the model continues with the inner
-///      object content (typically a key literal such as `"key":"value"}`).
-///      Without the start+end discriminator in case 2, that continuation
-///      would be mis-classified as already-encoded and the leading `{` would
-///      never be restored.
 /// Build the OpenAI-compatible request body. Extracted as a pure helper so the
 /// `response_format: {"type": "json_object"}` constraint can be unit-tested
 /// without spinning up an HTTP client. See AC-B3 — JSON-mode enforcement is
@@ -120,6 +106,20 @@ pub(crate) fn build_anthropic_body(
     })
 }
 
+/// Stitch the leading `{` back onto an Anthropic prefill response if the model
+/// continued the prefill without re-emitting the brace. Idempotent across three
+/// shapes:
+///   1. Content already starts with `{` → return as-is (already object-shaped).
+///   2. Content starts AND ends with `"` (a string-encoded / double-encoded
+///      JSON literal such as `"{\"k\":1}"`) → return as-is so downstream
+///      `unwrap_stringified_json` still applies.
+///   3. Otherwise the model continued the prefill `{` without echoing it →
+///      prepend `{`. This is the common case for Anthropic prefill: the
+///      assistant turn ends with `{`, and the model continues with the inner
+///      object content (typically a key literal such as `"key":"value"}`).
+///      Without the start+end discriminator in case 2, that continuation
+///      would be mis-classified as already-encoded and the leading `{` would
+///      never be restored.
 pub(crate) fn stitch_prefill(raw: String) -> String {
     let trimmed = raw.trim();
     if trimmed.starts_with('{') {

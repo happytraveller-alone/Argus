@@ -769,7 +769,7 @@ export default function AgentAuditDetail() {
 		try {
 			const blob = new Blob([JSON.stringify(activeEvents, null, 2)], { type: "application/json" });
 			const ts = new Date().toISOString().replace(/[:.]/g, "-");
-			const filename = `agent-audit-${taskId}-${ts}.json`;
+			const filename = `agent-audit-${encodeURIComponent(taskId ?? "unknown")}-${ts}.json`;
 			downloadBlob(blob, filename);
 			toast.success("已导出时间日志");
 		} catch (err) {
