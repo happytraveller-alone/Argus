@@ -1,0 +1,471 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="130" Name="Improper Handling of Length Parameter Inconsistency" Abstraction="Base" Structure="Simple" Status="Incomplete">
+         <Description>The product parses a formatted message or structure, but it does not handle or incorrectly handles a length field that is inconsistent with the actual length of the associated data.</Description>
+         <Extended_Description>If an attacker can manipulate the length parameter associated with an input such that it is inconsistent with the actual length of the input, this can be leveraged to cause the target application to behave in unexpected, and possibly, malicious ways. One of the possible motives for doing so is to pass in arbitrarily large input to the application. Another possible motivation is the modification of application state by including invalid data for subsequent properties of the application. Such weaknesses commonly lead to attacks such as buffer overflows and execution of arbitrary code.</Extended_Description>
+         <Related_Weaknesses>
+            <Related_Weakness Nature="ChildOf" CWE_ID="240" View_ID="1000" Ordinal="Primary" />
+             <Related_Weakness Nature="ChildOf" CWE_ID="119" View_ID="1305" Ordinal="Primary" />
+			 <Related_Weakness Nature="ChildOf" CWE_ID="119" View_ID="1340" Ordinal="Primary" />
+            <Related_Weakness Nature="CanPrecede" CWE_ID="805" View_ID="1000" />
+         </Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+         <Applicable_Platforms>
+            <Language Name="C" Prevalence="Sometimes" />
+            <Language Name="C++" Prevalence="Sometimes" />
+            <Language Class="Not Language-Specific" Prevalence="Undetermined" />
+	    <Technology Class="Not Technology-Specific" Prevalence="Undetermined" />
+         </Applicable_Platforms>
+         <Alternate_Terms>
+            <Alternate_Term>
+               <Term>length manipulation</Term>
+            </Alternate_Term>
+            <Alternate_Term>
+               <Term>length tampering</Term>
+            </Alternate_Term>
+         </Alternate_Terms>
+         <Modes_Of_Introduction>
+            <Introduction>
+               <Phase>Implementation</Phase>
+            </Introduction>
+         </Modes_Of_Introduction>
+         <Common_Consequences>
+            <Consequence>
+               <Scope>Confidentiality</Scope>
+               <Scope>Integrity</Scope>
+               <Impact>Read Memory</Impact>
+               <Impact>Modify Memory</Impact>
+               <Impact>Varies by Context</Impact>
+            </Consequence>
+         </Common_Consequences>
+	 <Detection_Methods>
+	   <Detection_Method Detection_Method_ID="DM-14">
+	     <Method>Automated Static Analysis</Method>
+	     <Description>Automated static analysis, commonly referred to as Static Application Security Testing (SAST), can find some instances of this weakness by analyzing source code (or binary/compiled code) without having to execute it. Typically, this is done by building a model of data flow and control flow, then searching for potentially-vulnerable patterns that connect "sources" (origins of input) with "sinks" (destinations where the data interacts with external components, a lower layer such as the OS, etc.)</Description>
+	     <Effectiveness>High</Effectiveness>
+	   </Detection_Method>
+	 </Detection_Methods>
+         <Potential_Mitigations>
+            <Mitigation>
+               <Phase>Implementation</Phase>
+               <Description>When processing structured incoming data containing a size field followed by raw data, ensure that you identify and resolve any inconsistencies between the size field and the actual size of the data.</Description>
+            </Mitigation>
+            <Mitigation>
+               <Phase>Implementation</Phase>
+               <Description>Do not let the user control the size of the buffer.</Description>
+            </Mitigation>
+            <Mitigation>
+               <Phase>Implementation</Phase>
+               <Description>Validate that the length of the user-supplied data is consistent with the buffer size.</Description>
+            </Mitigation>
+         </Potential_Mitigations>
+         <Demonstrative_Examples>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-91">
+               <Intro_Text>In the following C/C++ example the method processMessageFromSocket() will get a message from a socket, placed into a buffer, and will parse the contents of the buffer into a structure that contains the message length and the message body. A for loop is used to copy the message body into a local character string which will be passed to another method for processing.</Intro_Text>
+               <Example_Code Nature="Bad" Language="C">
+                  <xhtml:div>int processMessageFromSocket(int socket) {<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>int success;<xhtml:br />
+                           <xhtml:br />char buffer[BUFFER_SIZE];<xhtml:br />char message[MESSAGE_SIZE];<xhtml:br />
+                           <xhtml:br />
+                           <xhtml:i>// get message from socket and store into buffer</xhtml:i>
+                           <xhtml:br />
+                           <xhtml:br />
+                           <xhtml:i>//Ignoring possibliity that buffer &gt; BUFFER_SIZE</xhtml:i>
+                           <xhtml:br />if (getMessage(socket, buffer, BUFFER_SIZE) &gt; 0) {<xhtml:div style="margin-left:1em;">
+                              <xhtml:div>
+                                 <xhtml:br />
+                                 <xhtml:i>// place contents of the buffer into message structure</xhtml:i>
+                                 <xhtml:br />ExMessage *msg = recastBuffer(buffer);<xhtml:br />
+                                 <xhtml:br />
+                                 <xhtml:i>// copy message body into string for processing</xhtml:i>
+                                 <xhtml:br />int index;<xhtml:br />for (index = 0; index &lt; msg-&gt;msgLength; index++) {<xhtml:div style="margin-left:1em;">message[index] = msg-&gt;msgBody[index];</xhtml:div>}<xhtml:br />message[index] = '\0';<xhtml:br />
+                                 <xhtml:br />
+                                 <xhtml:i>// process message</xhtml:i>
+                                 <xhtml:br />success = processMessage(message);</xhtml:div>
+                           </xhtml:div>}<xhtml:br />return success;</xhtml:div>
+                     </xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>However, the message length variable (msgLength) from the structure is used as the condition for ending the for loop without validating that msgLength accurately reflects the actual length of the message body (CWE-606). If msgLength indicates a length that is longer than the size of a message body (CWE-130), then this can result in a buffer over-read by reading past the end of the buffer (CWE-126).</Body_Text>
+            </Demonstrative_Example>
+         </Demonstrative_Examples>
+         <Observed_Examples>
+            <Observed_Example>
+               <Reference>CVE-2014-0160</Reference>
+               <Description>Chain: "Heartbleed" bug receives an inconsistent length parameter (CWE-130) enabling an out-of-bounds read (CWE-126), returning memory that could include private cryptographic keys and other sensitive data.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2014-0160</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2009-2299</Reference>
+               <Description>Web application firewall consumes excessive memory when an HTTP request contains a large Content-Length value but no POST data.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2009-2299</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2001-0825</Reference>
+               <Description>Buffer overflow in internal string handling routine allows remote attackers to execute arbitrary commands via a length argument of zero or less, which disables the length check.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2001-0825</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2001-1186</Reference>
+               <Description>Web server allows remote attackers to cause a denial of service via an HTTP request with a content-length value that is larger than the size of the request, which prevents server from timing out the connection.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2001-1186</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2001-0191</Reference>
+               <Description>Service does not properly check the specified length of a cookie, which allows remote attackers to execute arbitrary commands via a buffer overflow, or brute force authentication by using a short cookie length.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2001-0191</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2003-0429</Reference>
+               <Description>Traffic analyzer allows remote attackers to cause a denial of service and possibly execute arbitrary code via invalid IPv4 or IPv6 prefix lengths, possibly triggering a buffer overflow.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2003-0429</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2000-0655</Reference>
+               <Description>Chat client allows remote attackers to cause a denial of service or execute arbitrary commands via a JPEG image containing a comment with an illegal field length of 1.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2000-0655</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2004-0492</Reference>
+               <Description>Server allows remote attackers to cause a denial of service and possibly execute arbitrary code via a negative Content-Length HTTP header field causing a heap-based buffer overflow.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2004-0492</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2004-0201</Reference>
+               <Description>Help program allows remote attackers to execute arbitrary commands via a heap-based buffer overflow caused by a .CHM file with a large length field</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2004-0201</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2003-0825</Reference>
+               <Description>Name services does not properly validate the length of certain packets, which allows attackers to cause a denial of service and possibly execute arbitrary code. Can overlap zero-length issues</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2003-0825</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2004-0095</Reference>
+               <Description>Policy manager allows remote attackers to cause a denial of service (memory consumption and crash) and possibly execute arbitrary code via an HTTP POST request with an invalid Content-Length value.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2004-0095</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2004-0826</Reference>
+               <Description>Heap-based buffer overflow in library allows remote attackers to execute arbitrary code via a modified record length field in an SSLv2 client hello message.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2004-0826</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2004-0808</Reference>
+               <Description>When domain logons are enabled, server allows remote attackers to cause a denial of service via a SAM_UAS_CHANGE request with a length value that is larger than the number of structures that are provided.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2004-0808</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2002-1357</Reference>
+               <Description>Multiple SSH2 servers and clients do not properly handle packets or data elements with incorrect length specifiers, which may allow remote attackers to cause a denial of service or possibly execute arbitrary code.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2002-1357</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2004-0774</Reference>
+               <Description>Server allows remote attackers to cause a denial of service (CPU and memory exhaustion) via a POST request with a Content-Length header set to -1.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2004-0774</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2004-0989</Reference>
+               <Description>Multiple buffer overflows in xml library that may allow remote attackers to execute arbitrary code via long URLs.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2004-0989</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2004-0568</Reference>
+               <Description>Application does not properly validate the length of a value that is saved in a session file, which allows remote attackers to execute arbitrary code via a malicious session file (.ht), web site, or Telnet URL contained in an e-mail message, triggering a buffer overflow.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2004-0568</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2003-0327</Reference>
+               <Description>Server allows remote attackers to cause a denial of service via a remote password array with an invalid length, which triggers a heap-based buffer overflow.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2003-0327</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2003-0345</Reference>
+               <Description>Product allows remote attackers to cause a denial of service and possibly execute arbitrary code via an SMB packet that specifies a smaller buffer length than is required.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2003-0345</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2004-0430</Reference>
+               <Description>Server allows remote attackers to execute arbitrary code via a LoginExt packet for a Cleartext Password User Authentication Method (UAM) request with a PathName argument that includes an AFPName type string that is longer than the associated length field.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2004-0430</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2005-0064</Reference>
+               <Description>PDF viewer allows remote attackers to execute arbitrary code via a PDF file with a large /Encrypt /Length keyLength value.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2005-0064</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2004-0413</Reference>
+               <Description>SVN client trusts the length field of SVN protocol URL strings, which allows remote attackers to cause a denial of service and possibly execute arbitrary code via an integer overflow that leads to a heap-based buffer overflow.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2004-0413</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2004-0940</Reference>
+               <Description>Is effectively an accidental double increment of a counter that prevents a length check conditional from exiting a loop.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2004-0940</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2002-1235</Reference>
+               <Description>Length field of a request not verified.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2002-1235</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2005-3184</Reference>
+               <Description>Buffer overflow by modifying a length value.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2005-3184</Link>
+            </Observed_Example>
+         </Observed_Examples>
+         <Taxonomy_Mappings>
+            <Taxonomy_Mapping Taxonomy_Name="PLOVER">
+               <Entry_Name>Length Parameter Inconsistency</Entry_Name>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="Software Fault Patterns">
+               <Entry_ID>SFP24</Entry_ID>
+               <Entry_Name>Tainted Input to Command</Entry_Name>
+            </Taxonomy_Mapping>
+         </Taxonomy_Mappings>
+         <Related_Attack_Patterns>
+            <Related_Attack_Pattern CAPEC_ID="47" />
+         </Related_Attack_Patterns>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Base level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+         <Notes>
+            <Note Type="Relationship">This probably overlaps other categories including zero-length issues.</Note>
+         </Notes>
+         <Content_History>
+            <Submission>
+               <Submission_Name>PLOVER</Submission_Name>
+               <Submission_Date>2006-07-19</Submission_Date>
+               <Submission_Version>Draft 3</Submission_Version>
+               <Submission_ReleaseDate>2006-07-19</Submission_ReleaseDate>
+            </Submission>
+            <Modification>
+               <Modification_Name>Eric Dalci</Modification_Name>
+               <Modification_Organization>Cigital</Modification_Organization>
+               <Modification_Date>2008-07-01</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>updated Potential_Mitigations, Time_of_Introduction</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2008-09-08</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>updated Applicable_Platforms, Description, Name, Relationships, Observed_Example, Relationship_Notes, Taxonomy_Mappings, Weakness_Ordinalities</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2009-03-10</Modification_Date>
+               <Modification_Version>1.3</Modification_Version>
+               <Modification_ReleaseDate>2009-03-10</Modification_ReleaseDate>
+               <Modification_Comment>updated Description, Name</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2009-12-28</Modification_Date>
+               <Modification_Version>1.7</Modification_Version>
+               <Modification_ReleaseDate>2009-12-28</Modification_ReleaseDate>
+               <Modification_Comment>updated Observed_Examples</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2010-02-16</Modification_Date>
+               <Modification_Version>1.8</Modification_Version>
+               <Modification_ReleaseDate>2010-02-16</Modification_ReleaseDate>
+               <Modification_Comment>updated Description, Potential_Mitigations, Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2010-12-13</Modification_Date>
+               <Modification_Version>1.11</Modification_Version>
+               <Modification_ReleaseDate>2010-12-13</Modification_ReleaseDate>
+               <Modification_Comment>updated Potential_Mitigations</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-03-29</Modification_Date>
+               <Modification_Version>1.12</Modification_Version>
+               <Modification_ReleaseDate>2011-03-30</Modification_ReleaseDate>
+               <Modification_Comment>updated Demonstrative_Examples</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-06-01</Modification_Date>
+               <Modification_Version>1.13</Modification_Version>
+               <Modification_ReleaseDate>2011-06-01</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-06-27</Modification_Date>
+               <Modification_Version>2.0</Modification_Version>
+               <Modification_ReleaseDate>2011-06-27</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2012-05-11</Modification_Date>
+               <Modification_Version>2.2</Modification_Version>
+               <Modification_ReleaseDate>2012-05-15</Modification_ReleaseDate>
+               <Modification_Comment>updated Observed_Examples, Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2012-10-30</Modification_Date>
+               <Modification_Version>2.3</Modification_Version>
+               <Modification_ReleaseDate>2012-10-30</Modification_ReleaseDate>
+               <Modification_Comment>updated Potential_Mitigations</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2013-07-17</Modification_Date>
+               <Modification_Version>2.5</Modification_Version>
+               <Modification_ReleaseDate>2013-07-17</Modification_ReleaseDate>
+               <Modification_Comment>updated Type</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2014-06-23</Modification_Date>
+               <Modification_Version>2.7</Modification_Version>
+               <Modification_ReleaseDate>2014-06-23</Modification_ReleaseDate>
+               <Modification_Comment>updated Observed_Examples</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2014-07-30</Modification_Date>
+               <Modification_Version>2.8</Modification_Version>
+               <Modification_ReleaseDate>2014-07-31</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2017-01-19</Modification_Date>
+               <Modification_Version>2.10</Modification_Version>
+               <Modification_ReleaseDate>2017-01-19</Modification_ReleaseDate>
+               <Modification_Comment>updated Type</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2017-11-08</Modification_Date>
+               <Modification_Version>3.0</Modification_Version>
+               <Modification_ReleaseDate>2017-11-08</Modification_ReleaseDate>
+               <Modification_Comment>updated Applicable_Platforms, Causal_Nature, Demonstrative_Examples</Modification_Comment>
+            </Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-02-24</Modification_Date>
+					<Modification_Version>4.0</Modification_Version>
+					<Modification_ReleaseDate>2020-02-24</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-06-25</Modification_Date>
+					<Modification_Version>4.1</Modification_Version>
+					<Modification_ReleaseDate>2020-06-25</Modification_ReleaseDate>
+					<Modification_Comment>updated Common_Consequences, Demonstrative_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-08-20</Modification_Date>
+					<Modification_Version>4.2</Modification_Version>
+					<Modification_ReleaseDate>2020-08-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-12-10</Modification_Date>
+					<Modification_Version>4.3</Modification_Version>
+					<Modification_ReleaseDate>2020-12-10</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-10-13</Modification_Date>
+					<Modification_Version>4.9</Modification_Version>
+					<Modification_ReleaseDate>2022-10-13</Modification_ReleaseDate>
+					<Modification_Comment>updated Taxonomy_Mappings</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-01-31</Modification_Date>
+					<Modification_Version>4.10</Modification_Version>
+					<Modification_ReleaseDate>2023-01-31</Modification_ReleaseDate>
+					<Modification_Comment>updated Description</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships, Time_of_Introduction</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2024-02-29</Modification_Date>
+					<Modification_Version>4.14</Modification_Version>
+					<Modification_ReleaseDate>2024-02-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Observed_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-09-09</Modification_Date>
+					<Modification_Version>4.18</Modification_Version>
+					<Modification_ReleaseDate>2025-09-09</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Applicable_Platforms, Detection_Factors</Modification_Comment>
+				</Modification>
+            <Previous_Entry_Name Date="2008-09-09">Length Parameter Inconsistency</Previous_Entry_Name>
+            <Previous_Entry_Name Date="2009-03-10">Failure to Handle Length Parameter Inconsistency</Previous_Entry_Name>
+         </Content_History>
+      </Weakness>
+      

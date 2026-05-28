@@ -1,0 +1,247 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="309" Name="Use of Password System for Primary Authentication" Abstraction="Base" Structure="Simple" Status="Draft">
+         <Description>The use of password systems as the primary means of authentication may be subject to several flaws or shortcomings, each reducing the effectiveness of the mechanism.</Description>
+         <Related_Weaknesses>
+            <Related_Weakness Nature="ChildOf" CWE_ID="1390" View_ID="1000" Ordinal="Primary" />
+            <Related_Weakness Nature="ChildOf" CWE_ID="654" View_ID="1000" />
+            <Related_Weakness Nature="PeerOf" CWE_ID="308" View_ID="1000" />
+         </Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+         <Applicable_Platforms>
+            <Language Class="Not Language-Specific" Prevalence="Undetermined" />
+         </Applicable_Platforms>
+         <Background_Details>
+            <Background_Detail>Password systems are the simplest and most ubiquitous authentication mechanisms. However, they are subject to such well known attacks,and such frequent compromise that their use in the most simple implementation is not practical.</Background_Detail>
+         </Background_Details>
+         <Modes_Of_Introduction>
+            <Introduction>
+               <Phase>Architecture and Design</Phase>
+            </Introduction>
+         </Modes_Of_Introduction>
+         <Likelihood_Of_Exploit>High</Likelihood_Of_Exploit>
+         <Common_Consequences>
+            <Consequence>
+               <Scope>Access Control</Scope>
+               <Impact>Bypass Protection Mechanism</Impact>
+               <Impact>Gain Privileges or Assume Identity</Impact>
+               <Note>A password authentication mechanism error will almost always result in attackers being authorized as valid users.</Note>
+            </Consequence>
+         </Common_Consequences>
+         <Potential_Mitigations>
+            <Mitigation>
+               <Phase>Architecture and Design</Phase>
+               <Description>
+                  <xhtml:p>In order to protect password systems from compromise, the following should be noted:</xhtml:p>
+                     <xhtml:ul>
+                        <xhtml:li>Passwords should be stored safely to prevent insider attack and to ensure that -- if a system is compromised -- the passwords are not retrievable. Due to password reuse, this information may be useful in the compromise of other systems these users work with. In order to protect these passwords, they should be stored encrypted, in a non-reversible state, such that the original text password cannot be extracted from the stored value.</xhtml:li>
+                        <xhtml:li>Password aging should be strictly enforced to ensure that passwords do not remain unchanged for long periods of time. The longer a password remains in use, the higher the probability that it has been compromised. For this reason, passwords should require refreshing periodically, and users should be informed of the risk of passwords which remain in use for too long.</xhtml:li>
+                        <xhtml:li>Password strength should be enforced intelligently. Rather than restrict passwords to specific content, or specific length, users should be encouraged to use upper and lower case letters, numbers, and symbols in their passwords. The system should also ensure that no passwords are derived from dictionary words.</xhtml:li>
+                     </xhtml:ul>
+               </Description>
+            </Mitigation>
+            <Mitigation>
+               <Phase>Architecture and Design</Phase>
+               <Description>Use a zero-knowledge password protocol, such as SRP.</Description>
+            </Mitigation>
+            <Mitigation>
+               <Phase>Architecture and Design</Phase>
+               <Description>Ensure that passwords are stored safely and are not reversible.</Description>
+            </Mitigation>
+            <Mitigation>
+               <Phase>Architecture and Design</Phase>
+               <Description>Implement password aging functionality that requires passwords be changed after a certain point.</Description>
+            </Mitigation>
+            <Mitigation>
+               <Phase>Architecture and Design</Phase>
+               <Description>Use a mechanism for determining the strength of a password and notify the user of weak password use.</Description>
+            </Mitigation>
+            <Mitigation>
+               <Phase>Architecture and Design</Phase>
+               <Description>Inform the user of why password protections are in place, how they work to protect data integrity, and why it is important to heed their warnings.</Description>
+            </Mitigation>
+         </Potential_Mitigations>
+         <Demonstrative_Examples>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-101">
+               <Intro_Text>In both of these examples, a user is logged in if their given password matches a stored password:</Intro_Text>
+               <Example_Code Nature="Bad" Language="C">
+                  <xhtml:div>unsigned char *check_passwd(char *plaintext) {<xhtml:div style="margin-left:1em;">ctext = simple_digest("sha1",plaintext,strlen(plaintext), ... );<xhtml:br />
+                        <xhtml:i>//Login if hash matches stored hash</xhtml:i>
+                        <xhtml:br />if (equal(ctext, secret_password())) {<xhtml:div style="margin-left:1em;">login_user();</xhtml:div>}</xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Example_Code Nature="Bad" Language="Java">
+                  <xhtml:div>String plainText = new String(plainTextIn);<xhtml:br />MessageDigest encer = MessageDigest.getInstance("SHA");<xhtml:br />encer.update(plainTextIn);<xhtml:br />byte[] digest = password.digest();<xhtml:br />
+                     <xhtml:i>//Login if hash matches stored hash</xhtml:i>
+                     <xhtml:br />if (equal(digest,secret_password())) {<xhtml:div style="margin-left:1em;">login_user();</xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>This code relies exclusively on a password mechanism (CWE-309) using only one factor of authentication (CWE-308). If an attacker can steal or guess a user's password, they are given full access to their account. Note this code also uses SHA-1, which is a weak hash (CWE-328).  It also does not use a salt (CWE-759).</Body_Text>
+            </Demonstrative_Example>
+         </Demonstrative_Examples>
+         <Taxonomy_Mappings>
+            <Taxonomy_Mapping Taxonomy_Name="CLASP">
+               <Entry_Name>Using password systems</Entry_Name>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="OWASP Top Ten 2004">
+               <Entry_ID>A3</Entry_ID>
+               <Entry_Name>Broken Authentication and Session Management</Entry_Name>
+               <Mapping_Fit>CWE More Specific</Mapping_Fit>
+            </Taxonomy_Mapping>
+         </Taxonomy_Mappings>
+         <Related_Attack_Patterns>
+            <Related_Attack_Pattern CAPEC_ID="16" />
+            <Related_Attack_Pattern CAPEC_ID="49" />
+            <Related_Attack_Pattern CAPEC_ID="509" />
+            <Related_Attack_Pattern CAPEC_ID="55" />
+            <Related_Attack_Pattern CAPEC_ID="555" />
+            <Related_Attack_Pattern CAPEC_ID="560" />
+            <Related_Attack_Pattern CAPEC_ID="561" />
+            <Related_Attack_Pattern CAPEC_ID="565" />
+            <Related_Attack_Pattern CAPEC_ID="600" />
+            <Related_Attack_Pattern CAPEC_ID="652" />
+            <Related_Attack_Pattern CAPEC_ID="653" />
+            <Related_Attack_Pattern CAPEC_ID="70" />
+         </Related_Attack_Patterns>
+         <References>
+            <Reference External_Reference_ID="REF-18" />
+         </References>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Base level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+         <Content_History>
+            <Submission>
+               <Submission_Name>CLASP</Submission_Name>
+               <Submission_Date>2006-07-19</Submission_Date>
+               <Submission_Version>Draft 3</Submission_Version>
+               <Submission_ReleaseDate>2006-07-19</Submission_ReleaseDate>
+            </Submission>
+            <Modification>
+               <Modification_Organization>Veracode</Modification_Organization>
+               <Modification_Date>2008-08-15</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>Suggested OWASP Top Ten 2004 mapping</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2008-09-08</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>updated Background_Details, Common_Consequences, Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2010-12-13</Modification_Date>
+               <Modification_Version>1.11</Modification_Version>
+               <Modification_ReleaseDate>2010-12-13</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-06-01</Modification_Date>
+               <Modification_Version>1.13</Modification_Version>
+               <Modification_ReleaseDate>2011-06-01</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2012-05-11</Modification_Date>
+               <Modification_Version>2.2</Modification_Version>
+               <Modification_ReleaseDate>2012-05-15</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2012-10-30</Modification_Date>
+               <Modification_Version>2.3</Modification_Version>
+               <Modification_ReleaseDate>2012-10-30</Modification_ReleaseDate>
+               <Modification_Comment>updated Demonstrative_Examples</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2014-07-30</Modification_Date>
+               <Modification_Version>2.8</Modification_Version>
+               <Modification_ReleaseDate>2014-07-31</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2017-11-08</Modification_Date>
+               <Modification_Version>3.0</Modification_Version>
+               <Modification_ReleaseDate>2017-11-08</Modification_ReleaseDate>
+               <Modification_Comment>updated Applicable_Platforms, Likelihood_of_Exploit</Modification_Comment>
+            </Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-02-24</Modification_Date>
+					<Modification_Version>4.0</Modification_Version>
+					<Modification_ReleaseDate>2020-02-24</Modification_ReleaseDate>
+					<Modification_Comment>updated References, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-08-20</Modification_Date>
+					<Modification_Version>4.2</Modification_Version>
+					<Modification_ReleaseDate>2020-08-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Related_Attack_Patterns</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-03-15</Modification_Date>
+					<Modification_Version>4.4</Modification_Version>
+					<Modification_ReleaseDate>2021-03-15</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-10-13</Modification_Date>
+					<Modification_Version>4.9</Modification_Version>
+					<Modification_ReleaseDate>2022-10-13</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships, Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+            <Previous_Entry_Name Date="2008-04-11">Using Password Systems</Previous_Entry_Name>
+         </Content_History>
+      </Weakness>
+      

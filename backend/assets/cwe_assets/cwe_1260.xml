@@ -1,0 +1,295 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="1260" Name="Improper Handling of Overlap Between Protected Memory Ranges" Abstraction="Base" Structure="Simple" Status="Stable">
+         <Description>The product allows address regions to overlap, which can result in the bypassing of intended memory protection.</Description>
+         <Extended_Description>
+            <xhtml:p>Isolated memory regions and access control (read/write) policies are used by hardware to protect privileged software. Software components are often allowed to change or remap memory region definitions in order to enable flexible and dynamically changeable memory management by system software.</xhtml:p>
+            <xhtml:p>If a software component running at lower privilege can program a memory address region to overlap with other memory regions used by software running at higher privilege, privilege escalation may be available to attackers. The memory protection unit (MPU) logic can incorrectly handle such an address overlap and allow the lower-privilege software to read or write into the protected memory region, resulting in privilege escalation attack. An address overlap weakness can also be used to launch a denial of service attack on the higher-privilege software memory regions.</xhtml:p>
+         </Extended_Description>
+			<Related_Weaknesses>
+			  <Related_Weakness Nature="ChildOf" CWE_ID="284" View_ID="1000" Ordinal="Primary" />
+			  <Related_Weakness Nature="CanPrecede" CWE_ID="119" View_ID="1000" Ordinal="Primary" />
+			</Related_Weaknesses>
+		 <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+            <Weakness_Ordinality>
+               <Ordinality>Resultant</Ordinality>
+            </Weakness_Ordinality>
+		 </Weakness_Ordinalities>
+         <Applicable_Platforms>
+            <Language Class="Not Language-Specific" Prevalence="Undetermined" />
+	    <Operating_System Class="Not OS-Specific" Prevalence="Undetermined" />
+	    <Architecture Class="Not Architecture-Specific" Prevalence="Undetermined" />
+            <Technology Name="Memory Hardware" Prevalence="Undetermined" />
+            <Technology Name="Processor Hardware" Prevalence="Undetermined" />
+         </Applicable_Platforms>
+         <Modes_Of_Introduction>
+            <Introduction>
+               <Phase>Architecture and Design</Phase>
+            <Note>Such issues could be introduced during hardware architecture and design or implementation and identified later during the Testing phase.</Note>            
+            </Introduction>
+            <Introduction>
+               <Phase>Implementation</Phase>
+            </Introduction>
+         </Modes_Of_Introduction>
+         <Common_Consequences>
+            <Consequence>
+               <Scope>Confidentiality</Scope>
+               <Scope>Integrity</Scope>
+               <Scope>Availability</Scope>
+               <Impact>Modify Memory</Impact>
+               <Impact>Read Memory</Impact>
+               <Impact>DoS: Instability</Impact>
+               <Likelihood>High</Likelihood>
+            </Consequence>
+         </Common_Consequences>
+	 <Detection_Methods>
+	   <Detection_Method>
+	     <Method>Manual Analysis</Method>
+	     <Description>Create a high privilege memory block of any arbitrary size. Attempt to create a lower privilege memory block with an overlap of the high privilege memory block. If the creation attempt works, fix the hardware. Repeat the test.</Description>
+	     <Effectiveness>High</Effectiveness>
+	   </Detection_Method>
+	 </Detection_Methods>
+         <Potential_Mitigations>
+            <Mitigation>
+               <Phase>Architecture and Design</Phase>
+               <Description>
+                   <xhtml:p>Ensure that memory regions are isolated as intended and that access control (read/write) policies are used by hardware to protect privileged software.</xhtml:p>
+               </Description>
+            </Mitigation>
+            <Mitigation> 
+               <Phase>Implementation</Phase>
+               <Description>
+                 <xhtml:p>For all of the programmable memory protection regions, the memory protection unit (MPU) design can define a priority scheme.</xhtml:p>
+                 <xhtml:p>For example: if three memory regions can be programmed (Region_0, Region_1, and Region_2), the design can enforce a priority scheme, such that, if a system address is within multiple regions, then the region with the lowest ID takes priority and the access-control policy of that region will be applied.  In some MPU designs, the priority scheme can also be programmed by trusted software.</xhtml:p>
+                 <xhtml:p>Hardware logic or trusted firmware can also check for region definitions and block programming of memory regions with overlapping addresses. </xhtml:p>
+                 <xhtml:p>The memory-access-control-check filter can also be designed to apply a policy filter to all of the overlapping ranges, i.e., if an address is within Region_0 and Region_1, then access to this address is only granted if both Region_0 and Region_1 policies allow the access.</xhtml:p>
+               </Description>
+               <Effectiveness>High</Effectiveness>
+            </Mitigation>
+         </Potential_Mitigations>
+         <Demonstrative_Examples>
+            <Demonstrative_Example>
+	      <Intro_Text>
+		<xhtml:p>For example, consider a design with a 16-bit address that has two software privilege levels: Privileged_SW and Non_privileged_SW. To isolate the system memory regions accessible by these two privilege levels, the design supports three memory regions: Region_0, Region_1, and Region_2.</xhtml:p>
+		<xhtml:p>Each region is defined by two 32 bit registers: its range and its access policy.</xhtml:p>
+		<xhtml:ul>
+		  <xhtml:li>Address_range[15:0]: specifies the Base address of the region</xhtml:li>
+		  <xhtml:li>Address_range[31:16]: specifies the size of the region</xhtml:li>
+		  <xhtml:li>Access_policy[31:0]: specifies what types of software can access a region and which actions are allowed</xhtml:li>
+		</xhtml:ul>
+		<xhtml:p>Certain bits of the access policy are defined symbolically as follows:</xhtml:p>
+		<xhtml:ul>
+		  <xhtml:li>Access_policy.read_np: if set to one, allows reads from Non_privileged_SW</xhtml:li>
+		  <xhtml:li>Access_policy.write_np: if set to one, allows writes from Non_privileged_SW</xhtml:li>
+		  <xhtml:li>Access_policy.execute_np: if set to one, allows code execution by Non_privileged_SW</xhtml:li>
+		  <xhtml:li>Access_policy.read_p: if set to one, allows reads from Privileged_SW</xhtml:li>
+		  <xhtml:li>Access_policy.write_p: if set to one, allows writes from Privileged_SW</xhtml:li>
+		  <xhtml:li>Access_policy.execute_p: if set to one, allows code execution by Privileged_SW</xhtml:li>
+		</xhtml:ul>
+		<xhtml:p>For any requests from software, an address-protection filter checks the address range and access policies for each of the three regions, and only allows software access if all three filters allow access.</xhtml:p>
+		<xhtml:p>Consider the following goals for access control as intended by the designer:</xhtml:p>
+		<xhtml:ul>
+		  <xhtml:li>Region_0 &amp; Region_1: registers are programmable by Privileged_SW</xhtml:li>
+		  <xhtml:li>Region_2: registers are programmable by Non_privileged_SW</xhtml:li>
+		</xhtml:ul>
+		<xhtml:p>The intention is that Non_privileged_SW cannot modify memory region and policies defined by Privileged_SW in Region_0 and Region_1. Thus, it cannot read or write the memory regions that Privileged_SW is using.</xhtml:p>
+	      </Intro_Text>
+            <Example_Code Nature="Bad">
+               <xhtml:p>Non_privileged_SW can program the Address_range register for Region_2 so that its address overlaps with the ranges defined by Region_0 or Region_1. Using this capability, it is possible for Non_privileged_SW to block any memory region from being accessed by Privileged_SW, i.e., Region_0 and Region_1.</xhtml:p>
+            </Example_Code>
+	    <Body_Text>This design could be improved in several ways.</Body_Text>
+            <Example_Code Nature="Good">Ensure that software accesses to memory regions are only permitted if all three filters permit access. Additionally, the scheme could define a memory region priority to ensure that Region_2 (the memory region defined by Non_privileged_SW) cannot overlap Region_0 or Region_1 (which are used by Privileged_SW).</Example_Code>
+	    </Demonstrative_Example>
+		    <Demonstrative_Example>
+               <Intro_Text>The example code below is taken from the IOMMU controller module of the HACK@DAC'19 buggy CVA6 SoC [REF-1338]. The static memory map is composed of a set of Memory-Mapped Input/Output (MMIO) regions covering different IP agents within the SoC. Each region is defined by two 64-bit variables representing the base address and size of the memory region (XXXBase and XXXLength).</Intro_Text>
+               <Body_Text>In this example, we have 12 IP agents, and only 4 of them are called out for illustration purposes in the code snippets. Access to the AES IP MMIO region is considered privileged as it provides access to AES secret key, internal states, or decrypted data.</Body_Text>
+			   <Example_Code Nature="Bad" Language="Verilog">
+                	<xhtml:div>...
+						<xhtml:div style="margin-left:1em;">
+							localparam logic[63:0] PLICLength = 64'h03FF_FFFF;<xhtml:br />
+							<xhtml:b>localparam logic[63:0] UARTLength = 64'h0011_1000;</xhtml:b><xhtml:br />
+							<xhtml:b>localparam logic[63:0] AESLength = 64'h0000_1000;</xhtml:b><xhtml:br />
+							localparam logic[63:0] SPILength = 64'h0080_0000;<xhtml:br />
+						</xhtml:div>
+						<xhtml:div>...<xhtml:br /></xhtml:div>
+						<xhtml:div style="margin-left:1em;">
+							typedef enum logic [63:0] {<xhtml:br />
+							<xhtml:div style="margin-left:1em;">
+								...<xhtml:br />
+								PLICBase = 64'h0C00_0000,<xhtml:br />
+								<xhtml:b>UARTBase = 64'h1000_0000,</xhtml:b><xhtml:br />
+								<xhtml:b>AESBase = 64'h1010_0000,</xhtml:b><xhtml:br />
+								SPIBase = 64'h2000_0000,<xhtml:br />
+								...<xhtml:br />
+							</xhtml:div>
+						</xhtml:div>       
+                	</xhtml:div>
+               </Example_Code>
+               <Body_Text>The vulnerable code allows the overlap between the protected MMIO region of the AES peripheral and the unprotected UART MMIO region. As a result, unprivileged users can access the protected region of the AES IP. In the given vulnerable example UART MMIO region starts at address 64'h1000_0000 and ends at address 64'h1011_1000 (UARTBase is 64'h1000_0000, and the size of the region is provided by the UARTLength of 64'h0011_1000).</Body_Text>
+			   <Body_Text>On the other hand, the AES MMIO region starts at address 64'h1010_0000 and ends at address 64'h1010_1000, which implies an overlap between the two peripherals' memory regions. Thus, any user with access to the UART can read or write the AES MMIO region, e.g., the AES secret key.</Body_Text>
+				<Body_Text>To mitigate this issue, remove the overlapping address regions by decreasing the size of the UART memory region or adjusting memory bases for all the remaining peripherals. [REF-1339]</Body_Text>
+				<Example_Code Nature="Good" Language="Verilog">
+					<xhtml:div>...
+						<xhtml:div style="margin-left:1em;">
+							localparam logic[63:0] PLICLength = 64'h03FF_FFFF;<xhtml:br />
+							<xhtml:b>localparam logic[63:0] UARTLength = 64'h0000_1000;</xhtml:b><xhtml:br />
+							localparam logic[63:0] AESLength = 64'h0000_1000;<xhtml:br />
+							localparam logic[63:0] SPILength = 64'h0080_0000;<xhtml:br />
+						</xhtml:div>
+					<xhtml:div>...<xhtml:br /></xhtml:div>
+						<xhtml:div style="margin-left:1em;">
+							typedef enum logic [63:0] {<xhtml:br />
+							<xhtml:div style="margin-left:1em;">
+								...<xhtml:br />
+								PLICBase = 64'h0C00_0000,<xhtml:br />
+								UARTBase = 64'h1000_0000,<xhtml:br />
+								AESBase = 64'h1010_0000,<xhtml:br />
+								SPIBase = 64'h2000_0000,<xhtml:br />
+								...<xhtml:br />
+							</xhtml:div>
+						</xhtml:div>       
+					</xhtml:div>
+               </Example_Code>
+			</Demonstrative_Example>
+         </Demonstrative_Examples>
+         <Observed_Examples>
+            <Observed_Example>
+               <Reference>CVE-2008-7096</Reference>
+               <Description>virtualization product allows compromise of hardware product by accessing certain remapping registers.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2008-7096</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>[REF-1100]</Reference>
+               <Description>processor design flaw allows ring 0 code to access more privileged rings by causing a register window to overlap a range of protected system RAM [REF-1100]</Description>
+               <Link>https://github.com/xoreaxeaxeax/sinkhole/blob/master/us-15-Domas-TheMemorySinkhole-wp.pdf</Link>
+            </Observed_Example>
+			</Observed_Examples>
+         <Related_Attack_Patterns>
+            <Related_Attack_Pattern CAPEC_ID="456" />
+            <Related_Attack_Pattern CAPEC_ID="679" />
+         </Related_Attack_Patterns>
+         <References>
+         <Reference External_Reference_ID="REF-1100" />
+		 <Reference External_Reference_ID="REF-1338" />
+		 <Reference External_Reference_ID="REF-1339" />
+      </References>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Base level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+      <Notes>
+	<Note Type="Maintenance">As of CWE 4.6, CWE-1260 and CWE-1316 are siblings under view 1000, but CWE-1260 might be a parent of CWE-1316. More analysis is warranted.</Note>
+      </Notes>
+         <Content_History>
+            <Submission>
+               <Submission_Name>Arun Kanuparthi, Hareesh Khattri, Parbati Kumar Manna, Narasimha Kumar V Mangipudi</Submission_Name>
+               <Submission_Organization>Intel Corporation</Submission_Organization>
+               <Submission_Date>2020-02-10</Submission_Date>
+               <Submission_Version>4.1</Submission_Version>
+               <Submission_ReleaseDate>2020-02-24</Submission_ReleaseDate>
+            </Submission>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-08-20</Modification_Date>
+					<Modification_Version>4.2</Modification_Version>
+					<Modification_ReleaseDate>2020-08-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples, Description, Modes_of_Introduction, Related_Attack_Patterns</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-12-10</Modification_Date>
+					<Modification_Version>4.3</Modification_Version>
+					<Modification_ReleaseDate>2020-12-10</Modification_ReleaseDate>
+					<Modification_Comment>updated Maintenance_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-10-28</Modification_Date>
+					<Modification_Version>4.6</Modification_Version>
+					<Modification_ReleaseDate>2021-10-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples, Description, Detection_Factors, Maintenance_Notes, Observed_Examples, Relationships, Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-04-28</Modification_Date>
+					<Modification_Version>4.7</Modification_Version>
+					<Modification_ReleaseDate>2022-04-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Applicable_Platforms, Related_Attack_Patterns</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-06-28</Modification_Date>
+					<Modification_Version>4.8</Modification_Version>
+					<Modification_ReleaseDate>2022-06-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Applicable_Platforms</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-01-31</Modification_Date>
+					<Modification_Version>4.10</Modification_Version>
+					<Modification_ReleaseDate>2023-01-31</Modification_ReleaseDate>
+					<Modification_Comment>updated Related_Attack_Patterns</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples, Mapping_Notes, References</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-09-09</Modification_Date>
+					<Modification_Version>4.18</Modification_Version>
+					<Modification_ReleaseDate>2025-09-09</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Contribution Type="Feedback">
+				  <Contribution_Name>Narasimha Kumar V Mangipudi</Contribution_Name>
+				  <Contribution_Organization>Lattice Semiconductor</Contribution_Organization>
+				  <Contribution_Date>2021-10-20</Contribution_Date>
+				  <Contribution_Comment>suggested content improvements</Contribution_Comment>
+				</Contribution>
+				<Contribution Type="Content">
+				  <Contribution_Name>Hareesh Khattri</Contribution_Name>
+				  <Contribution_Organization>Intel Corporation</Contribution_Organization>
+				  <Contribution_Date>2021-10-22</Contribution_Date>
+				  <Contribution_Comment>suggested observed examples</Contribution_Comment>
+				</Contribution>
+				<Contribution Type="Content">
+				  <Contribution_Name>Shaza Zeitouni, Mohamadreza Rostami, Pouya Mahmoody, Ahmad-Reza Sadeghi</Contribution_Name>
+				  <Contribution_Organization>Technical University of Darmstadt</Contribution_Organization>
+				  <Contribution_Date>2023-06-21</Contribution_Date>
+				  <Contribution_Comment>suggested demonstrative example</Contribution_Comment>
+				</Contribution>
+				<Contribution Type="Content">
+				  <Contribution_Name>Rahul Kande, Chen Chen, Jeyavijayan Rajendran</Contribution_Name>
+				  <Contribution_Organization>Texas A&amp;M University</Contribution_Organization>
+				  <Contribution_Date>2023-06-21</Contribution_Date>
+				  <Contribution_Comment>suggested demonstrative example</Contribution_Comment>
+				</Contribution>
+         </Content_History>
+      </Weakness>
+      

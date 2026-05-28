@@ -1,0 +1,113 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" ID="1176" Name="Inefficient CPU Computation" Abstraction="Class" Structure="Simple" Status="Incomplete">
+         <Description>The product performs CPU computations using
+         algorithms that are not as efficient as they could be for the
+         needs of the developer, i.e., the computations can be
+         optimized further.</Description>
+         <Related_Weaknesses>
+            <Related_Weakness Nature="ChildOf" CWE_ID="405" View_ID="1000" Ordinal="Primary" />
+         </Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Indirect</Ordinality>
+            </Weakness_Ordinality>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+         <Applicable_Platforms>
+            <Language Class="Not Language-Specific" Prevalence="Undetermined" />
+         </Applicable_Platforms>
+         <Modes_Of_Introduction>
+            <Introduction>
+               <Phase>Architecture and Design</Phase>
+            </Introduction>
+            <Introduction>
+               <Phase>Implementation</Phase>
+            </Introduction>
+         </Modes_Of_Introduction>
+         <Common_Consequences>
+            <Consequence>
+               <Scope>Availability</Scope>
+               <Impact>Reduce Performance</Impact>
+               <Impact>DoS: Resource Consumption (CPU)</Impact>
+	       <Note>This issue can make the product perform more slowly, possibly in ways that are noticeable to the users.  If an attacker can influence the amount of computation that must be performed, e.g. by triggering worst-case complexity, then this performance problem might introduce a vulnerability.</Note>
+            </Consequence>
+         </Common_Consequences>
+		 <Observed_Examples>
+		   <Observed_Example>
+			 <Reference>CVE-2022-37734</Reference>
+			 <Description>Chain: lexer in Java-based GraphQL server does not enforce maximum of tokens early enough (CWE-696), allowing excessive CPU consumption (CWE-1176)</Description>
+			 <Link>https://www.cve.org/CVERecord?id=CVE-2022-37734</Link>
+		   </Observed_Example>
+		 </Observed_Examples>
+         <References>
+            <Reference External_Reference_ID="REF-1008" />
+         </References>
+         <Mapping_Notes>
+            <Usage>Allowed-with-Review</Usage>
+            <Rationale>This CWE entry is a Class and might have Base-level children that would be more appropriate</Rationale>
+            <Comments>Examine children of this entry to see if there is a better fit</Comments>
+            <Reasons>
+               <Reason Type="Abstraction" />
+            </Reasons>
+         </Mapping_Notes>
+         <Content_History>
+            <Submission>
+               <Submission_Name>CWE Content Team</Submission_Name>
+               <Submission_Organization>MITRE</Submission_Organization>
+               <Submission_Date>2019-01-03</Submission_Date>
+               <Submission_Version>3.2</Submission_Version>
+               <Submission_ReleaseDate>2019-01-03</Submission_ReleaseDate>
+            </Submission>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-02-24</Modification_Date>
+					<Modification_Version>4.0</Modification_Version>
+					<Modification_ReleaseDate>2020-02-24</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-01-31</Modification_Date>
+					<Modification_Version>4.10</Modification_Version>
+					<Modification_ReleaseDate>2023-01-31</Modification_ReleaseDate>
+					<Modification_Comment>updated Description</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-10-26</Modification_Date>
+					<Modification_Version>4.13</Modification_Version>
+					<Modification_ReleaseDate>2023-10-26</Modification_ReleaseDate>
+					<Modification_Comment>updated Observed_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Applicable_Platforms, Common_Consequences, Description</Modification_Comment>
+				</Modification>
+         </Content_History>
+      </Weakness>
+      

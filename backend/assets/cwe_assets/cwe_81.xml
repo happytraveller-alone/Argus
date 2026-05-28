@@ -1,0 +1,286 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="81" Name="Improper Neutralization of Script in an Error Message Web Page" Abstraction="Variant" Structure="Simple" Status="Incomplete">
+         <Description>The product receives input from an upstream component, but it does not neutralize or incorrectly neutralizes special characters that could be interpreted as web-scripting elements when they are sent to an error page.</Description>
+         <Extended_Description>
+            <xhtml:p>Error pages may include customized 403 Forbidden or 404 Not Found pages.</xhtml:p>
+            <xhtml:p>When an attacker can trigger an error that contains script syntax within the attacker's input, then cross-site scripting attacks may be possible.</xhtml:p>
+         </Extended_Description>
+         <Related_Weaknesses>
+            <Related_Weakness Nature="ChildOf" CWE_ID="79" View_ID="1000" Ordinal="Primary" />
+            <Related_Weakness Nature="CanAlsoBe" CWE_ID="209" View_ID="1000" />
+            <Related_Weakness Nature="CanAlsoBe" CWE_ID="390" View_ID="1000" />
+         </Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Resultant</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+         <Applicable_Platforms>
+            <Language Class="Not Language-Specific" Prevalence="Undetermined" />
+	    <Technology Class="Web Based" Prevalence="Undetermined" />
+	    <Technology Name="Web Server" Prevalence="Undetermined" />
+         </Applicable_Platforms>
+         <Modes_Of_Introduction>
+            <Introduction>
+               <Phase>Implementation</Phase>
+            </Introduction>
+            <Introduction>
+               <Phase>Operation</Phase>
+            </Introduction>
+         </Modes_Of_Introduction>
+         <Common_Consequences>
+            <Consequence>
+               <Scope>Confidentiality</Scope>
+               <Scope>Integrity</Scope>
+               <Scope>Availability</Scope>
+               <Impact>Read Application Data</Impact>
+               <Impact>Execute Unauthorized Code or Commands</Impact>
+            </Consequence>
+         </Common_Consequences>
+	 <Detection_Methods>
+	   <Detection_Method Detection_Method_ID="DM-14">
+	     <Method>Automated Static Analysis</Method>
+	     <Description>Automated static analysis, commonly referred to as Static Application Security Testing (SAST), can find some instances of this weakness by analyzing source code (or binary/compiled code) without having to execute it. Typically, this is done by building a model of data flow and control flow, then searching for potentially-vulnerable patterns that connect "sources" (origins of input) with "sinks" (destinations where the data interacts with external components, a lower layer such as the OS, etc.)</Description>
+	   </Detection_Method>
+	 </Detection_Methods>
+         <Potential_Mitigations>
+            <Mitigation>
+               <Phase>Implementation</Phase>
+               <Description>Do not write user-controlled input to error pages.</Description>
+            </Mitigation>
+            <Mitigation>
+               <Phase>Implementation</Phase>
+               <Description>Carefully check each input parameter against a rigorous positive specification (allowlist) defining the specific characters and format allowed. All input should be neutralized, not just parameters that the user is supposed to specify, but all data in the request, including hidden fields, cookies, headers, the URL itself, and so forth. A common mistake that leads to continuing XSS vulnerabilities is to validate only fields that are expected to be redisplayed by the site. We often encounter data from the request that is reflected by the application server or the application that the development team did not anticipate. Also, a field that is not currently reflected may be used by a future developer. Therefore, validating ALL parts of the HTTP request is recommended.</Description>
+            </Mitigation>
+            <Mitigation Mitigation_ID="MIT-30.1">
+               <Phase>Implementation</Phase>
+               <Strategy>Output Encoding</Strategy>
+               <Description>
+                  <xhtml:p>Use and specify an output encoding that can be handled by the downstream component that is reading the output. Common encodings include ISO-8859-1, UTF-7, and UTF-8. When an encoding is not specified, a downstream component may choose a different encoding, either by assuming a default encoding or automatically inferring which encoding is being used, which can be erroneous. When the encodings are inconsistent, the downstream component might treat some character or byte sequences as special, even if they are not special in the original encoding. Attackers might then be able to exploit this discrepancy and conduct injection attacks; they even might be able to bypass protection mechanisms that assume the original encoding is also being used by the downstream component.</xhtml:p>
+                  <xhtml:p>The problem of inconsistent output encodings often arises in web pages. If an encoding is not specified in an HTTP header, web browsers often guess about which encoding is being used. This can open up the browser to subtle XSS attacks.</xhtml:p>
+               </Description>
+            </Mitigation>
+            <Mitigation Mitigation_ID="MIT-43">
+               <Phase>Implementation</Phase>
+               <Description>With Struts, write all data from form beans with the bean's filter attribute set to true.</Description>
+            </Mitigation>
+            <Mitigation Mitigation_ID="MIT-31">
+               <Phase>Implementation</Phase>
+               <Strategy>Attack Surface Reduction</Strategy>
+               <Description>To help mitigate XSS attacks against the user's session cookie, set the session cookie to be HttpOnly. In browsers that support the HttpOnly feature (such as more recent versions of Internet Explorer and Firefox), this attribute can prevent the user's session cookie from being accessible to malicious client-side scripts that use document.cookie. This is not a complete solution, since HttpOnly is not supported by all browsers. More importantly, XmlHttpRequest and other powerful browser technologies provide read access to HTTP headers, including the Set-Cookie header in which the HttpOnly flag is set.</Description>
+               <Effectiveness>Defense in Depth</Effectiveness>
+            </Mitigation>
+         </Potential_Mitigations>
+         <Observed_Examples>
+            <Observed_Example>
+               <Reference>CVE-2002-0840</Reference>
+               <Description>XSS in default error page from Host: header.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2002-0840</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2002-1053</Reference>
+               <Description>XSS in error message.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2002-1053</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2002-1700</Reference>
+               <Description>XSS in error page from targeted parameter.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2002-1700</Link>
+            </Observed_Example>
+         </Observed_Examples>
+         <Taxonomy_Mappings>
+            <Taxonomy_Mapping Taxonomy_Name="PLOVER">
+               <Entry_Name>XSS in error pages</Entry_Name>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="Software Fault Patterns">
+               <Entry_ID>SFP24</Entry_ID>
+               <Entry_Name>Tainted input to command</Entry_Name>
+            </Taxonomy_Mapping>
+         </Taxonomy_Mappings>
+         <Related_Attack_Patterns>
+            <Related_Attack_Pattern CAPEC_ID="198" />
+         </Related_Attack_Patterns>
+         <References>
+            <Reference External_Reference_ID="REF-44" Section="&quot;Sin 11: Failure to Handle Errors Correctly.&quot; Page 183" />
+         </References>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Variant level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+         <Content_History>
+            <Submission>
+               <Submission_Name>PLOVER</Submission_Name>
+               <Submission_Date>2006-07-19</Submission_Date>
+               <Submission_Version>Draft 3</Submission_Version>
+               <Submission_ReleaseDate>2006-07-19</Submission_ReleaseDate>
+            </Submission>
+            <Modification>
+               <Modification_Name>Eric Dalci</Modification_Name>
+               <Modification_Organization>Cigital</Modification_Organization>
+               <Modification_Date>2008-07-01</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>updated Time_of_Introduction</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2008-09-08</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>updated Description, Relationships, Taxonomy_Mappings, Weakness_Ordinalities</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2008-10-14</Modification_Date>
+               <Modification_Version>1.0.1</Modification_Version>
+               <Modification_ReleaseDate>2008-10-14</Modification_ReleaseDate>
+               <Modification_Comment>updated Description</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2009-05-27</Modification_Date>
+               <Modification_Version>1.4</Modification_Version>
+               <Modification_ReleaseDate>2009-05-27</Modification_ReleaseDate>
+               <Modification_Comment>updated Description, Name</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2010-04-05</Modification_Date>
+               <Modification_Version>1.8.1</Modification_Version>
+               <Modification_ReleaseDate>2010-04-05</Modification_ReleaseDate>
+               <Modification_Comment>updated Related_Attack_Patterns</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2010-06-21</Modification_Date>
+               <Modification_Version>1.9</Modification_Version>
+               <Modification_ReleaseDate>2010-06-21</Modification_ReleaseDate>
+               <Modification_Comment>updated Description, Name, Potential_Mitigations</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-03-29</Modification_Date>
+               <Modification_Version>1.12</Modification_Version>
+               <Modification_ReleaseDate>2011-03-30</Modification_ReleaseDate>
+               <Modification_Comment>updated Potential_Mitigations</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-06-01</Modification_Date>
+               <Modification_Version>1.13</Modification_Version>
+               <Modification_ReleaseDate>2011-06-01</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2012-05-11</Modification_Date>
+               <Modification_Version>2.2</Modification_Version>
+               <Modification_ReleaseDate>2012-05-15</Modification_ReleaseDate>
+               <Modification_Comment>updated References, Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2012-10-30</Modification_Date>
+               <Modification_Version>2.3</Modification_Version>
+               <Modification_ReleaseDate>2012-10-30</Modification_ReleaseDate>
+               <Modification_Comment>updated Potential_Mitigations</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2013-02-21</Modification_Date>
+               <Modification_Version>2.4</Modification_Version>
+               <Modification_ReleaseDate>2013-02-21</Modification_ReleaseDate>
+               <Modification_Comment>updated Potential_Mitigations</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2014-07-30</Modification_Date>
+               <Modification_Version>2.8</Modification_Version>
+               <Modification_ReleaseDate>2014-07-31</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2017-05-03</Modification_Date>
+               <Modification_Version>2.11</Modification_Version>
+               <Modification_ReleaseDate>2017-05-05</Modification_ReleaseDate>
+               <Modification_Comment>updated Potential_Mitigations</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2017-11-08</Modification_Date>
+               <Modification_Version>3.0</Modification_Version>
+               <Modification_ReleaseDate>2017-11-08</Modification_ReleaseDate>
+               <Modification_Comment>updated Applicable_Platforms, Causal_Nature</Modification_Comment>
+            </Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-02-24</Modification_Date>
+					<Modification_Version>4.0</Modification_Version>
+					<Modification_ReleaseDate>2020-02-24</Modification_ReleaseDate>
+					<Modification_Comment>updated Description, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-06-25</Modification_Date>
+					<Modification_Version>4.1</Modification_Version>
+					<Modification_ReleaseDate>2020-06-25</Modification_ReleaseDate>
+					<Modification_Comment>updated Potential_Mitigations</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-01-31</Modification_Date>
+					<Modification_Version>4.10</Modification_Version>
+					<Modification_ReleaseDate>2023-01-31</Modification_ReleaseDate>
+					<Modification_Comment>updated Description</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Applicable_Platforms, Detection_Factors</Modification_Comment>
+				</Modification>
+            <Previous_Entry_Name Date="2008-04-11">XSS in Error Pages</Previous_Entry_Name>
+            <Previous_Entry_Name Date="2009-05-27">Failure to Sanitize Directives in an Error Message Web Page</Previous_Entry_Name>
+            <Previous_Entry_Name Date="2010-06-21">Improper Sanitization of Script in an Error Message Web Page</Previous_Entry_Name>
+         </Content_History>
+      </Weakness>
+      

@@ -1,0 +1,224 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="687" Name="Function Call With Incorrectly Specified Argument Value" Abstraction="Variant" Structure="Simple" Status="Draft">
+         <Description>The product calls a function, procedure, or routine, but the caller specifies an argument that contains the wrong value, which may lead to resultant weaknesses.</Description>
+         <Related_Weaknesses>
+            <Related_Weakness Nature="ChildOf" CWE_ID="628" View_ID="1000" Ordinal="Primary" />
+         </Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+         <Applicable_Platforms>
+            <Language Class="Not Language-Specific" Prevalence="Undetermined" />
+         </Applicable_Platforms>
+         <Modes_Of_Introduction>
+            <Introduction>
+               <Phase>Implementation</Phase>
+            </Introduction>
+         </Modes_Of_Introduction>
+         <Common_Consequences>
+            <Consequence>
+               <Scope>Other</Scope>
+               <Impact>Quality Degradation</Impact>
+            </Consequence>
+         </Common_Consequences>
+         <Detection_Methods>
+            <Detection_Method>
+               <Method>Manual Static Analysis</Method>
+               <Description>This might require an understanding of intended program behavior or design to determine whether the value is incorrect.</Description>
+            </Detection_Method>
+         </Detection_Methods>
+         <Demonstrative_Examples>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-63">
+               <Intro_Text>This Perl code intends to record whether a user authenticated successfully or not, and to exit if the user fails to authenticate. However, when it calls ReportAuth(), the third argument is specified as 0 instead of 1, so it does not exit.</Intro_Text>
+               <Example_Code Nature="Bad" Language="Perl">
+                  <xhtml:div>sub ReportAuth {<xhtml:div style="margin-left:1em;">my ($username, $result, $fatal) = @_;<xhtml:br />PrintLog("auth: username=%s, result=%d", $username, $result);<xhtml:br />if (($result ne "success") &amp;&amp; $fatal) {<xhtml:div style="margin-left:1em;">die "Failed!\n";</xhtml:div>}</xhtml:div>}<xhtml:br />
+                     <xhtml:br />sub PrivilegedFunc<xhtml:br />{<xhtml:div style="margin-left:1em;">my $result = CheckAuth($username);<xhtml:br />ReportAuth($username, $result, 0);<xhtml:br />DoReallyImportantStuff();</xhtml:div>}</xhtml:div>
+               </Example_Code>
+            </Demonstrative_Example>
+         </Demonstrative_Examples>
+         <Taxonomy_Mappings>
+            <Taxonomy_Mapping Taxonomy_Name="CERT C Secure Coding">
+               <Entry_ID>MEM04-C</Entry_ID>
+               <Entry_Name>Do not perform zero length allocations</Entry_Name>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="Software Fault Patterns">
+               <Entry_ID>SFP24</Entry_ID>
+               <Entry_Name>Tainted input to command</Entry_Name>
+            </Taxonomy_Mapping>
+         </Taxonomy_Mappings>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Variant level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+         <Notes>
+            <Note Type="Relationship">When primary, this weakness is most likely to occur in rarely-tested code, since the wrong value can change the semantic meaning of the program's execution and lead to obviously-incorrect behavior. It can also be resultant from issues in which the program assigns the wrong value to a variable, and that variable is later used in a function call. In that sense, this issue could be argued as having chaining relationships with many implementation errors in CWE.</Note>
+         </Notes>
+         <Content_History>
+            <Submission>
+                <Submission_Name>CWE Content Team</Submission_Name>
+				<Submission_Organization>MITRE</Submission_Organization>
+                <Submission_Date>2008-04-11</Submission_Date>
+                <Submission_Version>Draft 9</Submission_Version>
+                <Submission_ReleaseDate>2008-04-11</Submission_ReleaseDate>
+            </Submission>
+            <Modification>
+               <Modification_Name>Eric Dalci</Modification_Name>
+               <Modification_Organization>Cigital</Modification_Organization>
+               <Modification_Date>2008-07-01</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>updated Potential_Mitigations</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2008-09-08</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>updated Detection_Factors, Relationships, Other_Notes, Weakness_Ordinalities</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2008-11-24</Modification_Date>
+               <Modification_Version>1.1</Modification_Version>
+               <Modification_ReleaseDate>2008-11-25</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2009-05-27</Modification_Date>
+               <Modification_Version>1.4</Modification_Version>
+               <Modification_ReleaseDate>2009-05-27</Modification_ReleaseDate>
+               <Modification_Comment>updated Description</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2009-10-29</Modification_Date>
+               <Modification_Version>1.6</Modification_Version>
+               <Modification_ReleaseDate>2009-10-29</Modification_ReleaseDate>
+               <Modification_Comment>updated Other_Notes, Relationship_Notes</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2010-02-16</Modification_Date>
+               <Modification_Version>1.8</Modification_Version>
+               <Modification_ReleaseDate>2010-02-16</Modification_ReleaseDate>
+               <Modification_Comment>updated Detection_Factors</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-06-01</Modification_Date>
+               <Modification_Version>1.13</Modification_Version>
+               <Modification_ReleaseDate>2011-06-01</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-06-27</Modification_Date>
+               <Modification_Version>2.0</Modification_Version>
+               <Modification_ReleaseDate>2011-06-27</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-09-13</Modification_Date>
+               <Modification_Version>2.1</Modification_Version>
+               <Modification_ReleaseDate>2011-09-13</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2012-05-11</Modification_Date>
+               <Modification_Version>2.2</Modification_Version>
+               <Modification_ReleaseDate>2012-05-15</Modification_ReleaseDate>
+               <Modification_Comment>updated Demonstrative_Examples, Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2012-10-30</Modification_Date>
+               <Modification_Version>2.3</Modification_Version>
+               <Modification_ReleaseDate>2012-10-30</Modification_ReleaseDate>
+               <Modification_Comment>updated Potential_Mitigations</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2014-07-30</Modification_Date>
+               <Modification_Version>2.8</Modification_Version>
+               <Modification_ReleaseDate>2014-07-31</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2017-11-08</Modification_Date>
+               <Modification_Version>3.0</Modification_Version>
+               <Modification_ReleaseDate>2017-11-08</Modification_ReleaseDate>
+               <Modification_Comment>updated Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-02-24</Modification_Date>
+					<Modification_Version>4.0</Modification_Version>
+					<Modification_ReleaseDate>2020-02-24</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships, Taxonomy_Mappings</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-03-15</Modification_Date>
+					<Modification_Version>4.4</Modification_Version>
+					<Modification_ReleaseDate>2021-03-15</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-01-31</Modification_Date>
+					<Modification_Version>4.10</Modification_Version>
+					<Modification_ReleaseDate>2023-01-31</Modification_ReleaseDate>
+					<Modification_Comment>updated Description</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Applicable_Platforms</Modification_Comment>
+				</Modification>
+         </Content_History>
+      </Weakness>
+      

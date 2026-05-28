@@ -1,0 +1,187 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="799" Name="Improper Control of Interaction Frequency" Abstraction="Class" Structure="Simple" Status="Incomplete">
+         <Description>The product does not properly limit the number or frequency of interactions that it has with an actor, such as the number of incoming requests.</Description>
+         <Extended_Description>This can allow the actor to perform actions more frequently than expected. The actor could be a human or an automated process such as a virus or bot. This could be used to cause a denial of service, compromise program logic (such as limiting humans to a single vote), or other consequences. For example, an authentication routine might not limit the number of times an attacker can guess a password. Or, a web site might conduct a poll but only expect humans to vote a maximum of once a day.</Extended_Description>
+         <Related_Weaknesses>
+            <Related_Weakness Nature="ChildOf" CWE_ID="691" View_ID="1000" Ordinal="Primary" />
+         </Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+         <Applicable_Platforms>
+            <Language Class="Not Language-Specific" Prevalence="Undetermined" />
+	    <Technology Class="Not Technology-Specific" Prevalence="Undetermined" />
+            <Technology Class="Web Based" Prevalence="Undetermined" />
+	    <Technology Name="Web Server" Prevalence="Undetermined" />
+         </Applicable_Platforms>
+         <Alternate_Terms>
+            <Alternate_Term>
+               <Term>Insufficient anti-automation</Term>
+               <Description>The term "insufficient anti-automation" focuses primarly on non-human actors such as viruses or bots, but the scope of this CWE entry is broader.</Description>
+            </Alternate_Term>
+            <Alternate_Term>
+               <Term>Brute force</Term>
+               <Description>Vulnerabilities that can be targeted using brute force attacks are often symptomatic of this weakness.</Description>
+            </Alternate_Term>
+         </Alternate_Terms>
+         <Modes_Of_Introduction>
+            <Introduction>
+               <Phase>Architecture and Design</Phase>
+            </Introduction>
+            <Introduction>
+               <Phase>Implementation</Phase>
+            </Introduction>
+            <Introduction>
+               <Phase>Operation</Phase>
+            </Introduction>
+         </Modes_Of_Introduction>
+         <Common_Consequences>
+            <Consequence>
+               <Scope>Availability</Scope>
+               <Scope>Access Control</Scope>
+               <Scope>Other</Scope>
+               <Impact>DoS: Resource Consumption (Other)</Impact>
+               <Impact>Bypass Protection Mechanism</Impact>
+               <Impact>Other</Impact>
+            </Consequence>
+         </Common_Consequences>
+         <Demonstrative_Examples>
+            <Demonstrative_Example>
+               <Intro_Text>In the following code a username and password is read from a socket and an attempt is made to authenticate the username and password. The code will continuously checked the socket for a username and password until it has been authenticated.</Intro_Text>
+               <Example_Code Nature="Bad" Language="C">
+                  <xhtml:div>char username[USERNAME_SIZE];<xhtml:br />char password[PASSWORD_SIZE];<xhtml:br />
+                     <xhtml:br />while (isValidUser == 0) {<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>if (getNextMessage(socket, username, USERNAME_SIZE) &gt; 0) {<xhtml:div style="margin-left:1em;">if (getNextMessage(socket, password, PASSWORD_SIZE) &gt; 0) {<xhtml:div style="margin-left:1em;">isValidUser = AuthenticateUser(username, password);</xhtml:div>}</xhtml:div>}</xhtml:div>
+                     </xhtml:div>}<xhtml:br />return(SUCCESS);</xhtml:div>
+               </Example_Code>
+               <Body_Text>This code does not place any restriction on the number of authentication attempts made. There should be a limit on the number of authentication attempts made to prevent brute force attacks as in the following example code.</Body_Text>
+               <Example_Code Nature="Good" Language="C">
+                  <xhtml:div>int count = 0;<xhtml:br />while ((isValidUser == 0) &amp;&amp; (count &lt; MAX_ATTEMPTS)) {<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>if (getNextMessage(socket, username, USERNAME_SIZE) &gt; 0) {<xhtml:div style="margin-left:1em;">if (getNextMessage(socket, password, PASSWORD_SIZE) &gt; 0) {<xhtml:div style="margin-left:1em;">isValidUser = AuthenticateUser(username, password);</xhtml:div>}</xhtml:div>}<xhtml:br />count++;</xhtml:div>
+                     </xhtml:div>}<xhtml:br />if (isValidUser) {<xhtml:div style="margin-left:1em;">return(SUCCESS);</xhtml:div>}<xhtml:br />else {<xhtml:div style="margin-left:1em;">return(FAIL);</xhtml:div>}</xhtml:div>
+               </Example_Code>
+            </Demonstrative_Example>
+         </Demonstrative_Examples>
+         <Observed_Examples>
+            <Observed_Example>
+               <Reference>CVE-2024-50653</Reference>
+               <Description>Chain: e-commerce product has a "front-end restriction" for coupon use (CWE-602), but the server does not restrict the number of requests for the same coupon (CWE-799)</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2024-50653</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2002-1876</Reference>
+               <Description>Mail server allows attackers to prevent other users from accessing mail by sending large number of rapid requests.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2002-1876</Link>
+            </Observed_Example>
+         </Observed_Examples>
+         <Taxonomy_Mappings>
+            <Taxonomy_Mapping Taxonomy_Name="WASC">
+               <Entry_ID>21</Entry_ID>
+               <Entry_Name>Insufficient Anti-Automation</Entry_Name>
+            </Taxonomy_Mapping>
+         </Taxonomy_Mappings>
+         <References>
+            <Reference External_Reference_ID="REF-731" />
+         </References>
+         <Mapping_Notes>
+            <Usage>Allowed-with-Review</Usage>
+            <Rationale>This CWE entry is a Class and might have Base-level children that would be more appropriate</Rationale>
+            <Comments>Examine children of this entry to see if there is a better fit</Comments>
+            <Reasons>
+               <Reason Type="Abstraction" />
+            </Reasons>
+         </Mapping_Notes>
+         <Content_History>
+            <Submission>
+               <Submission_Name>CWE Content Team</Submission_Name>
+               <Submission_Organization>MITRE</Submission_Organization>
+               <Submission_Date>2010-01-15</Submission_Date>
+               <Submission_Version>1.8</Submission_Version>
+               <Submission_ReleaseDate>2010-02-16</Submission_ReleaseDate>
+               <Submission_Comment>New entry to handle anti-automation as identified in WASC.</Submission_Comment>
+            </Submission>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2010-04-05</Modification_Date>
+               <Modification_Version>1.8.1</Modification_Version>
+               <Modification_ReleaseDate>2010-04-05</Modification_ReleaseDate>
+               <Modification_Comment>updated Demonstrative_Examples</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-03-29</Modification_Date>
+               <Modification_Version>1.12</Modification_Version>
+               <Modification_ReleaseDate>2011-03-30</Modification_ReleaseDate>
+               <Modification_Comment>updated Observed_Examples, Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-06-01</Modification_Date>
+               <Modification_Version>1.13</Modification_Version>
+               <Modification_ReleaseDate>2011-06-01</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2017-11-08</Modification_Date>
+               <Modification_Version>3.0</Modification_Version>
+               <Modification_ReleaseDate>2017-11-08</Modification_ReleaseDate>
+               <Modification_Comment>updated Demonstrative_Examples</Modification_Comment>
+            </Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-02-24</Modification_Date>
+					<Modification_Version>4.0</Modification_Version>
+					<Modification_ReleaseDate>2020-02-24</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-10-28</Modification_Date>
+					<Modification_Version>4.6</Modification_Version>
+					<Modification_ReleaseDate>2021-10-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-01-31</Modification_Date>
+					<Modification_Version>4.10</Modification_Version>
+					<Modification_ReleaseDate>2023-01-31</Modification_ReleaseDate>
+					<Modification_Comment>updated Description</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Applicable_Platforms, Observed_Examples, Relationships</Modification_Comment>
+				</Modification>
+         </Content_History>
+      </Weakness>
+      

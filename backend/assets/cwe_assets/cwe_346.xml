@@ -1,0 +1,398 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="346" Name="Origin Validation Error" Abstraction="Class" Structure="Simple" Status="Draft">
+         <Description>The product does not properly verify that the source of data or communication is valid.</Description>
+         <Related_Weaknesses>
+            <Related_Weakness Nature="ChildOf" CWE_ID="345" View_ID="1000" Ordinal="Primary" />
+            <Related_Weakness Nature="ChildOf" CWE_ID="345" View_ID="1003" Ordinal="Primary" />
+            <Related_Weakness Nature="ChildOf" CWE_ID="284" View_ID="1000" />
+         </Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+            <Weakness_Ordinality>
+               <Ordinality>Resultant</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+         <Applicable_Platforms>
+            <Language Class="Not Language-Specific" Prevalence="Undetermined" />
+	    <Technology Class="Not Technology-Specific" Prevalence="Undetermined" />
+            <Technology Class="Web Based" Prevalence="Undetermined" />
+         </Applicable_Platforms>
+         <Modes_Of_Introduction>
+            <Introduction>
+               <Phase>Architecture and Design</Phase>
+            </Introduction>
+            <Introduction>
+               <Phase>Implementation</Phase>
+               <Note>REALIZATION: This weakness is caused during implementation of an architectural security tactic.</Note>
+            </Introduction>
+         </Modes_Of_Introduction>
+         <Common_Consequences>
+            <Consequence>
+               <Scope>Access Control</Scope>
+               <Scope>Other</Scope>
+               <Impact>Gain Privileges or Assume Identity</Impact>
+               <Impact>Varies by Context</Impact>
+               <Note>An attacker can access any functionality that is inadvertently accessible to the source.</Note>
+            </Consequence>
+         </Common_Consequences>
+         <Detection_Methods>
+	   <Detection_Method Detection_Method_ID="DM-14">
+	     <Method>Automated Static Analysis</Method>
+	     <Description>Automated static analysis, commonly referred to as Static Application Security Testing (SAST), can find some instances of this weakness by analyzing source code (or binary/compiled code) without having to execute it. Typically, this is done by building a model of data flow and control flow, then searching for potentially-vulnerable patterns that connect "sources" (origins of input) with "sinks" (destinations where the data interacts with external components, a lower layer such as the OS, etc.)</Description>
+	   </Detection_Method>
+         </Detection_Methods>
+         <Demonstrative_Examples>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-112">
+               <Intro_Text>This Android application will remove a user account when it receives an intent to do so:</Intro_Text>
+               <Example_Code Nature="Bad" Language="Java">
+                  <xhtml:div>IntentFilter filter = new IntentFilter("com.example.RemoveUser");<xhtml:br />MyReceiver receiver = new MyReceiver();<xhtml:br />registerReceiver(receiver, filter);<xhtml:br />
+                     <xhtml:br />public class DeleteReceiver extends BroadcastReceiver {<xhtml:div style="margin-left:1em;">@Override<xhtml:br />public void onReceive(Context context, Intent intent) {<xhtml:div style="margin-left:1em;">int userID = intent.getIntExtra("userID");<xhtml:br />destroyUserData(userID);</xhtml:div>}</xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>This application does not check the origin of the intent, thus allowing any malicious application to remove a user. Always check the origin of an intent, or create an allowlist of trusted applications using the manifest.xml file.</Body_Text>
+            </Demonstrative_Example>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-109">
+               <Intro_Text>These Android and iOS applications intercept URL loading within a WebView and perform special actions if a particular URL scheme is used, thus allowing the Javascript within the WebView to communicate with the application:</Intro_Text>
+               <Example_Code Nature="Bad" Language="Java">
+                  <xhtml:div>
+                     <xhtml:i>// Android</xhtml:i>
+                     <xhtml:br />@Override<xhtml:br />public boolean shouldOverrideUrlLoading(WebView view, String url){<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>if (url.substring(0,14).equalsIgnoreCase("examplescheme:")){<xhtml:div style="margin-left:1em;">if(url.substring(14,25).equalsIgnoreCase("getUserInfo")){<xhtml:div style="margin-left:1em;">writeDataToView(view, UserData);<xhtml:br />return false;</xhtml:div>}<xhtml:br />else{<xhtml:div style="margin-left:1em;">return true;</xhtml:div>}</xhtml:div>}</xhtml:div>
+                     </xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Example_Code Nature="Bad" Language="Objective-C">
+                  <xhtml:div>
+                     <xhtml:i>// iOS</xhtml:i>
+                     <xhtml:br />-(BOOL) webView:(UIWebView *)exWebView shouldStartLoadWithRequest:(NSURLRequest *)exRequest navigationType:(UIWebViewNavigationType)exNavigationType<xhtml:br />{<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>NSURL *URL = [exRequest URL];<xhtml:br />if ([[URL scheme] isEqualToString:@"exampleScheme"])<xhtml:br />{<xhtml:div style="margin-left:1em;">
+                              <xhtml:div>NSString *functionString = [URL resourceSpecifier];<xhtml:br />if ([functionString hasPrefix:@"specialFunction"])<xhtml:br />{<xhtml:div style="margin-left:1em;">
+                                    <xhtml:div>
+                                       <xhtml:br />
+                                       <xhtml:i>// Make data available back in webview.</xhtml:i>
+                                       <xhtml:br />UIWebView *webView = [self writeDataToView:[URL query]];</xhtml:div>
+                                 </xhtml:div>}<xhtml:br />return NO;</xhtml:div>
+                           </xhtml:div>}<xhtml:br />return YES;</xhtml:div>
+                     </xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>A call into native code can then be initiated by passing parameters within the URL:</Body_Text>
+               <Example_Code Nature="Attack" Language="JavaScript">
+                  <xhtml:div>window.location = examplescheme://method?parameter=value</xhtml:div>
+               </Example_Code>
+               <Body_Text>Because the application does not check the source, a malicious website loaded within this WebView has the same access to the API as a trusted site.</Body_Text>
+            </Demonstrative_Example>
+         </Demonstrative_Examples>
+         <Observed_Examples>
+            <Observed_Example>
+               <Reference>CVE-2000-1218</Reference>
+               <Description>DNS server can accept DNS updates from hosts that it did not query, leading to cache poisoning</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2000-1218</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2018-6074</Reference>
+               <Description>Browser does not set Mark-of-the-Web (MotW) for a downloaded .EXE file if the name is close to the maximum path length, preventing recording of a zone identifier in the filename</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2018-6074</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2025-0411</Reference>
+               <Description>Zip file extraction program does not propagate Mark-of-the-Web (MotW) metadata to files that are extracted from an Internet-downloaded Zip file</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2025-0411</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2025-46652</Reference>
+               <Description>Zip file extraction program does not propagate Mark-of-the-Web (MotW) metadata to files that are extracted from an Internet-downloaded Zip file</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2025-46652</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2005-0877</Reference>
+               <Description>DNS server can accept DNS updates from hosts that it did not query, leading to cache poisoning</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2005-0877</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2001-1452</Reference>
+               <Description>DNS server caches glue records received from non-delegated name servers</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2001-1452</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2005-2188</Reference>
+               <Description>user ID obtained from untrusted source (URL)</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2005-2188</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2003-0174</Reference>
+               <Description>LDAP service does not verify if a particular attribute was set by the LDAP server</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2003-0174</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-1999-1549</Reference>
+               <Description>product does not sufficiently distinguish external HTML from internal, potentially dangerous HTML, allowing bypass using special strings in the page title. Overlaps special elements.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-1999-1549</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2003-0981</Reference>
+               <Description>product records the reverse DNS name of a visitor in the logs, allowing spoofing and resultant XSS.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2003-0981</Link>
+            </Observed_Example>
+         </Observed_Examples>
+         <Taxonomy_Mappings>
+            <Taxonomy_Mapping Taxonomy_Name="PLOVER">
+               <Entry_Name>Origin Validation Error</Entry_Name>
+            </Taxonomy_Mapping>
+	    <Taxonomy_Mapping Taxonomy_Name="ISA/IEC 62443">
+	      <Entry_ID>Part 3-3</Entry_ID>
+	      <Entry_Name>Req SR 2.12 RE(1)</Entry_Name>
+	    </Taxonomy_Mapping>
+	    <Taxonomy_Mapping Taxonomy_Name="ISA/IEC 62443">
+	      <Entry_ID>Part 4-1</Entry_ID>
+	      <Entry_Name>Req SD-1</Entry_Name>
+	    </Taxonomy_Mapping>
+	    <Taxonomy_Mapping Taxonomy_Name="ISA/IEC 62443">
+	      <Entry_ID>Part 4-1</Entry_ID>
+	      <Entry_Name>Req SR-2</Entry_Name>
+	    </Taxonomy_Mapping>
+	    <Taxonomy_Mapping Taxonomy_Name="ISA/IEC 62443">
+	      <Entry_ID>Part 4-1</Entry_ID>
+	      <Entry_Name>Req SVV-1</Entry_Name>
+	    </Taxonomy_Mapping>
+	    <Taxonomy_Mapping Taxonomy_Name="ISA/IEC 62443">
+	      <Entry_ID>Part 4-2</Entry_ID>
+	      <Entry_Name>Req CR 2.12 RE(1)</Entry_Name>
+	    </Taxonomy_Mapping>
+	    <Taxonomy_Mapping Taxonomy_Name="ISA/IEC 62443">
+	      <Entry_ID>Part 4-2</Entry_ID>
+	      <Entry_Name>Req CR 3.1 RE(1)</Entry_Name>
+	    </Taxonomy_Mapping>
+         </Taxonomy_Mappings>
+         <Related_Attack_Patterns>
+            <Related_Attack_Pattern CAPEC_ID="111" />
+            <Related_Attack_Pattern CAPEC_ID="141" />
+            <Related_Attack_Pattern CAPEC_ID="142" />
+            <Related_Attack_Pattern CAPEC_ID="160" />
+            <Related_Attack_Pattern CAPEC_ID="21" />
+            <Related_Attack_Pattern CAPEC_ID="384" />
+            <Related_Attack_Pattern CAPEC_ID="385" />
+            <Related_Attack_Pattern CAPEC_ID="386" />
+            <Related_Attack_Pattern CAPEC_ID="387" />
+            <Related_Attack_Pattern CAPEC_ID="388" />
+            <Related_Attack_Pattern CAPEC_ID="510" />
+            <Related_Attack_Pattern CAPEC_ID="59" />
+            <Related_Attack_Pattern CAPEC_ID="60" />
+            <Related_Attack_Pattern CAPEC_ID="75" />
+            <Related_Attack_Pattern CAPEC_ID="76" />
+            <Related_Attack_Pattern CAPEC_ID="89" />
+         </Related_Attack_Patterns>
+         <References>
+            <Reference External_Reference_ID="REF-324" />
+         </References>
+         <Mapping_Notes>
+            <Usage>Allowed-with-Review</Usage>
+            <Rationale>This CWE entry is a Class and might have Base-level children that would be more appropriate</Rationale>
+            <Comments>Examine children of this entry to see if there is a better fit</Comments>
+            <Reasons>
+               <Reason Type="Abstraction" />
+            </Reasons>
+         </Mapping_Notes>
+         <Notes>
+            <Note Type="Maintenance">This entry has some significant overlap with other CWE entries and may need some clarification. See terminology notes.</Note>
+            <Note Type="Terminology">The "Origin Validation Error" term was originally used in a 1995 thesis [REF-324]. Although not formally defined, an issue is considered to be an origin validation error if either (1) "an object [accepts] input from an unauthorized subject," or (2) "the system [fails] to properly or completely authenticate a subject." A later section says that an origin validation error can occur when the system (1) "does not properly authenticate a user or process" or (2) "does not properly authenticate the shared data or libraries." The only example provided in the thesis (covered by OSVDB:57615) involves a setuid program running command-line arguments without dropping privileges. So, this definition (and its examples in the thesis) effectively cover other weaknesses such as CWE-287 (Improper Authentication), CWE-285 (Improper Authorization), and CWE-250 (Execution with Unnecessary Privileges). There appears to be little usage of this term today, except in the SecurityFocus vulnerability database, where the term is used for a variety of issues, including web-browser problems that allow violation of the Same Origin Policy and improper validation of the source of an incoming message.</Note>
+         </Notes>
+         <Content_History>
+            <Submission>
+               <Submission_Name>PLOVER</Submission_Name>
+               <Submission_Date>2006-07-19</Submission_Date>
+               <Submission_Version>Draft 3</Submission_Version>
+               <Submission_ReleaseDate>2006-07-19</Submission_ReleaseDate>
+            </Submission>
+            <Modification>
+               <Modification_Name>Eric Dalci</Modification_Name>
+               <Modification_Organization>Cigital</Modification_Organization>
+               <Modification_Date>2008-07-01</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>updated Time_of_Introduction</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2008-09-08</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships, Relationship_Notes, Taxonomy_Mappings, Weakness_Ordinalities</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2009-05-27</Modification_Date>
+               <Modification_Version>1.4</Modification_Version>
+               <Modification_ReleaseDate>2009-05-27</Modification_ReleaseDate>
+               <Modification_Comment>updated Related_Attack_Patterns</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2010-12-13</Modification_Date>
+               <Modification_Version>1.11</Modification_Version>
+               <Modification_ReleaseDate>2010-12-13</Modification_ReleaseDate>
+               <Modification_Comment>updated Related_Attack_Patterns</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-06-01</Modification_Date>
+               <Modification_Version>1.13</Modification_Version>
+               <Modification_ReleaseDate>2011-06-01</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-06-27</Modification_Date>
+               <Modification_Version>2.0</Modification_Version>
+               <Modification_ReleaseDate>2011-06-27</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2012-05-11</Modification_Date>
+               <Modification_Version>2.2</Modification_Version>
+               <Modification_ReleaseDate>2012-05-15</Modification_ReleaseDate>
+               <Modification_Comment>updated Related_Attack_Patterns, Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2014-02-18</Modification_Date>
+               <Modification_Version>2.6</Modification_Version>
+               <Modification_ReleaseDate>2014-02-19</Modification_ReleaseDate>
+               <Modification_Comment>updated Applicable_Platforms, Common_Consequences, Demonstrative_Examples, Maintenance_Notes, References, Relationship_Notes, Relationships, Terminology_Notes</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2014-06-23</Modification_Date>
+               <Modification_Version>2.7</Modification_Version>
+               <Modification_ReleaseDate>2014-06-23</Modification_ReleaseDate>
+               <Modification_Comment>updated Related_Attack_Patterns</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2014-07-30</Modification_Date>
+               <Modification_Version>2.8</Modification_Version>
+               <Modification_ReleaseDate>2014-07-31</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2017-11-08</Modification_Date>
+               <Modification_Version>3.0</Modification_Version>
+               <Modification_ReleaseDate>2017-11-08</Modification_ReleaseDate>
+               <Modification_Comment>updated Modes_of_Introduction, References, Relationships</Modification_Comment>
+            </Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2019-06-20</Modification_Date>
+					<Modification_Version>3.3</Modification_Version>
+					<Modification_ReleaseDate>2019-06-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Related_Attack_Patterns, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-02-24</Modification_Date>
+					<Modification_Version>4.0</Modification_Version>
+					<Modification_ReleaseDate>2020-02-24</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-06-25</Modification_Date>
+					<Modification_Version>4.1</Modification_Version>
+					<Modification_ReleaseDate>2020-06-25</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples, Terminology_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-10-28</Modification_Date>
+					<Modification_Version>4.6</Modification_Version>
+					<Modification_ReleaseDate>2021-10-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-04-28</Modification_Date>
+					<Modification_Version>4.7</Modification_Version>
+					<Modification_ReleaseDate>2022-04-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-01-31</Modification_Date>
+					<Modification_Version>4.10</Modification_Version>
+					<Modification_ReleaseDate>2023-01-31</Modification_ReleaseDate>
+					<Modification_Comment>updated Description, Type</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships, Taxonomy_Mappings</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2024-02-29</Modification_Date>
+					<Modification_Version>4.14</Modification_Version>
+					<Modification_ReleaseDate>2024-02-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Taxonomy_Mappings</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2024-11-19</Modification_Date>
+					<Modification_Version>4.16</Modification_Version>
+					<Modification_ReleaseDate>2024-11-19</Modification_ReleaseDate>
+					<Modification_Comment>updated References</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-09-09</Modification_Date>
+					<Modification_Version>4.18</Modification_Version>
+					<Modification_ReleaseDate>2025-09-09</Modification_ReleaseDate>
+					<Modification_Comment>updated Observed_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Applicable_Platforms, Detection_Factors, Relationships</Modification_Comment>
+				</Modification>
+            <Contribution Type="Content">
+               <Contribution_Name>"Mapping CWE to 62443" Sub-Working Group</Contribution_Name>
+               <Contribution_Organization>CWE-CAPEC ICS/OT SIG</Contribution_Organization>
+               <Contribution_Date>2023-04-25</Contribution_Date>
+               <Contribution_Comment>Suggested mappings to ISA/IEC 62443.</Contribution_Comment>
+            </Contribution>
+         </Content_History>
+      </Weakness>
+      

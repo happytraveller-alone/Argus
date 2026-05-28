@@ -1,0 +1,174 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="1041" Name="Use of Redundant Code" Abstraction="Base" Structure="Simple" Status="Incomplete">
+         <Description>The product has multiple functions, methods, procedures, macros, etc. that
+					contain the same code.</Description>
+         <Related_Weaknesses>
+            <Related_Weakness Nature="ChildOf" CWE_ID="710" View_ID="1000" Ordinal="Primary" />
+         </Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Indirect</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+         <Applicable_Platforms>
+            <Language Class="Not Language-Specific" Prevalence="Undetermined" />
+         </Applicable_Platforms>
+		 <Modes_Of_Introduction>
+		   <Introduction>
+			 <Phase>Implementation</Phase>
+		   </Introduction>
+		 </Modes_Of_Introduction>
+         <Common_Consequences>
+            <Consequence>
+               <Scope>Other</Scope>
+               <Impact>Reduce Maintainability</Impact>
+	       <Note>This issue makes it more difficult to maintain the product, which indirectly affects security by making it more difficult or time-consuming to find and/or fix vulnerabilities.  For example, if there are two copies of the same code, the programmer might fix a weakness in one copy while forgetting to fix the same weakness in another copy.</Note>
+            </Consequence>
+         </Common_Consequences>
+	 <Detection_Methods>
+	   <Detection_Method Detection_Method_ID="DM-14">
+	     <Method>Automated Static Analysis</Method>
+	     <Description>Automated static analysis, commonly referred to as Static Application Security Testing (SAST), can find some instances of this weakness by analyzing source code (or binary/compiled code) without having to execute it. Typically, this is done by building a model of data flow and control flow, then searching for potentially-vulnerable patterns that connect "sources" (origins of input) with "sinks" (destinations where the data interacts with external components, a lower layer such as the OS, etc.)</Description>
+	   </Detection_Method>
+	 </Detection_Methods>
+         <Potential_Mitigations>
+            <Mitigation>
+               <Phase>Implementation</Phase>
+               <Description>Merge common functionality into a single function and then call that function from across the entire code base.</Description>
+            </Mitigation>
+         </Potential_Mitigations>
+         <Demonstrative_Examples>
+            <Demonstrative_Example>
+               <Intro_Text>In the following Java example the code performs some complex math when specific test conditions are met. The math is the same in each case and the equations are repeated within the code. Unfortunately if a future change needs to be made then that change needs to be made in all locations. This opens the door to mistakes being made and the changes not being made in the same way in each instance.</Intro_Text>
+               <Example_Code Nature="Bad" Language="Java">
+                  <xhtml:div>public class Main {<xhtml:br />
+                     <xhtml:div style="margin-left:1em;">public static void main(String[] args) {
+                        <xhtml:div style="margin-left:1em;">double s = 10.0;
+                        <xhtml:br />double r = 1.0;
+                        <xhtml:br />double pi = 3.14159;
+                        <xhtml:br />double surface_area;<xhtml:br />
+                        <xhtml:br />if(r &gt; 0.0) {
+                           <xhtml:div style="margin-left:1em;">// complex math equations
+                           <xhtml:br />surface_area = pi * r * s + pi * Math.pow(r, 2);</xhtml:div>
+                        <xhtml:br />}<xhtml:br />
+                        <xhtml:br />if(r &gt; 1.0) {
+                           <xhtml:div style="margin-left:1em;">// a complex set of math
+                           <xhtml:br />surface_area = pi * r * s + pi * Math.pow(r, 2);</xhtml:div>
+                        <xhtml:br />}</xhtml:div>
+                     <xhtml:br />}</xhtml:div><xhtml:br />
+                  <xhtml:br />}</xhtml:div>
+               </Example_Code>
+               <Body_Text>It is recommended to place the complex math into its own function and then call that function whenever necessary.</Body_Text>
+               <Example_Code Nature="Good" Language="Java">
+                  <xhtml:div>public class Main {<xhtml:br />
+                     <xhtml:div style="margin-left:1em;">private double ComplexMath(double r, double s) {
+                        <xhtml:div style="margin-left:1em;">//complex math equations
+                        <xhtml:br />double pi = Math.PI;
+                        <xhtml:br />double surface_area = pi * r * s + pi * Math.pow(r, 2);
+                        <xhtml:br />return surface_area;</xhtml:div>
+                     <xhtml:br />}</xhtml:div><xhtml:br />
+                     <xhtml:div style="margin-left:1em;">public static void main(String[] args) {
+                        <xhtml:div style="margin-left:1em;">double s = 10.0;
+                        <xhtml:br />double r = 1.0;
+                        <xhtml:br />double surface_area;<xhtml:br />
+                        <xhtml:br />if(r &gt; 0.0) {
+                           <xhtml:div style="margin-left:1em;">surface_area = ComplexMath(r, s);</xhtml:div>
+                        <xhtml:br />}<xhtml:br />
+                        <xhtml:br />if(r &gt; 1.0) {
+                           <xhtml:div style="margin-left:1em;">surface_area = ComplexMath(r, s);</xhtml:div>
+                        <xhtml:br />}</xhtml:div>
+                     <xhtml:br />}</xhtml:div><xhtml:br />
+                  <xhtml:br />}</xhtml:div>
+               </Example_Code>
+            </Demonstrative_Example>
+         </Demonstrative_Examples>
+         <Taxonomy_Mappings>
+            <Taxonomy_Mapping Taxonomy_Name="OMG ASCMM">
+               <Entry_ID>ASCMM-MNT-19</Entry_ID>
+            </Taxonomy_Mapping>
+         </Taxonomy_Mappings>
+         <References>
+            <Reference External_Reference_ID="REF-960" Section="ASCMM-MNT-19" />
+         </References>
+         <Mapping_Notes>
+           <Usage>Prohibited</Usage>
+           <Rationale>This entry is primarily a quality issue with no direct security implications.</Rationale>
+           <Comments>Look for weaknesses that are focused specifically on insecure behaviors that have more direct security implications.</Comments>
+           <Reasons>
+             <Reason Type="Other" />
+           </Reasons>
+         </Mapping_Notes>
+         <Content_History>
+            <Submission>
+               <Submission_Name>CWE Content Team</Submission_Name>
+               <Submission_Organization>MITRE</Submission_Organization>
+               <Submission_Date>2018-07-02</Submission_Date>
+               <Submission_Version>3.2</Submission_Version>
+               <Submission_ReleaseDate>2019-01-03</Submission_ReleaseDate>
+               <Submission_Comment>Entry derived from Common Quality Enumeration (CQE) Draft 0.9.</Submission_Comment>
+            </Submission>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-08-20</Modification_Date>
+					<Modification_Version>4.2</Modification_Version>
+					<Modification_ReleaseDate>2020-08-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-10-13</Modification_Date>
+					<Modification_Version>4.9</Modification_Version>
+					<Modification_ReleaseDate>2022-10-13</Modification_ReleaseDate>
+					<Modification_Comment>updated Applicable_Platforms, Demonstrative_Examples, Potential_Mitigations</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-01-31</Modification_Date>
+					<Modification_Version>4.10</Modification_Version>
+					<Modification_ReleaseDate>2023-01-31</Modification_ReleaseDate>
+					<Modification_Comment>updated Description</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated References, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2024-02-29</Modification_Date>
+					<Modification_Version>4.14</Modification_Version>
+					<Modification_ReleaseDate>2024-02-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Common_Consequences, Description, Detection_Factors, Time_of_Introduction</Modification_Comment>
+				</Modification>
+            <Contribution Type="Content">
+               <Contribution_Name>Drew Buttner</Contribution_Name>
+	       <Contribution_Organization>MITRE</Contribution_Organization>
+               <Contribution_Date>2022-08-15</Contribution_Date>
+               <Contribution_Comment>Suggested new demonstrative examples, mitigations, and applicable platforms.</Contribution_Comment>
+            </Contribution>
+         </Content_History>
+      </Weakness>
+      

@@ -1,0 +1,403 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="703" Name="Improper Check or Handling of Exceptional Conditions" Abstraction="Pillar" Structure="Simple" Status="Incomplete" Diagram="/data/images/CWE-703-Diagram.png">
+         <Description>The product does not properly anticipate or handle exceptional conditions that rarely occur during normal operation of the product.</Description>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+            <Weakness_Ordinality>
+               <Ordinality>Resultant</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+         <Applicable_Platforms>
+            <Language Class="Not Language-Specific" Prevalence="Undetermined" />
+            <Technology Class="Not Technology-Specific" Prevalence="Undetermined" />
+         </Applicable_Platforms>
+         <Modes_Of_Introduction>
+            <Introduction>
+               <Phase>Architecture and Design</Phase>
+            </Introduction>
+            <Introduction>
+               <Phase>Implementation</Phase>
+               <Note>REALIZATION: This weakness is caused during implementation of an architectural security tactic.</Note>
+            </Introduction>
+            <Introduction>
+               <Phase>Operation</Phase>
+            </Introduction>
+         </Modes_Of_Introduction>
+         <Common_Consequences>
+            <Consequence>
+               <Scope>Confidentiality</Scope>
+               <Scope>Availability</Scope>
+               <Scope>Integrity</Scope>
+               <Impact>Read Application Data</Impact>
+               <Impact>DoS: Crash, Exit, or Restart</Impact>
+               <Impact>Unexpected State</Impact>
+            </Consequence>
+         </Common_Consequences>
+         <Detection_Methods>
+            <Detection_Method>
+               <Method>Dynamic Analysis with Manual Results Interpretation</Method>
+               <Description>
+                  <xhtml:p>According to SOAR [REF-1479], the following detection techniques may be useful:</xhtml:p>
+                  <xhtml:div style="margin-left:1em;">
+                     <xhtml:div>Highly cost effective:</xhtml:div>
+                        <xhtml:ul>
+                           <xhtml:li>Fault Injection - source code</xhtml:li>
+                           <xhtml:li>Fault Injection - binary</xhtml:li>
+                        </xhtml:ul>
+                     <xhtml:div>Cost effective for partial coverage:</xhtml:div>
+                        <xhtml:ul>
+                           <xhtml:li>Forced Path Execution</xhtml:li>
+                        </xhtml:ul>
+                  </xhtml:div>
+               </Description>
+               <Effectiveness>High</Effectiveness>
+            </Detection_Method>
+            <Detection_Method>
+               <Method>Manual Static Analysis - Source Code</Method>
+               <Description>
+                  <xhtml:p>According to SOAR [REF-1479], the following detection techniques may be useful:</xhtml:p>
+                  <xhtml:div style="margin-left:1em;">
+                     <xhtml:div>Highly cost effective:</xhtml:div>
+                        <xhtml:ul>
+                           <xhtml:li>Manual Source Code Review (not inspections)</xhtml:li>
+                        </xhtml:ul>
+                     <xhtml:div>Cost effective for partial coverage:</xhtml:div>
+                        <xhtml:ul>
+                           <xhtml:li>Focused Manual Spotcheck - Focused manual analysis of source</xhtml:li>
+                        </xhtml:ul>
+                  </xhtml:div>
+               </Description>
+               <Effectiveness>High</Effectiveness>
+            </Detection_Method>
+            <Detection_Method>
+               <Method>Automated Static Analysis - Source Code</Method>
+               <Description>
+                  <xhtml:p>According to SOAR [REF-1479], the following detection techniques may be useful:</xhtml:p>
+                  <xhtml:div style="margin-left:1em;">
+                     <xhtml:div>Cost effective for partial coverage:</xhtml:div>
+                        <xhtml:ul>
+                           <xhtml:li>Source code Weakness Analyzer</xhtml:li>
+                           <xhtml:li>Context-configured Source Code Weakness Analyzer</xhtml:li>
+                        </xhtml:ul>
+                  </xhtml:div>
+               </Description>
+               <Effectiveness>SOAR Partial</Effectiveness>
+            </Detection_Method>
+            <Detection_Method>
+               <Method>Architecture or Design Review</Method>
+               <Description>
+                  <xhtml:p>According to SOAR [REF-1479], the following detection techniques may be useful:</xhtml:p>
+                  <xhtml:div style="margin-left:1em;">
+                     <xhtml:div>Highly cost effective:</xhtml:div>
+                        <xhtml:ul>
+                           <xhtml:li>Inspection (IEEE 1028 standard) (can apply to requirements, design, source code, etc.)</xhtml:li>
+                           <xhtml:li>Formal Methods / Correct-By-Construction</xhtml:li>
+                        </xhtml:ul>
+                  </xhtml:div>
+               </Description>
+               <Effectiveness>High</Effectiveness>
+            </Detection_Method>
+         </Detection_Methods>
+         <Demonstrative_Examples>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-7">
+               <Intro_Text>Consider the following code segment:</Intro_Text>
+               <Example_Code Nature="Bad" Language="C">
+                  <xhtml:div>char buf[10], cp_buf[10];<xhtml:br />fgets(buf, 10, stdin);<xhtml:br />strcpy(cp_buf, buf);</xhtml:div>
+               </Example_Code>
+               <Body_Text>The programmer expects that when fgets() returns, buf will contain a null-terminated string of length 9 or less. But if an I/O error occurs, fgets() will not null-terminate buf. Furthermore, if the end of the file is reached before any characters are read, fgets() returns without writing anything to buf. In both of these situations, fgets() signals that something unusual has happened by returning NULL, but in this code, the warning will not be noticed. The lack of a null terminator in buf can result in a buffer overflow in the subsequent call to strcpy().</Body_Text>
+            </Demonstrative_Example>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-198">
+               <Intro_Text>The following method throws three types of exceptions.</Intro_Text>
+               <Example_Code Nature="Good" Language="Java">
+                  <xhtml:div>public void doExchange() throws IOException, InvocationTargetException, SQLException {<xhtml:div style="margin-left:1em;">...</xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>While it might seem tidier to write</Body_Text>
+               <Example_Code Nature="Bad" Language="Java">
+                  <xhtml:div>public void doExchange() throws Exception {<xhtml:div style="margin-left:1em;">...</xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>doing so hampers the caller's ability to understand and handle the exceptions that occur. Further, if a later revision of doExchange() introduces a new type of exception that should be treated differently than previous exceptions, there is no easy way to enforce this requirement.</Body_Text>
+            </Demonstrative_Example>
+         </Demonstrative_Examples>
+         <Observed_Examples>
+		   <Observed_Example>
+			 <Reference>[REF-1374]</Reference>
+			 <Description>Chain: JavaScript-based cryptocurrency library can fall back to the insecure Math.random() function instead of reporting a failure (CWE-392), thus reducing the entropy (CWE-332) and leading to generation of non-unique cryptographic keys for Bitcoin wallets (CWE-1391)</Description>
+			 <Link>https://www.unciphered.com/blog/randstorm-you-cant-patch-a-house-of-cards</Link>
+		   </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2022-22224</Reference>
+               <Description>Chain: an operating system does not properly process malformed Open Shortest Path First (OSPF) Type/Length/Value Identifiers (TLV) (CWE-703), which can cause the process to enter an infinite loop (CWE-835)</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2022-22224</Link>
+            </Observed_Example>
+         </Observed_Examples>
+         <Taxonomy_Mappings>
+            <Taxonomy_Mapping Taxonomy_Name="The CERT Oracle Secure Coding Standard for Java (2011)">
+               <Entry_ID>ERR06-J</Entry_ID>
+               <Entry_Name>Do not throw undeclared checked exceptions</Entry_Name>
+            </Taxonomy_Mapping>
+         </Taxonomy_Mappings>
+         <References>
+            <Reference External_Reference_ID="REF-567" />
+            <Reference External_Reference_ID="REF-568" />
+            <Reference External_Reference_ID="REF-44" Section="&quot;Sin 8: C++ Catastrophes.&quot; Page 143" />
+	    <Reference External_Reference_ID="REF-1374" />
+            <Reference External_Reference_ID="REF-1479" />
+         </References>
+         <Mapping_Notes>
+            <Usage>Discouraged</Usage>
+            <Rationale>This CWE entry is extremely high-level, a Pillar.</Rationale>
+            <Comments>Consider children or descendants of this entry instead.</Comments>
+            <Reasons>
+               <Reason Type="Abstraction" />
+            </Reasons>
+         </Mapping_Notes>
+         <Notes>
+            <Note Type="Relationship">This is a high-level class that might have some overlap with other classes. It could be argued that even "normal" weaknesses such as buffer overflows involve unusual or exceptional conditions. In that sense, this might be an inherent aspect of most other weaknesses within CWE, similar to API Abuse (CWE-227) and Indicator of Poor Code Quality (CWE-398). However, this entry is currently intended to unify disparate concepts that do not have other places within the Research Concepts view (CWE-1000).</Note>
+         </Notes>
+         <Content_History>
+            <Submission>
+               <Submission_Name>CWE Content Team</Submission_Name>
+               <Submission_Organization>MITRE</Submission_Organization>
+               <Submission_Date>2008-09-09</Submission_Date>
+               <Submission_Version>1.0</Submission_Version>
+               <Submission_ReleaseDate>2008-09-09</Submission_ReleaseDate>
+		<Submission_Comment>Note: this date reflects when the entry was first published. Draft versions of this entry were provided to members of the CWE community and modified between Draft 9 and 1.0.</Submission_Comment>
+            </Submission>
+            <Modification>
+               <Modification_Name>Eric Dalci</Modification_Name>
+               <Modification_Organization>Cigital</Modification_Organization>
+               <Modification_Date>2008-07-01</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>updated Time_of_Introduction</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2009-03-10</Modification_Date>
+               <Modification_Version>1.3</Modification_Version>
+               <Modification_ReleaseDate>2009-03-10</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2009-10-29</Modification_Date>
+               <Modification_Version>1.6</Modification_Version>
+               <Modification_ReleaseDate>2009-10-29</Modification_ReleaseDate>
+               <Modification_Comment>updated Other_Notes</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2010-02-16</Modification_Date>
+               <Modification_Version>1.8</Modification_Version>
+               <Modification_ReleaseDate>2010-02-16</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2010-12-13</Modification_Date>
+               <Modification_Version>1.11</Modification_Version>
+               <Modification_ReleaseDate>2010-12-13</Modification_ReleaseDate>
+               <Modification_Comment>updated Name, Relationship_Notes</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-03-29</Modification_Date>
+               <Modification_Version>1.12</Modification_Version>
+               <Modification_ReleaseDate>2011-03-30</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-06-01</Modification_Date>
+               <Modification_Version>1.13</Modification_Version>
+               <Modification_ReleaseDate>2011-06-01</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences, Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-06-27</Modification_Date>
+               <Modification_Version>2.0</Modification_Version>
+               <Modification_ReleaseDate>2011-06-27</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-09-13</Modification_Date>
+               <Modification_Version>2.1</Modification_Version>
+               <Modification_ReleaseDate>2011-09-13</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2012-05-11</Modification_Date>
+               <Modification_Version>2.2</Modification_Version>
+               <Modification_ReleaseDate>2012-05-15</Modification_ReleaseDate>
+               <Modification_Comment>updated References, Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2014-07-30</Modification_Date>
+               <Modification_Version>2.8</Modification_Version>
+               <Modification_ReleaseDate>2014-07-31</Modification_ReleaseDate>
+               <Modification_Comment>updated Detection_Factors, Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2017-01-19</Modification_Date>
+               <Modification_Version>2.10</Modification_Version>
+               <Modification_ReleaseDate>2017-01-19</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2017-11-08</Modification_Date>
+               <Modification_Version>3.0</Modification_Version>
+               <Modification_ReleaseDate>2017-11-08</Modification_ReleaseDate>
+               <Modification_Comment>updated Applicable_Platforms, Modes_of_Introduction, References, Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2019-01-03</Modification_Date>
+					<Modification_Version>3.2</Modification_Version>
+					<Modification_ReleaseDate>2019-01-03</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships, Taxonomy_Mappings</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2019-06-20</Modification_Date>
+					<Modification_Version>3.3</Modification_Version>
+					<Modification_ReleaseDate>2019-06-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-02-24</Modification_Date>
+					<Modification_Version>4.0</Modification_Version>
+					<Modification_ReleaseDate>2020-02-24</Modification_ReleaseDate>
+					<Modification_Comment>updated Applicable_Platforms, Relationships, Type</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-08-20</Modification_Date>
+					<Modification_Version>4.2</Modification_Version>
+					<Modification_ReleaseDate>2020-08-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-12-10</Modification_Date>
+					<Modification_Version>4.3</Modification_Version>
+					<Modification_ReleaseDate>2020-12-10</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-07-20</Modification_Date>
+					<Modification_Version>4.5</Modification_Version>
+					<Modification_ReleaseDate>2021-07-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-10-28</Modification_Date>
+					<Modification_Version>4.6</Modification_Version>
+					<Modification_ReleaseDate>2021-10-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-04-28</Modification_Date>
+					<Modification_Version>4.7</Modification_Version>
+					<Modification_ReleaseDate>2022-04-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-01-31</Modification_Date>
+					<Modification_Version>4.10</Modification_Version>
+					<Modification_ReleaseDate>2023-01-31</Modification_ReleaseDate>
+					<Modification_Comment>updated Description, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated References, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-10-26</Modification_Date>
+					<Modification_Version>4.13</Modification_Version>
+					<Modification_ReleaseDate>2023-10-26</Modification_ReleaseDate>
+					<Modification_Comment>updated Observed_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2024-02-29</Modification_Date>
+					<Modification_Version>4.14</Modification_Version>
+					<Modification_ReleaseDate>2024-02-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples, Observed_Examples, References, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-04-03</Modification_Date>
+					<Modification_Version>4.17</Modification_Version>
+					<Modification_ReleaseDate>2025-04-03</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-09-09</Modification_Date>
+					<Modification_Version>4.18</Modification_Version>
+					<Modification_ReleaseDate>2025-09-09</Modification_ReleaseDate>
+					<Modification_Comment>updated Detection_Factors, References</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Diagram, Relationships, Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+            <Previous_Entry_Name Date="2010-12-13">Failure to Handle Exceptional Conditions</Previous_Entry_Name>
+         </Content_History>
+      </Weakness>
+      

@@ -1,0 +1,91 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" ID="769" Name="DEPRECATED: Uncontrolled File Descriptor Consumption" Abstraction="Base" Structure="Simple" Status="Deprecated">
+         <Description>This entry has been deprecated because it was a duplicate of CWE-774. All content has been transferred to CWE-774.</Description>
+         <Mapping_Notes>
+            <Usage>Prohibited</Usage>
+            <Rationale>This CWE has been deprecated.</Rationale>
+            <Comments>See description and name for possible suggestions of other CWEs to consider.</Comments>
+            <Reasons>
+               <Reason Type="Deprecated" />
+            </Reasons>
+			<Suggestions>
+			  <Suggestion CWE_ID="774" Comment="Allocation of File Descriptors or Handles Without Limits or Throttling" />
+			</Suggestions>
+         </Mapping_Notes>
+         <Content_History>
+            <Submission>
+               <Submission_Name>CWE Content Team</Submission_Name>
+               <Submission_Organization>MITRE</Submission_Organization>
+               <Submission_Date>2009-05-08</Submission_Date>
+               <Submission_Version>1.4</Submission_Version>
+               <Submission_ReleaseDate>2009-05-27</Submission_ReleaseDate>
+            </Submission>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2010-04-05</Modification_Date>
+               <Modification_Version>1.8.1</Modification_Version>
+               <Modification_ReleaseDate>2010-04-05</Modification_ReleaseDate>
+               <Modification_Comment>updated Potential_Mitigations</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2010-06-21</Modification_Date>
+               <Modification_Version>1.9</Modification_Version>
+               <Modification_ReleaseDate>2010-06-21</Modification_ReleaseDate>
+               <Modification_Comment>updated Description</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2010-12-13</Modification_Date>
+               <Modification_Version>1.11</Modification_Version>
+               <Modification_ReleaseDate>2010-12-13</Modification_ReleaseDate>
+               <Modification_Comment>updated Description</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2013-02-21</Modification_Date>
+               <Modification_Version>2.4</Modification_Version>
+               <Modification_ReleaseDate>2013-02-21</Modification_ReleaseDate>
+               <Modification_Comment>updated Maintenance_Notes</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2015-12-07</Modification_Date>
+               <Modification_Version>2.9</Modification_Version>
+               <Modification_ReleaseDate>2015-12-07</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2017-11-08</Modification_Date>
+               <Modification_Version>3.0</Modification_Version>
+               <Modification_ReleaseDate>2017-11-08</Modification_ReleaseDate>
+               <Modification_Comment>updated Alternate_Terms, Description, Likelihood_of_Exploit, Name, Relationships, Type</Modification_Comment>
+            </Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2019-01-03</Modification_Date>
+					<Modification_Version>3.2</Modification_Version>
+					<Modification_ReleaseDate>2019-01-03</Modification_ReleaseDate>
+					<Modification_Comment>updated Alternate_Terms, Description, Likelihood_of_Exploit, Name, Potential_Mitigations, References, Relationships, Time_of_Introduction, Type</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+            <Previous_Entry_Name Date="2017-11-08">File Descriptor Exhaustion</Previous_Entry_Name>
+			<Previous_Entry_Name Date="2019-01-03">Uncontrolled File Descriptor Consumption</Previous_Entry_Name>
+         </Content_History>
+      </Weakness>
+      

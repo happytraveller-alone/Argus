@@ -1,0 +1,315 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="1256" Name="Improper Restriction of Software Interfaces to Hardware Features" Abstraction="Base" Structure="Simple" Status="Stable">
+
+			<Description>The product provides software-controllable
+			device functionality for capabilities such as power and
+			clock management, but it does not properly limit
+			functionality that can lead to modification of
+			hardware memory or register bits, or the ability to
+			observe physical side channels.</Description>
+            <Extended_Description>
+              <xhtml:p>It is frequently assumed that physical attacks
+              such as fault injection and side-channel analysis
+              require an attacker to have physical access to the
+              target device.  This assumption may be false if the
+              device has improperly secured power management features,
+              or similar features.  For mobile devices, minimizing
+              power consumption is critical, but these devices run a
+              wide variety of applications with different performance
+              requirements. Software-controllable mechanisms to
+              dynamically scale device voltage and frequency and
+              monitor power consumption are common features in today's
+              chipsets, but they also enable attackers to mount fault
+              injection and side-channel attacks without having
+              physical access to the device.</xhtml:p>
+			  
+              <xhtml:p>Fault injection attacks involve strategic
+              manipulation of bits in a device to achieve a desired
+              effect such as skipping an authentication step,
+              elevating privileges, or altering the output of a
+              cryptographic operation.  Manipulation of the device
+              clock and voltage supply is a well-known technique to
+              inject faults and is cheap to implement with physical
+              device access.  Poorly protected power management
+              features allow these attacks to be performed from
+              software.  Other features, such as the ability to write
+              repeatedly to DRAM at a rapid rate from unprivileged
+              software, can result in bit flips in other memory
+              locations (Rowhammer, [REF-1083]).</xhtml:p>
+
+			  <xhtml:p>Side channel analysis requires gathering
+			  measurement traces of physical quantities such as power
+			  consumption.  Modern processors often include power
+			  metering capabilities in the hardware itself (e.g.,
+			  Intel RAPL) which if not adequately protected enable
+			  attackers to gather measurements necessary for
+			  performing side-channel attacks from software.</xhtml:p>
+            </Extended_Description>
+			<Related_Weaknesses>
+			  <Related_Weakness Nature="ChildOf" CWE_ID="285" View_ID="1000" Ordinal="Primary" />
+			</Related_Weaknesses>
+		 <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+		 </Weakness_Ordinalities>
+            <Applicable_Platforms>
+                <Language Class="Not Language-Specific" Prevalence="Undetermined" />
+                <Operating_System Class="Not OS-Specific" Prevalence="Undetermined" />
+                <Architecture Class="Not Architecture-Specific" Prevalence="Undetermined" />
+                <Technology Class="Not Technology-Specific" Prevalence="Undetermined" />
+				<Technology Name="Memory Hardware" Prevalence="Undetermined" />
+			    <Technology Name="Power Management Hardware" Prevalence="Undetermined" />
+				<Technology Name="Clock/Counter Hardware" Prevalence="Undetermined" />
+            </Applicable_Platforms>
+            <Modes_Of_Introduction>
+                <Introduction>
+                    <Phase>Architecture and Design</Phase>
+					<Note>An architect may initiate introduction of
+					this weakness via exacting requirements for
+					software accessible power/clock management
+					requirements</Note>
+                </Introduction>
+                <Introduction>
+		            <Phase>Implementation</Phase>
+					<Note>An implementer may introduce this weakness
+					by assuming there are no consequences to unbounded
+					power and clock management for secure components
+					from untrusted ones.</Note>
+                </Introduction>
+            </Modes_Of_Introduction>
+            <Common_Consequences>
+                <Consequence>
+                    <Scope>Integrity</Scope>
+                    <Impact>Modify Memory</Impact>
+                    <Impact>Modify Application Data</Impact>
+                    <Impact>Bypass Protection Mechanism</Impact>
+                </Consequence>
+            </Common_Consequences>
+	    <Detection_Methods>
+	      <Detection_Method>
+		<Method>Manual Analysis</Method>
+		<Description>Perform a security evaluation of system-level
+		architecture and design with software-aided physical attacks
+		in scope.</Description>
+	      </Detection_Method>
+	      <Detection_Method>
+		<Method>Automated Dynamic Analysis</Method>
+		<Description>
+		  <xhtml:p>Use custom software to change registers that control clock settings or power settings to try to bypass security locks, or repeatedly write DRAM to try to change adjacent locations. This can be effective in extracting or changing data. The drawback is that it cannot be run before manufacturing, and it may require specialized software.</xhtml:p>
+		</Description>
+		<Effectiveness>Moderate</Effectiveness>
+	      </Detection_Method>
+	    </Detection_Methods>
+            <Potential_Mitigations>
+                <Mitigation>
+                    <Phase>Architecture and Design</Phase>
+                    <Phase>Implementation</Phase>
+                    <Description>
+                        <xhtml:p>Ensure proper access control mechanisms protect software-controllable features altering physical operating conditions such as clock frequency and voltage.</xhtml:p>
+                    </Description>
+                </Mitigation>
+            </Potential_Mitigations>
+            <Demonstrative_Examples>
+               <Demonstrative_Example>
+                    <Intro_Text>This example considers the Rowhammer problem [REF-1083]. The Rowhammer issue was caused by a program in a tight loop writing repeatedly to a location to which the program was allowed to write but causing an adjacent memory location value to change.</Intro_Text>
+                    <Example_Code Nature="Bad" Language="Other">
+                        Continuously writing the same value to the same address causes the value of an adjacent location to change value.
+                    </Example_Code>
+                    <Body_Text>Preventing the loop required to defeat the Rowhammer exploit is not always possible:</Body_Text>
+                    <Example_Code Nature="Good" Language="Other">
+                        Redesign the RAM devices to reduce inter capacitive coupling making the Rowhammer exploit impossible.
+                    </Example_Code>
+                    <Body_Text>While the redesign may be possible for new devices, a redesign is not possible in existing devices. There is also the possibility that reducing capacitance with a relayout would impact the density of the device resulting in a less capable, more costly device.</Body_Text>
+                </Demonstrative_Example>
+                <Demonstrative_Example>
+                    <Intro_Text>Suppose a hardware design implements a set of software-accessible registers for scaling clock frequency and voltage but does not control access to these registers. Attackers may cause register and memory changes and race conditions by changing the clock or voltage of the device under their control.</Intro_Text>
+                </Demonstrative_Example>
+            <Demonstrative_Example>
+	      <Intro_Text>Consider the following SoC
+	      design. Security-critical settings for scaling clock
+	      frequency and voltage are available in a range of
+	      registers bounded by [PRIV_END_ADDR : PRIV_START_ADDR]
+	      in the tmcu.csr module in the HW Root of Trust. These
+	      values are writable based on the lock_bit register in
+	      the same module. The lock_bit is only writable by
+	      privileged software running on the tmcu.</Intro_Text>
+	    <Body_Text>
+	    <xhtml:img src="/data/images/HRoT-CWE.png" alt="Hardware Root of Trust" />
+	    <xhtml:p>
+	      We assume that untrusted software running on any of the
+	      Core{0-N} processors has access to the input and output
+	      ports of the hrot_iface. If untrusted software can clear
+	      the lock_bit or write the clock frequency and voltage
+	      registers due to inadequate protection, a fault
+	      injection attack could be performed.</xhtml:p>
+	    </Body_Text>
+            </Demonstrative_Example>
+            </Demonstrative_Examples>
+            <Observed_Examples>
+            	<Observed_Example>
+               		<Reference>CVE-2019-11157</Reference>
+               		<Description>Plundervolt: Improper conditions check in voltage settings for some Intel(R) Processors may allow a privileged user to potentially enable escalation of privilege and/or information disclosure via local access [REF-1081].</Description>
+               		<Link>https://www.cve.org/CVERecord?id=CVE-2019-11157</Link>
+           		 </Observed_Example>
+               <Observed_Example>
+                     <Reference>CVE-2020-8694</Reference>
+                     <Description>PLATYPUS Attack: Insufficient access control in the Linux kernel driver for some Intel processors allows information disclosure.</Description>
+                     <Link>https://www.cve.org/CVERecord?id=CVE-2020-8694</Link>
+                     </Observed_Example>
+               <Observed_Example>
+                     <Reference>CVE-2020-8695</Reference>
+                     <Description>Observable discrepancy in the RAPL interface for some Intel processors allows information disclosure.</Description>
+                     <Link>https://www.cve.org/CVERecord?id=CVE-2020-8695</Link>
+                     </Observed_Example>
+               <Observed_Example>
+                     <Reference>CVE-2020-12912</Reference>
+                     <Description>AMD extension to a Linux service does not require privileged access to the RAPL interface, allowing side-channel attacks.</Description>
+                     <Link>https://www.cve.org/CVERecord?id=CVE-2020-12912</Link>
+                     </Observed_Example>
+					 <Observed_Example>
+               		<Reference>CVE-2015-0565</Reference>
+               		<Description>NaCl in 2015 allowed the CLFLUSH instruction, making Rowhammer attacks possible.</Description>
+               		<Link>https://www.cve.org/CVERecord?id=CVE-2015-0565</Link>
+           		 </Observed_Example>
+           	</Observed_Examples>
+         <Functional_Areas>
+            	<Functional_Area>Power</Functional_Area>
+                <Functional_Area>Clock</Functional_Area>
+         </Functional_Areas>
+         <Related_Attack_Patterns>
+            <Related_Attack_Pattern CAPEC_ID="624" />
+            <Related_Attack_Pattern CAPEC_ID="625" />
+         </Related_Attack_Patterns>
+         <References>
+                <Reference External_Reference_ID="REF-1081" />
+                <Reference External_Reference_ID="REF-1082" />
+                <Reference External_Reference_ID="REF-1083" />
+                <Reference External_Reference_ID="REF-1225" />
+                <Reference External_Reference_ID="REF-1217" />
+            </References>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Base level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+            <Content_History>
+                <Submission>
+                    <Submission_Name>Nicole Fern</Submission_Name>
+                    <Submission_Organization>Cycuity (originally submitted as Tortuga Logic)</Submission_Organization>
+                    <Submission_Date>2020-05-08</Submission_Date>
+                    <Submission_Version>4.1</Submission_Version>
+                    <Submission_ReleaseDate>2020-02-24</Submission_ReleaseDate>
+                </Submission>
+		<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-08-20</Modification_Date>
+					<Modification_Version>4.2</Modification_Version>
+					<Modification_ReleaseDate>2020-08-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples, Description, Maintenance_Notes, Related_Attack_Patterns</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-03-15</Modification_Date>
+					<Modification_Version>4.4</Modification_Version>
+					<Modification_ReleaseDate>2021-03-15</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples, Functional_Areas, Maintenance_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-07-20</Modification_Date>
+					<Modification_Version>4.5</Modification_Version>
+					<Modification_ReleaseDate>2021-07-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples, Observed_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-10-28</Modification_Date>
+					<Modification_Version>4.6</Modification_Version>
+					<Modification_ReleaseDate>2021-10-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples, Description, Detection_Factors, Maintenance_Notes, Modes_of_Introduction, Name, Observed_Examples, References, Relationships, Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-04-28</Modification_Date>
+					<Modification_Version>4.7</Modification_Version>
+					<Modification_ReleaseDate>2022-04-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Applicable_Platforms</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-06-28</Modification_Date>
+					<Modification_Version>4.8</Modification_Version>
+					<Modification_ReleaseDate>2022-06-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Applicable_Platforms</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-01-31</Modification_Date>
+					<Modification_Version>4.10</Modification_Version>
+					<Modification_ReleaseDate>2023-01-31</Modification_ReleaseDate>
+					<Modification_Comment>updated Related_Attack_Patterns</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-04-03</Modification_Date>
+					<Modification_Version>4.17</Modification_Version>
+					<Modification_ReleaseDate>2025-04-03</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-09-09</Modification_Date>
+					<Modification_Version>4.18</Modification_Version>
+					<Modification_ReleaseDate>2025-09-09</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+            <Contribution Type="Content">
+               <Contribution_Organization>Cycuity (originally submitted as Tortuga Logic)</Contribution_Organization>
+               <Contribution_Date>2021-07-16</Contribution_Date>
+               <Contribution_Comment>Provided Demonstrative Example for Hardware Root of Trust</Contribution_Comment>
+            </Contribution>
+		<Contribution Type="Content">
+		  <Contribution_Name>Anders Nordstrom, Alric Althoff</Contribution_Name>
+		  <Contribution_Organization>Cycuity (originally submitted as Tortuga Logic)</Contribution_Organization>
+		  <Contribution_Date>2021-10-11</Contribution_Date>
+		  <Contribution_Comment>Provided detection method</Contribution_Comment>
+		</Contribution>
+		<Contribution Type="Content">
+		  <Contribution_Name>Nicole Fern</Contribution_Name>
+		  <Contribution_Organization>Riscure</Contribution_Organization>
+		  <Contribution_Date>2021-10-15</Contribution_Date>
+		  <Contribution_Comment>updated description and extended description, detection method, and observed examples</Contribution_Comment>
+		</Contribution>
+			<Previous_Entry_Name Date="2021-10-28">Hardware Features Enable Physical Attacks from Software</Previous_Entry_Name>
+            </Content_History>
+        </Weakness>
+      

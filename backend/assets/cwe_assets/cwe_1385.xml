@@ -1,0 +1,175 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="1385" Name="Missing Origin Validation in WebSockets" Abstraction="Variant" Structure="Simple" Status="Incomplete">
+      <Description>The product uses a WebSocket, but it does not properly verify that the source of data or communication is valid.</Description>
+      <Extended_Description>
+	<xhtml:p>WebSockets provide a bi-directional low latency communication (near real-time) between a client and a server. WebSockets are different than HTTP in that the connections are long-lived, as the channel will remain open until the client or the server is ready to send the message, whereas in HTTP, once the response occurs (which typically happens immediately), the transaction completes. </xhtml:p>
+	<xhtml:p>A WebSocket can leverage the existing HTTP protocol over ports 80 and 443, but it is not limited to HTTP. WebSockets can make cross-origin requests that are not restricted by browser-based protection mechanisms such as the Same Origin Policy (SOP) or Cross-Origin Resource Sharing (CORS). Without explicit origin validation, this makes CSRF attacks more powerful.</xhtml:p>
+      </Extended_Description>
+      <Related_Weaknesses>
+	<Related_Weakness Nature="ChildOf" CWE_ID="346" View_ID="1000" Ordinal="Primary" />
+      </Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+      <Applicable_Platforms>
+	<Language Class="Not Language-Specific" Prevalence="Undetermined" />
+        <Technology Class="Web Based" Prevalence="Often" />
+	<Technology Name="Web Server" Prevalence="Undetermined" />
+      </Applicable_Platforms>
+      <Alternate_Terms>
+	<Alternate_Term>
+	  <Term>Cross-Site WebSocket hijacking (CSWSH)</Term>
+	  <Description>this term is used for attacks that exploit this weakness</Description>
+	</Alternate_Term>
+      </Alternate_Terms>
+      <Modes_Of_Introduction>
+	<Introduction>
+	  <Phase>Architecture and Design</Phase>
+	</Introduction>
+	<Introduction>
+	  <Phase>Implementation</Phase>
+	</Introduction>
+      </Modes_Of_Introduction>
+      <Common_Consequences>
+	<Consequence>
+	  <Scope>Confidentiality</Scope>
+	  <Scope>Integrity</Scope>
+	  <Scope>Availability</Scope>
+	  <Scope>Non-Repudiation</Scope>
+	  <Scope>Access Control</Scope>
+	  <Impact>Varies by Context</Impact>
+	  <Impact>Gain Privileges or Assume Identity</Impact>
+	  <Impact>Bypass Protection Mechanism</Impact>
+	  <Impact>Read Application Data</Impact>
+	  <Impact>Modify Application Data</Impact>
+	  <Impact>DoS: Crash, Exit, or Restart</Impact>
+	  <Note>The consequences will vary depending on the nature of the functionality that is vulnerable to CSRF. An attacker could effectively perform any operations as the victim. If the victim is an administrator or privileged user, the consequences may include obtaining complete control over the web application - deleting or stealing data, uninstalling the product, or using it to launch other attacks against all of the product's users. Because the attacker has the identity of the victim, the scope of the CSRF is limited only by the victim's privileges.</Note>
+	</Consequence>
+      </Common_Consequences>
+      <Potential_Mitigations>
+	<Mitigation>
+	  <Phase>Implementation</Phase>
+	  <Description>Enable CORS-like access restrictions by verifying the 'Origin' header during the WebSocket handshake.</Description>
+	</Mitigation>
+	<Mitigation>
+	  <Phase>Implementation</Phase>
+	  <Description>Use a randomized CSRF token to verify requests.</Description>
+	</Mitigation>
+	<Mitigation>
+	  <Phase>Implementation</Phase>
+	  <Description>Use TLS to securely communicate using 'wss' (WebSocket Secure) instead of 'ws'.</Description>
+	</Mitigation>
+	<Mitigation>
+	  <Phase>Architecture and Design</Phase>
+	  <Phase>Implementation</Phase>
+	  <Description>Require user authentication prior to the WebSocket connection being established. For example, the WS library in Node has a 'verifyClient' function.</Description>
+	</Mitigation>
+	<Mitigation>
+	  <Phase>Implementation</Phase>
+	  <Description>Leverage rate limiting to prevent against DoS. Use of the leaky bucket algorithm can help with this.</Description>
+	  <Effectiveness>Defense in Depth</Effectiveness>
+	</Mitigation>
+	<Mitigation>
+	  <Phase>Implementation</Phase>
+	  <Description>Use a library that provides restriction of the payload size. For example, WS library for Node includes 'maxPayloadoption' that can be set.</Description>
+	  <Effectiveness>Defense in Depth</Effectiveness>
+	</Mitigation>
+	<Mitigation>
+	  <Phase>Implementation</Phase>
+	  <Description>Treat data/input as untrusted in both directions and apply the same data/input sanitization as XSS, SQLi, etc.</Description>
+	</Mitigation>
+      </Potential_Mitigations>
+      <Observed_Examples>
+	<Observed_Example>
+	  <Reference>CVE-2020-25095</Reference>
+	  <Description>web console for SIEM product does not check Origin header, allowing Cross Site WebSocket Hijacking (CSWH)</Description>
+	  <Link>https://www.cve.org/CVERecord?id=CVE-2020-25095</Link>
+	</Observed_Example>
+	<Observed_Example>
+	  <Reference>CVE-2018-6651</Reference>
+	  <Description>Chain: gaming client attempts to validate the Origin header, but only uses a substring, allowing Cross-Site WebSocket hijacking by forcing requests from an origin whose hostname is a substring of the valid origin.</Description>
+	  <Link>https://www.cve.org/CVERecord?id=CVE-2018-6651</Link>
+	</Observed_Example>
+	<Observed_Example>
+	  <Reference>CVE-2018-14730</Reference>
+	  <Description>WebSocket server does not check the origin of requests, allowing attackers to steal developer's code using a ws://127.0.0.1:3123/ connection.</Description>
+	  <Link>https://www.cve.org/CVERecord?id=CVE-2018-14730</Link>
+	</Observed_Example>
+	<Observed_Example>
+	  <Reference>CVE-2018-14731</Reference>
+	  <Description>WebSocket server does not check the origin of requests, allowing attackers to steal developer's code using a ws://127.0.0.1/ connection to a randomized port number.</Description>
+	  <Link>https://www.cve.org/CVERecord?id=CVE-2018-14731</Link>
+	</Observed_Example>
+	<Observed_Example>
+	  <Reference>CVE-2018-14732</Reference>
+	  <Description>WebSocket server does not check the origin of requests, allowing attackers to steal developer's code using a ws://127.0.0.1:8080/ connection.</Description>
+	  <Link>https://www.cve.org/CVERecord?id=CVE-2018-14732</Link>
+	</Observed_Example>
+      </Observed_Examples>
+      <References>
+	<Reference External_Reference_ID="REF-1257" />
+	<Reference External_Reference_ID="REF-1251" />
+	<Reference External_Reference_ID="REF-1252" />
+	<Reference External_Reference_ID="REF-1256" />
+	<Reference External_Reference_ID="REF-1253" Section="Using cross-site WebSockets to exploit vulnerabilities" />
+      </References>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Variant level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+      <Content_History>
+	<Submission>
+	  <Submission_Name>Anonymous External Contributor</Submission_Name>
+	  <Submission_Date>2021-05-28</Submission_Date>
+	  <Submission_Version>4.7</Submission_Version>
+	  <Submission_ReleaseDate>2022-04-28</Submission_ReleaseDate>
+	</Submission>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-01-31</Modification_Date>
+					<Modification_Version>4.10</Modification_Version>
+					<Modification_ReleaseDate>2023-01-31</Modification_ReleaseDate>
+					<Modification_Comment>updated Description</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated References, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-09-09</Modification_Date>
+					<Modification_Version>4.18</Modification_Version>
+					<Modification_ReleaseDate>2025-09-09</Modification_ReleaseDate>
+					<Modification_Comment>updated References</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Applicable_Platforms, Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+      </Content_History>
+    </Weakness>
+      

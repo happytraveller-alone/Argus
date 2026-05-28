@@ -1,0 +1,133 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" ID="1037" Name="Processor Optimization Removal or Modification of Security-critical Code" Abstraction="Base" Structure="Simple" Status="Incomplete">
+         <Description>The developer builds a security-critical protection mechanism into the software, but the processor optimizes the execution of the program such that the mechanism is removed or modified.</Description>
+         <Related_Weaknesses>
+            <Related_Weakness Nature="ChildOf" CWE_ID="1038" View_ID="1000" Ordinal="Primary" />
+         </Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+               <Description>This weakness does not depend on other weaknesses and is the result of choices made by the processor in executing the specified application.</Description>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+         <Applicable_Platforms>
+            <Language Class="Not Language-Specific" Prevalence="Rarely" />
+	    <Technology Name="Processor Hardware" Prevalence="Undetermined" />
+         </Applicable_Platforms>
+         <Modes_Of_Introduction>
+            <Introduction>
+               <Phase>Architecture and Design</Phase>
+               <Note>Optimizations built into the design of the processor can have unintended consequences during the execution of an application.</Note>
+            </Introduction>
+         </Modes_Of_Introduction>
+         <Likelihood_Of_Exploit>Low</Likelihood_Of_Exploit>
+         <Common_Consequences>
+            <Consequence>
+               <Scope>Integrity</Scope>
+               <Impact>Bypass Protection Mechanism</Impact>
+               <Likelihood>High</Likelihood>
+               <Note>A successful exploitation of this weakness will change the order of an application's execution and will likely be used to bypass specific protection mechanisms. This bypass can be exploited further to potentially read data that should otherwise be unaccessible.</Note>
+            </Consequence>
+         </Common_Consequences>
+         <Detection_Methods>
+            <Detection_Method>
+               <Method>White Box</Method>
+               <Description>In theory this weakness can be detected through the use of white box testing techniques where specifically crafted test cases are used in conjunction with debuggers to verify the order of statements being executed.</Description>
+               <Effectiveness>Opportunistic</Effectiveness>
+               <Effectiveness_Notes>Although the mentioned detection method is theoretically possible, the use of speculative execution is a preferred way of increasing processor performance. The reality is that a large number of statements are executed out of order, and determining if any of them break an access control property would be extremely opportunistic.</Effectiveness_Notes>
+            </Detection_Method>
+         </Detection_Methods>
+         <Observed_Examples>
+            <Observed_Example>
+               <Reference>CVE-2017-5715</Reference>
+               <Description>Intel, ARM, and AMD processor optimizations related to speculative execution and branch prediction cause access control checks to be bypassed when placing data into the cache. Often known as "Spectre".</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2017-5715</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2017-5753</Reference>
+               <Description>Intel, ARM, and AMD processor optimizations related to speculative execution and branch prediction cause access control checks to be bypassed when placing data into the cache. Often known as "Spectre".</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2017-5753</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2017-5754</Reference>
+               <Description>Intel processor optimizations related to speculative execution cause access control checks to be bypassed when placing data into the cache. Often known as "Meltdown".</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2017-5754</Link>
+            </Observed_Example>
+         </Observed_Examples>
+         <Related_Attack_Patterns>
+            <Related_Attack_Pattern CAPEC_ID="663" />
+         </Related_Attack_Patterns>
+         <References>
+            <Reference External_Reference_ID="REF-11" />
+            <Reference External_Reference_ID="REF-12" />
+         </References>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Base level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+	 <Notes>
+           <Note Type="Maintenance">As of CWE 4.9, members of the CWE Hardware SIG are closely analyzing this entry and others to improve CWE's coverage of transient execution weaknesses, which include issues related to Spectre, Meltdown, and other attacks. Additional investigation may include other weaknesses related to microarchitectural state. As a result, this entry might change significantly in CWE 4.10.</Note>
+	 </Notes>
+         <Content_History>
+            <Submission>
+               <Submission_Name>CWE Content Team</Submission_Name>
+               <Submission_Organization>MITRE</Submission_Organization>
+               <Submission_Date>2018-03-07</Submission_Date>
+               <Submission_Version>3.1</Submission_Version>
+               <Submission_ReleaseDate>2018-03-29</Submission_ReleaseDate>
+            </Submission>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-02-24</Modification_Date>
+					<Modification_Version>4.0</Modification_Version>
+					<Modification_ReleaseDate>2020-02-24</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-06-25</Modification_Date>
+					<Modification_Version>4.1</Modification_Version>
+					<Modification_ReleaseDate>2020-06-25</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-03-15</Modification_Date>
+					<Modification_Version>4.4</Modification_Version>
+					<Modification_ReleaseDate>2021-03-15</Modification_ReleaseDate>
+					<Modification_Comment>updated Related_Attack_Patterns</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-10-13</Modification_Date>
+					<Modification_Version>4.9</Modification_Version>
+					<Modification_ReleaseDate>2022-10-13</Modification_ReleaseDate>
+					<Modification_Comment>updated Applicable_Platforms, Maintenance_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+         </Content_History>
+      </Weakness>
+      

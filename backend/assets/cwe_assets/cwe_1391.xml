@@ -1,0 +1,311 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="1391" Name="Use of Weak Credentials" Abstraction="Class" Structure="Simple" Status="Incomplete">
+      <Description>The product uses weak credentials (such as a default key or hard-coded password) that can be calculated, derived, reused, or guessed by an attacker.</Description>
+      <Extended_Description>
+	<xhtml:p>By design, authentication protocols try to ensure that attackers must perform brute force attacks if they do not know the credentials such as a key or password. However, when these credentials are easily predictable or even fixed (as with default or hard-coded passwords and keys), then the attacker can defeat the mechanism without relying on brute force.</xhtml:p>
+	<xhtml:p>Credentials may be weak for different reasons, such as:</xhtml:p>
+	<xhtml:ul>
+	  <xhtml:li>Hard-coded (i.e., static and unchangeable by the administrator)</xhtml:li>
+	  <xhtml:li>Default (i.e., the same static value across different deployments/installations, but able to be changed by the administrator)</xhtml:li>
+	  <xhtml:li>Predictable (i.e., generated in a way that produces unique credentials across deployments/installations, but can still be guessed with reasonable efficiency)</xhtml:li>
+	  <xhtml:li>Previously Compromised (i.e., "leaked" credentials that were published as part of a data breach)</xhtml:li>
+	</xhtml:ul>
+	<xhtml:p>Even if a new, unique credential is intended to be generated for each product installation, if the generation is predictable, then that may also simplify guessing attacks.</xhtml:p>
+      </Extended_Description>
+      <Related_Weaknesses>
+	<Related_Weakness Nature="ChildOf" CWE_ID="1390" View_ID="1000" Ordinal="Primary" />
+      </Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+            <Weakness_Ordinality>
+               <Ordinality>Resultant</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+      <Applicable_Platforms>
+	<Language Class="Not Language-Specific" Prevalence="Undetermined" />
+	<Operating_System Class="Not OS-Specific" Prevalence="Undetermined" />
+	<Architecture Class="Not Architecture-Specific" Prevalence="Undetermined" />
+	<Technology Class="ICS/OT" Prevalence="Undetermined" />
+	<Technology Class="Not Technology-Specific" Prevalence="Undetermined" />
+      </Applicable_Platforms>
+      <Modes_Of_Introduction>
+	<Introduction>
+	  <Phase>Requirements</Phase>
+	</Introduction>
+	<Introduction>
+	  <Phase>Architecture and Design</Phase>
+	</Introduction>
+	<Introduction>
+	  <Phase>Installation</Phase>
+	</Introduction>
+	<Introduction>
+	  <Phase>Operation</Phase>
+	</Introduction>
+      </Modes_Of_Introduction>
+      <Common_Consequences>
+	<Consequence>
+	  <Scope>Access Control</Scope>
+	  <Impact>Bypass Protection Mechanism</Impact>
+	  <Note>An adversary could bypass intended authentication restrictions.</Note>
+	</Consequence>
+      </Common_Consequences>
+      <Potential_Mitigations>
+	<Mitigation>
+	  <Phase>Architecture and Design</Phase>
+	  <Phase>Operation</Phase>
+	  <Description>When the user changes or sets a password, check
+	  the password against a database of already compromised or
+	  breached passwords. These passwords are likely to be used in
+	  password guessing attacks.</Description>
+	  <Effectiveness>Moderate</Effectiveness>
+	</Mitigation>
+      </Potential_Mitigations>
+	<Demonstrative_Examples>
+        <Demonstrative_Example Demonstrative_Example_ID="DX-153">
+          <Intro_Text>In 2022, the OT:ICEFALL study examined products by 10 different Operational Technology (OT) vendors. The researchers reported 56 vulnerabilities and said that the products were "insecure by design" [REF-1283]. If exploited, these vulnerabilities often allowed adversaries to change how the products operated, ranging from denial of service to changing the code that the products executed. Since these products were often used in industries such as power, electrical, water, and others, there could even be safety implications.</Intro_Text>
+          <Body_Text>Multiple OT products used weak credentials.</Body_Text>
+        </Demonstrative_Example>
+    </Demonstrative_Examples>
+      <Observed_Examples>
+	<Observed_Example>
+	  <Reference>[REF-1374]</Reference>
+	  <Description>Chain: JavaScript-based cryptocurrency library can fall back to the insecure Math.random() function instead of reporting a failure (CWE-392), thus reducing the entropy (CWE-332) and leading to generation of non-unique cryptographic keys for Bitcoin wallets (CWE-1391)</Description>
+	  <Link>https://www.unciphered.com/blog/randstorm-you-cant-patch-a-house-of-cards</Link>
+	</Observed_Example>
+	<Observed_Example>
+	  <Reference>CVE-2022-30270</Reference>
+	  <Description>Remote Terminal Unit (RTU) uses default credentials for some SSH accounts</Description>
+	  <Link>https://www.cve.org/CVERecord?id=CVE-2022-30270</Link>
+	</Observed_Example>
+	<Observed_Example>
+        <Reference>CVE-2022-29965</Reference>
+        <Description>Distributed Control System (DCS) uses a deterministic algorithm to generate utility passwords</Description>
+        <Link>https://www.cve.org/CVERecord?id=CVE-2022-29965</Link>
+    </Observed_Example>
+	<Observed_Example>
+	  <Reference>CVE-2022-30271</Reference>
+	  <Description>Remote Terminal Unit (RTU) uses a hard-coded SSH private key that is likely to be used in typical deployments</Description>
+	  <Link>https://www.cve.org/CVERecord?id=CVE-2022-30271</Link>
+	</Observed_Example>
+	<Observed_Example>
+	  <Reference>CVE-2021-38759</Reference>
+	  <Description>microcontroller board has default password, allowing admin access</Description>
+	  <Link>https://www.cve.org/CVERecord?id=CVE-2021-38759</Link>
+	</Observed_Example>
+	<Observed_Example>
+	  <Reference>CVE-2021-41192</Reference>
+	  <Description>data visualization/sharing package uses default secret keys or cookie values if they are not specified in environment variables</Description>
+	  <Link>https://www.cve.org/CVERecord?id=CVE-2021-41192</Link>
+	</Observed_Example>
+	<Observed_Example>
+	  <Reference>CVE-2020-8994</Reference>
+	  <Description>UART interface for AI speaker uses empty password for root shell</Description>
+	  <Link>https://www.cve.org/CVERecord?id=CVE-2020-8994</Link>
+	</Observed_Example>
+	<Observed_Example>
+	  <Reference>CVE-2020-27020</Reference>
+	  <Description>password manager does not generate cryptographically strong passwords, allowing prediction of passwords using guessable details such as time of generation</Description>
+	  <Link>https://www.cve.org/CVERecord?id=CVE-2020-27020</Link>
+	</Observed_Example>
+	<Observed_Example>
+	  <Reference>CVE-2020-8632</Reference>
+	  <Description>password generator for cloud application has small length value, making it easier for brute-force guessing</Description>
+	  <Link>https://www.cve.org/CVERecord?id=CVE-2020-8632</Link>
+	</Observed_Example>
+	<Observed_Example>
+	  <Reference>CVE-2020-5365</Reference>
+	  <Description>network-attached storage (NAS) system has predictable default passwords for a diagnostics/support account</Description>
+	  <Link>https://www.cve.org/CVERecord?id=CVE-2020-5365</Link>
+	</Observed_Example>
+	<Observed_Example>
+	  <Reference>CVE-2020-5248</Reference>
+	  <Description>IT asset management app has a default encryption key that is the same across installations </Description>
+	  <Link>https://www.cve.org/CVERecord?id=CVE-2020-5248</Link>
+	</Observed_Example>
+	<Observed_Example>
+	  <Reference>CVE-2018-3825</Reference>
+	  <Description>cloud cluster management product has a default master encryption key</Description>
+	  <Link>https://www.cve.org/CVERecord?id=CVE-2018-3825</Link>
+	</Observed_Example>
+	<Observed_Example>
+	  <Reference>CVE-2012-3503</Reference>
+	  <Description>Installation script has a hard-coded secret token value, allowing attackers to bypass authentication</Description>
+	  <Link>https://www.cve.org/CVERecord?id=CVE-2012-3503</Link>
+	</Observed_Example>
+	<Observed_Example>
+	  <Reference>CVE-2010-2306</Reference>
+	  <Description>Intrusion Detection System (IDS) uses the same static, private SSL keys for multiple devices and installations, allowing decryption of SSL traffic</Description>
+	  <Link>https://www.cve.org/CVERecord?id=CVE-2010-2306</Link>
+	</Observed_Example>
+	<Observed_Example>
+	  <Reference>CVE-2001-0618</Reference>
+	  <Description>Residential gateway uses the last 5 digits of the 'Network Name' or SSID as the default WEP key, which allows attackers to get the key by sniffing the SSID, which is sent in the clear</Description>
+	  <Link>https://www.cve.org/CVERecord?id=CVE-2001-0618</Link>
+	</Observed_Example>
+      </Observed_Examples>
+	  <Taxonomy_Mappings>
+		<Taxonomy_Mapping Taxonomy_Name="ISA/IEC 62443">
+		  <Entry_ID>Part 2-4</Entry_ID>
+		  <Entry_Name>Req SP.09.02 RE(1)</Entry_Name>
+		</Taxonomy_Mapping>
+		<Taxonomy_Mapping Taxonomy_Name="ISA/IEC 62443">
+		  <Entry_ID>Part 4-1</Entry_ID>
+		  <Entry_Name>Req SR-3 b)</Entry_Name>
+		</Taxonomy_Mapping>
+		<Taxonomy_Mapping Taxonomy_Name="ISA/IEC 62443">
+		  <Entry_ID>Part 4-1</Entry_ID>
+		  <Entry_Name>Req SI-2 b)</Entry_Name>
+		</Taxonomy_Mapping>
+		<Taxonomy_Mapping Taxonomy_Name="ISA/IEC 62443">
+		  <Entry_ID>Part 4-1</Entry_ID>
+		  <Entry_Name>Req SI-2 d)</Entry_Name>
+		</Taxonomy_Mapping>
+		<Taxonomy_Mapping Taxonomy_Name="ISA/IEC 62443">
+		  <Entry_ID>Part 4-1</Entry_ID>
+		  <Entry_Name>Req SG-3 d)</Entry_Name>
+		</Taxonomy_Mapping>
+		<Taxonomy_Mapping Taxonomy_Name="ISA/IEC 62443">
+		  <Entry_ID>Part 4-1</Entry_ID>
+		  <Entry_Name>Req SG-6 b)</Entry_Name>
+		</Taxonomy_Mapping>
+		<Taxonomy_Mapping Taxonomy_Name="ISA/IEC 62443">
+		  <Entry_ID>Part 4-2</Entry_ID>
+		  <Entry_Name>Req CR 1.1</Entry_Name>
+		</Taxonomy_Mapping>
+		<Taxonomy_Mapping Taxonomy_Name="ISA/IEC 62443">
+		  <Entry_ID>Part 4-2</Entry_ID>
+		  <Entry_Name>Req CR 1.2</Entry_Name>
+		</Taxonomy_Mapping>
+		<Taxonomy_Mapping Taxonomy_Name="ISA/IEC 62443">
+		  <Entry_ID>Part 4-2</Entry_ID>
+		  <Entry_Name>Req CR 1.5</Entry_Name>
+		</Taxonomy_Mapping>
+		<Taxonomy_Mapping Taxonomy_Name="ISA/IEC 62443">
+		  <Entry_ID>Part 4-2</Entry_ID>
+		  <Entry_Name>Req CR 1.7</Entry_Name>
+		</Taxonomy_Mapping>
+		<Taxonomy_Mapping Taxonomy_Name="ISA/IEC 62443">
+		  <Entry_ID>Part 4-2</Entry_ID>
+		  <Entry_Name>Req CR 1.8</Entry_Name>
+		</Taxonomy_Mapping>
+		<Taxonomy_Mapping Taxonomy_Name="ISA/IEC 62443">
+		  <Entry_ID>Part 4-2</Entry_ID>
+		  <Entry_Name>Req CR 1.9</Entry_Name>
+		</Taxonomy_Mapping>
+		<Taxonomy_Mapping Taxonomy_Name="ISA/IEC 62443">
+		  <Entry_ID>Part 4-2</Entry_ID>
+		  <Entry_Name>Req CR 1.14</Entry_Name>
+		</Taxonomy_Mapping>
+		<Taxonomy_Mapping Taxonomy_Name="ISA/IEC 62443">
+		  <Entry_ID>Part 4-2</Entry_ID>
+		  <Entry_Name>Req CR 2.1</Entry_Name>
+		</Taxonomy_Mapping>
+		<Taxonomy_Mapping Taxonomy_Name="ISA/IEC 62443">
+		  <Entry_ID>Part 4-2</Entry_ID>
+		  <Entry_Name>Req CR 4.3</Entry_Name>
+		</Taxonomy_Mapping>
+		<Taxonomy_Mapping Taxonomy_Name="ISA/IEC 62443">
+		  <Entry_ID>Part 4-2</Entry_ID>
+		  <Entry_Name>Req CR 7.5</Entry_Name>
+		</Taxonomy_Mapping>
+	  </Taxonomy_Mappings>
+      <References>
+            <Reference External_Reference_ID="REF-1303" />
+            <Reference External_Reference_ID="REF-1304" />
+	    <Reference External_Reference_ID="REF-1283" />
+	    <Reference External_Reference_ID="REF-1374" />
+	    <Reference External_Reference_ID="REF-1488" Section="5.1.1.2" /> 
+	    <Reference External_Reference_ID="REF-1514" />
+      </References>
+         <Mapping_Notes>
+            <Usage>Allowed-with-Review</Usage>
+            <Rationale>This CWE entry is a Class and might have Base-level children that would be more appropriate</Rationale>
+            <Comments>Examine children of this entry to see if there is a better fit</Comments>
+            <Reasons>
+               <Reason Type="Abstraction" />
+            </Reasons>
+         </Mapping_Notes>
+      <Content_History>
+	<Submission>
+	  <Submission_Name>CWE Content Team</Submission_Name>
+	  <Submission_Organization>MITRE</Submission_Organization>
+	  <Submission_Date>2022-10-06</Submission_Date>
+	  <Submission_Version>4.9</Submission_Version>
+	  <Submission_ReleaseDate>2022-10-13</Submission_ReleaseDate>
+	</Submission>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-01-31</Modification_Date>
+					<Modification_Version>4.10</Modification_Version>
+					<Modification_ReleaseDate>2023-01-31</Modification_ReleaseDate>
+					<Modification_Comment>updated Applicable_Platforms, Demonstrative_Examples, Observed_Examples, References</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated References, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes, Taxonomy_Mappings</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2024-02-29</Modification_Date>
+					<Modification_Version>4.14</Modification_Version>
+					<Modification_ReleaseDate>2024-02-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Observed_Examples, References</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2024-11-19</Modification_Date>
+					<Modification_Version>4.16</Modification_Version>
+					<Modification_ReleaseDate>2024-11-19</Modification_ReleaseDate>
+					<Modification_Comment>updated Observed_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-09-09</Modification_Date>
+					<Modification_Version>4.18</Modification_Version>
+					<Modification_ReleaseDate>2025-09-09</Modification_ReleaseDate>
+					<Modification_Comment>updated References</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Common_Consequences, Description, Potential_Mitigations, References, Relationships, Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+				<Contribution Type="Content">
+				  <Contribution_Name>"Mapping CWE to 62443" Sub-Working Group</Contribution_Name>
+				  <Contribution_Organization>CWE-CAPEC ICS/OT SIG</Contribution_Organization>
+				  <Contribution_Date>2023-06-29</Contribution_Date>
+				  <Contribution_Version>4.12</Contribution_Version>
+				  <Contribution_ReleaseDate>2023-06-29</Contribution_ReleaseDate>
+				  <Contribution_Comment>Suggested mappings to ISA/IEC 62443.</Contribution_Comment>
+				</Contribution>
+				<Contribution Type="Content">
+				  <Contribution_Name>Michal Biesiada</Contribution_Name>
+				  <Contribution_Date>2023-07-07</Contribution_Date>
+				  <Contribution_Version>4.19</Contribution_Version>
+				  <Contribution_ReleaseDate>2025-12-11</Contribution_ReleaseDate>
+				  <Contribution_Comment>Proposed inclusion of already-compromised passwords, leading to modifications of extended description, mitigations, and references</Contribution_Comment>
+				</Contribution>
+      </Content_History>
+    </Weakness>
+      

@@ -1,0 +1,321 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="350" Name="Reliance on Reverse DNS Resolution for a Security-Critical Action" Abstraction="Variant" Structure="Simple" Status="Draft">
+         <Description>The product performs reverse DNS resolution on an IP address to obtain the hostname and make a security decision, but it does not properly ensure that the IP address is truly associated with the hostname.</Description>
+         <Extended_Description>
+            <xhtml:p>Since DNS names can be easily spoofed or misreported, and it may be difficult for the product to detect if a trusted DNS server has been compromised, DNS names do not constitute a valid authentication mechanism.</xhtml:p>
+            <xhtml:p>When the product performs a reverse DNS resolution for an IP address, if an attacker controls the DNS server for that IP address, then the attacker can cause the server to return an arbitrary hostname. As a result, the attacker may be able to bypass authentication, cause the wrong hostname to be recorded in log files to hide activities, or perform other attacks.</xhtml:p>
+            <xhtml:p>Attackers can spoof DNS names by either (1) compromising a DNS server and modifying its records (sometimes called DNS cache poisoning), or (2) having legitimate control over a DNS server associated with their IP address.</xhtml:p>
+         </Extended_Description>
+         <Related_Weaknesses>
+            <Related_Weakness Nature="ChildOf" CWE_ID="290" View_ID="1000" Ordinal="Primary" />
+            <Related_Weakness Nature="ChildOf" CWE_ID="807" View_ID="1000" />
+            <Related_Weakness Nature="CanPrecede" CWE_ID="923" View_ID="1000" />
+         </Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+         <Applicable_Platforms>
+            <Language Class="Not Language-Specific" Prevalence="Undetermined" />
+         </Applicable_Platforms>
+         <Modes_Of_Introduction>
+            <Introduction>
+               <Phase>Architecture and Design</Phase>
+            </Introduction>
+         </Modes_Of_Introduction>
+         <Common_Consequences>
+            <Consequence>
+               <Scope>Access Control</Scope>
+               <Impact>Gain Privileges or Assume Identity</Impact>
+               <Impact>Bypass Protection Mechanism</Impact>
+               <Note>Malicious users can fake authentication information by providing false DNS information.</Note>
+            </Consequence>
+         </Common_Consequences>
+         <Detection_Methods>
+           <Detection_Method Detection_Method_ID="DM-14">
+             <Method>Automated Static Analysis</Method>
+             <Description>Automated static analysis, commonly referred to as Static Application Security Testing (SAST), can find some instances of this weakness by analyzing source code (or binary/compiled code) without having to execute it. Typically, this is done by building a model of data flow and control flow, then searching for potentially-vulnerable patterns that connect "sources" (origins of input) with "sinks" (destinations where the data interacts with external components, a lower layer such as the OS, etc.)</Description>
+             <Effectiveness>High</Effectiveness>
+           </Detection_Method>
+         </Detection_Methods>
+         <Potential_Mitigations>
+            <Mitigation>
+               <Phase>Architecture and Design</Phase>
+               <Description>Use other means of identity verification that cannot be simply spoofed. Possibilities include a username/password or certificate.</Description>
+            </Mitigation>
+            <Mitigation Mitigation_ID="MIT-42">
+               <Phase>Implementation</Phase>
+               <Description>Perform proper forward and reverse DNS lookups to detect DNS spoofing.</Description>
+            </Mitigation>
+         </Potential_Mitigations>
+         <Demonstrative_Examples>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-93">
+               <Intro_Text>The following code samples use a DNS lookup in order to decide whether or not an inbound request is from a trusted host. If an attacker can poison the DNS cache, they can gain trusted status.</Intro_Text>
+               <Example_Code Nature="Bad" Language="C">
+                  <xhtml:div>struct hostent *hp;struct in_addr myaddr;<xhtml:br />char* tHost = "trustme.example.com";<xhtml:br />myaddr.s_addr=inet_addr(ip_addr_string);<xhtml:br />
+                     <xhtml:br />hp = gethostbyaddr((char *) &amp;myaddr, sizeof(struct in_addr), AF_INET);<xhtml:br />if (hp &amp;&amp; !strncmp(hp-&gt;h_name, tHost, sizeof(tHost))) {<xhtml:div style="margin-left:1em;">trusted = true;</xhtml:div>} else {<xhtml:div style="margin-left:1em;">trusted = false;</xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Example_Code Nature="Bad" Language="Java">
+                  <xhtml:div>String ip = request.getRemoteAddr();<xhtml:br />InetAddress addr = InetAddress.getByName(ip);<xhtml:br />if (addr.getCanonicalHostName().endsWith("trustme.com")) {<xhtml:div style="margin-left:1em;">trusted = true;</xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Example_Code Nature="Bad" Language="C#">
+                  <xhtml:div>IPAddress hostIPAddress = IPAddress.Parse(RemoteIpAddress);<xhtml:br />IPHostEntry hostInfo = Dns.GetHostByAddress(hostIPAddress);<xhtml:br />if (hostInfo.HostName.EndsWith("trustme.com")) {<xhtml:div style="margin-left:1em;">trusted = true;</xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>IP addresses are more reliable than DNS names, but they can also be spoofed. Attackers can easily forge the source IP address of the packets they send, but response packets will return to the forged IP address. To see the response packets, the attacker has to sniff the traffic between the victim machine and the forged IP address. In order to accomplish the required sniffing, attackers typically attempt to locate themselves on the same subnet as the victim machine. Attackers may be able to circumvent this requirement by using source routing, but source routing is disabled across much of the Internet today. In summary, IP address verification can be a useful part of an authentication scheme, but it should not be the single factor required for authentication.</Body_Text>
+            </Demonstrative_Example>
+            <Demonstrative_Example>
+               <Intro_Text>In these examples, a connection is established if a request is made by a trusted host.</Intro_Text>
+               <Example_Code Nature="Bad" Language="C">
+                  <xhtml:div>sd = socket(AF_INET, SOCK_DGRAM, 0);<xhtml:br />serv.sin_family = AF_INET;<xhtml:br />serv.sin_addr.s_addr = htonl(INADDR_ANY);<xhtml:br />servr.sin_port = htons(1008);<xhtml:br />bind(sd, (struct sockaddr *) &amp; serv, sizeof(serv));<xhtml:br />while (1) {<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>
+                           <xhtml:br />memset(msg, 0x0, MAX_MSG);<xhtml:br />clilen = sizeof(cli);<xhtml:br />h=gethostbyname(inet_ntoa(cliAddr.sin_addr));<xhtml:br />if (h-&gt;h_name==...) n = recvfrom(sd, msg, MAX_MSG, 0, (struct sockaddr *) &amp; cli, &amp;clilen);</xhtml:div>
+                     </xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Example_Code Nature="Bad" Language="Java">
+                  <xhtml:div>while(true) {<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>DatagramPacket rp=new DatagramPacket(rData,rData.length);<xhtml:br />outSock.receive(rp);<xhtml:br />String in = new String(p.getData(),0, rp.getLength());<xhtml:br />InetAddress IPAddress = rp.getAddress();<xhtml:br />int port = rp.getPort();<xhtml:br />if ((rp.getHostName()==...) &amp; (in==...)) {<xhtml:div style="margin-left:1em;">
+                              <xhtml:div>
+                                 <xhtml:br />out = secret.getBytes();<xhtml:br />DatagramPacket sp =new DatagramPacket(out,out.length, IPAddress, port);<xhtml:br />outSock.send(sp);</xhtml:div>
+                           </xhtml:div>}</xhtml:div>
+                     </xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>These examples check if a request is from a trusted host before responding to a request, but the code only verifies the hostname as stored in the request packet. An attacker can spoof the hostname, thus impersonating a trusted client.</Body_Text>
+            </Demonstrative_Example>
+         </Demonstrative_Examples>
+         <Observed_Examples>
+            <Observed_Example>
+               <Reference>CVE-2001-1488</Reference>
+               <Description>Does not do double-reverse lookup to prevent DNS spoofing.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2001-1488</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2001-1500</Reference>
+               <Description>Does not verify reverse-resolved hostnames in DNS.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2001-1500</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2000-1221</Reference>
+               <Description>Authentication bypass using spoofed reverse-resolved DNS hostnames.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2000-1221</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2002-0804</Reference>
+               <Description>Authentication bypass using spoofed reverse-resolved DNS hostnames.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2002-0804</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2001-1155</Reference>
+               <Description>Filter does not properly check the result of a reverse DNS lookup, which could allow remote attackers to bypass intended access restrictions via DNS spoofing.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2001-1155</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2004-0892</Reference>
+               <Description>Reverse DNS lookup used to spoof trusted content in intermediary.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2004-0892</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2003-0981</Reference>
+               <Description>Product records the reverse DNS name of a visitor in the logs, allowing spoofing and resultant XSS.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2003-0981</Link>
+            </Observed_Example>
+         </Observed_Examples>
+         <Taxonomy_Mappings>
+            <Taxonomy_Mapping Taxonomy_Name="PLOVER">
+               <Entry_Name>Improperly Trusted Reverse DNS</Entry_Name>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="CLASP">
+               <Entry_Name>Trusting self-reported DNS name</Entry_Name>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="Software Fault Patterns">
+               <Entry_ID>SFP29</Entry_ID>
+               <Entry_Name>Faulty endpoint authentication</Entry_Name>
+            </Taxonomy_Mapping>
+         </Taxonomy_Mappings>
+         <Related_Attack_Patterns>
+            <Related_Attack_Pattern CAPEC_ID="142" />
+            <Related_Attack_Pattern CAPEC_ID="275" />
+            <Related_Attack_Pattern CAPEC_ID="73" />
+            <Related_Attack_Pattern CAPEC_ID="89" />
+         </Related_Attack_Patterns>
+         <References>
+            <Reference External_Reference_ID="REF-18" />
+            <Reference External_Reference_ID="REF-44" Section="&quot;Sin 15: Not Updating Easily.&quot; Page 231" />
+            <Reference External_Reference_ID="REF-44" Section="&quot;Sin 24: Trusting Network Name Resolution.&quot; Page 361" />
+            <Reference External_Reference_ID="REF-62" Section="Chapter 16, &quot;DNS Spoofing&quot;, Page 1002" />
+         </References>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Variant level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+         <Notes>
+            <Note Type="Maintenance">CWE-350, CWE-247, and CWE-292 were merged into CWE-350 in CWE 2.5. CWE-247 was originally derived from Seven Pernicious Kingdoms, CWE-350 from PLOVER, and CWE-292 from CLASP. All taxonomies focused closely on the use of reverse DNS for authentication of incoming requests.</Note>
+         </Notes>
+         <Content_History>
+            <Submission>
+               <Submission_Name>PLOVER</Submission_Name>
+               <Submission_Date>2006-07-19</Submission_Date>
+               <Submission_Version>Draft 3</Submission_Version>
+               <Submission_ReleaseDate>2006-07-19</Submission_ReleaseDate>
+            </Submission>
+            <Modification>
+               <Modification_Name>Sean Eidemiller</Modification_Name>
+               <Modification_Organization>Cigital</Modification_Organization>
+               <Modification_Date>2008-07-01</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>added/updated demonstrative examples</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2008-09-08</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2009-05-27</Modification_Date>
+               <Modification_Version>1.4</Modification_Version>
+               <Modification_ReleaseDate>2009-05-27</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2010-09-27</Modification_Date>
+               <Modification_Version>1.10</Modification_Version>
+               <Modification_ReleaseDate>2010-09-27</Modification_ReleaseDate>
+               <Modification_Comment>updated Potential_Mitigations</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-06-01</Modification_Date>
+               <Modification_Version>1.13</Modification_Version>
+               <Modification_ReleaseDate>2011-06-01</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2012-05-11</Modification_Date>
+               <Modification_Version>2.2</Modification_Version>
+               <Modification_ReleaseDate>2012-05-15</Modification_ReleaseDate>
+               <Modification_Comment>updated Related_Attack_Patterns, Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2013-06-23</Modification_Date>
+               <Modification_Version>2.5</Modification_Version>
+               <Modification_ReleaseDate>2013-07-17</Modification_ReleaseDate>
+               <Modification_Importance>Critical</Modification_Importance>
+               <Modification_Comment>CWE-247 and CWE-292 deprecated and merged into CWE-350 to address duplicates.</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2013-07-17</Modification_Date>
+               <Modification_Version>2.5</Modification_Version>
+               <Modification_ReleaseDate>2013-07-17</Modification_ReleaseDate>
+               <Modification_Comment>updated Applicable_Platforms, Common_Consequences, Demonstrative_Examples, Description, Maintenance_Notes, Name, Potential_Mitigations, References, Relationships, Taxonomy_Mappings, Type</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2014-02-18</Modification_Date>
+               <Modification_Version>2.6</Modification_Version>
+               <Modification_ReleaseDate>2014-02-19</Modification_ReleaseDate>
+               <Modification_Comment>updated Description, Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2014-07-30</Modification_Date>
+               <Modification_Version>2.8</Modification_Version>
+               <Modification_ReleaseDate>2014-07-31</Modification_ReleaseDate>
+               <Modification_Comment>updated Demonstrative_Examples, Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2017-05-03</Modification_Date>
+               <Modification_Version>2.11</Modification_Version>
+               <Modification_ReleaseDate>2017-05-05</Modification_ReleaseDate>
+               <Modification_Comment>updated Related_Attack_Patterns</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2017-11-08</Modification_Date>
+               <Modification_Version>3.0</Modification_Version>
+               <Modification_ReleaseDate>2017-11-08</Modification_ReleaseDate>
+               <Modification_Comment>updated Demonstrative_Examples, Relationships</Modification_Comment>
+            </Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-02-24</Modification_Date>
+					<Modification_Version>4.0</Modification_Version>
+					<Modification_ReleaseDate>2020-02-24</Modification_ReleaseDate>
+					<Modification_Comment>updated References, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-03-15</Modification_Date>
+					<Modification_Version>4.4</Modification_Version>
+					<Modification_ReleaseDate>2021-03-15</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-10-13</Modification_Date>
+					<Modification_Version>4.9</Modification_Version>
+					<Modification_ReleaseDate>2022-10-13</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-01-31</Modification_Date>
+					<Modification_Version>4.10</Modification_Version>
+					<Modification_ReleaseDate>2023-01-31</Modification_ReleaseDate>
+					<Modification_Comment>updated Description</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Detection_Factors, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships, Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+            <Previous_Entry_Name Date="2013-07-17">Improperly Trusted Reverse DNS</Previous_Entry_Name>
+         </Content_History>
+      </Weakness>
+      

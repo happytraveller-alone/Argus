@@ -1,0 +1,230 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="1341" Name="Multiple Releases of Same Resource or Handle" Abstraction="Base" Structure="Simple" Status="Incomplete">
+			<Description>The product attempts to close or release a resource or handle more than once, without any successful open between the close operations.</Description>
+			<Extended_Description>
+			  <xhtml:p>Code typically requires "opening" handles or references to resources such as memory, files, devices, socket connections, services, etc. When the code is finished with using the resource, it is typically expected to "close" or "release" the resource, which indicates to the environment (such as the OS) that the resource can be re-assigned or reused by unrelated processes or actors - or in some cases, within the same process. API functions or other abstractions are often used to perform this release, such as free() or delete() within C/C++, or file-handle close() operations that are used in many languages.</xhtml:p>
+			  <xhtml:p>Unfortunately, the implementation or design of such APIs might expect the developer to be responsible for ensuring that such APIs are only called once per release of the resource. If the developer attempts to release the same resource/handle more than once, then the API's expectations are not met, resulting in undefined and/or insecure behavior. This could lead to consequences such as memory corruption, data corruption, execution path corruption, or other consequences.</xhtml:p>
+			  <xhtml:p>Note that while the implementation for most (if not all) resource reservation allocations involve a unique identifier/pointer/symbolic reference, then if this identifier is reused, checking the identifier for resource closure may result in a false state of openness and closing of the wrong resource. For this reason, reuse of identifiers is discouraged.</xhtml:p>
+			</Extended_Description>
+			<Related_Weaknesses>
+				<Related_Weakness Nature="ChildOf" CWE_ID="675" View_ID="1000" Ordinal="Primary" />
+				<Related_Weakness Nature="CanPrecede" CWE_ID="672" View_ID="1000" Ordinal="Primary" />
+			</Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Resultant</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+			<Applicable_Platforms>	
+				<Language Name="Java" Prevalence="Undetermined" />
+				<Language Name="Rust" Prevalence="Undetermined" />
+				<Language Class="Not Language-Specific" Prevalence="Undetermined" />
+				<Language Name="C" Prevalence="Undetermined" />
+				<Language Name="C++" Prevalence="Undetermined" />
+				<Operating_System Class="Not OS-Specific" Prevalence="Undetermined" />
+				<Architecture Class="Not Architecture-Specific" Prevalence="Undetermined" />
+				<Technology Class="Not Technology-Specific" Prevalence="Undetermined" />
+			</Applicable_Platforms>
+			<Modes_Of_Introduction>
+				<Introduction>
+					<Phase>Implementation</Phase>
+				</Introduction>
+			</Modes_Of_Introduction>
+			<Common_Consequences>
+				<Consequence>
+					<Scope>Availability</Scope>
+					<Scope>Integrity</Scope>
+					<Impact>DoS: Crash, Exit, or Restart</Impact>
+					<Likelihood>Medium</Likelihood>
+				</Consequence>
+			</Common_Consequences>
+			<Detection_Methods>
+				<Detection_Method>
+				  <Method>Automated Static Analysis</Method>
+				  <Description>For commonly-used APIs and resource types, automated tools often have signatures that can spot this issue.</Description>
+				</Detection_Method>
+				<Detection_Method>
+					<Method>Automated Dynamic Analysis</Method>
+					<Description>Some compiler instrumentation tools such as AddressSanitizer (ASan) can indirectly detect some instances of this weakness.</Description>
+				</Detection_Method>
+			</Detection_Methods>
+			<Potential_Mitigations>
+				<Mitigation>
+				  <Phase>Implementation</Phase>
+				  <Description>Change the code's logic so that the resource is only closed once. This might require simplifying or refactoring. This fix can be simple to do in small code blocks, but more difficult when multiple closes are buried within complex conditionals.</Description>
+				</Mitigation>
+				<Mitigation>
+				  <Phase>Implementation</Phase>
+				  <Strategy>Refactoring</Strategy>
+				  <Description>It can be effective to implement a flag that is (1) set when the resource is opened, (2) cleared when it is closed, and (3) checked before closing. This approach can be useful when there are disparate cases in which closes must be performed. However, flag-tracking can increase code complexity and requires diligent compliance by the programmer.</Description>
+				</Mitigation>
+				<Mitigation>
+				  <Phase>Implementation</Phase>
+				  <Strategy>Refactoring</Strategy>
+				  <Description>When closing a resource, set the resource's associated variable to NULL or equivalent value for the given language. Some APIs will ignore this null value without causing errors. For other APIs, this can lead to application crashes or exceptions, which may still be preferable to corrupting an unintended resource such as memory or data.</Description>
+				  <Effectiveness>Defense in Depth</Effectiveness>
+				</Mitigation>
+			</Potential_Mitigations>
+			<Demonstrative_Examples>
+				<Demonstrative_Example>
+					<Intro_Text>This example attempts to close a file twice. In some cases, the C library fclose() function will catch the error and return an error code. In other implementations, a double-free (CWE-415) occurs, causing the program to fault. Note that the examples presented here are simplistic, and double fclose() calls will frequently be spread around a program, making them more difficult to find during code reviews.</Intro_Text>
+					<Example_Code Nature="Bad" Language="C">
+char b[2000];<xhtml:br />
+FILE *f = fopen("dbl_cls.c", "r");<xhtml:br />
+if (f)<xhtml:br />
+{<xhtml:br />
+	<xhtml:div style="margin-left:1em;">b[0] = 0;<xhtml:br />
+	fread(b, 1, sizeof(b) - 1, f);<xhtml:br />
+	printf("%s\n'", b);<xhtml:br />
+	int r1 = fclose(f);<xhtml:br />
+	printf("\n-----------------\n1 close done '%d'\n", r1);<xhtml:br /><xhtml:br />
+	int r2 = fclose(f);	// Double close<xhtml:br />
+	printf("2 close done '%d'\n", r2);</xhtml:div>
+}
+					</Example_Code>
+					<Body_Text>There are multiple possible fixes. This fix only has one call to fclose(), which is typically the preferred handling of this problem - but this simplistic method is not always possible.<xhtml:br />
+					</Body_Text>
+					<Example_Code Nature="Good" Language="C">
+char b[2000];<xhtml:br />
+FILE *f = fopen("dbl_cls.c", "r");<xhtml:br />
+if (f)<xhtml:br />
+{<xhtml:br />
+	<xhtml:div style="margin-left:1em;">b[0] = 0;<xhtml:br />
+	fread(b, 1, sizeof(b) - 1, f);<xhtml:br />
+	printf("%s\n'", b);<xhtml:br />
+	int r = fclose(f);<xhtml:br />
+	printf("\n-----------------\n1 close done '%d'\n", r);</xhtml:div>
+}
+					</Example_Code>
+					<Body_Text>This fix uses a flag to call fclose() only once. Note that this flag is explicit. The variable "f" could also have been used as it will be either NULL if the file is not able to be opened or a valid pointer if the file was successfully opened. If "f" is replacing "f_flg" then "f" would need to be set to NULL after the first fclose() call so the second fclose call would never be executed.<xhtml:br />
+					</Body_Text>
+					<Example_Code Nature="Good" Language="C">
+char b[2000];<xhtml:br />
+int f_flg = 0;<xhtml:br />
+FILE *f = fopen("dbl_cls.c", "r");<xhtml:br />
+if (f)<xhtml:br />
+{<xhtml:br />
+	<xhtml:div style="margin-left:1em;">f_flg = 1;<xhtml:br />
+	b[0] = 0;<xhtml:br />
+	fread(b, 1, sizeof(b) - 1, f);<xhtml:br />
+	printf("%s\n'", b);<xhtml:br />
+	if (f_flg)<xhtml:br />
+	{<xhtml:br />
+		<xhtml:div style="margin-left:1em;">int r1 = fclose(f);<xhtml:br />
+		f_flg = 0;<xhtml:br />
+		printf("\n-----------------\n1 close done '%d'\n", r1);</xhtml:div><xhtml:br />
+	}<xhtml:br /><xhtml:br />
+	if (f_flg)<xhtml:br />
+	{<xhtml:br />
+		<xhtml:div style="margin-left:1em;">int r2 = fclose(f);	// Double close<xhtml:br />
+		f_flg = 0;<xhtml:br />
+		printf("2 close done '%d'\n", r2);</xhtml:div><xhtml:br />
+	}</xhtml:div><xhtml:br />
+}
+					</Example_Code>
+				</Demonstrative_Example>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-149">
+               <Intro_Text>The following code shows a simple example of a double free vulnerability.</Intro_Text>
+               <Example_Code Nature="Bad" Language="C">
+                  <xhtml:div>char* ptr = (char*)malloc (SIZE);<xhtml:br />...<xhtml:br />if (abrt) {<xhtml:div style="margin-left:1em;">free(ptr);</xhtml:div>}<xhtml:br />...<xhtml:br />free(ptr);</xhtml:div>
+               </Example_Code>
+               <Body_Text>Double free vulnerabilities have two common (and sometimes overlapping) causes:</Body_Text>
+               <Body_Text>
+                  <xhtml:ul>
+                     <xhtml:li>
+                        <xhtml:div>Error conditions and other exceptional circumstances</xhtml:div>
+                     </xhtml:li>
+                     <xhtml:li>
+                        <xhtml:div>Confusion over which part of the program is responsible for freeing the memory</xhtml:div>
+                     </xhtml:li>
+                  </xhtml:ul>
+               </Body_Text>
+               <Body_Text>Although some double free vulnerabilities are not much more complicated than this example, most are spread out across hundreds of lines of code or even different files. Programmers seem particularly susceptible to freeing global variables more than once.</Body_Text>
+            </Demonstrative_Example>
+			</Demonstrative_Examples>
+			<Observed_Examples>
+			  <Observed_Example>
+			    <Reference>CVE-2019-13351</Reference>
+			    <Description>file descriptor double close can cause the wrong file to be associated with a file descriptor.</Description>
+			    <Link>https://www.cve.org/CVERecord?id=CVE-2019-13351</Link>
+			  </Observed_Example>
+			  <Observed_Example>
+			    <Reference>CVE-2006-5051</Reference>
+			    <Description>Chain: Signal handler contains too much functionality (CWE-828), introducing a race condition (CWE-362) that leads to a double free (CWE-415).</Description>
+			    <Link>https://www.cve.org/CVERecord?id=CVE-2006-5051</Link>
+			  </Observed_Example>
+			  <Observed_Example>
+			    <Reference>CVE-2004-0772</Reference>
+			    <Description>Double free resultant from certain error conditions.</Description>
+			    <Link>https://www.cve.org/CVERecord?id=CVE-2004-0772</Link>
+			  </Observed_Example>
+			</Observed_Examples>
+			<References>
+				<Reference External_Reference_ID="REF-1198" />
+				<Reference External_Reference_ID="REF-1199" />
+				<Reference External_Reference_ID="REF-1200" />
+				<Reference External_Reference_ID="REF-1201" />
+			</References>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Base level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+			<Notes>
+			  <Note Type="Terminology">The terms related to "release"  may vary depending on the type of resource, programming language, specification, or framework. "Close" has been used synonymously for the release of resources like file descriptors and file handles. "Return" is sometimes used instead of Release. "Free" is typically used when releasing memory or buffers back into the system for reuse.
+			  </Note>
+			</Notes>
+			<Content_History>
+			  <Submission>
+			    <Submission_Name>CWE Content Team</Submission_Name>
+			    <Submission_Organization>MITRE</Submission_Organization>
+			    <Submission_Date>2021-09-07</Submission_Date>
+			    <Submission_Version>4.6</Submission_Version>
+			    <Submission_ReleaseDate>2021-10-28</Submission_ReleaseDate>
+			  </Submission>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-04-28</Modification_Date>
+					<Modification_Version>4.7</Modification_Version>
+					<Modification_ReleaseDate>2022-04-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples, Description, Potential_Mitigations</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-10-13</Modification_Date>
+					<Modification_Version>4.9</Modification_Version>
+					<Modification_ReleaseDate>2022-10-13</Modification_ReleaseDate>
+					<Modification_Comment>updated References</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Observed_Examples, Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+			</Content_History>
+		</Weakness>
+      

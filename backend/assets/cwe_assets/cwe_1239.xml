@@ -1,0 +1,226 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="1239" Name="Improper Zeroization of Hardware Register" Abstraction="Variant" Structure="Simple" Status="Draft">
+            <Description>The hardware product does not properly clear sensitive information from built-in registers when the user of the hardware block changes.</Description>
+            <Extended_Description>Hardware logic operates on data stored in registers local to the hardware block. Most hardware IPs, including cryptographic accelerators, rely on registers to buffer I/O, store intermediate values, and interface with software. The result of this is that sensitive information, such as passwords or encryption keys, can exist in locations not transparent to the user of the hardware logic. When a different entity obtains access to the IP due to a change in operating mode or conditions, the new entity can extract information belonging to the previous user if no mechanisms are in place to clear register contents. It is important to clear information stored in the hardware if a physical attack on the product is detected, or if the user of the hardware block changes. The process of clearing register contents in a hardware IP is referred to as zeroization in standards for cryptographic hardware modules such as FIPS-140-2 [REF-267].</Extended_Description>
+            <Related_Weaknesses>
+              <Related_Weakness Nature="ChildOf" CWE_ID="226" View_ID="1000" Ordinal="Primary" />
+              <Related_Weakness Nature="ChildOf" CWE_ID="226" View_ID="1194" Ordinal="Primary" />
+            </Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+            <Applicable_Platforms>
+                <Language Class="Not Language-Specific" Prevalence="Undetermined" />
+                <Operating_System Class="Not OS-Specific" Prevalence="Undetermined" />
+                <Architecture Class="Not Architecture-Specific" Prevalence="Undetermined" />
+                <Technology Class="System on Chip" Prevalence="Undetermined" />
+            </Applicable_Platforms>
+			<Modes_Of_Introduction>
+				<Introduction>
+					<Phase>Architecture and Design</Phase>
+					<Note>Lack of hardware mechanisms to zeroize or clear registers in the design or specification.</Note>
+				</Introduction>
+				<Introduction>
+					<Phase>Implementation</Phase>
+					<Note>Mechanisms to zeroize and clear registers are in the design but implemented incorrectly.</Note>
+				</Introduction>
+				<Introduction>
+					<Phase>Operation</Phase>
+					<Note>Hardware-provided zeroization mechanisms are not used appropriately by the IP user (ex. firmware), or data remanence issues are not taken into account.</Note>
+				</Introduction>
+			</Modes_Of_Introduction>
+			<Common_Consequences>
+				<Consequence>
+					<Scope>Confidentiality</Scope>
+					<Impact>Varies by Context</Impact>
+					<Note>The consequences will depend on the information disclosed due to the vulnerability.</Note>
+				</Consequence>
+			</Common_Consequences>
+			<Potential_Mitigations>
+				<Mitigation>
+					<Phase>Architecture and Design</Phase>
+					<Description>Every register potentially containing sensitive information must have a policy specifying how and when information is cleared, in addition to clarifying if it is the responsibility of the hardware logic or IP user to initiate the zeroization procedure at the appropriate time.</Description>
+					<Effectiveness_Notes>Unfortunately, data disclosure can occur even after information has been overwritten/zeroized from the digital perspective. Physical characteristics of the memory can reveal the history of previously written data.  For example, if the same value is written repeatedly to a memory location, the corresponding memory cells can become physically altered to a degree that even if the original data is erased it can still be recovered through physical characterization of the memory cells [REF-1055].</Effectiveness_Notes>
+				</Mitigation>
+			</Potential_Mitigations>
+			<Demonstrative_Examples>
+				<Demonstrative_Example>
+					<Intro_Text>Suppose a hardware IP for implementing an encryption routine works as expected, but it leaves the intermediate results in some registers that can be accessed. Exactly why this access happens is immaterial - it might be unintentional or intentional, where the designer wanted a "quick fix" for something.  </Intro_Text>
+				</Demonstrative_Example>
+				<Demonstrative_Example>
+					<Intro_Text>The example code below [REF-1379] is taken from the SHA256 Interface/wrapper controller module of the HACK@DAC'21 buggy OpenPiton SoC. Within the wrapper module there are a set of 16 memory-mapped registers referenced data[0] to data[15]. These registers are 32 bits in size and are used to store the data received on the AXI Lite interface for hashing. Once both the message to be hashed and a request to start the hash computation are received, the values of these registers will be forwarded to the underlying SHA256 module for processing. Once forwarded, the values in these registers no longer need to be retained. In fact, if not cleared or overwritten, these sensitive values can be read over the AXI Lite interface, potentially compromising any previously confidential data stored therein.</Intro_Text>
+					<Example_Code Nature="Bad" Language="Verilog">
+					...<xhtml:br />
+						<xhtml:div style="margin-left:1em;">
+						// Implement SHA256 I/O memory map interface<xhtml:br />
+						// Write side<xhtml:br />
+						always @(posedge clk_i)<xhtml:br />
+							<xhtml:div style="margin-left:1em;">
+							begin<xhtml:br />
+								<xhtml:div style="margin-left:1em;">
+								if(~(rst_ni &amp;&amp; ~rst_3))<xhtml:br />
+									<xhtml:div style="margin-left:1em;">
+									begin<xhtml:br />
+										<xhtml:div style="margin-left:1em;">
+										startHash &lt;= 0;<xhtml:br />
+										newMessage &lt;= 0;<xhtml:br />
+										data[0] &lt;= 0;<xhtml:br />
+										data[1] &lt;= 0;<xhtml:br />
+										data[2] &lt;= 0;<xhtml:br />
+										...<xhtml:br />
+										data[14] &lt;= 0;<xhtml:br />
+										data[15] &lt;= 0;<xhtml:br />
+										</xhtml:div>
+									</xhtml:div>
+								</xhtml:div>
+							</xhtml:div>
+						</xhtml:div>
+					...<xhtml:br />
+					</Example_Code>
+					<Body_Text>In the previous code snippet [REF-1379] there is the lack of a data clearance mechanism for the memory-mapped I/O registers after their utilization. These registers get cleared only when a reset condition is met. This condition is met when either the global negative-edge reset input signal (rst_ni) or the dedicated reset input signal for SHA256 peripheral (rst_3) is active. In other words, if either of these reset signals is true, the registers will be cleared. However, in cases where there is not a reset condition these registers retain their values until the next hash operation. It is during the time between an old hash operation and a new hash operation that that data is open to unauthorized disclosure.</Body_Text>
+					<Body_Text>To correct the issue of data persisting between hash operations, the memory mapped I/O registers need to be cleared once the values written in these registers are propagated to the SHA256 module. This could be done for example by adding a new condition to zeroize the memory mapped I/O registers once the hash value is computed, i.e., hashValid signal asserted, as shown in the good code example below [REF-1380]. This fix will clear the memory-mapped I/O registers after the data has been provided as input to the SHA engine.</Body_Text>
+					<Example_Code Nature="Good" Language="Verilog">
+					...<xhtml:br />
+						<xhtml:div style="margin-left:1em;">
+						// Implement SHA256 I/O memory map interface<xhtml:br />
+						// Write side<xhtml:br />
+						always @(posedge clk_i)<xhtml:br />
+							<xhtml:div style="margin-left:1em;">
+							begin<xhtml:br />
+								<xhtml:div style="margin-left:1em;">
+								if(~(rst_ni &amp;&amp; ~rst_3))<xhtml:br />
+									<xhtml:div style="margin-left:1em;">
+									begin<xhtml:br />
+										<xhtml:div style="margin-left:1em;">
+										startHash &lt;= 0;<xhtml:br />
+										newMessage &lt;= 0;<xhtml:br />
+										data[0] &lt;= 0;<xhtml:br />
+										data[1] &lt;= 0;<xhtml:br />
+										data[2] &lt;= 0;<xhtml:br />
+										...<xhtml:br />
+										data[14] &lt;= 0;<xhtml:br />
+										data[15] &lt;= 0;<xhtml:br />
+										</xhtml:div>
+									end<xhtml:br />
+									</xhtml:div>
+								<xhtml:b>else if(hashValid &amp;&amp; ~hashValid_r)</xhtml:b>
+									<xhtml:div style="margin-left:1em;">
+									<xhtml:b>begin</xhtml:b>
+										<xhtml:div style="margin-left:1em;">
+										<xhtml:b>data[0] &lt;= 0;</xhtml:b><xhtml:br />
+										<xhtml:b>data[1] &lt;= 0;</xhtml:b><xhtml:br />
+										<xhtml:b>data[2] &lt;= 0;</xhtml:b><xhtml:br />
+										<xhtml:b>...</xhtml:b><xhtml:br />
+										<xhtml:b>data[14] &lt;= 0;</xhtml:b><xhtml:br />
+										<xhtml:b>data[15] &lt;= 0;</xhtml:b><xhtml:br />
+										</xhtml:div>
+									end<xhtml:br />
+									</xhtml:div>
+								</xhtml:div>
+							</xhtml:div>
+						</xhtml:div>
+					...<xhtml:br />
+					</Example_Code>
+				</Demonstrative_Example>
+			</Demonstrative_Examples>
+         <Related_Attack_Patterns>
+            <Related_Attack_Pattern CAPEC_ID="150" />
+            <Related_Attack_Pattern CAPEC_ID="204" />
+            <Related_Attack_Pattern CAPEC_ID="37" />
+            <Related_Attack_Pattern CAPEC_ID="545" />
+         </Related_Attack_Patterns>
+         <References>
+				<Reference External_Reference_ID="REF-267" />
+				<Reference External_Reference_ID="REF-1055" />
+				<Reference External_Reference_ID="REF-1379" />
+				<Reference External_Reference_ID="REF-1380" />
+			</References>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Variant level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+            <Content_History>
+                <Submission>
+					<Submission_Name>Nicole Fern</Submission_Name>
+					<Submission_Organization>Cycuity (originally submitted as Tortuga Logic)</Submission_Organization>
+					<Submission_Date>2020-02-08</Submission_Date>
+					<Submission_Version>4.0</Submission_Version>
+					<Submission_ReleaseDate>2020-02-24</Submission_ReleaseDate>
+                </Submission>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-08-20</Modification_Date>
+					<Modification_Version>4.2</Modification_Version>
+					<Modification_ReleaseDate>2020-08-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Related_Attack_Patterns</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-10-28</Modification_Date>
+					<Modification_Version>4.6</Modification_Version>
+					<Modification_ReleaseDate>2021-10-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated References, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2024-02-29</Modification_Date>
+					<Modification_Version>4.14</Modification_Version>
+					<Modification_ReleaseDate>2024-02-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples, References</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-09-09</Modification_Date>
+					<Modification_Version>4.18</Modification_Version>
+					<Modification_ReleaseDate>2025-09-09</Modification_ReleaseDate>
+					<Modification_Comment>updated References</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+				<Contribution Type="Content">
+					<Contribution_Name>Chen Chen, Rahul Kande, Jeyavijayan Rajendran</Contribution_Name>
+					<Contribution_Organization>Texas A&amp;M University</Contribution_Organization>
+					<Contribution_Date>2023-11-07</Contribution_Date>
+					<Contribution_Comment>suggested demonstrative example</Contribution_Comment>
+				</Contribution>
+				<Contribution Type="Content">
+					<Contribution_Name>Shaza Zeitouni, Mohamadreza Rostami, Ahmad-Reza Sadeghi</Contribution_Name>
+					<Contribution_Organization>Technical University of Darmstadt</Contribution_Organization>
+					<Contribution_Date>2023-11-07</Contribution_Date>
+					<Contribution_Comment>suggested demonstrative example</Contribution_Comment>
+				</Contribution>
+            </Content_History>
+        </Weakness>
+      

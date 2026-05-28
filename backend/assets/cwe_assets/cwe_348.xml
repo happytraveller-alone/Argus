@@ -1,0 +1,223 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="348" Name="Use of Less Trusted Source" Abstraction="Base" Structure="Simple" Status="Draft">
+         <Description>The product has two different sources of the same data or information, but it uses the source that has less support for verification, is less trusted, or is less resistant to attack.</Description>
+         <Related_Weaknesses>
+            <Related_Weakness Nature="ChildOf" CWE_ID="345" View_ID="1000" Ordinal="Primary" />
+         </Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+         <Applicable_Platforms>
+            <Language Class="Not Language-Specific" Prevalence="Undetermined" />
+	    <Technology Class="Not Technology-Specific" Prevalence="Undetermined" />
+         </Applicable_Platforms>
+         <Modes_Of_Introduction>
+            <Introduction>
+               <Phase>Architecture and Design</Phase>
+            </Introduction>
+            <Introduction>
+               <Phase>Implementation</Phase>
+            </Introduction>
+         </Modes_Of_Introduction>
+         <Common_Consequences>
+            <Consequence>
+               <Scope>Access Control</Scope>
+               <Impact>Bypass Protection Mechanism</Impact>
+               <Impact>Gain Privileges or Assume Identity</Impact>
+               <Note>An attacker could utilize the untrusted data source to bypass protection mechanisms and gain access to sensitive data.</Note>
+            </Consequence>
+         </Common_Consequences>
+         <Demonstrative_Examples>
+            <Demonstrative_Example>
+               <Intro_Text>This code attempts to limit the access of a page to certain IP Addresses. It checks the 'HTTP_X_FORWARDED_FOR' header in case an authorized user is sending the request through a proxy.</Intro_Text>
+               <Example_Code Nature="Bad" Language="PHP">
+                  <xhtml:div>$requestingIP = '0.0.0.0';<xhtml:br />if (array_key_exists('HTTP_X_FORWARDED_FOR', $_SERVER)) {<xhtml:div style="margin-left:1em;">$requestingIP = $_SERVER['HTTP_X_FORWARDED_FOR'];</xhtml:div>
+                     <xhtml:br />else{<xhtml:div style="margin-left:1em;">$requestingIP = $_SERVER['REMOTE_ADDR'];</xhtml:div>}<xhtml:br />
+                     <xhtml:br />if(in_array($requestingIP,$ipAllowlist)){<xhtml:div style="margin-left:1em;">generatePage();<xhtml:br />return;</xhtml:div>}<xhtml:br />else{<xhtml:div style="margin-left:1em;">echo "You are not authorized to view this page";<xhtml:br />return;</xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>The 'HTTP_X_FORWARDED_FOR' header can be user controlled and so should never be trusted. An attacker can falsify the header to gain access to the page.</Body_Text>
+               <Body_Text>This fixed code only trusts the 'REMOTE_ADDR' header and so avoids the issue:</Body_Text>
+               <Example_Code Nature="Good" Language="PHP">
+                  <xhtml:div>$requestingIP = '0.0.0.0';<xhtml:br />if (array_key_exists('HTTP_X_FORWARDED_FOR', $_SERVER)) {<xhtml:div style="margin-left:1em;">echo "This application cannot be accessed through a proxy.";<xhtml:br />return;</xhtml:div>
+                     <xhtml:br />else{<xhtml:div style="margin-left:1em;">$requestingIP = $_SERVER['REMOTE_ADDR'];</xhtml:div>}<xhtml:br />
+                     <xhtml:i>...</xhtml:i>
+                     <xhtml:br />
+                  </xhtml:div>
+               </Example_Code>
+               <Body_Text>Be aware that 'REMOTE_ADDR' can still be spoofed. This may seem useless because the server will send the response to the fake address and not the attacker, but this may still be enough to conduct an attack. For example, if the generatePage() function in this code is resource intensive, an attacker could flood the server with fake requests using an authorized IP and consume significant resources. This could be a serious DoS attack even though the attacker would never see the page's sensitive content.</Body_Text>
+            </Demonstrative_Example>
+         </Demonstrative_Examples>
+         <Observed_Examples>
+            <Observed_Example>
+               <Reference>CVE-2001-0860</Reference>
+               <Description>Product uses IP address provided by a client, instead of obtaining it from the packet headers, allowing easier spoofing.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2001-0860</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2004-1950</Reference>
+               <Description>Web product uses the IP address in the X-Forwarded-For HTTP header instead of a server variable that uses the connecting IP address, allowing filter bypass.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2004-1950</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2001-0908</Reference>
+               <Description>Product logs IP address specified by the client instead of obtaining it from the packet headers, allowing information hiding.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2001-0908</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2006-1126</Reference>
+               <Description>PHP application uses IP address from X-Forwarded-For HTTP header, instead of REMOTE_ADDR.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2006-1126</Link>
+            </Observed_Example>
+         </Observed_Examples>
+         <Taxonomy_Mappings>
+            <Taxonomy_Mapping Taxonomy_Name="PLOVER">
+               <Entry_Name>Use of Less Trusted Source</Entry_Name>
+            </Taxonomy_Mapping>
+         </Taxonomy_Mappings>
+         <Related_Attack_Patterns>
+            <Related_Attack_Pattern CAPEC_ID="141" />
+            <Related_Attack_Pattern CAPEC_ID="142" />
+            <Related_Attack_Pattern CAPEC_ID="73" />
+            <Related_Attack_Pattern CAPEC_ID="76" />
+            <Related_Attack_Pattern CAPEC_ID="85" />
+         </Related_Attack_Patterns>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Base level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+         <Content_History>
+            <Submission>
+               <Submission_Name>PLOVER</Submission_Name>
+               <Submission_Date>2006-07-19</Submission_Date>
+               <Submission_Version>Draft 3</Submission_Version>
+               <Submission_ReleaseDate>2006-07-19</Submission_ReleaseDate>
+            </Submission>
+            <Modification>
+               <Modification_Name>Eric Dalci</Modification_Name>
+               <Modification_Organization>Cigital</Modification_Organization>
+               <Modification_Date>2008-07-01</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>updated Time_of_Introduction</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2008-09-08</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-06-01</Modification_Date>
+               <Modification_Version>1.13</Modification_Version>
+               <Modification_ReleaseDate>2011-06-01</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2012-05-11</Modification_Date>
+               <Modification_Version>2.2</Modification_Version>
+               <Modification_ReleaseDate>2012-05-15</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences, Demonstrative_Examples, Observed_Examples, Related_Attack_Patterns, Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2013-07-17</Modification_Date>
+               <Modification_Version>2.5</Modification_Version>
+               <Modification_ReleaseDate>2013-07-17</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2014-07-30</Modification_Date>
+               <Modification_Version>2.8</Modification_Version>
+               <Modification_ReleaseDate>2014-07-31</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2017-05-03</Modification_Date>
+               <Modification_Version>2.11</Modification_Version>
+               <Modification_ReleaseDate>2017-05-05</Modification_ReleaseDate>
+               <Modification_Comment>updated Related_Attack_Patterns</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2017-11-08</Modification_Date>
+               <Modification_Version>3.0</Modification_Version>
+               <Modification_ReleaseDate>2017-11-08</Modification_ReleaseDate>
+               <Modification_Comment>updated Applicable_Platforms</Modification_Comment>
+            </Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-02-24</Modification_Date>
+					<Modification_Version>4.0</Modification_Version>
+					<Modification_ReleaseDate>2020-02-24</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-06-25</Modification_Date>
+					<Modification_Version>4.1</Modification_Version>
+					<Modification_ReleaseDate>2020-06-25</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-01-31</Modification_Date>
+					<Modification_Version>4.10</Modification_Version>
+					<Modification_ReleaseDate>2023-01-31</Modification_ReleaseDate>
+					<Modification_Comment>updated Description</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2024-02-29</Modification_Date>
+					<Modification_Version>4.14</Modification_Version>
+					<Modification_ReleaseDate>2024-02-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Observed_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Applicable_Platforms, Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+         </Content_History>
+      </Weakness>
+      

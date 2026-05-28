@@ -1,0 +1,153 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="1235" Name="Incorrect Use of Autoboxing and Unboxing for Performance Critical Operations" Abstraction="Base" Structure="Simple" Status="Incomplete">
+         <Description>The code uses boxed primitives, which may introduce inefficiencies into performance-critical operations.</Description>
+         <Related_Weaknesses>
+            <Related_Weakness Nature="ChildOf" CWE_ID="400" View_ID="1000" Ordinal="Primary" />
+         </Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+         <Applicable_Platforms>
+            <Language Name="Java" Prevalence="Undetermined" />
+			<Language Name="C#" Prevalence="Undetermined" />
+			<Operating_System Class="Not OS-Specific" Prevalence="Undetermined" />
+			<Architecture Class="Not Architecture-Specific" Prevalence="Undetermined" />
+			<Technology Class="Not Technology-Specific" Prevalence="Undetermined" />
+         </Applicable_Platforms>
+	 <Background_Details>
+	   <Background_Detail>
+	     Languages such as Java and C# support automatic conversion through their respective compilers from primitive types into objects of the corresponding wrapper classes, and vice versa. For example, a compiler might convert an int to Integer (called autoboxing) or an Integer to int (called unboxing). This eliminates forcing the programmer to perform these conversions manually, which makes the code cleaner.
+	   </Background_Detail>
+	 </Background_Details>
+         <Modes_Of_Introduction>
+            <Introduction>
+               <Phase>Implementation</Phase>
+	       <Note>The programmer may use boxed primitives when not strictly necessary.</Note>
+            </Introduction>
+         </Modes_Of_Introduction>
+         <Common_Consequences>
+            <Consequence>
+               <Scope>Availability</Scope>
+               <Impact>DoS: Resource Consumption (CPU)</Impact>
+			   <Impact>DoS: Resource Consumption (Memory)</Impact>
+			   <Impact>DoS: Resource Consumption (Other)</Impact>
+			   <Impact>Reduce Performance</Impact>
+			   <Likelihood>Low</Likelihood>
+               <Note>Incorrect autoboxing/unboxing would result in reduced performance, which sometimes can lead to resource consumption issues, impacting availability when used with generic collections.</Note>
+            </Consequence>
+         </Common_Consequences>
+	 <Detection_Methods>
+	   <Detection_Method Detection_Method_ID="DM-14">
+	     <Method>Automated Static Analysis</Method>
+	     <Description>Automated static analysis, commonly referred to as Static Application Security Testing (SAST), can find some instances of this weakness by analyzing source code (or binary/compiled code) without having to execute it. Typically, this is done by building a model of data flow and control flow, then searching for potentially-vulnerable patterns that connect "sources" (origins of input) with "sinks" (destinations where the data interacts with external components, a lower layer such as the OS, etc.)</Description>
+	   </Detection_Method>
+	 </Detection_Methods>
+         <Potential_Mitigations>
+            <Mitigation>
+               <Phase>Implementation</Phase>
+               <Description>Use of boxed primitives should be limited to certain situations such as when calling methods with typed parameters.  They should not be used for scientific computing or other performance critical operations. They are only suited to support "impedance mismatch" between reference types and primitives.  Examine the use of boxed primitives prior to use. Use SparseArrays or ArrayMap instead of HashMap to avoid performance overhead.</Description>
+            </Mitigation>
+         </Potential_Mitigations>
+         <Demonstrative_Examples>
+            <Demonstrative_Example>
+               <Intro_Text>Java has a boxed primitive for each primitive type. A long can be represented with the boxed primitive Long. Issues arise where boxed primitives are used when not strictly necessary.</Intro_Text>
+               <Example_Code Nature="Bad" Language="Java">
+				<xhtml:div>Long count = 0L;
+					<xhtml:br />
+					for (long i = 0; i &lt; Integer.MAX_VALUE; i++) {
+					<xhtml:div style="margin-left:1em;">
+						count += i;
+						<xhtml:br />
+					</xhtml:div>
+					}
+				</xhtml:div>
+               </Example_Code>
+               <Body_Text>In the above loop, we see that the count variable is declared as a boxed primitive. This causes autoboxing on the line that increments. This causes execution to be magnitudes less performant (time and possibly space) than if the "long" primitive was used to declare the count variable, which can impact availability of a resource.</Body_Text>
+            </Demonstrative_Example>
+            <Demonstrative_Example>
+               <Intro_Text>This code uses primitive long which fixes the issue.</Intro_Text>
+               <Example_Code Nature="Good" Language="Java">
+				<xhtml:div>long count = 0L;
+					<xhtml:br />
+					for (long i = 0; i &lt; Integer.MAX_VALUE; i++) {
+					<xhtml:div style="margin-left:1em;">
+						count += i;
+						<xhtml:br />
+					</xhtml:div>
+					}
+				</xhtml:div>
+               </Example_Code>
+            </Demonstrative_Example>
+         </Demonstrative_Examples>
+         <Taxonomy_Mappings>
+            <Taxonomy_Mapping Taxonomy_Name="SEI CERT Oracle Coding Standard for Java">
+               <Entry_ID>EXP04-J</Entry_ID>
+               <Entry_Name>Do not pass arguments to certain Java Collections Framework methods that are a different type than the collection parameter type</Entry_Name>
+            </Taxonomy_Mapping>
+	    <Taxonomy_Mapping Taxonomy_Name="ISA/IEC 62443">
+	      <Entry_ID>Part 4-1</Entry_ID>
+	      <Entry_Name>Req SI-2</Entry_Name>
+	    </Taxonomy_Mapping>
+         </Taxonomy_Mappings>
+         <References>
+            <Reference External_Reference_ID="REF-1051" />
+			<Reference External_Reference_ID="REF-1052" />
+         </References>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Base level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+         <Content_History>
+            <Submission>
+               <Submission_Name>Joe Harvey</Submission_Name>
+			   <Submission_Date>2019-10-14</Submission_Date>
+			   <Submission_Version>4.0</Submission_Version>
+			   <Submission_ReleaseDate>2020-02-24</Submission_ReleaseDate>
+            </Submission>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-03-15</Modification_Date>
+					<Modification_Version>4.4</Modification_Version>
+					<Modification_ReleaseDate>2021-03-15</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships, Taxonomy_Mappings</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Background_Details, Common_Consequences, Description, Detection_Factors, Potential_Mitigations, Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+            <Contribution Type="Content">
+               <Contribution_Name>"Mapping CWE to 62443" Sub-Working Group</Contribution_Name>
+               <Contribution_Organization>CWE-CAPEC ICS/OT SIG</Contribution_Organization>
+               <Contribution_Date>2023-04-25</Contribution_Date>
+               <Contribution_Comment>Suggested mappings to ISA/IEC 62443.</Contribution_Comment>
+            </Contribution>
+         </Content_History>
+      </Weakness>
+      

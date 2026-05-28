@@ -1,0 +1,382 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="300" Name="Channel Accessible by Non-Endpoint" Abstraction="Class" Structure="Simple" Status="Draft">
+         <Description>The product does not adequately verify the identity of actors at both ends of a communication channel, or does not adequately ensure the integrity of the channel, in a way that allows the channel to be accessed or influenced by an actor that is not an endpoint.</Description>
+         <Extended_Description>In order to establish secure communication between two parties, it is often important to adequately verify the identity of entities at each end of the communication channel. Inadequate or inconsistent verification may result in insufficient or incorrect identification of either communicating entity. This can have negative consequences such as misplaced trust in the entity at the other end of the channel. An attacker can leverage this by interposing between the communicating entities and masquerading as the original entity. In the absence of sufficient verification of identity, such an attacker can eavesdrop and potentially modify the communication between the original entities.</Extended_Description>
+         <Related_Weaknesses>
+            <Related_Weakness Nature="ChildOf" CWE_ID="923" View_ID="1000" Ordinal="Primary" />
+         </Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+            <Weakness_Ordinality>
+               <Ordinality>Resultant</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+         <Applicable_Platforms>
+            <Language Class="Not Language-Specific" Prevalence="Undetermined" />
+         </Applicable_Platforms>
+         <Alternate_Terms>
+            <Alternate_Term>
+               <Term>Adversary-in-the-Middle / AITM</Term>
+            </Alternate_Term>
+            <Alternate_Term>
+               <Term>Attacker-in-the-Middle / AITM</Term>
+            </Alternate_Term>
+            <Alternate_Term>
+               <Term>Man-in-the-Middle / MITM</Term>
+            </Alternate_Term>
+            <Alternate_Term>
+               <Term>Person-in-the-Middle / PITM</Term>
+            </Alternate_Term>
+            <Alternate_Term>
+               <Term>Monkey-in-the-Middle</Term>
+            </Alternate_Term>
+            <Alternate_Term>
+               <Term>Monster-in-the-Middle</Term>
+            </Alternate_Term>
+            <Alternate_Term>
+               <Term>Manipulator-in-the-Middle</Term>
+            </Alternate_Term>
+            <Alternate_Term>
+               <Term>On-path attack</Term>
+            </Alternate_Term>
+            <Alternate_Term>
+               <Term>Interception attack</Term>
+            </Alternate_Term>
+         </Alternate_Terms>
+         <Modes_Of_Introduction>
+            <Introduction>
+               <Phase>Architecture and Design</Phase>
+               <Note>REALIZATION: This weakness is caused during implementation of an architectural security tactic.</Note>
+            </Introduction>
+         </Modes_Of_Introduction>
+         <Common_Consequences>
+            <Consequence>
+               <Scope>Confidentiality</Scope>
+               <Scope>Integrity</Scope>
+               <Scope>Access Control</Scope>
+               <Impact>Read Application Data</Impact>
+               <Impact>Modify Application Data</Impact>
+               <Impact>Gain Privileges or Assume Identity</Impact>
+               <Note>An attacker could pose as one of the entities and read or possibly modify the communication.</Note>
+            </Consequence>
+         </Common_Consequences>
+         <Detection_Methods>
+           <Detection_Method>
+             <Method>Automated Dynamic Analysis</Method>
+             <Description>Some tools can act as proxy servers that allow the tester to intercept packets or messages, inspect them, and modify them before sending them to the destination in order to see if the modified packets are still accepted by the receiving component.</Description>
+           </Detection_Method>
+           <Detection_Method>
+             <Method>Automated Dynamic Analysis</Method>
+             <Description>Dynamic Application Security Testing (DAST) tools can be used to detect network traffic without encryption and/or verification. The affected protocol may be subject to Adversary-in-the-Middle attacks.  Some tools act as proxy servers that allow the tester to inspect and modify packets/messages to see if they are still accepted by the receiving component. </Description>
+           </Detection_Method>
+           <Detection_Method>
+             <Method>Automated Static Analysis</Method>
+             <Description>Automated static analysis, commonly referred to as Static Application Security Testing (SAST), can find some instances of this weakness by analyzing source code (or binary/compiled code) without having to execute it. Typically, this is done by building a model of data flow and control flow, then searching for potentially-vulnerable patterns that connect "sources" (origins of input) with "sinks" (destinations where the data interacts with external components, a lower layer such as the OS, etc.) The analysis could identify use of protocols that are subject to Adversary-in-the-Middle attacks.</Description>
+             <Effectiveness>Moderate</Effectiveness>
+			 <Effectiveness_Notes>Encryption and other protection mechanisms may be provided in the environment (e.g., by a load balancer or firewall that is positioned in front of a server), but this cannot be detected by SAST tools.</Effectiveness_Notes>
+           </Detection_Method>
+         </Detection_Methods>
+         <Potential_Mitigations>
+            <Mitigation>
+               <Phase>Implementation</Phase>
+               <Description>Always fully authenticate both ends of any communications channel.</Description>
+            </Mitigation>
+            <Mitigation>
+               <Phase>Architecture and Design</Phase>
+               <Description>Adhere to the principle of complete mediation.</Description>
+            </Mitigation>
+            <Mitigation>
+               <Phase>Implementation</Phase>
+               <Description>A certificate binds an identity to a cryptographic key to authenticate a communicating party. Often, the certificate takes the encrypted form of the hash of the identity of the subject, the public key, and information such as time of issue or expiration using the issuer's private key. The certificate can be validated by deciphering the certificate with the issuer's public key. See also X.509 certificate signature chains and the PGP certification structure.</Description>
+            </Mitigation>
+         </Potential_Mitigations>
+         <Demonstrative_Examples>
+            <Demonstrative_Example>
+               <Intro_Text>In the Java snippet below, data is sent over an unencrypted channel to a remote server.</Intro_Text>
+               <Example_Code Nature="Bad" Language="Java">
+                  <xhtml:div>Socket sock;<xhtml:br />PrintWriter out;<xhtml:br />
+                     <xhtml:br />try {<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>sock = new Socket(REMOTE_HOST, REMOTE_PORT);<xhtml:br />out = new PrintWriter(echoSocket.getOutputStream(), true);<xhtml:br />
+                           <xhtml:br />
+                           <xhtml:i>// Write data to remote host via socket output stream.</xhtml:i>
+                           <xhtml:br />...</xhtml:div>
+                     </xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>By eavesdropping on the communication channel or posing as the endpoint, an attacker would be able to read all of the transmitted data.</Body_Text>
+            </Demonstrative_Example>
+         </Demonstrative_Examples>
+         <Observed_Examples>
+            <Observed_Example>
+               <Reference>CVE-2014-1266</Reference>
+               <Description>Chain: incorrect "goto" in Apple SSL product bypasses certificate validation, allowing Adversary-in-the-Middle (AITM) attack (Apple "goto fail" bug). CWE-705 (Incorrect Control Flow Scoping) -&gt; CWE-561 (Dead Code) -&gt; CWE-295 (Improper Certificate Validation) -&gt; CWE-393 (Return of Wrong Status Code) -&gt; CWE-300 (Channel Accessible by Non-Endpoint). The code's whitespace indentation did not reflect the actual control flow (CWE-1114) and did not explicitly delimit the block (CWE-483), which could have made it more difficult for human code auditors to detect the vulnerability.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2014-1266</Link>
+            </Observed_Example>
+         </Observed_Examples>
+         <Taxonomy_Mappings>
+            <Taxonomy_Mapping Taxonomy_Name="PLOVER">
+               <Entry_Name>Man-in-the-middle (MITM)</Entry_Name>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="WASC">
+               <Entry_ID>32</Entry_ID>
+               <Entry_Name>Routing Detour</Entry_Name>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="The CERT Oracle Secure Coding Standard for Java (2011)">
+               <Entry_ID>SEC06-J</Entry_ID>
+               <Entry_Name>Do not rely on the default automatic signature verification provided by URLClassLoader and java.util.jar</Entry_Name>
+            </Taxonomy_Mapping>
+         </Taxonomy_Mappings>
+         <Related_Attack_Patterns>
+            <Related_Attack_Pattern CAPEC_ID="466" />
+            <Related_Attack_Pattern CAPEC_ID="57" />
+            <Related_Attack_Pattern CAPEC_ID="589" />
+            <Related_Attack_Pattern CAPEC_ID="590" />
+            <Related_Attack_Pattern CAPEC_ID="612" />
+            <Related_Attack_Pattern CAPEC_ID="613" />
+            <Related_Attack_Pattern CAPEC_ID="615" />
+            <Related_Attack_Pattern CAPEC_ID="662" />
+            <Related_Attack_Pattern CAPEC_ID="94" />
+         </Related_Attack_Patterns>
+         <References>
+            <Reference External_Reference_ID="REF-244" />
+         </References>
+         <Mapping_Notes>
+            <Usage>Discouraged</Usage>
+            <Rationale>CWE-300 is commonly misused for vulnerabilities in which the prerequisites for exploitation require the adversary to be in a privileged "in-the-middle" position.</Rationale>
+            <Comments>Consider root-cause weaknesses that allow adversary-in-the-middle attacks to happen, such as CWEs involving poor integrity protection.</Comments>
+            <Reasons>
+               <Reason Type="Frequent Misuse" />
+            </Reasons>
+         </Mapping_Notes>
+         <Notes>
+            <Note Type="Maintenance">The summary identifies multiple distinct possibilities, suggesting that this is a category that must be broken into more specific weaknesses.</Note>
+         </Notes>
+         <Content_History>
+            <Submission>
+               <Submission_Name>PLOVER</Submission_Name>
+               <Submission_Date>2006-07-19</Submission_Date>
+               <Submission_Version>Draft 3</Submission_Version>
+               <Submission_ReleaseDate>2006-07-19</Submission_ReleaseDate>
+            </Submission>
+            <Modification>
+               <Modification_Name>Sean Eidemiller</Modification_Name>
+               <Modification_Organization>Cigital</Modification_Organization>
+               <Modification_Date>2008-07-01</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>added/updated demonstrative examples</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>Eric Dalci</Modification_Name>
+               <Modification_Organization>Cigital</Modification_Organization>
+               <Modification_Date>2008-07-01</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>updated Time_of_Introduction</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2008-09-08</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>updated Description, Maintenance_Notes, Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2009-05-27</Modification_Date>
+               <Modification_Version>1.4</Modification_Version>
+               <Modification_ReleaseDate>2009-05-27</Modification_ReleaseDate>
+               <Modification_Comment>updated Name</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2010-02-16</Modification_Date>
+               <Modification_Version>1.8</Modification_Version>
+               <Modification_ReleaseDate>2010-02-16</Modification_ReleaseDate>
+               <Modification_Comment>updated Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2010-12-13</Modification_Date>
+               <Modification_Version>1.11</Modification_Version>
+               <Modification_ReleaseDate>2010-12-13</Modification_ReleaseDate>
+               <Modification_Comment>updated Description</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-06-01</Modification_Date>
+               <Modification_Version>1.13</Modification_Version>
+               <Modification_ReleaseDate>2011-06-01</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences, Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2012-05-11</Modification_Date>
+               <Modification_Version>2.2</Modification_Version>
+               <Modification_ReleaseDate>2012-05-15</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences, Related_Attack_Patterns, Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2012-10-30</Modification_Date>
+               <Modification_Version>2.3</Modification_Version>
+               <Modification_ReleaseDate>2012-10-30</Modification_ReleaseDate>
+               <Modification_Comment>updated Potential_Mitigations</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2014-02-18</Modification_Date>
+               <Modification_Version>2.6</Modification_Version>
+               <Modification_ReleaseDate>2014-02-19</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2014-06-23</Modification_Date>
+               <Modification_Version>2.7</Modification_Version>
+               <Modification_ReleaseDate>2014-06-23</Modification_ReleaseDate>
+               <Modification_Comment>updated Observed_Examples</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2014-07-30</Modification_Date>
+               <Modification_Version>2.8</Modification_Version>
+               <Modification_ReleaseDate>2014-07-31</Modification_ReleaseDate>
+               <Modification_Comment>updated Demonstrative_Examples, Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2017-11-08</Modification_Date>
+               <Modification_Version>3.0</Modification_Version>
+               <Modification_ReleaseDate>2017-11-08</Modification_ReleaseDate>
+               <Modification_Comment>updated Applicable_Platforms, Modes_of_Introduction, Relationships</Modification_Comment>
+            </Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2019-01-03</Modification_Date>
+					<Modification_Version>3.2</Modification_Version>
+					<Modification_ReleaseDate>2019-01-03</Modification_ReleaseDate>
+					<Modification_Comment>updated Taxonomy_Mappings</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2019-06-20</Modification_Date>
+					<Modification_Version>3.3</Modification_Version>
+					<Modification_ReleaseDate>2019-06-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Related_Attack_Patterns</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-02-24</Modification_Date>
+					<Modification_Version>4.0</Modification_Version>
+					<Modification_ReleaseDate>2020-02-24</Modification_ReleaseDate>
+					<Modification_Comment>updated Alternate_Terms, Name, Observed_Examples, Related_Attack_Patterns, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-12-10</Modification_Date>
+					<Modification_Version>4.3</Modification_Version>
+					<Modification_ReleaseDate>2020-12-10</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-03-15</Modification_Date>
+					<Modification_Version>4.4</Modification_Version>
+					<Modification_ReleaseDate>2021-03-15</Modification_ReleaseDate>
+					<Modification_Comment>updated Alternate_Terms, Related_Attack_Patterns</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-07-20</Modification_Date>
+					<Modification_Version>4.5</Modification_Version>
+					<Modification_ReleaseDate>2021-07-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Alternate_Terms, Observed_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-10-28</Modification_Date>
+					<Modification_Version>4.6</Modification_Version>
+					<Modification_ReleaseDate>2021-10-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-01-31</Modification_Date>
+					<Modification_Version>4.10</Modification_Version>
+					<Modification_ReleaseDate>2023-01-31</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Detection_Factors, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2024-07-16</Modification_Date>
+					<Modification_Version>4.15</Modification_Version>
+					<Modification_ReleaseDate>2024-07-16</Modification_ReleaseDate>
+					<Modification_Comment>updated Alternate_Terms</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-09-09</Modification_Date>
+					<Modification_Version>4.18</Modification_Version>
+					<Modification_ReleaseDate>2025-09-09</Modification_ReleaseDate>
+					<Modification_Comment>updated Alternate_Terms, Detection_Factors</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Observed_Examples, Relationships, Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+			<Contribution Type="Feedback">
+			  <Contribution_Name>Renaud Sauvain</Contribution_Name>
+			  <Contribution_Organization>West Pharmaceutical Services</Contribution_Organization>
+			  <Contribution_Date>2024-09-02</Contribution_Date>
+			  <Contribution_Version>4.18</Contribution_Version>
+			  <Contribution_ReleaseDate>2025-09-09</Contribution_ReleaseDate>
+			</Contribution>
+            <Previous_Entry_Name Date="2008-04-11">Man-in-the-middle (MITM)</Previous_Entry_Name>
+            <Previous_Entry_Name Date="2009-05-27">Channel Accessible by Non-Endpoint (aka 'Man-in-the-Middle')</Previous_Entry_Name>
+			<Previous_Entry_Name Date="2020-02-24">Channel Accessible by Non-Endpoint ('Man-in-the-Middle')</Previous_Entry_Name>
+         </Content_History>
+      </Weakness>
+      

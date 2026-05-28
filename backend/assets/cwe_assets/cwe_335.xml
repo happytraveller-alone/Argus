@@ -1,0 +1,290 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="335" Name="Incorrect Usage of Seeds in Pseudo-Random Number Generator (PRNG)" Abstraction="Base" Structure="Simple" Status="Draft">
+         <Description>The product uses a Pseudo-Random Number Generator (PRNG) but does not correctly manage seeds.</Description>
+		 <Extended_Description>
+		   <xhtml:p>
+		   PRNGs are deterministic and, while their output appears
+		   random, they cannot actually create entropy. They rely on
+		   cryptographically secure and unique seeds for entropy so
+		   proper seeding is critical to the secure operation of the
+		   PRNG.</xhtml:p>
+		   <xhtml:p>
+		   Management of seeds could be broken down into two main areas:
+		   </xhtml:p>
+		   <xhtml:ul>
+			 <xhtml:li>
+		   (1) protecting seeds as cryptographic material (such as a cryptographic key);
+			 </xhtml:li>
+			 <xhtml:li>
+		   (2) whenever possible, using a uniquely generated seed from
+		   a cryptographically secure source
+			 </xhtml:li>
+		   </xhtml:ul>
+			 <xhtml:p>
+			   PRNGs require a seed as input to generate a stream of
+			   numbers that are functionally indistinguishable from
+			   random numbers.  While the output is, in many cases,
+			   sufficient for cryptographic uses, the output of any
+			   PRNG is directly determined by the seed provided as
+			   input. If the seed can be ascertained by a third party,
+			   the entire output of the PRNG can be made known to
+			   them. As such, the seed should be kept secret and
+			   should ideally not be able to be guessed. For example,
+			   the current time may be a poor seed. Knowing the
+			   approximate time the PRNG was seeded greatly reduces
+			   the possible key space.
+			 </xhtml:p>
+			 <xhtml:p>
+			   Seeds do not necessarily need to be unique, but reusing seeds may open up attacks if the seed is discovered.
+			 </xhtml:p>
+		 </Extended_Description>
+         <Related_Weaknesses>
+            <Related_Weakness Nature="ChildOf" CWE_ID="330" View_ID="1000" Ordinal="Primary" />
+            <Related_Weakness Nature="ChildOf" CWE_ID="330" View_ID="1003" Ordinal="Primary" />
+         </Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+            <Weakness_Ordinality>
+               <Ordinality>Resultant</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+         <Applicable_Platforms>
+            <Language Class="Not Language-Specific" Prevalence="Undetermined" />
+         </Applicable_Platforms>
+         <Modes_Of_Introduction>
+            <Introduction>
+               <Phase>Implementation</Phase>
+               <Note>REALIZATION: This weakness is caused during implementation of an architectural security tactic.</Note>
+            </Introduction>
+         </Modes_Of_Introduction>
+         <Common_Consequences>
+            <Consequence>
+               <Scope>Access Control</Scope>
+               <Scope>Other</Scope>
+               <Impact>Bypass Protection Mechanism</Impact>
+               <Impact>Other</Impact>
+               <Note>If a PRNG is used incorrectly, such as using the same seed for each initialization or using a predictable seed, then an attacker may be able to easily guess the seed and thus the random numbers. This could lead to unauthorized access to a system if the seed is used for authentication and authorization.</Note>
+            </Consequence>
+         </Common_Consequences>
+	 <Detection_Methods>
+	   <Detection_Method Detection_Method_ID="DM-14">
+	     <Method>Automated Static Analysis</Method>
+	     <Description>Automated static analysis, commonly referred to as Static Application Security Testing (SAST), can find some instances of this weakness by analyzing source code (or binary/compiled code) without having to execute it. Typically, this is done by building a model of data flow and control flow, then searching for potentially-vulnerable patterns that connect "sources" (origins of input) with "sinks" (destinations where the data interacts with external components, a lower layer such as the OS, etc.)</Description>
+	   </Detection_Method>
+	 </Detection_Methods>
+		 <Demonstrative_Examples>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-177">
+               <Intro_Text>The following code uses a statistical PRNG to generate account IDs.</Intro_Text>
+               <Example_Code Nature="Bad" Language="Java">
+                  <xhtml:div>private static final long SEED = 1234567890;<xhtml:br />public int generateAccountID() {<xhtml:div style="margin-left:1em;">Random random = new Random(SEED);<xhtml:br />return random.nextInt();</xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>Because the program uses the same seed value for every invocation of the PRNG, its values are predictable, making the system vulnerable to attack.</Body_Text>
+            </Demonstrative_Example>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-102">
+               <Intro_Text>Both of these examples use a statistical PRNG seeded with the current value of the system clock to generate a random number:</Intro_Text>
+               <Example_Code Nature="Bad" Language="Java">
+                  <xhtml:div>Random random = new Random(System.currentTimeMillis());<xhtml:br />int accountID = random.nextInt();</xhtml:div>
+               </Example_Code>
+               <Example_Code Nature="Bad" Language="C">
+                  <xhtml:div>srand(time());<xhtml:br />int randNum = rand();</xhtml:div>
+               </Example_Code>
+               <Body_Text>An attacker can easily predict the seed used by these PRNGs, and so also predict the stream of random numbers generated. Note these examples also exhibit CWE-338 (Use of Cryptographically Weak PRNG).</Body_Text>
+            </Demonstrative_Example>
+			<Demonstrative_Example Demonstrative_Example_ID="DX-178">
+			  <Intro_Text>This code grabs some random bytes and uses them for a seed in a PRNG, in order to generate a new cryptographic key.</Intro_Text>
+			  <Example_Code Nature="Bad" Language="Python">
+				<xhtml:div>
+				  <xhtml:i># getting 2 bytes of randomness for the seeding the PRNG </xhtml:i><xhtml:br />
+				  seed = os.urandom(2)<xhtml:br />
+				  random.seed(a=seed)<xhtml:br />
+				  key = random.getrandbits(128)<xhtml:br />
+				</xhtml:div>
+			  </Example_Code>
+			  <Body_Text>Since only 2 bytes are used as a seed, an attacker will only need to guess 2^16 (65,536) values before being able to replicate the state of the PRNG.</Body_Text>
+			</Demonstrative_Example>
+		 </Demonstrative_Examples>
+		 <Observed_Examples>
+			<Observed_Example>
+				<Reference>CVE-2020-7010</Reference>
+				<Description>Cloud application on Kubernetes generates passwords using a weak random number generator based on deployment time.</Description>
+				<Link>https://www.cve.org/CVERecord?id=CVE-2020-7010</Link>
+			 </Observed_Example>
+		   <Observed_Example>
+			 <Reference>CVE-2019-11495</Reference>
+			 <Description>server uses erlang:now() to seed the PRNG, which
+			 results in a small search space for potential random
+			 seeds</Description>
+			 <Link>https://www.cve.org/CVERecord?id=CVE-2019-11495</Link>
+		   </Observed_Example>
+		   <Observed_Example>
+			 <Reference>CVE-2018-12520</Reference>
+			 <Description>Product's PRNG is not seeded for the generation of session IDs</Description>
+			 <Link>https://www.cve.org/CVERecord?id=CVE-2018-12520</Link>
+		   </Observed_Example>
+		   <Observed_Example>
+			 <Reference>CVE-2016-10180</Reference>
+			 <Description>Router's PIN generation is based on rand(time(0)) seeding.</Description>
+			 <Link>https://www.cve.org/CVERecord?id=CVE-2016-10180</Link>
+		   </Observed_Example>
+		 </Observed_Examples>
+         <Taxonomy_Mappings>
+            <Taxonomy_Mapping Taxonomy_Name="PLOVER">
+               <Entry_Name>PRNG Seed Error</Entry_Name>
+            </Taxonomy_Mapping>
+         </Taxonomy_Mappings>
+         <References>
+            <Reference External_Reference_ID="REF-44" Section="&quot;Sin 20: Weak Random Numbers.&quot; Page 299" />
+         </References>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Base level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+	 <Notes>
+	   <Note Type="Maintenance">As of CWE 4.5, terminology related to randomness, entropy, and
+	   predictability can vary widely. Within the developer and other
+	   communities, "randomness" is used heavily. However, within
+	   cryptography, "entropy" is distinct, typically implied as a
+	   measurement. There are no commonly-used definitions, even within
+	   standards documents and cryptography papers. Future versions of
+	   CWE will attempt to define these terms and, if necessary,
+	   distinguish between them in ways that are appropriate for
+	   different communities but do not reduce the usability of CWE for
+	   mapping, understanding, or other scenarios.</Note>
+	 </Notes>
+         <Content_History>
+            <Submission>
+               <Submission_Name>PLOVER</Submission_Name>
+               <Submission_Date>2006-07-19</Submission_Date>
+               <Submission_Version>Draft 3</Submission_Version>
+               <Submission_ReleaseDate>2006-07-19</Submission_ReleaseDate>
+            </Submission>
+            <Modification>
+               <Modification_Name>Eric Dalci</Modification_Name>
+               <Modification_Organization>Cigital</Modification_Organization>
+               <Modification_Date>2008-07-01</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>updated Time_of_Introduction</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2008-09-08</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-06-01</Modification_Date>
+               <Modification_Version>1.13</Modification_Version>
+               <Modification_ReleaseDate>2011-06-01</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2012-05-11</Modification_Date>
+               <Modification_Version>2.2</Modification_Version>
+               <Modification_ReleaseDate>2012-05-15</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences, References, Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2017-11-08</Modification_Date>
+               <Modification_Version>3.0</Modification_Version>
+               <Modification_ReleaseDate>2017-11-08</Modification_ReleaseDate>
+               <Modification_Comment>updated Applicable_Platforms, Description, Modes_of_Introduction, Name, Relationships, Type</Modification_Comment>
+            </Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2019-06-20</Modification_Date>
+					<Modification_Version>3.3</Modification_Version>
+					<Modification_ReleaseDate>2019-06-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-02-24</Modification_Date>
+					<Modification_Version>4.0</Modification_Version>
+					<Modification_ReleaseDate>2020-02-24</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-07-20</Modification_Date>
+					<Modification_Version>4.5</Modification_Version>
+					<Modification_ReleaseDate>2021-07-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Description, Maintenance_Notes, Observed_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-10-28</Modification_Date>
+					<Modification_Version>4.6</Modification_Version>
+					<Modification_ReleaseDate>2021-10-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-10-13</Modification_Date>
+					<Modification_Version>4.9</Modification_Version>
+					<Modification_ReleaseDate>2022-10-13</Modification_ReleaseDate>
+					<Modification_Comment>updated Observed_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-01-31</Modification_Date>
+					<Modification_Version>4.10</Modification_Version>
+					<Modification_ReleaseDate>2023-01-31</Modification_ReleaseDate>
+					<Modification_Comment>updated Description</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships, Time_of_Introduction</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-10-26</Modification_Date>
+					<Modification_Version>4.13</Modification_Version>
+					<Modification_ReleaseDate>2023-10-26</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Detection_Factors, Relationships, Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+            <Previous_Entry_Name Date="2017-11-08">PRNG Seed Error</Previous_Entry_Name>
+         </Content_History>
+      </Weakness>
+      

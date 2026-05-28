@@ -1,0 +1,150 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="1253" Name="Incorrect Selection of Fuse Values" Abstraction="Base" Structure="Simple" Status="Draft">
+     <Description>The logic level used to set a system to a secure state relies on a fuse being unblown.</Description>
+     <Extended_Description>
+      <xhtml:p>Fuses are often used to store secret data, including security configuration data. When not blown, a fuse is considered to store a logic 0, and, when blown, it indicates a logic 1. Fuses are generally considered to be one-directional, i.e., once blown to logic 1, it cannot be reset to logic 0.</xhtml:p>
+     </Extended_Description>
+			<Related_Weaknesses>
+			 <Related_Weakness Nature="ChildOf" CWE_ID="693" View_ID="1000" Ordinal="Primary" />
+			</Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+     <Applicable_Platforms>
+				<Language Class="Not Language-Specific" Prevalence="Undetermined" />
+				<Operating_System Class="Not OS-Specific" Prevalence="Undetermined" />
+				<Architecture Class="Not Architecture-Specific" Prevalence="Undetermined" />
+				<Technology Class="Not Technology-Specific" Prevalence="Undetermined" />
+				</Applicable_Platforms>
+     <Modes_Of_Introduction>
+      <Introduction>
+        <Phase>Architecture and Design</Phase>
+      </Introduction>
+      <Introduction>
+        <Phase>Implementation</Phase>
+      </Introduction>
+     </Modes_Of_Introduction>
+     <Common_Consequences>
+      <Consequence>
+        <Scope>Access Control</Scope>
+        <Scope>Authorization</Scope>
+        <Impact>Bypass Protection Mechanism</Impact>
+        <Impact>Gain Privileges or Assume Identity</Impact>
+	<Note>If the logic used to determine system-security state (by leveraging the values sensed from the fuses) uses negative logic, an attacker might blow the fuse and drive the system to an insecure state.</Note>
+      </Consequence>
+      <Consequence>
+        <Scope>Availability</Scope>
+        <Impact>DoS: Crash, Exit, or Restart</Impact>
+      </Consequence>
+      <Consequence>
+        <Scope>Confidentiality</Scope>
+        <Impact>Read Memory</Impact>
+      </Consequence>
+      <Consequence>
+        <Scope>Integrity</Scope>
+        <Impact>Modify Memory</Impact>
+        <Impact>Execute Unauthorized Code or Commands</Impact>
+      </Consequence>
+     </Common_Consequences>
+     <Potential_Mitigations>
+      <Mitigation>
+        <Phase>Architecture and Design</Phase>
+        <Description>Logic should be designed in a way that blown fuses do not put the product into an insecure state that can be leveraged by an attacker.
+        </Description>
+      </Mitigation>
+     </Potential_Mitigations>
+     <Demonstrative_Examples>
+      <Demonstrative_Example>
+        <Intro_Text><xhtml:p>A chip implements a secure boot and uses the sensed value of a fuse 
+         "do_secure_boot" to determine whether to perform a secure boot or not. If this fuse 
+         value is "0", the system performs secure boot. Otherwise, it does not perform secure 
+         boot.</xhtml:p>
+         <xhtml:p>An attacker blows the "do_secure_boot" fuse to "1". After reset, the attacker loads a custom 
+         bootloader, and, since the fuse value is now "1", the system does not perform secure boot, 
+         and the attacker can execute their custom firmware image.</xhtml:p>
+         <xhtml:p>Since by default, a fuse-configuration value is a "0", an attacker can blow it to a "1" with 
+         inexpensive hardware.</xhtml:p>
+         <xhtml:p>If the logic is reversed, an attacker cannot easily reset the fuse. Note that, with 
+         specialized and expensive equipment, an attacker with full physical access might be able to "unblow" the fuse 
+         value to a "0".</xhtml:p>
+        </Intro_Text>
+      </Demonstrative_Example>
+     </Demonstrative_Examples>
+         <Related_Attack_Patterns>
+            <Related_Attack_Pattern CAPEC_ID="74" />
+         </Related_Attack_Patterns>
+         <References>
+      <Reference External_Reference_ID="REF-1080" />
+     </References>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Base level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+     <Notes>
+      <Note Type="Maintenance">This entry is still under development and will continue to see updates and content improvements.</Note>
+     </Notes>
+     <Content_History>
+      <Submission>
+        <Submission_Name>Arun Kanuparthi, Hareesh Khattri, Parbati Kumar Manna, Narasimha Kumar V Mangipudi</Submission_Name>
+        <Submission_Organization>Intel Corporation</Submission_Organization>
+        <Submission_Date>2019-10-15</Submission_Date>
+        <Submission_Version>4.1</Submission_Version>
+        <Submission_ReleaseDate>2020-02-24</Submission_ReleaseDate>
+      </Submission>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-08-20</Modification_Date>
+					<Modification_Version>4.2</Modification_Version>
+					<Modification_ReleaseDate>2020-08-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Applicable_Platforms, Demonstrative_Examples, Description</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-07-20</Modification_Date>
+					<Modification_Version>4.5</Modification_Version>
+					<Modification_ReleaseDate>2021-07-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Related_Attack_Patterns</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-10-28</Modification_Date>
+					<Modification_Version>4.6</Modification_Version>
+					<Modification_ReleaseDate>2021-10-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Description</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Common_Consequences, Description, Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+     </Content_History>
+   </Weakness>
+      

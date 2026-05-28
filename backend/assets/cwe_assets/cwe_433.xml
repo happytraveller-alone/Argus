@@ -1,0 +1,228 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="433" Name="Unparsed Raw Web Content Delivery" Abstraction="Variant" Structure="Simple" Status="Incomplete">
+         <Description>The product stores raw content or supporting code under the web document root with an extension that is not specifically handled by the server.</Description>
+         <Extended_Description>If code is stored in a file with an extension such as ".inc" or ".pl", and the web server does not have a handler for that extension, then the server will likely send the contents of the file directly to the requester without the pre-processing that was expected. When that file contains sensitive information such as database credentials, this may allow the attacker to compromise the application or associated components.</Extended_Description>
+         <Related_Weaknesses>
+            <Related_Weakness Nature="ChildOf" CWE_ID="219" View_ID="1000" Ordinal="Primary" />
+         </Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+            <Weakness_Ordinality>
+               <Ordinality>Resultant</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+         <Applicable_Platforms>
+            <Language Class="Not Language-Specific" Prevalence="Undetermined" />
+            <Technology Class="Web Based" Prevalence="Often" />
+	    <Technology Name="Web Server" Prevalence="Undetermined" />
+         </Applicable_Platforms>
+         <Modes_Of_Introduction>
+            <Introduction>
+               <Phase>Implementation</Phase>
+            </Introduction>
+            <Introduction>
+               <Phase>Operation</Phase>
+            </Introduction>
+         </Modes_Of_Introduction>
+         <Common_Consequences>
+            <Consequence>
+               <Scope>Confidentiality</Scope>
+               <Impact>Read Application Data</Impact>
+            </Consequence>
+         </Common_Consequences>
+         <Potential_Mitigations>
+            <Mitigation>
+               <Phase>Architecture and Design</Phase>
+               <Description>Perform a type check before interpreting files.</Description>
+            </Mitigation>
+            <Mitigation>
+               <Phase>Architecture and Design</Phase>
+               <Description>Do not store sensitive information in files which may be misinterpreted.</Description>
+            </Mitigation>
+         </Potential_Mitigations>
+         <Demonstrative_Examples>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-104">
+               <Intro_Text>The following code uses an include file to store database credentials:</Intro_Text>
+               <Body_Text>database.inc</Body_Text>
+               <Example_Code Nature="Bad" Language="PHP">
+                  <xhtml:div>&lt;?php<xhtml:br />$dbName = 'usersDB';<xhtml:br />$dbPassword = 'skjdh#67nkjd3$3$';<xhtml:br />?&gt;</xhtml:div>
+               </Example_Code>
+               <Body_Text>login.php</Body_Text>
+               <Example_Code Nature="Bad" Language="PHP">
+                  <xhtml:div>&lt;?php<xhtml:br />include('database.inc');<xhtml:br />$db = connectToDB($dbName, $dbPassword);<xhtml:br />$db.authenticateUser($username, $password);<xhtml:br />?&gt;</xhtml:div>
+               </Example_Code>
+               <Body_Text>If the server does not have an explicit handler set for .inc files it may send the contents of database.inc to an attacker without pre-processing, if the attacker requests the file directly. This will expose the database name and password.</Body_Text>
+            </Demonstrative_Example>
+         </Demonstrative_Examples>
+         <Observed_Examples>
+            <Observed_Example>
+               <Reference>CVE-2002-1886</Reference>
+               <Description>".inc" file stored under web document root and returned unparsed by the server</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2002-1886</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2002-2065</Reference>
+               <Description>".inc" file stored under web document root and returned unparsed by the server</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2002-2065</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2005-2029</Reference>
+               <Description>".inc" file stored under web document root and returned unparsed by the server</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2005-2029</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2001-0330</Reference>
+               <Description>direct request to .pl file leaves it unparsed</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2001-0330</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2002-0614</Reference>
+               <Description>.inc file</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2002-0614</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2004-2353</Reference>
+               <Description>unparsed config.conf file</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2004-2353</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2007-3365</Reference>
+               <Description>Chain: uppercase file extensions causes web server to return script source code instead of executing the script.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2007-3365</Link>
+            </Observed_Example>
+         </Observed_Examples>
+         <Taxonomy_Mappings>
+            <Taxonomy_Mapping Taxonomy_Name="PLOVER">
+               <Entry_Name>Unparsed Raw Web Content Delivery</Entry_Name>
+            </Taxonomy_Mapping>
+         </Taxonomy_Mappings>
+         <References>
+            <Reference External_Reference_ID="REF-62" Section="Chapter 3, &quot;File Handlers&quot;, Page 74" />
+         </References>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Variant level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+         <Notes>
+            <Note Type="Relationship">This overlaps direct requests (CWE-425), alternate path (CWE-424), permissions (CWE-275), and sensitive file under web root (CWE-219).</Note>
+         </Notes>
+         <Content_History>
+            <Submission>
+               <Submission_Name>PLOVER</Submission_Name>
+               <Submission_Date>2006-07-19</Submission_Date>
+               <Submission_Version>Draft 3</Submission_Version>
+               <Submission_ReleaseDate>2006-07-19</Submission_ReleaseDate>
+            </Submission>
+            <Modification>
+               <Modification_Name>Eric Dalci</Modification_Name>
+               <Modification_Organization>Cigital</Modification_Organization>
+               <Modification_Date>2008-07-01</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>updated Potential_Mitigations, Time_of_Introduction</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2008-09-08</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships, Other_Notes, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2008-10-14</Modification_Date>
+               <Modification_Version>1.0.1</Modification_Version>
+               <Modification_ReleaseDate>2008-10-14</Modification_ReleaseDate>
+               <Modification_Comment>updated Description, Other_Notes, Relationship_Notes</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2010-09-27</Modification_Date>
+               <Modification_Version>1.10</Modification_Version>
+               <Modification_ReleaseDate>2010-09-27</Modification_ReleaseDate>
+               <Modification_Comment>updated Description, Potential_Mitigations</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-06-01</Modification_Date>
+               <Modification_Version>1.13</Modification_Version>
+               <Modification_ReleaseDate>2011-06-01</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2012-05-11</Modification_Date>
+               <Modification_Version>2.2</Modification_Version>
+               <Modification_ReleaseDate>2012-05-15</Modification_ReleaseDate>
+               <Modification_Comment>updated References, Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2012-10-30</Modification_Date>
+               <Modification_Version>2.3</Modification_Version>
+               <Modification_ReleaseDate>2012-10-30</Modification_ReleaseDate>
+               <Modification_Comment>updated Demonstrative_Examples, Potential_Mitigations</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2014-07-30</Modification_Date>
+               <Modification_Version>2.8</Modification_Version>
+               <Modification_ReleaseDate>2014-07-31</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2017-11-08</Modification_Date>
+               <Modification_Version>3.0</Modification_Version>
+               <Modification_ReleaseDate>2017-11-08</Modification_ReleaseDate>
+               <Modification_Comment>updated Applicable_Platforms, Observed_Examples</Modification_Comment>
+            </Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-01-31</Modification_Date>
+					<Modification_Version>4.10</Modification_Version>
+					<Modification_ReleaseDate>2023-01-31</Modification_ReleaseDate>
+					<Modification_Comment>updated Description</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Applicable_Platforms, Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+         </Content_History>
+      </Weakness>
+      

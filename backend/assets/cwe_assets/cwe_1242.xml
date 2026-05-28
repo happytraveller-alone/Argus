@@ -1,0 +1,179 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="1242" Name="Inclusion of Undocumented Features or Chicken Bits" Abstraction="Base" Structure="Simple" Status="Incomplete">
+            <Description>The device includes chicken bits or undocumented features that can create entry points for unauthorized actors.</Description>
+            <Extended_Description>
+                <xhtml:p>A common design practice is to use undocumented bits on a device that can be used to disable certain functional security features. These bits are commonly referred to as "chicken bits". They can facilitate quick identification and isolation of faulty components, features that negatively affect performance, or features that do not provide the required controllability for debug and test. Another way to achieve this is through implementation of undocumented features.</xhtml:p>
+            </Extended_Description>
+			<Related_Weaknesses>
+              <Related_Weakness Nature="ChildOf" CWE_ID="912" View_ID="1000" Ordinal="Primary" />
+			</Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+            <Applicable_Platforms>
+                <Language Class="Not Language-Specific" Prevalence="Undetermined" />
+                <Operating_System Class="Not OS-Specific" Prevalence="Undetermined" />
+                <Architecture Class="Not Architecture-Specific" Prevalence="Undetermined" />
+                <Technology Class="Not Technology-Specific" Prevalence="Undetermined" />
+				<Technology Class="ICS/OT" Prevalence="Undetermined" />
+            </Applicable_Platforms>
+            <Modes_Of_Introduction>
+                <Introduction>
+                    <Phase>Architecture and Design</Phase>
+                </Introduction>
+                <Introduction>
+                    <Phase>Implementation</Phase>
+                </Introduction>
+                <Introduction>
+                    <Phase>Documentation</Phase>
+                </Introduction>
+            </Modes_Of_Introduction>
+            <Common_Consequences>
+                <Consequence>
+                    <Scope>Confidentiality</Scope>
+                    <Scope>Integrity</Scope>
+                    <Scope>Availability</Scope>
+                    <Scope>Access Control</Scope>
+                    <Impact>Modify Memory</Impact>
+                    <Impact>Read Memory</Impact>
+                    <Impact>Execute Unauthorized Code or Commands</Impact>
+                    <Impact>Gain Privileges or Assume Identity</Impact>
+                    <Impact>Bypass Protection Mechanism</Impact>
+		    <Note>An attacker might exploit these interfaces for unauthorized access.</Note>
+                </Consequence>
+            </Common_Consequences>
+            <Potential_Mitigations>
+                <Mitigation>
+                    <Phase>Architecture and Design</Phase>
+                    <Phase>Implementation</Phase>
+                    <Description>
+                        <xhtml:p>The implementation of chicken bits in a released product is highly discouraged. If implemented at all, ensure that they are disabled in production devices. All interfaces to a device should be documented.</xhtml:p>
+                    </Description>
+                    <Effectiveness>High</Effectiveness>
+                </Mitigation>
+            </Potential_Mitigations>
+            <Demonstrative_Examples>
+                <Demonstrative_Example Demonstrative_Example_ID="DX-231">
+                    <Intro_Text>Consider a device that comes with various security measures, such as secure boot. The secure-boot process performs firmware-integrity verification at boot time, and this code is stored in a separate SPI-flash device. However, this code contains undocumented "special access features" intended to be used only for performing failure analysis and intended to only be unlocked by the device designer.</Intro_Text>
+                    <Example_Code Nature="Bad" Language="Other">
+                        <xhtml:div>Attackers dump the code from the device and then perform reverse engineering to analyze the code. The undocumented, special-access features are identified, and attackers can activate them by sending specific commands via UART before secure-boot phase completes. Using these hidden features, attackers can perform reads and writes to memory via the UART interface. At runtime, the attackers can also execute arbitrary code and dump the entire memory contents.</xhtml:div>
+                    </Example_Code>
+                    <Body_Text>Remove all chicken bits and hidden features that are exposed to attackers. Add authorization schemes that rely on cryptographic primitives to access any features that the manufacturer does not want to expose. Clearly document all interfaces.</Body_Text>
+            	</Demonstrative_Example>
+            </Demonstrative_Examples>
+         <Taxonomy_Mappings>
+	   <Taxonomy_Mapping Taxonomy_Name="ISA/IEC 62443">
+	     <Entry_ID>Part 4-1</Entry_ID>
+	     <Entry_Name>Req SD-4</Entry_Name>
+	   </Taxonomy_Mapping>
+	   <Taxonomy_Mapping Taxonomy_Name="ISA/IEC 62443">
+	     <Entry_ID>Part 4-1</Entry_ID>
+	     <Entry_Name>Req SVV-3</Entry_Name>
+	   </Taxonomy_Mapping>
+	   <Taxonomy_Mapping Taxonomy_Name="ISA/IEC 62443">
+	     <Entry_ID>Part 4-2</Entry_ID>
+	     <Entry_Name>Req CR 2.12</Entry_Name>
+	   </Taxonomy_Mapping>
+         </Taxonomy_Mappings>
+         <Related_Attack_Patterns>
+            <Related_Attack_Pattern CAPEC_ID="212" />
+            <Related_Attack_Pattern CAPEC_ID="36" />
+         </Related_Attack_Patterns>
+         <References>
+                <Reference External_Reference_ID="REF-1071" />
+                <Reference External_Reference_ID="REF-1072" />
+                <Reference External_Reference_ID="REF-1073" />
+                <Reference External_Reference_ID="REF-1074" />
+                <Reference External_Reference_ID="REF-1075" />
+            </References>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Base level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+            <Content_History>
+                <Submission>
+                    <Submission_Name>Arun Kanuparthi, Hareesh Khattri, Parbati Kumar Manna, Narasimha Kumar V Mangipudi</Submission_Name>
+                    <Submission_Organization>Intel Corporation</Submission_Organization>
+                    <Submission_Date>2020-02-13</Submission_Date>
+                    <Submission_Version>4.0</Submission_Version>
+                    <Submission_ReleaseDate>2020-02-24</Submission_ReleaseDate>
+                </Submission>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-08-20</Modification_Date>
+					<Modification_Version>4.2</Modification_Version>
+					<Modification_ReleaseDate>2020-08-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Applicable_Platforms, Demonstrative_Examples, Description, Potential_Mitigations, Related_Attack_Patterns</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-04-28</Modification_Date>
+					<Modification_Version>4.7</Modification_Version>
+					<Modification_ReleaseDate>2022-04-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-01-31</Modification_Date>
+					<Modification_Version>4.10</Modification_Version>
+					<Modification_ReleaseDate>2023-01-31</Modification_ReleaseDate>
+					<Modification_Comment>updated Applicable_Platforms</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships, Taxonomy_Mappings</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes, Taxonomy_Mappings</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2024-02-29</Modification_Date>
+					<Modification_Version>4.14</Modification_Version>
+					<Modification_ReleaseDate>2024-02-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Taxonomy_Mappings</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-04-03</Modification_Date>
+					<Modification_Version>4.17</Modification_Version>
+					<Modification_ReleaseDate>2025-04-03</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Common_Consequences, Demonstrative_Examples, Description, Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+            <Contribution Type="Content">
+               <Contribution_Name>"Mapping CWE to 62443" Sub-Working Group</Contribution_Name>
+               <Contribution_Organization>CWE-CAPEC ICS/OT SIG</Contribution_Organization>
+               <Contribution_Date>2023-04-25</Contribution_Date>
+               <Contribution_Comment>Suggested mappings to ISA/IEC 62443.</Contribution_Comment>
+            </Contribution>
+            </Content_History>
+        </Weakness>
+      

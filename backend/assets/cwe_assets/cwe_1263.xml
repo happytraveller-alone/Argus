@@ -1,0 +1,142 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" ID="1263" Name="Improper Physical Access Control" Abstraction="Class" Structure="Simple" Status="Incomplete">
+			<Description>The product is designed with access restricted to certain information, but it does not sufficiently protect against an unauthorized actor with physical access to these areas.</Description>
+			<Extended_Description>Sections of a product intended to have restricted access may be inadvertently or intentionally rendered accessible when the implemented physical protections are insufficient. The specific requirements around how robust the design of the physical protection mechanism needs to be depends on the type of product being protected. Selecting the correct physical protection mechanism and properly enforcing it through implementation and manufacturing are critical to the overall physical security of the product.
+			</Extended_Description>
+			<Related_Weaknesses>
+				<Related_Weakness Nature="ChildOf" CWE_ID="284" View_ID="1000" Ordinal="Primary" />
+				<Related_Weakness Nature="PeerOf" CWE_ID="1191" View_ID="1000" />
+			</Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+			<Applicable_Platforms>
+				<Language Class="Not Language-Specific" Prevalence="Undetermined" />
+				<Operating_System Class="Not OS-Specific" Prevalence="Undetermined" />
+				<Architecture Class="Not Architecture-Specific" Prevalence="Undetermined" />
+				<Technology Class="Not Technology-Specific" Prevalence="Undetermined" />
+				</Applicable_Platforms>
+			<Modes_Of_Introduction>
+				<Introduction>
+					<Phase>Architecture and Design</Phase>
+					<Note>This weakness can arise if design decisions are made that do not align with the intended physical protection of the product.</Note>
+				</Introduction>
+				<Introduction>
+					<Phase>Manufacturing</Phase>
+					<Note>While the architecture and design phase of the product may have accurately met the intended robustness for product physical protections, this phase may introduce the weakness through errors in physically manufacturing the product.</Note>
+				</Introduction>
+			</Modes_Of_Introduction>
+			<Common_Consequences>
+				<Consequence>
+					<Scope>Confidentiality</Scope>
+					<Scope>Integrity</Scope>
+					<Scope>Access Control</Scope>
+					<Impact>Varies by Context</Impact>
+				</Consequence>
+			</Common_Consequences>
+			<Potential_Mitigations>
+				<Mitigation>
+					<Phase>Architecture and Design</Phase>
+					<Description>Specific protection requirements depend strongly on contextual factors including the level of acceptable risk associated with compromise to the product's protection mechanism. Designers could incorporate anti-tampering measures that protect against or detect when the product has been tampered with.</Description>
+				</Mitigation>
+				<Mitigation>
+				  <Phase>Testing</Phase>
+				  <Description>The testing phase of the lifecycle should establish a method for determining whether the protection mechanism is sufficient to prevent unauthorized access.</Description>
+				</Mitigation>
+				<Mitigation>
+					<Phase>Manufacturing</Phase>
+					<Description>Ensure that all protection mechanisms are fully activated at the time of manufacturing and distribution.</Description>
+				</Mitigation>
+			</Potential_Mitigations>
+         <Related_Attack_Patterns>
+            <Related_Attack_Pattern CAPEC_ID="401" />
+         </Related_Attack_Patterns>
+         <Mapping_Notes>
+            <Usage>Allowed-with-Review</Usage>
+            <Rationale>This CWE entry is a Class and might have Base-level children that would be more appropriate</Rationale>
+            <Comments>Examine children of this entry to see if there is a better fit</Comments>
+            <Reasons>
+               <Reason Type="Abstraction" />
+            </Reasons>
+         </Mapping_Notes>
+         <Notes>
+        <Note Type="Maintenance">This entry is still under development and will continue to see updates and content improvements.</Note>
+      </Notes>
+			<Content_History>
+				<Submission>
+					<Submission_Name>CWE Content Team</Submission_Name>
+				<Submission_Organization>MITRE</Submission_Organization>
+					<Submission_Date>2020-05-28</Submission_Date>
+					<Submission_Version>4.1</Submission_Version>
+					<Submission_ReleaseDate>2020-02-24</Submission_ReleaseDate>
+				</Submission>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-08-20</Modification_Date>
+					<Modification_Version>4.2</Modification_Version>
+					<Modification_ReleaseDate>2020-08-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Common_Consequences, Description, Modes_of_Introduction, Name, Potential_Mitigations, Related_Attack_Patterns, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-12-10</Modification_Date>
+					<Modification_Version>4.3</Modification_Version>
+					<Modification_ReleaseDate>2020-12-10</Modification_ReleaseDate>
+					<Modification_Comment>updated Potential_Mitigations</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-07-20</Modification_Date>
+					<Modification_Version>4.5</Modification_Version>
+					<Modification_ReleaseDate>2021-07-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-10-28</Modification_Date>
+					<Modification_Version>4.6</Modification_Version>
+					<Modification_ReleaseDate>2021-10-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Description</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-10-13</Modification_Date>
+					<Modification_Version>4.9</Modification_Version>
+					<Modification_ReleaseDate>2022-10-13</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+			<Previous_Entry_Name Date="2020-08-20">Insufficient Physical Protection Mechanism</Previous_Entry_Name>
+			</Content_History>
+		</Weakness>
+      

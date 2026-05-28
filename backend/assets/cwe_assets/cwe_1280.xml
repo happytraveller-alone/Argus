@@ -1,0 +1,164 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="1280" Name="Access Control Check Implemented After Asset is Accessed" Abstraction="Base" Structure="Simple" Status="Incomplete">
+			<Description>A product's hardware-based access control check occurs after the asset has been accessed.</Description>
+			<Extended_Description>
+				<xhtml:p>The product implements a hardware-based access control check. The asset should be accessible only after the check is successful. If, however, this operation is not atomic and the asset is accessed before the check is complete, the security of the system may be compromised.</xhtml:p>
+			</Extended_Description>
+			<Related_Weaknesses>
+                <Related_Weakness Nature="ChildOf" CWE_ID="696" View_ID="1000" Ordinal="Primary" />
+                <Related_Weakness Nature="ChildOf" CWE_ID="284" View_ID="1000" />
+            </Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+			<Applicable_Platforms>
+				<Language Name="Verilog" Prevalence="Undetermined" />
+				<Language Name="VHDL" Prevalence="Undetermined" />
+				<Language Class="Not Language-Specific" Prevalence="Undetermined" />
+				<Operating_System Class="Not OS-Specific" Prevalence="Undetermined" />
+				<Architecture Class="Not Architecture-Specific" Prevalence="Undetermined" />
+				<Technology Class="Not Technology-Specific" Prevalence="Undetermined" />
+			</Applicable_Platforms>
+			<Modes_Of_Introduction>
+				<Introduction>
+					<Phase>Implementation</Phase>
+				</Introduction>
+			</Modes_Of_Introduction>
+			<Common_Consequences>
+				<Consequence>
+					<Scope>Access Control</Scope>
+					<Scope>Confidentiality</Scope>
+					<Scope>Integrity</Scope>
+					<Impact>Modify Memory</Impact>
+					<Impact>Read Memory</Impact>
+					<Impact>Modify Application Data</Impact>
+					<Impact>Read Application Data</Impact>
+					<Impact>Gain Privileges or Assume Identity</Impact>
+					<Impact>Bypass Protection Mechanism</Impact>
+				</Consequence>
+			</Common_Consequences>
+			<Potential_Mitigations>
+				<Mitigation>
+					<Phase>Implementation</Phase>
+					<Description>Implement the access control check first. Access should only be given to asset if agent is authorized. </Description>
+				</Mitigation>
+			</Potential_Mitigations>
+			<Demonstrative_Examples>
+			  <Demonstrative_Example Demonstrative_Example_ID="DX-187">
+			    <Intro_Text>Assume that the module foo_bar implements a protected register. The register content is the asset. Only transactions made by user id (indicated by signal usr_id) 0x4 are allowed to modify the register contents. The signal grant_access is used to provide access. </Intro_Text>
+			    <Example_Code Nature="Bad" Language="Verilog">
+       			      module foo_bar(data_out, usr_id, data_in, clk, rst_n);<xhtml:br />
+       			      output reg [7:0] data_out;<xhtml:br />
+       			      input wire [2:0] usr_id;<xhtml:br />
+       			      input wire [7:0] data_in; <xhtml:br />
+       			      input wire clk, rst_n;<xhtml:br />
+       			      wire grant_access;<xhtml:br />
+       			      always @ (posedge clk or negedge rst_n)<xhtml:br />
+       			      begin<xhtml:br />
+       			      <xhtml:div style="margin-left:1em;">
+				if (!rst_n)<xhtml:br />
+				<xhtml:div style="margin-left:1em;">
+				  data_out = 0;
+				</xhtml:div>
+				else
+				<xhtml:div style="margin-left:1em;">
+				  data_out = (grant_access) ? data_in : data_out;<xhtml:br />
+				  assign grant_access = (usr_id == 3'h4) ? 1'b1 : 1'b0;<xhtml:br />
+				</xhtml:div>
+			      </xhtml:div>
+			      end<xhtml:br />
+			      endmodule
+			    </Example_Code>
+			    <Body_Text>This code uses Verilog blocking assignments for data_out and grant_access. Therefore, these assignments happen sequentially (i.e., data_out is updated to new value first, and grant_access is updated the next cycle) and not in parallel. Therefore, the asset data_out is allowed to be modified even before the access control check is complete and grant_access signal is set. Since grant_access does not have a reset value, it will be meta-stable and will randomly go to either 0 or 1.</Body_Text>
+			    <Body_Text>Flipping the order of the assignment of data_out and grant_access should solve the problem. The correct snippet of code is shown below.</Body_Text>
+			    <Example_Code Nature="Good" Language="Verilog">
+       			      always @ (posedge clk or negedge rst_n)<xhtml:br />
+       			      begin<xhtml:br />
+			      <xhtml:div style="margin-left:1em;">
+				if (!rst_n)<xhtml:br />
+				<xhtml:div style="margin-left:1em;">
+				  data_out = 0;<xhtml:br />
+				</xhtml:div>
+				else<xhtml:br />
+				<xhtml:div style="margin-left:1em;">
+				  assign grant_access = (usr_id == 3'h4) ? 1'b1 : 1'b0;<xhtml:br />
+				  data_out = (grant_access) ? data_in : data_out;<xhtml:br />
+				</xhtml:div>
+			      </xhtml:div>
+			      end<xhtml:br />
+       			      endmodule
+			    </Example_Code>
+			  </Demonstrative_Example>
+			</Demonstrative_Examples>
+         <Related_Attack_Patterns>
+            <Related_Attack_Pattern CAPEC_ID="180" />
+         </Related_Attack_Patterns>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Base level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+         <Content_History>
+				<Submission>
+					<Submission_Name>Arun Kanuparthi, Hareesh Khattri, Parbati Kumar Manna, Narasimha Kumar V Mangipudi</Submission_Name>
+					<Submission_Organization>Intel Corporation</Submission_Organization>
+					<Submission_Date>2020-02-12</Submission_Date>
+					<Submission_Version>4.1</Submission_Version>
+					<Submission_ReleaseDate>2020-02-24</Submission_ReleaseDate>
+				</Submission>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-08-20</Modification_Date>
+					<Modification_Version>4.2</Modification_Version>
+					<Modification_ReleaseDate>2020-08-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Applicable_Platforms, Demonstrative_Examples, Description, Related_Attack_Patterns</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-10-13</Modification_Date>
+					<Modification_Version>4.9</Modification_Version>
+					<Modification_ReleaseDate>2022-10-13</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-10-26</Modification_Date>
+					<Modification_Version>4.13</Modification_Version>
+					<Modification_ReleaseDate>2023-10-26</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+			</Content_History>
+		</Weakness>
+      

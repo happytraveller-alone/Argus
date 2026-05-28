@@ -1,0 +1,216 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="1267" Name="Policy Uses Obsolete Encoding" Abstraction="Base" Structure="Simple" Status="Draft">
+   <Description>The product uses an obsolete encoding mechanism to implement access controls.</Description>
+   <Extended_Description>
+    <xhtml:p>Within a System-On-a-Chip (SoC), various circuits and hardware engines generate transactions for the purpose of accessing (read/write) assets or performing various actions (e.g., reset, fetch, compute, etc.). Among various types of message information, a typical transaction is comprised of source identity (identifying the originator of the transaction) and a destination identity (routing the transaction to the respective entity). Sometimes the transactions are qualified with a Security Token. This Security Token helps the destination agent decide on the set of allowed actions (e.g., access to an asset for reads and writes). A policy encoder is used to map the bus transactions to Security Tokens that in turn are used as access-controls/protection mechanisms. A common weakness involves using an encoding which is no longer trusted, i.e., an obsolete encoding.</xhtml:p>
+   </Extended_Description>
+	 <Related_Weaknesses>
+		<Related_Weakness Nature="ChildOf" CWE_ID="284" View_ID="1000" Ordinal="Primary" />
+	 </Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+   <Applicable_Platforms>
+    <Language Class="Not Language-Specific" Prevalence="Undetermined" />
+    <Operating_System Class="Not OS-Specific" Prevalence="Undetermined" />
+    <Architecture Class="Not Architecture-Specific" Prevalence="Undetermined" />
+    <Technology Class="Not Technology-Specific" Prevalence="Undetermined" />
+   </Applicable_Platforms>
+   <Modes_Of_Introduction>
+    <Introduction>
+     <Phase>Architecture and Design</Phase>
+     </Introduction>
+    <Introduction>
+     <Phase>Implementation</Phase>   
+    </Introduction>
+   </Modes_Of_Introduction>
+   <Common_Consequences>
+    <Consequence>
+     <Scope>Confidentiality</Scope>
+     <Scope>Integrity</Scope>
+     <Scope>Availability</Scope>
+     <Scope>Access Control</Scope>
+     <Impact>Modify Memory</Impact>
+     <Impact>Read Memory</Impact>
+     <Impact>Modify Files or Directories</Impact>
+     <Impact>Read Files or Directories</Impact>
+     <Impact>DoS: Resource Consumption (Other)</Impact>
+     <Impact>Execute Unauthorized Code or Commands</Impact>
+     <Impact>Gain Privileges or Assume Identity</Impact>
+     <Impact>Bypass Protection Mechanism</Impact>
+     <Impact>Reduce Reliability</Impact>
+     <Likelihood>High</Likelihood>
+    </Consequence>
+   </Common_Consequences>
+   <Potential_Mitigations>
+    <Mitigation>
+     <Phase>Architecture and Design</Phase>
+     <Phase>Implementation</Phase>
+     <Description>
+      <xhtml:p>Security Token Decoders should be reviewed for design inconsistency and common weaknesses.</xhtml:p>
+      <xhtml:p>Access and programming flows should be tested in both pre-silicon and post-silicon testing.</xhtml:p>
+     </Description>
+     <Effectiveness>High</Effectiveness>
+    </Mitigation>
+   </Potential_Mitigations>
+   <Demonstrative_Examples>
+		<Demonstrative_Example>
+      <Intro_Text>
+       <xhtml:p>For example, consider a system that has four bus masters. The table below provides bus masters, their Security Tokens, and trust assumptions.</xhtml:p>
+       <xhtml:table>
+        <xhtml:tr>
+         <xhtml:th>Bus Master</xhtml:th>
+         <xhtml:th>Security Token Decoding</xhtml:th>
+         <xhtml:th>Trust Assumptions</xhtml:th>
+        </xhtml:tr>
+        <xhtml:tr>
+         <xhtml:td>Master_0</xhtml:td>
+         <xhtml:td>"00"</xhtml:td>
+         <xhtml:td>Untrusted</xhtml:td>
+        </xhtml:tr>
+        <xhtml:tr>
+         <xhtml:td>Master_1</xhtml:td>
+         <xhtml:td>"01"</xhtml:td>
+         <xhtml:td>Trusted</xhtml:td>
+        </xhtml:tr>
+        <xhtml:tr>
+         <xhtml:td>Master_2</xhtml:td>
+         <xhtml:td>"10"</xhtml:td>
+         <xhtml:td>Untrusted</xhtml:td>
+        </xhtml:tr>
+        <xhtml:tr>
+         <xhtml:td>Master_3</xhtml:td>
+         <xhtml:td>"11"</xhtml:td>
+         <xhtml:td>Untrusted</xhtml:td>
+        </xhtml:tr>
+       </xhtml:table>
+       <xhtml:p>The policy encoding is to be defined such that Security Token will be used in implemented access-controls. The bits in the bus transaction that contain Security-Token information are Bus_transaction [15:11]. The assets are the AES-Key registers for encryption or decryption. The key of 128 bits is implemented as a set of four, 32-bit registers.</xhtml:p>
+       <xhtml:table>
+        <xhtml:tr>
+         <xhtml:th>Register</xhtml:th>
+         <xhtml:th>Field description</xhtml:th>
+        </xhtml:tr>
+        <xhtml:tr>
+         <xhtml:td>AES_ENC_DEC_KEY_0</xhtml:td>
+         <xhtml:td>AES key [0:31] for encryption or decryption, Default 0x00000000</xhtml:td>
+        </xhtml:tr>
+        <xhtml:tr>
+         <xhtml:td>AES_ENC_DEC_KEY_1</xhtml:td>
+         <xhtml:td>AES key [32:63] for encryption or decryption, Default 0x00000000</xhtml:td>
+        </xhtml:tr>
+        <xhtml:tr>
+         <xhtml:td>AES_ENC_DEC_KEY_2</xhtml:td>
+         <xhtml:td>AES key [64:95] for encryption or decryption, Default 0x00000000</xhtml:td>
+        </xhtml:tr>
+        <xhtml:tr>
+         <xhtml:td>AES_ENC_DEC_KEY_4</xhtml:td>
+         <xhtml:td>AES key [96:127] for encryption or decryption, Default 0x00000000</xhtml:td>
+        </xhtml:tr>
+       </xhtml:table>
+       <xhtml:p>Below is an example of a policy encoding scheme inherited from a previous project where all "ODD" numbered Security Tokens are trusted.</xhtml:p>
+      </Intro_Text>
+      <Example_Code Nature="Bad" Language="Pseudocode">
+        <xhtml:div>If (Bus_transaction[14] == "1")<xhtml:div style="margin-left:1em;">Trusted = "1"</xhtml:div>Else<xhtml:div style="margin-left:1em;">Trusted = "0"</xhtml:div></xhtml:div>
+        <xhtml:div>If (trusted)<xhtml:div style="margin-left:1em;">Allow access to AES-Key registers</xhtml:div>Else<xhtml:div style="margin-left:1em;">Deny access to AES-Key registers</xhtml:div></xhtml:div>
+      </Example_Code>
+		  <Body_Text><xhtml:p>The inherited policy encoding is obsolete and does not work for the new system where an untrusted bus master with an odd Security Token exists in the system, i.e., Master_3 whose Security Token is "11". Based on the old policy, the untrusted bus master (Master_3) has access to the AES-Key registers. To resolve this, a register AES_KEY_ACCESS_POLICY can be defined to provide necessary, access controls:</xhtml:p></Body_Text>
+		  <Body_Text>
+		    <xhtml:p>New Policy: </xhtml:p>
+		    <xhtml:table>
+		      <xhtml:tr>
+		        <xhtml:td>AES_KEY_ACCESS_POLICY</xhtml:td>
+		        <xhtml:td>[31:0] Default 0x00000002 - agent with Security Token "1" has access to AES_ENC_DEC_KEY_0 through AES_ENC_DEC_KEY_4 registers</xhtml:td>
+		      </xhtml:tr>
+		    </xhtml:table>
+		    <xhtml:p>The AES_KEY_ACCESS_POLICY register defines which agents with a Security Token in the transaction can access the AES-key registers. Each bit in this 32-bit register defines a Security Token. There could be a maximum of 32 security Tokens that are allowed access to the AES-key registers. The number of the bit when set (i.e., "1") allows respective action from an agent whose identity matches the number of the bit and, if "0" (i.e., Clear), disallows the respective action to that corresponding agent. Thus, any bus master with Security Token "01" is allowed access to the AES-Key registers. Below is the Pseudo Code for policy encoding:</xhtml:p>
+		  </Body_Text>
+      <Example_Code Nature="Good" Language="Pseudocode">
+        <xhtml:div>Security_Token[4:0] = Bus_transaction[15:11]</xhtml:div>
+        <xhtml:div>If (AES_KEY_ACCESS_POLICY[Security_Token] == "1")<xhtml:div style="margin-left:1em;">Allow access to AES-Key registers</xhtml:div>Else<xhtml:div style="margin-left:1em;">Deny access to AES-Key registers</xhtml:div></xhtml:div>
+      </Example_Code>
+		</Demonstrative_Example>
+   </Demonstrative_Examples>
+         <Related_Attack_Patterns>
+            <Related_Attack_Pattern CAPEC_ID="121" />
+            <Related_Attack_Pattern CAPEC_ID="681" />
+         </Related_Attack_Patterns>
+         <References>
+    <Reference External_Reference_ID="REF-1093" />
+   </References>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Base level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+   <Content_History>
+    <Submission>
+     <Submission_Name>Arun Kanuparthi, Hareesh Khattri, Parbati Kumar Manna, Narasimha Kumar V Mangipudi</Submission_Name>
+     <Submission_Organization>Intel Corporation</Submission_Organization>
+     <Submission_Date>2020-04-18</Submission_Date>
+     <Submission_Version>4.1</Submission_Version>
+     <Submission_ReleaseDate>2020-02-24</Submission_ReleaseDate>
+    </Submission>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-08-20</Modification_Date>
+					<Modification_Version>4.2</Modification_Version>
+					<Modification_ReleaseDate>2020-08-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Applicable_Platforms, Demonstrative_Examples, Description, Modes_of_Introduction, Potential_Mitigations</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-07-20</Modification_Date>
+					<Modification_Version>4.5</Modification_Version>
+					<Modification_ReleaseDate>2021-07-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Related_Attack_Patterns</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-04-28</Modification_Date>
+					<Modification_Version>4.7</Modification_Version>
+					<Modification_ReleaseDate>2022-04-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Related_Attack_Patterns</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-10-13</Modification_Date>
+					<Modification_Version>4.9</Modification_Version>
+					<Modification_ReleaseDate>2022-10-13</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated References, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples, Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+   </Content_History>
+  </Weakness>
+      

@@ -1,0 +1,141 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="1318" Name="Missing Support for Security Features in On-chip Fabrics or Buses" Abstraction="Base" Structure="Simple" Status="Incomplete">
+			<Description>On-chip fabrics or buses either do not support or are not configured to support privilege separation or other security features, such as access control.</Description>
+			<Extended_Description>
+				<xhtml:p>Certain on-chip fabrics and buses, especially simple and low-power buses, do not support security features.  Apart from data transfer and addressing ports, some fabrics and buses do not have any interfaces to transfer privilege, immutable identity, or any other security attribute coming from the bus master.  Similarly, they do not have dedicated signals to transport security-sensitive data from slave to master, such as completions for certain types of transactions.  Few other on-chip fabrics and buses support security features and define specific interfaces/signals for transporting security attributes from master to slave or vice-versa.  However, including these signals is not mandatory and could be left unconfigured when generating the register-transfer-level (RTL) description for the fabric.  Such fabrics or buses should not be used to transport any security attribute coming from the bus master.  In general, peripherals with security assets should not be connected to such buses before the transaction from the bus master reaches the bus, unless some form of access control is performed at a fabric bridge or another intermediate module.</xhtml:p>
+			</Extended_Description>
+			<Related_Weaknesses>
+				<Related_Weakness Nature="ChildOf" CWE_ID="693" View_ID="1000" Ordinal="Primary" />
+			</Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+			<Applicable_Platforms>	
+				<Language Class="Not Language-Specific" Prevalence="Undetermined" />
+				<Operating_System Class="Not OS-Specific" Prevalence="Undetermined" />
+				<Architecture Class="Not Architecture-Specific" Prevalence="Undetermined" />
+				<Technology Name="Processor Hardware" Prevalence="Undetermined" />
+				<Technology Class="Not Technology-Specific" Prevalence="Undetermined" />
+				</Applicable_Platforms>
+			<Modes_Of_Introduction>
+				<Introduction>
+					<Phase>Architecture and Design</Phase>
+				</Introduction>
+				<Introduction>
+					<Phase>Implementation</Phase>
+				</Introduction>
+			</Modes_Of_Introduction>
+			<Common_Consequences>
+				<Consequence>
+					<Scope>Confidentiality</Scope>
+					<Scope>Integrity</Scope>
+					<Scope>Access Control</Scope>
+					<Scope>Availability</Scope>
+					<Impact>DoS: Crash, Exit, or Restart</Impact>
+					<Impact>Read Memory</Impact>
+					<Impact>Modify Memory</Impact>
+					<Likelihood>Medium</Likelihood>
+				</Consequence>
+			</Common_Consequences>
+			<Detection_Methods>
+				<Detection_Method>
+				<Method>Architecture or Design Review</Method>
+				<Description>Review the fabric specification and ensure that it contains signals to transfer security-sensitive signals. </Description>
+				<Effectiveness>High</Effectiveness>
+				</Detection_Method>
+				<Detection_Method>
+				<Method>Manual Static Analysis - Source Code</Method>
+				<Description>Lack of security features can also be confirmed through manual RTL review of the fabric RTL. </Description>
+				<Effectiveness>High</Effectiveness>
+				</Detection_Method>
+			</Detection_Methods>
+			<Potential_Mitigations>
+				<Mitigation>
+					<Phase>Architecture and Design</Phase>
+					<Description>If fabric does not support security features, implement security checks in a bridge or any component that is between the master and the fabric.  Alternatively, connect all fabric slaves that do not have any security assets under one such fabric and connect peripherals with security assets to a different fabric that supports security features. </Description>
+				</Mitigation>
+			</Potential_Mitigations>
+			
+			<Demonstrative_Examples>
+				<Demonstrative_Example>
+					<Intro_Text>Several systems on chips (SoCs) use the Advanced-Microcontroller Bus Architecture (AMBA) Advanced-Peripheral Bus (APB) protocol.  APB is a simple, low-power bus and uses the PPROT[2:0] bits to indicate the security state of the bus masters ;PPROT[0] indicates privilege, PPROT[1] indicates secure/non-secure transaction, and PPROT[2] indicates instruction/data.  Assume that there is no fabric bridge in the SoC. One of the slaves, the power-management unit, contains registers that store the thermal-shutdown limits.</Intro_Text>
+					<Body_Text>The APB bus is used to connect several bus masters, each with a unique and immutable hardware identity, to several slaves. For a CPU supporting 8 potential identities (each with varying privilege levels), 16 types of outgoing transactions can be made--8 read transactions with each supported privilege level and 8 write transactions with each supported privilege level.  </Body_Text>
+					<Body_Text>Since APB PPROT can only support up to 8 transaction types, access-control checks cannot be performed on transactions going to the slaves at the right granularity for all possible transaction types.  Thus, potentially, user code running on the CPU could maliciously corrupt the thermal-shutdown-configuration registers to burn the device, resulting in permanent denial of service.  </Body_Text>
+					<Body_Text>In this scenario, only peripherals that need access protection from 8 of the 16 possible transaction types can be connected to the APB bus. Peripherals that require protection from the remaining 8 transaction types can be connected to a different APB bus. Alternatively, a bridge could be implemented to handle such complex scenarios before forwarding traffic to the APB bus. </Body_Text>
+				</Demonstrative_Example>
+				<Demonstrative_Example>
+					<Intro_Text>The Open-Core-Protocol (OCP) fabric supports two configurable, width-optional signals for transporting security attributes: MReqInfo and SRespInfo.  MReqInfo is used to transport security attributes from bus master to slave, and SRespInfo is used to transport security attributes from slave to bus master. An SoC uses OCP to connect several bus masters, each with a unique and immutable hardware identity, to several slaves.  One of the bus masters, the CPU, reports the privilege level (user or super user) in addition to the unique identity.  One of the slaves, the power-management unit, contains registers that store the thermal-shutdown limits.</Intro_Text>
+					<Body_Text>Since MReqInfo and SRespInfo are not mandatory, these signals are not configured when autogenerating RTL for the OCP fabric.  Thus, the fabric cannot be used to transport security attributes from bus masters to slave. </Body_Text>
+					<Body_Text>Code running at user-privilege level on the CPU could maliciously corrupt the thermal-shutdown-configuration registers to burn the device and cause permanent denial of service. </Body_Text>
+					<Body_Text>To address this, configure the fabric to include MReqInfo and SRespInfo signals and use these to transport security identity and privilege level to perform access-control checks at the slave interface.</Body_Text>
+				</Demonstrative_Example>
+			</Demonstrative_Examples>
+         <Related_Attack_Patterns>
+            <Related_Attack_Pattern CAPEC_ID="1" />
+            <Related_Attack_Pattern CAPEC_ID="180" />
+         </Related_Attack_Patterns>
+         <References>
+				<Reference External_Reference_ID="REF-1139" />
+				<Reference External_Reference_ID="REF-1140" />
+			</References>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Base level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+			<Content_History>
+				<Submission>
+					<Submission_Name>Arun Kanuparthi, Hareesh Khattri, Parbati Kumar Manna</Submission_Name>
+					<Submission_Organization>Intel Corporation</Submission_Organization>
+					<Submission_Date>2020-05-20</Submission_Date>
+					<Submission_Version>4.3</Submission_Version>
+					<Submission_ReleaseDate>2020-12-10</Submission_ReleaseDate>
+				</Submission>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-04-28</Modification_Date>
+					<Modification_Version>4.7</Modification_Version>
+					<Modification_ReleaseDate>2022-04-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Applicable_Platforms</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-06-28</Modification_Date>
+					<Modification_Version>4.8</Modification_Version>
+					<Modification_ReleaseDate>2022-06-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Applicable_Platforms</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+			</Content_History>
+		</Weakness>
+      

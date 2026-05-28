@@ -1,0 +1,160 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="1116" Name="Inaccurate Source Code Comments" Abstraction="Base" Structure="Simple" Status="Incomplete">
+         <Description>The source code contains comments that do not accurately
+					describe or explain aspects of the portion of the code with which the comment is
+					associated.</Description>
+         <Extended_Description><xhtml:p />
+<xhtml:p /></Extended_Description>
+         <Related_Weaknesses>
+            <Related_Weakness Nature="ChildOf" CWE_ID="1078" View_ID="1000" Ordinal="Primary" />
+         </Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Indirect</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+         <Applicable_Platforms>
+            <Language Class="Not Language-Specific" Prevalence="Undetermined" />
+         </Applicable_Platforms>
+         <Modes_Of_Introduction>
+            <Introduction>
+               <Phase>Implementation</Phase>
+            </Introduction>
+         </Modes_Of_Introduction>
+         <Common_Consequences>
+            <Consequence>
+               <Scope>Other</Scope>
+               <Impact>Reduce Maintainability</Impact>
+	       <Note>This issue makes it more difficult to maintain the product, which indirectly affects security by making it more difficult or time-consuming to find and/or fix vulnerabilities.  It also might make it easier to introduce vulnerabilities.</Note>
+            </Consequence>
+            <Consequence>
+               <Scope>Other</Scope>
+               <Impact>Increase Analytical Complexity</Impact>
+	       <Note>When a comment does not accurately reflect the associated code elements, this can introduce confusion to a reviewer (due to inconsistencies) or make it more difficult and less efficient to validate that the code is implementing the intended behavior correctly.</Note>
+            </Consequence>
+         </Common_Consequences>
+         <Potential_Mitigations>
+            <Mitigation>
+               <Phase>Implementation</Phase>
+               <Description>Verify that each comment accurately reflects what is intended to happen during execution of the code.</Description>
+            </Mitigation>
+         </Potential_Mitigations>
+         <Demonstrative_Examples>
+            <Demonstrative_Example>
+               <Intro_Text>In the following Java example the code performs a calculation to determine how much medicine to administer. A comment is provided to give insight into what the calculation shoud be doing. Unfortunately the comment does not match the actual code and thus leaves the reader to wonder which is correct.</Intro_Text>
+               <Example_Code Nature="Bad" Language="Java">
+                 public class Main {<xhtml:br />
+                 <xhtml:div style="margin-left:1em;">
+		   public static void main(String[] args) {
+                   <xhtml:div style="margin-left:1em;">
+		     int pt_weight = 83;<xhtml:br />
+		     int mg_per_kg = 3;<xhtml:br />
+		     int daily_dose = 0;<xhtml:br />
+		     <xhtml:br />
+		     // Add the patient weight and Mg/Kg to calculate the correct daily dose<xhtml:br />
+		     daily_dose = pt_weight * mg_per_kg;<xhtml:br />
+                     return dosage;
+		   </xhtml:div>
+                   }
+		 </xhtml:div>
+                 }
+               </Example_Code>
+               <Body_Text>In the correction below, the code functionality has been verified, and the comment has been corrected to reflect the proper calculation.</Body_Text>
+               <Example_Code Nature="Good" Language="Java">
+                 public class Main {<xhtml:br />
+                 <xhtml:div style="margin-left:1em;">
+		   public static void main(String[] args) {
+                   <xhtml:div style="margin-left:1em;">
+		     int pt_weight = 83;<xhtml:br />
+		     int mg_per_kg = 3;<xhtml:br />
+		     int daily_dose = 0;<xhtml:br />
+		     <xhtml:br />
+		     // Multiply the patient weight and Mg/Kg to calculate the correct daily dose<xhtml:br />
+		     daily_dose = pt_weight * mg_per_kg;<xhtml:br />
+                     return dosage;
+		   </xhtml:div>
+                   }
+		 </xhtml:div>
+                 }
+               </Example_Code>
+               <Body_Text>Note that in real-world code, these values should be validated to disallow negative numbers, prevent integer overflow, etc.</Body_Text>
+            </Demonstrative_Example>
+         </Demonstrative_Examples>
+         <References>
+            <Reference External_Reference_ID="REF-963" />
+         </References>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Base level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+         <Content_History>
+            <Submission>
+               <Submission_Name>CWE Content Team</Submission_Name>
+               <Submission_Organization>MITRE</Submission_Organization>
+               <Submission_Date>2018-07-02</Submission_Date>
+               <Submission_Version>3.2</Submission_Version>
+               <Submission_ReleaseDate>2019-01-03</Submission_ReleaseDate>
+               <Submission_Comment>Entry derived from Common Quality Enumeration (CQE) Draft 0.9.</Submission_Comment>
+            </Submission>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-02-24</Modification_Date>
+					<Modification_Version>4.0</Modification_Version>
+					<Modification_ReleaseDate>2020-02-24</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-10-13</Modification_Date>
+					<Modification_Version>4.9</Modification_Version>
+					<Modification_ReleaseDate>2022-10-13</Modification_ReleaseDate>
+					<Modification_Comment>updated Applicable_Platforms, Demonstrative_Examples, Potential_Mitigations</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-01-31</Modification_Date>
+					<Modification_Version>4.10</Modification_Version>
+					<Modification_ReleaseDate>2023-01-31</Modification_ReleaseDate>
+					<Modification_Comment>updated Description</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Common_Consequences, Description, Name, Time_of_Introduction</Modification_Comment>
+				</Modification>
+            <Contribution Type="Content">
+               <Contribution_Name>Drew Buttner</Contribution_Name>
+	       <Contribution_Organization>MITRE</Contribution_Organization>
+               <Contribution_Date>2022-08-15</Contribution_Date>
+               <Contribution_Comment>Suggested new demonstrative examples, mitigations, and applicable platforms.</Contribution_Comment>
+            </Contribution>
+			<Previous_Entry_Name Date="2025-12-11">Inaccurate Comments</Previous_Entry_Name>
+         </Content_History>
+      </Weakness>
+      

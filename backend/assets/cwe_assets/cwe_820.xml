@@ -1,0 +1,206 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="820" Name="Missing Synchronization" Abstraction="Base" Structure="Simple" Status="Incomplete">
+         <Description>The product utilizes a shared resource in a concurrent manner but does not attempt to synchronize access to the resource.</Description>
+         <Extended_Description>If access to a shared resource is not synchronized, then the resource may not be in a state that is expected by the product. This might lead to unexpected or insecure behaviors, especially if an attacker can influence the shared resource.</Extended_Description>
+         <Related_Weaknesses>
+             <Related_Weakness Nature="ChildOf" CWE_ID="662" View_ID="1000" Ordinal="Primary" />
+             <Related_Weakness Nature="ChildOf" CWE_ID="662" View_ID="1305" Ordinal="Primary" />
+			 <Related_Weakness Nature="ChildOf" CWE_ID="662" View_ID="1340" Ordinal="Primary" />
+         </Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+         <Applicable_Platforms>
+            <Language Class="Not Language-Specific" Prevalence="Undetermined" />
+         </Applicable_Platforms>
+         <Modes_Of_Introduction>
+            <Introduction>
+               <Phase>Implementation</Phase>
+            </Introduction>
+         </Modes_Of_Introduction>
+         <Common_Consequences>
+            <Consequence>
+               <Scope>Integrity</Scope>
+               <Scope>Confidentiality</Scope>
+               <Scope>Other</Scope>
+               <Impact>Modify Application Data</Impact>
+               <Impact>Read Application Data</Impact>
+               <Impact>Alter Execution Logic</Impact>
+            </Consequence>
+         </Common_Consequences>
+         <Demonstrative_Examples>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-170">
+               <Intro_Text>The following code intends to fork a process, then have both the parent and child processes print a single line.</Intro_Text>
+               <Example_Code Nature="Bad" Language="C">
+                  <xhtml:div>static void print (char * string) {<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>char * word;<xhtml:br />int counter;<xhtml:br />for (word = string; counter = *word++; ) {<xhtml:div style="margin-left:1em;">
+                              <xhtml:div>putc(counter, stdout);<xhtml:br />fflush(stdout);<xhtml:br />
+                                 <xhtml:i>/* Make timing window a little larger... */</xhtml:i>
+                                 <xhtml:br />
+                                 <xhtml:br />sleep(1);</xhtml:div>
+                           </xhtml:div>}</xhtml:div>
+                     </xhtml:div>}<xhtml:br />
+                     <xhtml:br />int main(void) {<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>pid_t pid;<xhtml:br />
+                           <xhtml:br />pid = fork();<xhtml:br />if (pid == -1) {<xhtml:div style="margin-left:1em;">exit(-2);</xhtml:div>}<xhtml:br />else if (pid == 0) {<xhtml:div style="margin-left:1em;">print("child\n");</xhtml:div>}<xhtml:br />else {<xhtml:div style="margin-left:1em;">print("PARENT\n");</xhtml:div>}<xhtml:br />exit(0);</xhtml:div>
+                     </xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>One might expect the code to print out something like:</Body_Text>
+               <Body_Text>
+                  <xhtml:div>
+                     <xhtml:div>PARENT</xhtml:div>
+                     <xhtml:div>child</xhtml:div>
+                  </xhtml:div>
+               </Body_Text>
+               <Body_Text>However, because the parent and child are executing concurrently, and stdout is flushed each time a character is printed, the output might be mixed together, such as:</Body_Text>
+               <Body_Text>
+                  <xhtml:div>
+                     <xhtml:div>PcAhRiElNdT</xhtml:div>
+                     <xhtml:div>[blank line]</xhtml:div>
+                     <xhtml:div>[blank line]</xhtml:div>
+                  </xhtml:div>
+               </Body_Text>
+            </Demonstrative_Example>
+         </Demonstrative_Examples>
+         <Taxonomy_Mappings>
+            <Taxonomy_Mapping Taxonomy_Name="The CERT Oracle Secure Coding Standard for Java (2011)">
+               <Entry_ID>LCK05-J</Entry_ID>
+               <Entry_Name>Synchronize access to static fields that can be modified by untrusted code</Entry_Name>
+            </Taxonomy_Mapping>
+         </Taxonomy_Mappings>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Base level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+	 <Notes>
+	   <Note Type="Maintenance">Deeper research is necessary for synchronization and related mechanisms, including locks, mutexes, semaphores, and other mechanisms. Multiple entries are dependent on this research, which includes relationships to concurrency, race conditions, reentrant functions, etc.  CWE-662 and its children - including CWE-667, CWE-820, CWE-821, and others - may need to be modified significantly, along with their relationships.</Note>
+	 </Notes>
+         <Content_History>
+            <Submission>
+               <Submission_Name>CWE Content Team</Submission_Name>
+               <Submission_Organization>MITRE</Submission_Organization>
+               <Submission_Date>2010-08-06</Submission_Date>
+               <Submission_Version>1.10</Submission_Version>
+               <Submission_ReleaseDate>2010-09-27</Submission_ReleaseDate>
+            </Submission>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2010-12-13</Modification_Date>
+               <Modification_Version>1.11</Modification_Version>
+               <Modification_ReleaseDate>2010-12-13</Modification_ReleaseDate>
+               <Modification_Comment>updated Demonstrative_Examples, Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-06-01</Modification_Date>
+               <Modification_Version>1.13</Modification_Version>
+               <Modification_ReleaseDate>2011-06-01</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences, Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2013-07-17</Modification_Date>
+               <Modification_Version>2.5</Modification_Version>
+               <Modification_ReleaseDate>2013-07-17</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2017-11-08</Modification_Date>
+               <Modification_Version>3.0</Modification_Version>
+               <Modification_ReleaseDate>2017-11-08</Modification_ReleaseDate>
+               <Modification_Comment>updated Demonstrative_Examples</Modification_Comment>
+            </Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2019-01-03</Modification_Date>
+					<Modification_Version>3.2</Modification_Version>
+					<Modification_ReleaseDate>2019-01-03</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships, Taxonomy_Mappings</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2019-09-23</Modification_Date>
+					<Modification_Version>3.4.1</Modification_Version>
+					<Modification_ReleaseDate>2019-09-23</Modification_ReleaseDate>
+					<Modification_Comment>updated Maintenance_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-02-24</Modification_Date>
+					<Modification_Version>4.0</Modification_Version>
+					<Modification_ReleaseDate>2020-02-24</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-08-20</Modification_Date>
+					<Modification_Version>4.2</Modification_Version>
+					<Modification_ReleaseDate>2020-08-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-12-10</Modification_Date>
+					<Modification_Version>4.3</Modification_Version>
+					<Modification_ReleaseDate>2020-12-10</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-01-31</Modification_Date>
+					<Modification_Version>4.10</Modification_Version>
+					<Modification_ReleaseDate>2023-01-31</Modification_ReleaseDate>
+					<Modification_Comment>updated Description</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-10-26</Modification_Date>
+					<Modification_Version>4.13</Modification_Version>
+					<Modification_ReleaseDate>2023-10-26</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Applicable_Platforms, Time_of_Introduction, Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+         </Content_History>
+      </Weakness>
+      

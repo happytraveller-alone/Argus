@@ -1,0 +1,308 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="412" Name="Unrestricted Externally Accessible Lock" Abstraction="Base" Structure="Simple" Status="Incomplete">
+         <Description>The product properly checks for the existence of a lock, but the lock can be externally controlled or influenced by an actor that is outside of the intended sphere of control.</Description>
+         <Extended_Description>This prevents the product from acting on associated resources or performing other behaviors that are controlled by the presence of the lock. Relevant locks might include an exclusive lock or mutex, or modifying a shared resource that is treated as a lock. If the lock can be held for an indefinite period of time, then the denial of service could be permanent.</Extended_Description>
+         <Related_Weaknesses>
+            <Related_Weakness Nature="ChildOf" CWE_ID="667" View_ID="1000" Ordinal="Primary" />
+            <Related_Weakness Nature="CanAlsoBe" CWE_ID="410" View_ID="1000" />
+         </Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+         <Applicable_Platforms>
+            <Language Class="Not Language-Specific" Prevalence="Undetermined" />
+         </Applicable_Platforms>
+         <Modes_Of_Introduction>
+            <Introduction>
+               <Phase>Architecture and Design</Phase>
+            </Introduction>
+            <Introduction>
+               <Phase>Implementation</Phase>
+            </Introduction>
+         </Modes_Of_Introduction>
+         <Common_Consequences>
+            <Consequence>
+               <Scope>Availability</Scope>
+               <Impact>DoS: Resource Consumption (Other)</Impact>
+               <Note>When an attacker can control a lock, the program may wait indefinitely until the attacker releases the lock, causing a denial of service to other users of the program. This is especially problematic if there is a blocking operation on the lock.</Note>
+            </Consequence>
+         </Common_Consequences>
+         <Detection_Methods>
+            <Detection_Method>
+               <Method>White Box</Method>
+               <Description>Automated code analysis techniques might not be able to reliably detect this weakness, since the application's behavior and general security model dictate which resource locks are critical. Interpretation of the weakness might require knowledge of the environment, e.g. if the existence of a file is used as a lock, but the file is created in a world-writable directory.</Description>
+            </Detection_Method>
+         </Detection_Methods>
+         <Potential_Mitigations>
+            <Mitigation>
+               <Phase>Architecture and Design</Phase>
+               <Phase>Implementation</Phase>
+               <Description>Use any access control that is offered by the functionality that is offering the lock.</Description>
+            </Mitigation>
+            <Mitigation>
+               <Phase>Architecture and Design</Phase>
+               <Phase>Implementation</Phase>
+               <Description>Use unpredictable names or identifiers for the locks. This might not always be possible or feasible.</Description>
+            </Mitigation>
+            <Mitigation>
+               <Phase>Architecture and Design</Phase>
+               <Description>Consider modifying your code to use non-blocking synchronization methods.</Description>
+            </Mitigation>
+         </Potential_Mitigations>
+         <Demonstrative_Examples>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-69">
+               <Intro_Text>This code tries to obtain a lock for a file, then writes to it.</Intro_Text>
+               <Example_Code Nature="Bad" Language="PHP">
+                  <xhtml:div>function writeToLog($message){<xhtml:div style="margin-left:1em;">$logfile = fopen("logFile.log", "a");<xhtml:br />
+                        <xhtml:i>//attempt to get logfile lock</xhtml:i>
+                        <xhtml:br />if (flock($logfile, LOCK_EX)) {<xhtml:div style="margin-left:1em;">fwrite($logfile,$message);<xhtml:br />
+                           <xhtml:i>// unlock logfile</xhtml:i>
+                           <xhtml:br />flock($logfile, LOCK_UN);</xhtml:div>}<xhtml:br />else {<xhtml:div style="margin-left:1em;">print "Could not obtain lock on logFile.log, message not recorded\n";</xhtml:div>}</xhtml:div>}<xhtml:br />fclose($logFile);</xhtml:div>
+               </Example_Code>
+               <Body_Text>PHP by default will wait indefinitely until a file lock is released. If an attacker is able to obtain the file lock, this code will pause execution, possibly leading to denial of service for other users. Note that in this case, if an attacker can perform an flock() on the file, they may already have privileges to destroy the log file. However, this still impacts the execution of other programs that depend on flock().</Body_Text>
+            </Demonstrative_Example>
+         </Demonstrative_Examples>
+         <Observed_Examples>
+            <Observed_Example>
+               <Reference>CVE-2001-0682</Reference>
+               <Description>Program can not execute when attacker obtains a mutex.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2001-0682</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2002-1914</Reference>
+               <Description>Program can not execute when attacker obtains a lock on a critical output file.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2002-1914</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2002-1915</Reference>
+               <Description>Program can not execute when attacker obtains a lock on a critical output file.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2002-1915</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2002-0051</Reference>
+               <Description>Critical file can be opened with exclusive read access by user, preventing application of security policy. Possibly related to improper permissions, large-window race condition.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2002-0051</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2000-0338</Reference>
+               <Description>Chain: predictable file names used for locking, allowing attacker to create the lock beforehand. Resultant from permissions and randomness.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2000-0338</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2000-1198</Reference>
+               <Description>Chain: Lock files with predictable names. Resultant from randomness.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2000-1198</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2002-1869</Reference>
+               <Description>Product does not check if it can write to a log file, allowing attackers to avoid logging by accessing the file using an exclusive lock. Overlaps unchecked error condition. This is not quite CWE-412, but close.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2002-1869</Link>
+            </Observed_Example>
+         </Observed_Examples>
+         <Taxonomy_Mappings>
+            <Taxonomy_Mapping Taxonomy_Name="PLOVER">
+               <Entry_Name>Unrestricted Critical Resource Lock</Entry_Name>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="7 Pernicious Kingdoms">
+               <Entry_Name>Deadlock</Entry_Name>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="OWASP Top Ten 2004">
+               <Entry_ID>A9</Entry_ID>
+               <Entry_Name>Denial of Service</Entry_Name>
+               <Mapping_Fit>CWE More Specific</Mapping_Fit>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="The CERT Oracle Secure Coding Standard for Java (2011)">
+               <Entry_ID>LCK00-J</Entry_ID>
+               <Entry_Name>Use private final lock objects to synchronize classes that may interact with untrusted code</Entry_Name>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="The CERT Oracle Secure Coding Standard for Java (2011)">
+               <Entry_ID>LCK07-J</Entry_ID>
+               <Entry_Name>Avoid deadlock by requesting and releasing locks in the same order</Entry_Name>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="Software Fault Patterns">
+               <Entry_ID>SFP22</Entry_ID>
+               <Entry_Name>Unrestricted lock</Entry_Name>
+            </Taxonomy_Mapping>
+         </Taxonomy_Mappings>
+         <Related_Attack_Patterns>
+            <Related_Attack_Pattern CAPEC_ID="25" />
+         </Related_Attack_Patterns>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Base level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+         <Notes>
+            <Note Type="Relationship">This overlaps Insufficient Resource Pool when the "pool" is of size 1. It can also be resultant from race conditions, although the timing window could be quite large in some cases.</Note>
+         </Notes>
+         <Content_History>
+            <Submission>
+               <Submission_Name>PLOVER</Submission_Name>
+               <Submission_Date>2006-07-19</Submission_Date>
+               <Submission_Version>Draft 3</Submission_Version>
+               <Submission_ReleaseDate>2006-07-19</Submission_ReleaseDate>
+            </Submission>
+            <Modification>
+               <Modification_Name>Eric Dalci</Modification_Name>
+               <Modification_Organization>Cigital</Modification_Organization>
+               <Modification_Date>2008-07-01</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>updated Potential_Mitigations, Time_of_Introduction</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Organization>KDM Analytics</Modification_Organization>
+               <Modification_Date>2008-08-01</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>added/updated white box definitions</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Organization>Veracode</Modification_Organization>
+               <Modification_Date>2008-08-15</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>Suggested OWASP Top Ten 2004 mapping</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2008-09-08</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences, Description, Detection_Factors, Relationships, Observed_Example, Relationship_Notes, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2008-10-14</Modification_Date>
+               <Modification_Version>1.0.1</Modification_Version>
+               <Modification_ReleaseDate>2008-10-14</Modification_ReleaseDate>
+               <Modification_Comment>updated Description</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>KDM Analytics</Modification_Name>
+               <Modification_Date>2009-07-17</Modification_Date>
+               <Modification_Version>1.5</Modification_Version>
+               <Modification_ReleaseDate>2009-07-27</Modification_ReleaseDate>
+               <Modification_Importance>Critical</Modification_Importance>
+               <Modification_Comment>Suggested a better name and the minimal relationship with resources regardless of their criticality.</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>KDM Analytics</Modification_Name>
+               <Modification_Date>2009-07-17</Modification_Date>
+               <Modification_Version>1.5</Modification_Version>
+               <Modification_ReleaseDate>2009-07-27</Modification_ReleaseDate>
+               <Modification_Comment>Added a White_Box_Definition and clarified the consequences.</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2009-07-27</Modification_Date>
+               <Modification_Version>1.5</Modification_Version>
+               <Modification_ReleaseDate>2009-07-27</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences, Description, Name, Potential_Mitigations, White_Box_Definitions</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-03-29</Modification_Date>
+               <Modification_Version>1.12</Modification_Version>
+               <Modification_ReleaseDate>2011-03-30</Modification_ReleaseDate>
+               <Modification_Comment>updated Demonstrative_Examples</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-06-01</Modification_Date>
+               <Modification_Version>1.13</Modification_Version>
+               <Modification_ReleaseDate>2011-06-01</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences, Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2012-05-11</Modification_Date>
+               <Modification_Version>2.2</Modification_Version>
+               <Modification_ReleaseDate>2012-05-15</Modification_ReleaseDate>
+               <Modification_Comment>updated Demonstrative_Examples, Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2014-07-30</Modification_Date>
+               <Modification_Version>2.8</Modification_Version>
+               <Modification_ReleaseDate>2014-07-31</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2017-11-08</Modification_Date>
+               <Modification_Version>3.0</Modification_Version>
+               <Modification_ReleaseDate>2017-11-08</Modification_ReleaseDate>
+               <Modification_Comment>updated Applicable_Platforms, Relationships, White_Box_Definitions</Modification_Comment>
+            </Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2019-01-03</Modification_Date>
+					<Modification_Version>3.2</Modification_Version>
+					<Modification_ReleaseDate>2019-01-03</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships, Taxonomy_Mappings</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-02-24</Modification_Date>
+					<Modification_Version>4.0</Modification_Version>
+					<Modification_ReleaseDate>2020-02-24</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-01-31</Modification_Date>
+					<Modification_Version>4.10</Modification_Version>
+					<Modification_ReleaseDate>2023-01-31</Modification_ReleaseDate>
+					<Modification_Comment>updated Description</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+            <Contribution Type="Feedback">
+               <Contribution_Organization>KDM Analytics</Contribution_Organization>
+               <Contribution_Date>2008-08-29</Contribution_Date>
+               <Contribution_Comment>suggested clarification of description and observed examples, which were vague and inconsistent.</Contribution_Comment>
+            </Contribution>
+            <Previous_Entry_Name Date="2008-04-11">Unrestricted Critical Resource Lock</Previous_Entry_Name>
+            <Previous_Entry_Name Date="2009-07-27">Unrestricted Lock on Critical Resource</Previous_Entry_Name>
+         </Content_History>
+      </Weakness>
+      

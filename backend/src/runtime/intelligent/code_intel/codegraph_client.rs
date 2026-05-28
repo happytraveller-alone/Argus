@@ -179,6 +179,29 @@ impl CodeGraphClient {
             if let Err(e) = cache.commit(&archive_sha256, &host_db).await {
                 warn!(error = %e, sha = %archive_sha256, "codegraph cache commit failed");
             }
+        } else {
+            // Warm path: cache.try_load restored codegraph.db into
+            // `index_host_path` (mounted at `/codegraph/index`), but every
+            // codegraph CLI query resolves the SQLite via
+            // `<--path>/.codegraph/codegraph.db`. The freshly-extracted source
+            // staging dir has no `.codegraph/` marker, so queries against
+            // `--path /codegraph/src` fail with
+            // `✗ CodeGraph not initialized in /codegraph/src`. Materialize the
+            // marker from the cached DB before language detection runs.
+            let restore = format!(
+                "mkdir -p {CONTAINER_SRC}/.codegraph \
+                 && cp {CONTAINER_INDEX}/codegraph.db {CONTAINER_SRC}/.codegraph/codegraph.db",
+            );
+            let (_, stderr, code) = session
+                .exec_command(&restore, 10_000)
+                .await
+                .context("codegraph cache marker restore exec failed")?;
+            if code != 0 {
+                bail!(
+                    "codegraph cache marker restore exit {code}: {}",
+                    truncate_for_err(&stderr),
+                );
+            }
         }
 
         // 6. Language detection — parse `codegraph files -j --path /codegraph/src`.

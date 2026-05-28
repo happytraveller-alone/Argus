@@ -1,0 +1,299 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="823" Name="Use of Out-of-range Pointer Offset" Abstraction="Base" Structure="Simple" Status="Incomplete">
+         <Description>The product performs pointer arithmetic on a valid pointer, but it uses an offset that can point outside of the intended range of valid memory locations for the resulting pointer.</Description>
+         <Extended_Description>
+            <xhtml:p>While a pointer can contain a reference to any arbitrary memory location, a program typically only intends to use the pointer to access limited portions of memory, such as contiguous memory used to access an individual array.</xhtml:p>
+            <xhtml:p>Programs may use offsets in order to access fields or sub-elements stored within structured data. The offset might be out-of-range if it comes from an untrusted source, is the result of an incorrect calculation, or occurs because of another error.</xhtml:p>
+            <xhtml:p>If an attacker can control or influence the offset so that it points outside of the intended boundaries of the structure, then the attacker may be able to read or write to memory locations that are used elsewhere in the product. As a result, the attack might change the state of the product as accessed through program variables, cause a crash or instable behavior, and possibly lead to code execution.</xhtml:p>
+         </Extended_Description>
+         <Related_Weaknesses>
+             <Related_Weakness Nature="ChildOf" CWE_ID="119" View_ID="1000" Ordinal="Primary" />
+             <Related_Weakness Nature="ChildOf" CWE_ID="119" View_ID="1305" Ordinal="Primary" />
+			 <Related_Weakness Nature="ChildOf" CWE_ID="119" View_ID="1340" Ordinal="Primary" />
+             <Related_Weakness Nature="CanPrecede" CWE_ID="125" View_ID="1000" />
+             <Related_Weakness Nature="CanPrecede" CWE_ID="787" View_ID="1000" />
+         </Related_Weaknesses>
+		 <Weakness_Ordinalities>
+		   <Weakness_Ordinality>
+			 <Ordinality>Primary</Ordinality>
+		   </Weakness_Ordinality>
+		   <Weakness_Ordinality>
+			 <Ordinality>Resultant</Ordinality>
+		   </Weakness_Ordinality>
+		 </Weakness_Ordinalities>
+         <Applicable_Platforms>
+	   <Language Class="Memory-Unsafe" Prevalence="Undetermined" />
+            <Language Name="C" Prevalence="Undetermined" />
+            <Language Name="C++" Prevalence="Undetermined" />
+         </Applicable_Platforms>
+         <Alternate_Terms>
+            <Alternate_Term>
+               <Term>Untrusted pointer offset</Term>
+               <Description>This term is narrower than the concept of "out-of-range" offset, since the offset might be the result of a calculation or other error that does not depend on any externally-supplied values.</Description>
+            </Alternate_Term>
+         </Alternate_Terms>
+		 <Modes_Of_Introduction>
+		   <Introduction>
+			 <Phase>Implementation</Phase>
+		   </Introduction>
+		 </Modes_Of_Introduction>
+         <Common_Consequences>
+            <Consequence>
+               <Scope>Confidentiality</Scope>
+               <Impact>Read Memory</Impact>
+               <Note>If the untrusted pointer is used in a read operation, an attacker might be able to read sensitive portions of memory.</Note>
+            </Consequence>
+            <Consequence>
+               <Scope>Availability</Scope>
+               <Impact>DoS: Crash, Exit, or Restart</Impact>
+               <Note>If the untrusted pointer references a memory location that is not accessible to the program, or points to a location that is "malformed" or larger than expected by a read or write operation, the application may terminate unexpectedly.</Note>
+            </Consequence>
+            <Consequence>
+               <Scope>Integrity</Scope>
+               <Scope>Confidentiality</Scope>
+               <Scope>Availability</Scope>
+               <Impact>Execute Unauthorized Code or Commands</Impact>
+               <Impact>Modify Memory</Impact>
+               <Note>If the untrusted pointer is used in a function call, or points to unexpected data in a write operation, then code execution may be possible.</Note>
+            </Consequence>
+         </Common_Consequences>
+         <Detection_Methods>
+           <Detection_Method Detection_Method_ID="DM-14">
+             <Method>Automated Static Analysis</Method>
+             <Description>Automated static analysis, commonly referred to as Static Application Security Testing (SAST), can find some instances of this weakness by analyzing source code (or binary/compiled code) without having to execute it. Typically, this is done by building a model of data flow and control flow, then searching for potentially-vulnerable patterns that connect "sources" (origins of input) with "sinks" (destinations where the data interacts with external components, a lower layer such as the OS, etc.)</Description>
+             <Effectiveness>High</Effectiveness>
+           </Detection_Method>
+	   <Detection_Method Detection_Method_ID="DM-15">
+	     <Method>Automated Dynamic Analysis</Method>
+	     <Description>Use tools that are integrated during
+	     compilation to insert runtime error-checking mechanisms
+	     related to memory safety errors, such as AddressSanitizer
+	     (ASan) for C/C++ [REF-1518].</Description>
+	     <Effectiveness>Moderate</Effectiveness>
+	     <Effectiveness_Notes>Crafted inputs are necessary to
+	     reach the code containing the error, such as generated
+	     by fuzzers.  Also, these tools may reduce performance,
+	     and they only report the error condition - not the
+	     original mistake that led to the
+	     error.</Effectiveness_Notes>
+	   </Detection_Method>
+         </Detection_Methods>
+         <Observed_Examples>
+            <Observed_Example>
+               <Reference>CVE-2010-2160</Reference>
+               <Description>Invalid offset in undocumented opcode leads to memory corruption.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2010-2160</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2010-1281</Reference>
+               <Description>Multimedia player uses untrusted value from a file when using file-pointer calculations.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2010-1281</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2009-3129</Reference>
+               <Description>Spreadsheet program processes a record with an invalid size field, which is later used as an offset.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2009-3129</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2009-2694</Reference>
+               <Description>Instant messaging library does not validate an offset value specified in a packet.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2009-2694</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2009-2687</Reference>
+               <Description>Language interpreter does not properly handle invalid offsets in JPEG image, leading to out-of-bounds memory access and crash.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2009-2687</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2009-0690</Reference>
+               <Description>negative offset leads to out-of-bounds read</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2009-0690</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2008-4114</Reference>
+               <Description>untrusted offset in kernel</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2008-4114</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2010-2873</Reference>
+               <Description>"blind trust" of an offset value while writing heap memory allows corruption of function pointer,leading to code execution</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2010-2873</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2010-2866</Reference>
+               <Description>negative value (signed) causes pointer miscalculation</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2010-2866</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2010-2872</Reference>
+               <Description>signed values cause incorrect pointer calculation</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2010-2872</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2007-5657</Reference>
+               <Description>values used as pointer offsets</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2007-5657</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2010-2867</Reference>
+               <Description>a return value from a function is sign-extended if the value is signed, then used as an offset for pointer arithmetic</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2010-2867</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2009-1097</Reference>
+               <Description>portions of a GIF image used as offsets, causing corruption of an object pointer.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2009-1097</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2008-1807</Reference>
+               <Description>invalid numeric field leads to a free of arbitrary memory locations, then code execution.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2008-1807</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2007-2500</Reference>
+               <Description>large number of elements leads to a free of an arbitrary address</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2007-2500</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2008-1686</Reference>
+               <Description>array index issue (CWE-129) with negative offset, used to dereference a function pointer</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2008-1686</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2010-2878</Reference>
+               <Description>"buffer seek" value - basically an offset?</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2010-2878</Link>
+            </Observed_Example>
+         </Observed_Examples>
+         <Functional_Areas>
+            <Functional_Area>Memory Management</Functional_Area>
+         </Functional_Areas>
+         <Affected_Resources>
+            <Affected_Resource>Memory</Affected_Resource>
+         </Affected_Resources>
+         <Related_Attack_Patterns>
+            <Related_Attack_Pattern CAPEC_ID="129" />
+         </Related_Attack_Patterns>
+         <References>
+            <Reference External_Reference_ID="REF-62" Section="Chapter 6, &quot;Pointer Arithmetic&quot;, Page 277" />
+	    <Reference External_Reference_ID="REF-1518" />
+         </References>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Base level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+         <Notes>
+            <Note Type="Maintenance">There are close relationships between incorrect pointer dereferences and other weaknesses related to buffer operations. There may not be sufficient community agreement regarding these relationships. Further study is needed to determine when these relationships are chains, composites, perspective/layering, or other types of relationships. As of September 2010, most of the relationships are being captured as chains.</Note>
+            <Note Type="Terminology">Many weaknesses related to pointer dereferences fall under the general term of "memory corruption" or "memory safety." As of September 2010, there is no commonly-used terminology that covers the lower-level variants.</Note>
+         </Notes>
+         <Content_History>
+            <Submission>
+               <Submission_Name>CWE Content Team</Submission_Name>
+               <Submission_Organization>MITRE</Submission_Organization>
+               <Submission_Date>2010-09-22</Submission_Date>
+               <Submission_Version>1.10</Submission_Version>
+               <Submission_ReleaseDate>2010-09-27</Submission_ReleaseDate>
+            </Submission>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-06-01</Modification_Date>
+               <Modification_Version>1.13</Modification_Version>
+               <Modification_ReleaseDate>2011-06-01</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2012-05-11</Modification_Date>
+               <Modification_Version>2.2</Modification_Version>
+               <Modification_ReleaseDate>2012-05-15</Modification_ReleaseDate>
+               <Modification_Comment>updated References</Modification_Comment>
+            </Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2019-06-20</Modification_Date>
+					<Modification_Version>3.3</Modification_Version>
+					<Modification_ReleaseDate>2019-06-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Related_Attack_Patterns</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-02-24</Modification_Date>
+					<Modification_Version>4.0</Modification_Version>
+					<Modification_ReleaseDate>2020-02-24</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-08-20</Modification_Date>
+					<Modification_Version>4.2</Modification_Version>
+					<Modification_ReleaseDate>2020-08-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-12-10</Modification_Date>
+					<Modification_Version>4.3</Modification_Version>
+					<Modification_ReleaseDate>2020-12-10</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-04-28</Modification_Date>
+					<Modification_Version>4.7</Modification_Version>
+					<Modification_ReleaseDate>2022-04-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Research_Gaps</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-01-31</Modification_Date>
+					<Modification_Version>4.10</Modification_Version>
+					<Modification_ReleaseDate>2023-01-31</Modification_ReleaseDate>
+					<Modification_Comment>updated Description</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Detection_Factors, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-09-09</Modification_Date>
+					<Modification_Version>4.18</Modification_Version>
+					<Modification_ReleaseDate>2025-09-09</Modification_ReleaseDate>
+					<Modification_Comment>updated Affected_Resources, Functional_Areas</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Applicable_Platforms, Detection_Factors, References, Time_of_Introduction, Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+         </Content_History>
+      </Weakness>
+      

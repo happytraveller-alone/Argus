@@ -1,0 +1,428 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="561" Name="Dead Code" Abstraction="Base" Structure="Simple" Status="Draft">
+         <Description>The product contains dead code, which can never be executed.</Description>
+         <Extended_Description>Dead code is code that can never be executed in a running program. The surrounding code makes it impossible for a section of code to ever be executed.</Extended_Description>
+         <Related_Weaknesses>
+            <Related_Weakness Nature="ChildOf" CWE_ID="1164" View_ID="1000" Ordinal="Primary" />
+         </Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Indirect</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+         <Applicable_Platforms>
+            <Language Class="Not Language-Specific" Prevalence="Undetermined" />
+         </Applicable_Platforms>
+         <Modes_Of_Introduction>
+            <Introduction>
+               <Phase>Implementation</Phase>
+            </Introduction>
+         </Modes_Of_Introduction>
+         <Common_Consequences>
+            <Consequence>
+               <Scope>Other</Scope>
+               <Impact>Quality Degradation</Impact>
+               <Note>Dead code that results from code that can never be executed is an indication of problems with the source code that needs to be fixed and is an indication of poor quality.</Note>
+            </Consequence>
+            <Consequence>
+               <Scope>Other</Scope>
+               <Impact>Reduce Maintainability</Impact>
+            </Consequence>
+         </Common_Consequences>
+         <Detection_Methods>
+            <Detection_Method>
+               <Method>Architecture or Design Review</Method>
+               <Description>
+                  <xhtml:p>According to SOAR [REF-1479], the following detection techniques may be useful:</xhtml:p>
+                  <xhtml:div style="margin-left:1em;">
+                     <xhtml:div>Highly cost effective:</xhtml:div>
+                        <xhtml:ul>
+                           <xhtml:li>Inspection (IEEE 1028 standard) (can apply to requirements, design, source code, etc.)</xhtml:li>
+                           <xhtml:li>Formal Methods / Correct-By-Construction</xhtml:li>
+                        </xhtml:ul>
+                     <xhtml:div>Cost effective for partial coverage:</xhtml:div>
+                        <xhtml:ul>
+                           <xhtml:li>Attack Modeling</xhtml:li>
+                        </xhtml:ul>
+                  </xhtml:div>
+               </Description>
+               <Effectiveness>High</Effectiveness>
+            </Detection_Method>
+            <Detection_Method>
+               <Method>Automated Static Analysis - Binary or Bytecode</Method>
+               <Description>
+                  <xhtml:p>According to SOAR [REF-1479], the following detection techniques may be useful:</xhtml:p>
+                  <xhtml:div style="margin-left:1em;">
+                     <xhtml:div>Highly cost effective:</xhtml:div>
+                        <xhtml:ul>
+                           <xhtml:li>Binary / Bytecode Quality Analysis</xhtml:li>
+                           <xhtml:li>Compare binary / bytecode to application permission manifest</xhtml:li>
+                        </xhtml:ul>
+                  </xhtml:div>
+               </Description>
+               <Effectiveness>High</Effectiveness>
+            </Detection_Method>
+            <Detection_Method>
+               <Method>Dynamic Analysis with Manual Results Interpretation</Method>
+               <Description>
+                  <xhtml:p>According to SOAR [REF-1479], the following detection techniques may be useful:</xhtml:p>
+                  <xhtml:div style="margin-left:1em;">
+                     <xhtml:div>Cost effective for partial coverage:</xhtml:div>
+                        <xhtml:ul>
+                           <xhtml:li>Automated Monitored Execution</xhtml:li>
+                        </xhtml:ul>
+                  </xhtml:div>
+               </Description>
+               <Effectiveness>SOAR Partial</Effectiveness>
+            </Detection_Method>
+            <Detection_Method>
+               <Method>Automated Static Analysis</Method>
+               <Description>
+                  <xhtml:p>According to SOAR [REF-1479], the following detection techniques may be useful:</xhtml:p>
+                  <xhtml:div style="margin-left:1em;">
+                     <xhtml:div>Cost effective for partial coverage:</xhtml:div>
+                        <xhtml:ul>
+                           <xhtml:li>Permission Manifest Analysis</xhtml:li>
+                        </xhtml:ul>
+                  </xhtml:div>
+               </Description>
+               <Effectiveness>SOAR Partial</Effectiveness>
+            </Detection_Method>
+            <Detection_Method>
+               <Method>Automated Static Analysis - Source Code</Method>
+               <Description>
+                  <xhtml:p>According to SOAR [REF-1479], the following detection techniques may be useful:</xhtml:p>
+                  <xhtml:div style="margin-left:1em;">
+                     <xhtml:div>Highly cost effective:</xhtml:div>
+                        <xhtml:ul>
+                           <xhtml:li>Source Code Quality Analyzer</xhtml:li>
+                        </xhtml:ul>
+                     <xhtml:div>Cost effective for partial coverage:</xhtml:div>
+                        <xhtml:ul>
+                           <xhtml:li>Warning Flags</xhtml:li>
+                           <xhtml:li>Source code Weakness Analyzer</xhtml:li>
+                           <xhtml:li>Context-configured Source Code Weakness Analyzer</xhtml:li>
+                        </xhtml:ul>
+                  </xhtml:div>
+               </Description>
+               <Effectiveness>High</Effectiveness>
+            </Detection_Method>
+            <Detection_Method>
+               <Method>Dynamic Analysis with Automated Results Interpretation</Method>
+               <Description>
+                  <xhtml:p>According to SOAR [REF-1479], the following detection techniques may be useful:</xhtml:p>
+                  <xhtml:div style="margin-left:1em;">
+                     <xhtml:div>Cost effective for partial coverage:</xhtml:div>
+                        <xhtml:ul>
+                           <xhtml:li>Web Application Scanner</xhtml:li>
+                           <xhtml:li>Web Services Scanner</xhtml:li>
+                           <xhtml:li>Database Scanners</xhtml:li>
+                        </xhtml:ul>
+                  </xhtml:div>
+               </Description>
+               <Effectiveness>SOAR Partial</Effectiveness>
+            </Detection_Method>
+            <Detection_Method>
+               <Method>Manual Static Analysis - Source Code</Method>
+               <Description>
+                  <xhtml:p>According to SOAR [REF-1479], the following detection techniques may be useful:</xhtml:p>
+                  <xhtml:div style="margin-left:1em;">
+                     <xhtml:div>Highly cost effective:</xhtml:div>
+                        <xhtml:ul>
+                           <xhtml:li>Manual Source Code Review (not inspections)</xhtml:li>
+                        </xhtml:ul>
+                     <xhtml:div>Cost effective for partial coverage:</xhtml:div>
+                        <xhtml:ul>
+                           <xhtml:li>Focused Manual Spotcheck - Focused manual analysis of source</xhtml:li>
+                        </xhtml:ul>
+                  </xhtml:div>
+               </Description>
+               <Effectiveness>High</Effectiveness>
+            </Detection_Method>
+         </Detection_Methods>
+         <Potential_Mitigations>
+            <Mitigation>
+               <Phase>Implementation</Phase>
+               <Description>Remove dead code before deploying the application.</Description>
+            </Mitigation>
+         </Potential_Mitigations>
+         <Demonstrative_Examples>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-217">
+               <Intro_Text>The condition for the second if statement is impossible to satisfy. It requires that the variables be non-null. However, on the only path where s can be assigned a non-null value, there is a return statement.</Intro_Text>
+               <Example_Code Nature="Bad" Language="C++">
+                  <xhtml:div>String s = null;<xhtml:br />if (b) {<xhtml:div style="margin-left:1em;">s = "Yes";<xhtml:br />return;</xhtml:div>}<xhtml:br />
+                     <xhtml:br />if (s != null) {<xhtml:div style="margin-left:1em;">Dead();</xhtml:div>}</xhtml:div>
+               </Example_Code>
+            </Demonstrative_Example>
+            <Demonstrative_Example>
+               <Intro_Text>In the following class, two private methods call each other, but since neither one is ever invoked from anywhere else, they are both dead code.</Intro_Text>
+               <Example_Code Nature="Bad" Language="Java">
+                  <xhtml:div>public class DoubleDead {<xhtml:div style="margin-left:1em;">private void doTweedledee() {<xhtml:div style="margin-left:1em;">doTweedledumb();</xhtml:div>}<xhtml:br />private void doTweedledumb() {<xhtml:div style="margin-left:1em;">doTweedledee();</xhtml:div>}<xhtml:br />public static void main(String[] args) {<xhtml:div style="margin-left:1em;">System.out.println("running DoubleDead");</xhtml:div>}</xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>(In this case it is a good thing that the methods are dead: invoking either one would cause an infinite loop.)</Body_Text>
+            </Demonstrative_Example>
+            <Demonstrative_Example>
+               <Intro_Text>The field named glue is not used in the following class. The author of the class has accidentally put quotes around the field name, transforming it into a string constant.</Intro_Text>
+               <Example_Code Nature="Bad" Language="Java">
+                  <xhtml:div>public class Dead {<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>String glue;<xhtml:br />
+                           <xhtml:br />public String getGlue() {<xhtml:div style="margin-left:1em;">return "glue";</xhtml:div>}</xhtml:div>
+                     </xhtml:div>}</xhtml:div>
+               </Example_Code>
+            </Demonstrative_Example>
+         </Demonstrative_Examples>
+         <Observed_Examples>
+            <Observed_Example>
+               <Reference>CVE-2014-1266</Reference>
+               <Description>Chain: incorrect "goto" in Apple SSL product bypasses certificate validation, allowing Adversary-in-the-Middle (AITM) attack (Apple "goto fail" bug). CWE-705 (Incorrect Control Flow Scoping) -&gt; CWE-561 (Dead Code) -&gt; CWE-295 (Improper Certificate Validation) -&gt; CWE-393 (Return of Wrong Status Code) -&gt; CWE-300 (Channel Accessible by Non-Endpoint). The code's whitespace indentation did not reflect the actual control flow (CWE-1114) and did not explicitly delimit the block (CWE-483), which could have made it more difficult for human code auditors to detect the vulnerability.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2014-1266</Link>
+            </Observed_Example>
+         </Observed_Examples>
+         <Taxonomy_Mappings>
+            <Taxonomy_Mapping Taxonomy_Name="CERT C Secure Coding">
+               <Entry_ID>MSC07-C</Entry_ID>
+               <Entry_Name>Detect and remove dead code</Entry_Name>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="SEI CERT Perl Coding Standard">
+               <Entry_ID>MSC00-PL</Entry_ID>
+               <Entry_Name>Detect and remove dead code</Entry_Name>
+               <Mapping_Fit>Exact</Mapping_Fit>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="Software Fault Patterns">
+               <Entry_ID>SFP2</Entry_ID>
+               <Entry_Name>Unused Entities</Entry_Name>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="OMG ASCMM">
+               <Entry_ID>ASCMM-MNT-20</Entry_ID>
+            </Taxonomy_Mapping>
+         </Taxonomy_Mappings>
+         <References>
+            <Reference External_Reference_ID="REF-960" Section="ASCMM-MNT-20" />
+            <Reference External_Reference_ID="REF-1479" />
+         </References>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Base level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+         <Content_History>
+            <Submission>
+               <Submission_Name>Anonymous Tool Vendor (under NDA)</Submission_Name>
+               <Submission_Date>2006-07-19</Submission_Date>
+               <Submission_Version>Draft 3</Submission_Version>
+               <Submission_ReleaseDate>2006-07-19</Submission_ReleaseDate>
+            </Submission>
+            <Modification>
+               <Modification_Name>Eric Dalci</Modification_Name>
+               <Modification_Organization>Cigital</Modification_Organization>
+               <Modification_Date>2008-07-01</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>updated Potential_Mitigations, Time_of_Introduction</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2008-09-08</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>updated Description, Relationships, Other_Notes, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2008-11-24</Modification_Date>
+               <Modification_Version>1.1</Modification_Version>
+               <Modification_ReleaseDate>2008-11-25</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2009-05-27</Modification_Date>
+               <Modification_Version>1.4</Modification_Version>
+               <Modification_ReleaseDate>2009-05-27</Modification_ReleaseDate>
+               <Modification_Comment>updated Demonstrative_Examples</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2009-07-27</Modification_Date>
+               <Modification_Version>1.5</Modification_Version>
+               <Modification_ReleaseDate>2009-07-27</Modification_ReleaseDate>
+               <Modification_Comment>updated Demonstrative_Examples</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2009-10-29</Modification_Date>
+               <Modification_Version>1.6</Modification_Version>
+               <Modification_ReleaseDate>2009-10-29</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences, Other_Notes</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-06-01</Modification_Date>
+               <Modification_Version>1.13</Modification_Version>
+               <Modification_ReleaseDate>2011-06-01</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-09-13</Modification_Date>
+               <Modification_Version>2.1</Modification_Version>
+               <Modification_ReleaseDate>2011-09-13</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2012-05-11</Modification_Date>
+               <Modification_Version>2.2</Modification_Version>
+               <Modification_ReleaseDate>2012-05-15</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences, Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2012-10-30</Modification_Date>
+               <Modification_Version>2.3</Modification_Version>
+               <Modification_ReleaseDate>2012-10-30</Modification_ReleaseDate>
+               <Modification_Comment>updated Potential_Mitigations</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2014-06-23</Modification_Date>
+               <Modification_Version>2.7</Modification_Version>
+               <Modification_ReleaseDate>2014-06-23</Modification_ReleaseDate>
+               <Modification_Comment>updated Observed_Examples</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2014-07-30</Modification_Date>
+               <Modification_Version>2.8</Modification_Version>
+               <Modification_ReleaseDate>2014-07-31</Modification_ReleaseDate>
+               <Modification_Comment>updated Detection_Factors, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2017-11-08</Modification_Date>
+               <Modification_Version>3.0</Modification_Version>
+               <Modification_ReleaseDate>2017-11-08</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2019-01-03</Modification_Date>
+					<Modification_Version>3.2</Modification_Version>
+					<Modification_ReleaseDate>2019-01-03</Modification_ReleaseDate>
+					<Modification_Comment>updated Common_Consequences, References, Relationships, Taxonomy_Mappings, Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2019-06-20</Modification_Date>
+					<Modification_Version>3.3</Modification_Version>
+					<Modification_ReleaseDate>2019-06-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Type</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-02-24</Modification_Date>
+					<Modification_Version>4.0</Modification_Version>
+					<Modification_ReleaseDate>2020-02-24</Modification_ReleaseDate>
+					<Modification_Comment>updated Applicable_Platforms, Observed_Examples, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-08-20</Modification_Date>
+					<Modification_Version>4.2</Modification_Version>
+					<Modification_ReleaseDate>2020-08-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-03-15</Modification_Date>
+					<Modification_Version>4.4</Modification_Version>
+					<Modification_ReleaseDate>2021-03-15</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-07-20</Modification_Date>
+					<Modification_Version>4.5</Modification_Version>
+					<Modification_ReleaseDate>2021-07-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Observed_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-01-31</Modification_Date>
+					<Modification_Version>4.10</Modification_Version>
+					<Modification_ReleaseDate>2023-01-31</Modification_ReleaseDate>
+					<Modification_Comment>updated Description</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated References, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2024-02-29</Modification_Date>
+					<Modification_Version>4.14</Modification_Version>
+					<Modification_ReleaseDate>2024-02-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-09-09</Modification_Date>
+					<Modification_Version>4.18</Modification_Version>
+					<Modification_ReleaseDate>2025-09-09</Modification_ReleaseDate>
+					<Modification_Comment>updated Detection_Factors, References</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Observed_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2026-04-30</Modification_Date>
+					<Modification_Version>4.20</Modification_Version>
+					<Modification_ReleaseDate>2026-04-30</Modification_ReleaseDate>
+					<Modification_Comment>updated Potential_Mitigations</Modification_Comment>
+				</Modification>
+         </Content_History>
+      </Weakness>
+      

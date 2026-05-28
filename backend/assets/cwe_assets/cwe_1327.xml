@@ -1,0 +1,171 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="1327" Name="Binding to an Unrestricted IP Address" Abstraction="Base" Structure="Simple" Status="Incomplete">
+			<Description>The product assigns the address 0.0.0.0 for a database server, a cloud service/instance, or any computing resource that communicates remotely.</Description>
+			<Extended_Description>
+				<xhtml:p>When a server binds to the address 0.0.0.0, it allows connections from every IP address on the local machine, effectively exposing the server to every possible network. This might be much broader access than intended by the developer or administrator, who might only be expecting the server to be reachable from a single interface/network.</xhtml:p>
+			</Extended_Description>
+			<Related_Weaknesses>
+			  <Related_Weakness Nature="ChildOf" CWE_ID="668" View_ID="1000" Ordinal="Primary" />
+			</Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+			<Applicable_Platforms>
+				<Language Name="Other" Prevalence="Undetermined" />
+				<Operating_System Class="Not OS-Specific" Prevalence="Undetermined" />
+				<Architecture Class="Not Architecture-Specific" Prevalence="Undetermined" />
+				<Technology Name="Web Server" Prevalence="Undetermined" />
+				<Technology Class="Client Server" Prevalence="Undetermined" />
+				<Technology Class="Cloud Computing" Prevalence="Undetermined" />
+				</Applicable_Platforms>
+			<Modes_Of_Introduction>
+				<Introduction>
+					<Phase>System Configuration</Phase>
+				</Introduction>
+			</Modes_Of_Introduction>
+			<Common_Consequences>
+				<Consequence>
+					<Scope>Availability</Scope>
+					<Impact>DoS: Amplification</Impact>
+					<Likelihood>High</Likelihood>
+				</Consequence>
+			</Common_Consequences>
+			<Potential_Mitigations>
+				<Mitigation>
+					<Phase>System Configuration</Phase>
+					<Description>Assign IP addresses that are not 0.0.0.0.</Description>
+					<Effectiveness>High</Effectiveness>
+				</Mitigation>
+				<Mitigation>
+					<Phase>System Configuration</Phase>
+					<Strategy>Firewall</Strategy>
+					<Description>Unwanted connections to the configured server may be denied through a firewall or other packet filtering measures.</Description>
+					<Effectiveness>High</Effectiveness>
+				</Mitigation>
+			</Potential_Mitigations>
+			<Demonstrative_Examples>
+				<Demonstrative_Example>
+					<Intro_Text>The following code snippet uses 0.0.0.0 in a Puppet script.</Intro_Text>
+					<Example_Code Nature="Bad" Language="Other">
+					signingserver::instance {<xhtml:br />
+					<xhtml:div style="margin-left:1em;">
+					  "nightly-key-signing-server":
+					  <xhtml:div style="margin-left:1em;">
+					  listenaddr     =&gt; "0.0.0.0",<xhtml:br />
+					  port           =&gt; "9100",<xhtml:br />
+					  code_tag       =&gt; "SIGNING_SERVER",<xhtml:br />
+					  </xhtml:div>
+					  }<xhtml:br />
+					</xhtml:div>
+					</Example_Code>
+					<Body_Text>The Puppet code snippet is used to provision a signing server that will use 0.0.0.0 to accept traffic. However, as 0.0.0.0 is unrestricted, malicious users may use this IP address to launch frequent requests and cause denial of service attacks.</Body_Text>
+					<Example_Code Nature="Good" Language="Other">
+					signingserver::instance {<xhtml:br />
+					<xhtml:div style="margin-left:1em;">
+					  "nightly-key-signing-server":
+					  <xhtml:div style="margin-left:1em;">
+					  listenaddr     =&gt; "127.0.0.1",<xhtml:br />
+					  port           =&gt; "9100",<xhtml:br />
+					  code_tag       =&gt; "SIGNING_SERVER",<xhtml:br />
+					  </xhtml:div>
+					  }<xhtml:br />
+					</xhtml:div>
+					</Example_Code>
+				</Demonstrative_Example>
+			</Demonstrative_Examples>
+			<Observed_Examples>
+			  <Observed_Example>
+				<Reference>CVE-2023-41742</Reference>
+				<Description>cybersecurity product binds to an unrestricted IP address</Description>
+				<Link>https://www.cve.org/CVERecord?id=CVE-2023-41742</Link>
+			  </Observed_Example>
+			  <Observed_Example>
+				<Reference>CVE-2022-21947</Reference>
+				<Description>Desktop manager for Kubernetes and container management binds a service to 0.0.0.0, allowing users on the network to make requests to a dashboard API.</Description>
+				<Link>https://www.cve.org/CVERecord?id=CVE-2022-21947</Link>
+			  </Observed_Example>
+			</Observed_Examples>
+         <Related_Attack_Patterns>
+            <Related_Attack_Pattern CAPEC_ID="1" />
+         </Related_Attack_Patterns>
+         <References>
+				<Reference External_Reference_ID="REF-1158" />
+				<Reference External_Reference_ID="REF-1159" />
+			</References>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Base level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+			<Content_History>
+				<Submission>
+					<Submission_Name>Akond Rahman</Submission_Name>
+					<Submission_Organization>Tennessee Technological University</Submission_Organization>
+					<Submission_Date>2020-09-08</Submission_Date>
+					<Submission_Version>4.3</Submission_Version>
+					<Submission_ReleaseDate>2020-12-10</Submission_ReleaseDate>
+				</Submission>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-03-15</Modification_Date>
+					<Modification_Version>4.4</Modification_Version>
+					<Modification_ReleaseDate>2021-03-15</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-10-26</Modification_Date>
+					<Modification_Version>4.13</Modification_Version>
+					<Modification_ReleaseDate>2023-10-26</Modification_ReleaseDate>
+					<Modification_Comment>updated Observed_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-09-09</Modification_Date>
+					<Modification_Version>4.18</Modification_Version>
+					<Modification_ReleaseDate>2025-09-09</Modification_ReleaseDate>
+					<Modification_Comment>updated References</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2026-04-30</Modification_Date>
+					<Modification_Version>4.20</Modification_Version>
+					<Modification_ReleaseDate>2026-04-30</Modification_ReleaseDate>
+					<Modification_Comment>updated Observed_Examples</Modification_Comment>
+				</Modification>
+			</Content_History>
+		</Weakness>
+      

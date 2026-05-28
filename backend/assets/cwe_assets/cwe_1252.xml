@@ -1,0 +1,133 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="1252" Name="CPU Hardware Not Configured to Support Exclusivity of Write and Execute Operations" Abstraction="Base" Structure="Simple" Status="Incomplete">
+            <Description>The CPU is not configured to provide hardware support for exclusivity of write and execute operations on memory. This allows an attacker to execute data from all of memory.</Description>
+            <Extended_Description>
+                <xhtml:p>CPUs provide a special bit that supports exclusivity of write and execute operations. This bit is used to segregate areas of memory to either mark them as code (instructions, which can be executed) or data (which should not be executed). In this way, if a user can write to a region of memory, the user cannot execute from that region and vice versa. This exclusivity provided by special hardware bit is leveraged by the operating system to protect executable space. While this bit is available in most modern processors by default, in some CPUs the exclusivity is implemented via a memory-protection unit (MPU) and memory-management unit (MMU) in which memory regions can be carved out with exact read, write, and execute permissions. However, if the CPU does not have an MMU/MPU, then there is no write exclusivity. </xhtml:p>
+            </Extended_Description>
+			<Related_Weaknesses>
+              <Related_Weakness Nature="ChildOf" CWE_ID="284" View_ID="1000" Ordinal="Primary" />
+			</Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+            <Applicable_Platforms>
+                <Language Class="Not Language-Specific" Prevalence="Undetermined" />
+                <Operating_System Class="Not OS-Specific" Prevalence="Undetermined" />
+                <Architecture Class="Not Architecture-Specific" Prevalence="Undetermined" />
+                <Technology Name="Microcontroller Hardware" Prevalence="Undetermined" />
+                <Technology Name="Processor Hardware" Prevalence="Undetermined" />
+            </Applicable_Platforms>
+            <Modes_Of_Introduction>
+                <Introduction>
+					<Phase>Architecture and Design</Phase>
+                </Introduction>
+            </Modes_Of_Introduction>
+            <Common_Consequences>
+                <Consequence>
+                    <Scope>Confidentiality</Scope>
+                    <Scope>Integrity</Scope>
+                    <Impact>Execute Unauthorized Code or Commands</Impact>
+		    <Note>Without configuring exclusivity of operations via segregated areas of memory, an attacker may be able to inject malicious code onto memory and later execute it.</Note>
+                </Consequence>
+            </Common_Consequences>
+            <Potential_Mitigations>
+                <Mitigation>
+                    <Phase>Architecture and Design</Phase>
+                    <Description>
+                        <xhtml:p>Implement a dedicated bit that can be leveraged by the Operating System to mark data areas as non-executable. If such a bit is not available in the CPU, implement MMU/MPU (memory management unit / memory protection unit).</xhtml:p>
+                    </Description>
+                </Mitigation>
+                <Mitigation>
+                    <Phase>Integration</Phase>
+                    <Description>
+                        <xhtml:p>If MMU/MPU are not available, then the firewalls need to be implemented in the SoC interconnect to mimic the write-exclusivity operation.</xhtml:p>
+                    </Description>
+                </Mitigation>
+            </Potential_Mitigations>
+            <Demonstrative_Examples>
+                <Demonstrative_Example>
+                    <Intro_Text>MCS51 Microcontroller (based on 8051) does not have a special bit to support write exclusivity. It also does not have an MMU/MPU support. The Cortex-M CPU has an optional MPU that supports up to 8 regions.</Intro_Text>
+                    <Example_Code Nature="Bad" Language="Other">
+                        <xhtml:div>The optional MPU is not configured.</xhtml:div>
+                    </Example_Code>
+                    <Body_Text>If the MPU is not configured, then an attacker will be able to inject malicious data into memory and execute it.</Body_Text>
+            	</Demonstrative_Example>
+            </Demonstrative_Examples>
+         <Related_Attack_Patterns>
+            <Related_Attack_Pattern CAPEC_ID="679" />
+         </Related_Attack_Patterns>
+         <References>
+                <Reference External_Reference_ID="REF-1076" />
+                <Reference External_Reference_ID="REF-1077" />
+                <Reference External_Reference_ID="REF-1078" />
+            </References>
+
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Base level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+            <Content_History>
+                <Submission>
+                    <Submission_Name>Arun Kanuparthi, Hareesh Khattri, Parbati Kumar Manna, Narasimha Kumar V Mangipudi</Submission_Name>
+                    <Submission_Organization>Intel Corporation</Submission_Organization>
+                    <Submission_Date>2020-02-13</Submission_Date>
+                    <Submission_Version>4.0</Submission_Version>
+                    <Submission_ReleaseDate>2020-02-24</Submission_ReleaseDate>
+                </Submission>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-08-20</Modification_Date>
+					<Modification_Version>4.2</Modification_Version>
+					<Modification_ReleaseDate>2020-08-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Related_Attack_Patterns</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-04-28</Modification_Date>
+					<Modification_Version>4.7</Modification_Version>
+					<Modification_ReleaseDate>2022-04-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Applicable_Platforms, Related_Attack_Patterns</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-06-28</Modification_Date>
+					<Modification_Version>4.8</Modification_Version>
+					<Modification_ReleaseDate>2022-06-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Applicable_Platforms</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated References, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Common_Consequences, Description, Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+            </Content_History>
+        </Weakness>
+      

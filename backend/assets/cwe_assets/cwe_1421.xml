@@ -1,0 +1,544 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="1421" Name="Exposure of Sensitive Information in Shared Microarchitectural Structures during Transient Execution" Abstraction="Base" Structure="Simple" Status="Incomplete">
+		  <Description>
+			A processor event may allow transient operations to access
+			architecturally restricted data (for example, in another address
+			space) in a shared microarchitectural structure (for example, a CPU
+			cache), potentially exposing the data over a covert channel.
+		  </Description>
+		  <Extended_Description>
+			<xhtml:p>Many commodity processors have Instruction Set Architecture (ISA)
+			features that protect software components from one another. These
+			features can include memory segmentation, virtual memory, privilege
+			rings, trusted execution environments, and virtual machines, among
+			others. For example, virtual memory provides each process with its own
+			address space, which prevents processes from accessing each other's
+			private data. Many of these features can be used to form
+			hardware-enforced security boundaries between software components.</xhtml:p>
+			<xhtml:p>Many commodity processors also share microarchitectural resources that
+			cache (temporarily store) data, which may be confidential. These
+			resources may be shared across processor contexts, including across
+			SMT threads, privilege rings, or others.</xhtml:p>
+			<xhtml:p>When transient operations allow access to ISA-protected data in a
+			shared microarchitectural resource, this might violate users'
+			expectations of the ISA feature that is bypassed. For example, if
+			transient operations can access a victim's private data in a shared
+			microarchitectural resource, then the operations' microarchitectural
+			side effects may correspond to the accessed data. If an attacker can
+			trigger these transient operations and observe their side effects
+			through a covert channel [REF-1400], then the attacker may be able to infer the
+			victim's private data. Private data could include sensitive program
+			data, OS/VMM data, page table data (such as memory addresses), system
+			configuration data (see Demonstrative Example 3), or any other data
+			that the attacker does not have the required privileges to access.</xhtml:p>
+		  </Extended_Description>
+			<Related_Weaknesses>
+				<Related_Weakness Nature="ChildOf" CWE_ID="1420" View_ID="1000" Ordinal="Primary" />
+				<Related_Weakness Nature="ChildOf" CWE_ID="1420" View_ID="1194" Ordinal="Primary" />
+			</Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+			<Applicable_Platforms>
+			  <Language Class="Not Language-Specific" Prevalence="Undetermined" />
+			  <Operating_System Class="Not OS-Specific" Prevalence="Undetermined" />
+			  <Architecture Class="Not Architecture-Specific" Prevalence="Undetermined" />
+			  <Technology Class="Not Technology-Specific" Prevalence="Undetermined" />
+			</Applicable_Platforms>
+			<Modes_Of_Introduction>
+			  <Introduction>
+				<Phase>Architecture and Design</Phase>
+				<Note><xhtml:p>This weakness can be introduced during hardware architecture and
+				design if a data path allows architecturally restricted data to
+				propagate to operations that execute before an older mis-prediction or
+				processor event (such as an exception) is caught.</xhtml:p>
+				</Note>
+			  </Introduction>
+			  <Introduction>
+				<Phase>Implementation</Phase>
+				<Note><xhtml:p>This weakness can be introduced during system software
+				implementation if state-sanitizing operations are not invoked when
+				switching from one context to another, according to the hardware
+				vendor's recommendations for mitigating the weakness.</xhtml:p>
+				</Note>
+			  </Introduction>
+			  <Introduction>
+				<Phase>System Configuration</Phase>
+				<Note><xhtml:p>This weakness can be introduced if the system has not been
+				configured according to the hardware vendor's recommendations for
+				mitigating the weakness.</xhtml:p>
+				</Note>
+			  </Introduction>
+			  <Introduction>
+				<Phase>Architecture and Design</Phase>
+				<Note><xhtml:p>This weakness can be introduced when an access control check
+				(for example, checking page permissions) can proceed in parallel with
+				the access operation (for example, a load) that is being checked. If
+				the processor can allow the access operation to execute before the
+				check completes, this race condition may allow subsequent transient
+				operations to expose sensitive information.</xhtml:p>
+				</Note>
+			  </Introduction>
+			</Modes_Of_Introduction>
+			<Common_Consequences>
+				<Consequence>
+					<Scope>Confidentiality</Scope>
+					<Impact>Read Memory</Impact>
+					<Likelihood>Medium</Likelihood>
+					<Note><xhtml:p>&lt;&lt;put the information here&gt;&gt;</xhtml:p></Note>
+				</Consequence>
+			</Common_Consequences>
+			<Detection_Methods>
+              <Detection_Method>
+				<Method>Manual Analysis</Method>
+				<Description><xhtml:p>This weakness can be detected in hardware by
+				manually inspecting processor specifications. Features that exhibit
+				this weakness may include microarchitectural predictors, access
+				control checks that occur out-of-order, or any other features that can
+				allow operations to execute without committing to architectural
+				state. Academic researchers have demonstrated that new hardware
+				weaknesses can be discovered by examining publicly available patent
+				filings, for example [REF-1405] and [REF-1406]. Hardware designers can also scrutinize aspects of the instruction set
+				architecture that have undefined behavior; these can become a focal point when applying other
+				detection methods.
+				</xhtml:p>
+				</Description>
+				<Effectiveness>Moderate</Effectiveness>
+				<Effectiveness_Notes>Manual analysis may not reveal all
+				weaknesses in a processor specification
+				and should be combined with other detection methods
+				to improve coverage.</Effectiveness_Notes>
+              </Detection_Method>
+              <Detection_Method>
+				<Method>Automated Analysis</Method>
+				<Description><xhtml:p>This weakness can be detected (pre-discovery) in hardware by
+				employing static or dynamic taint analysis methods [REF-1401]. These
+				methods can label data in one context (for example, kernel data) and
+				perform information flow analysis (or a simulation, etc.) to determine
+				whether tainted data can appear in another context (for example, user
+				mode). Alternatively, stale or invalid data in shared
+				microarchitectural resources can be marked as tainted, and the taint
+				analysis framework can identify when transient operations encounter
+				tainted data.</xhtml:p>
+				</Description>
+				<Effectiveness>Moderate</Effectiveness>
+				<Effectiveness_Notes>Automated static or dynamic taint
+				analysis may not reveal all weaknesses in a processor
+				specification and should be combined with other detection
+				methods to improve coverage.</Effectiveness_Notes>
+              </Detection_Method>
+              <Detection_Method>
+				<Method>Automated Analysis</Method>
+				<Description><xhtml:p>Software vendors can release tools that detect
+				presence of known weaknesses (post-discovery) on a processor. For example, some of
+				these tools can attempt to transiently execute a vulnerable code
+				sequence and detect whether code successfully leaks data in a manner
+				consistent with the weakness under test. Alternatively, some hardware
+				vendors provide enumeration for the presence of a weakness (or lack of
+				a weakness). These enumeration bits can be checked and reported by
+				system software. For example, Linux supports these checks for many
+				commodity processors:</xhtml:p>
+
+				<xhtml:p>$ cat /proc/cpuinfo | grep bugs | head -n 1</xhtml:p>
+
+				<xhtml:p>bugs : cpu_meltdown spectre_v1 spectre_v2 spec_store_bypass l1tf mds swapgs taa itlb_multihit srbds mmio_stale_data retbleed</xhtml:p>
+
+				</Description>
+				<Effectiveness>High</Effectiveness>
+				<Effectiveness_Notes>This method can be useful for detecting
+				whether a processor if affected by known weaknesses, but it
+				may not be useful for detecting unknown weaknesses.
+				</Effectiveness_Notes>
+              </Detection_Method>
+			  <Detection_Method>
+				<Method>Fuzzing</Method>
+				<Description>Academic researchers have demonstrated that this
+				weakness can be detected in hardware using software fuzzing
+				tools that treat the underlying hardware as a black box
+				([REF-1406], [REF-1430])
+				</Description>
+				<Effectiveness>Opportunistic</Effectiveness>
+				<Effectiveness_Notes>Fuzzing may not reveal all weaknesses
+				in a processor specification and should be combined with
+				other detection methods to improve coverage.
+				</Effectiveness_Notes>
+			  </Detection_Method>
+			</Detection_Methods>
+			<Potential_Mitigations>
+			  <Mitigation>
+				<Phase>Architecture and Design</Phase>
+				<Description><xhtml:p>Hardware designers may choose to engineer the processor's
+				pipeline to prevent architecturally restricted data from being used by
+				operations that can execute transiently.</xhtml:p>
+				</Description>
+				<Effectiveness>High</Effectiveness>
+			  </Mitigation>
+			  <Mitigation>
+				<Phase>Architecture and Design</Phase>
+				<Description><xhtml:p>Hardware designers may choose not to share
+				microarchitectural resources that can contain sensitive data, such as
+				fill buffers and store buffers.</xhtml:p>
+				</Description>
+				<Effectiveness>Moderate</Effectiveness>
+				<Effectiveness_Notes><xhtml:p>This can be highly effective at preventing this
+				weakness from being exposed across different SMT threads or different
+				processor cores. It is generally less practical to isolate these
+				resources between different contexts (for example, user and kernel)
+				that may execute on the same SMT thread or processor core.</xhtml:p>
+				</Effectiveness_Notes>
+			  </Mitigation>
+			  <Mitigation>
+				<Phase>Architecture and Design</Phase>
+				<Description><xhtml:p>Hardware designers may choose to sanitize specific
+				microarchitectural state (for example, store buffers) when the
+				processor transitions to a different context, such as whenever a
+				system call is invoked. Alternatively, the hardware may expose
+				instruction(s) that allow software to sanitize microarchitectural
+				state according to the user or system administrator's threat
+				model. These mitigation approaches are similar to those that address
+				CWE-226; however, sanitizing microarchitectural state may not be the
+				optimal or best way to mitigate this weakness on every processor
+				design.</xhtml:p>
+				</Description>
+				<Effectiveness>Moderate</Effectiveness>
+				<Effectiveness_Notes><xhtml:p>Sanitizing shared state on context transitions
+				may not be practical for all processors, especially when the amount of
+				shared state affected by the weakness is relatively
+				large. Additionally, this technique may not be practical unless there
+				is a synchronous transition between two processor contexts that would
+				allow the affected resource to be sanitized. For example, this
+				technique alone may not suffice to mitigate asynchronous access to a
+				resource that is shared by two SMT threads.</xhtml:p>
+				</Effectiveness_Notes>
+			  </Mitigation>
+			  <Mitigation>
+				<Phase>Architecture and Design</Phase>
+				<Description><xhtml:p>The hardware designer can attempt to prevent transient
+				execution from causing observable discrepancies in specific covert
+				channels.</xhtml:p>
+				</Description>
+				<Effectiveness>Limited</Effectiveness>
+					<Effectiveness_Notes><xhtml:p>This technique has many pitfalls. For example,
+							InvisiSpec was an early attempt to mitigate this weakness by blocking
+							"micro-architectural covert and side channels through the
+							multiprocessor data cache hierarchy due to speculative loads" [REF-1417].
+							Commodity processors and SoCs have many covert and side channels that
+							exist outside of the data cache hierarchy. Even when some of these
+							channels are blocked, others (such as execution ports [REF-1418]) may
+							allow an attacker to infer confidential data. Mitigation strategies
+							that attempt to prevent transient execution from causing observable
+							discrepancies also have other pitfalls, for example, see [REF-1419].</xhtml:p>
+					</Effectiveness_Notes>
+			  </Mitigation>
+			  <Mitigation>
+				<Phase>Architecture and Design</Phase>
+				<Description><xhtml:p>Software architects may design software to enforce strong
+				isolation between different contexts. For example, kernel page table
+				isolation (KPTI) mitigates the Meltdown vulnerability [REF-1401] by
+				separating user-mode page tables from kernel-mode page tables, which
+				prevents user-mode processes from using Meltdown to transiently access
+				kernel memory [REF-1404].</xhtml:p>
+				</Description>
+				<Effectiveness>Limited</Effectiveness>
+				<Effectiveness_Notes><xhtml:p>Isolating different contexts across a process
+				boundary (or another kind of architectural boundary) may only be
+				effective for some weaknesses.</xhtml:p>
+				</Effectiveness_Notes>
+			  </Mitigation>
+			  <Mitigation>
+				<Phase>Build and Compilation</Phase>
+				<Description><xhtml:p>If the weakness is exposed by a single instruction (or a
+				small set of instructions), then the compiler (or JIT, etc.) can be
+				configured to prevent the affected instruction(s) from being
+				generated, and instead generate an alternate sequence of instructions
+				that is not affected by the weakness.</xhtml:p>
+				</Description>
+				<Effectiveness>Limited</Effectiveness>
+				<Effectiveness_Notes><xhtml:p>This technique may only be fully effective if it
+				is applied to all software that runs on the system. Also, relatively
+				few observed examples of this weakness have exposed data through only
+				a single instruction.</xhtml:p>
+				</Effectiveness_Notes>
+			  </Mitigation>
+			  <Mitigation>
+				<Phase>Build and Compilation</Phase>
+				<Description><xhtml:p>Use software techniques (including the use of
+				serialization instructions) that are intended to reduce the number of
+				instructions that can be executed transiently after a processor event
+				or misprediction.</xhtml:p>
+				</Description>
+				<Effectiveness>Incidental</Effectiveness>
+				<Effectiveness_Notes><xhtml:p>Some transient execution weaknesses can be
+				exploited even if a single instruction is executed transiently after a
+				processor event or mis-prediction. This mitigation strategy has many
+				other pitfalls that prevent it from eliminating this weakness
+				entirely. For example, see [REF-1389].</xhtml:p>
+				</Effectiveness_Notes>
+			  </Mitigation>
+			  <Mitigation>
+				<Phase>Implementation</Phase>
+				<Description><xhtml:p>System software can mitigate this weakness by invoking
+				state-sanitizing operations when switching from one context to
+				another, according to the hardware vendor's recommendations.</xhtml:p>
+				</Description>
+				<Effectiveness>Limited</Effectiveness>
+				<Effectiveness_Notes><xhtml:p>This technique may not be able to mitigate
+				weaknesses that arise from resource sharing across SMT threads.</xhtml:p>
+				</Effectiveness_Notes>
+			  </Mitigation>
+			  <Mitigation>
+				<Phase>System Configuration</Phase>
+				<Description><xhtml:p>Some systems may allow the user to disable (for example,
+				in the BIOS) sharing of the affected resource.</xhtml:p>
+				</Description>
+				<Effectiveness>Limited</Effectiveness>
+				<Effectiveness_Notes><xhtml:p>Disabling resource sharing (for example, by
+				disabling SMT) may result in significant performance overhead.</xhtml:p>
+				</Effectiveness_Notes>
+			  </Mitigation>
+			  <Mitigation>
+				<Phase>System Configuration</Phase>
+				<Description><xhtml:p>Some systems may allow the user to disable (for example,
+				in the BIOS) microarchitectural features that allow transient access
+				to architecturally restricted data.</xhtml:p>
+				</Description>
+				<Effectiveness>Limited</Effectiveness>
+				<Effectiveness_Notes><xhtml:p>Disabling microarchitectural features such as
+				predictors may result in significant performance overhead.</xhtml:p>
+				</Effectiveness_Notes>
+			  </Mitigation>
+			  <Mitigation>
+				<Phase>Patching and Maintenance</Phase>
+				<Description><xhtml:p>The hardware vendor may provide a patch to sanitize the
+				affected shared microarchitectural state when the processor
+				transitions to a different context.</xhtml:p>
+				</Description>
+				<Effectiveness>Moderate</Effectiveness>
+				<Effectiveness_Notes><xhtml:p>This technique may not be able to mitigate
+				weaknesses that arise from resource sharing across SMT threads.</xhtml:p>
+				</Effectiveness_Notes>
+			  </Mitigation>
+			  <Mitigation>
+				<Phase>Patching and Maintenance</Phase>
+				<Description><xhtml:p>This kind of patch may not be feasible or
+				implementable for all processors or all weaknesses.</xhtml:p>
+				</Description>
+				<Effectiveness>Limited</Effectiveness>
+			  </Mitigation>
+			  <Mitigation>
+				<Phase>Requirements</Phase>
+				<Description><xhtml:p>Processor designers, system software vendors, or other
+				agents may choose to restrict the ability of unprivileged software to
+				access to high-resolution timers that are commonly used to monitor
+				covert channels.</xhtml:p>
+				</Description>
+				<Effectiveness>Defense in Depth</Effectiveness>
+					<Effectiveness_Notes><xhtml:p>Specific software algorithms can be used by an attacker to compensate for a lack of a high-resolution time source [REF-1420].</xhtml:p>
+					</Effectiveness_Notes>
+			  </Mitigation>
+			</Potential_Mitigations>
+			<Demonstrative_Examples>
+			  <Demonstrative_Example>
+				<Intro_Text><xhtml:p>Some processors may perform access control checks in parallel with
+				memory read/write operations. For example, when a user-mode program
+				attempts to read data from memory, the processor may also need to
+				check whether the memory address is mapped into user space or kernel
+				space. If the processor performs the access concurrently with the
+				check, then the access may be able to transiently read kernel data
+				before the check completes. This race condition is demonstrated in the
+				following code snippet from [REF-1408], with additional annotations:</xhtml:p>
+				</Intro_Text>
+				<Example_Code Nature="Bad" Language="x86 Assembly">
+				  1 ; rcx = kernel address, rbx = probe array<xhtml:br />
+				  2 xor rax, rax                # set rax to 0<xhtml:br />
+				  3 retry:<xhtml:br />
+				  4 mov al, byte [rcx]          # attempt to read kernel memory<xhtml:br />
+				  5 shl rax, 0xc                # multiply result by page size (4KB)<xhtml:br />
+				  6 jz retry                    # if the result is zero, try again<xhtml:br />
+				  7 mov rbx, qword [rbx + rax]  # transmit result over a cache covert channel<xhtml:br />
+				</Example_Code>
+
+				<Body_Text><xhtml:p>Vulnerable processors may return kernel data from a shared
+				microarchitectural resource in line 4, for example, from the
+				processor's L1 data cache. Since this vulnerability involves a race
+				condition, the mov in line 4 may not always return kernel data (that
+				is, whenever the check "wins" the race), in which case this
+				demonstration code re-attempts the access in line 6. The accessed data
+				is multiplied by 4KB, a common page size, to make it easier to observe
+				via a cache covert channel after the transmission in line 7. The use
+				of cache covert channels to observe the side effects of transient
+				execution has been described in [REF-1408].</xhtml:p>
+				</Body_Text>
+
+			  </Demonstrative_Example>
+			  <Demonstrative_Example>
+				<Intro_Text><xhtml:p>Many commodity processors share microarchitectural fill buffers
+				between sibling hardware threads on simultaneous multithreaded (SMT)
+				processors. Fill buffers can serve as temporary storage for data that
+				passes to and from the processor's caches. Microarchitectural Fill
+				Buffer Data Sampling (MFBDS) is a vulnerability that can allow a
+				hardware thread to access its sibling's private data in a shared fill
+				buffer. The access may be prohibited by the processor's ISA, but MFBDS
+				can allow the access to occur during transient execution, in
+				particular during a faulting operation or an operation that triggers a
+				microcode assist.</xhtml:p>
+
+				<xhtml:p>More information on MFBDS can be found in [REF-1405] and [REF-1409].</xhtml:p>
+
+				</Intro_Text>
+			  </Demonstrative_Example>
+
+			  <Demonstrative_Example>
+				<Intro_Text><xhtml:p>Some processors may allow access to system registers (for example,
+				system coprocessor registers or model-specific registers) during
+				transient execution. This scenario is depicted in the code snippet
+				below. Under ordinary operating circumstances, code in exception level
+				0 (EL0) is not permitted to access registers that are restricted to
+				EL1, such as TTBR0_EL1. However, on some processors an earlier
+				mis-prediction can cause the MRS instruction to transiently read the
+				value in an EL1 register. In this example, a conditional branch (line
+				2) can be mis-predicted as "not taken" while waiting for a slow load
+				(line 1). This allows MRS (line 3) to transiently read the value in
+				the TTBR0_EL1 register. The subsequent memory access (line 6) can
+				allow the restricted register's value to become observable, for
+				example, over a cache covert channel.</xhtml:p>
+
+				<xhtml:p>Code snippet is from [REF-1410]. See also [REF-1411].</xhtml:p>
+
+				</Intro_Text>
+				<Example_Code Nature="Bad" Language="x86 Assembly">
+				  <xhtml:br />
+				  1 LDR X1, [X2] ; arranged to miss in the cache<xhtml:br />
+				  2 CBZ X1, over ; This will be taken <xhtml:br />
+				  3 MRS X3, TTBR0_EL1; <xhtml:br />
+				  4 LSL X3, X3, #imm <xhtml:br />
+				  5 AND X3, X3, #0xFC0<xhtml:br />
+				  6 LDR X5, [X6,X3] ; X6 is an EL0 base address<xhtml:br />
+				  7 over<xhtml:br />
+				</Example_Code>
+			  </Demonstrative_Example>
+
+			</Demonstrative_Examples>
+			<Observed_Examples>
+			  <Observed_Example>
+				<Reference>CVE-2017-5715</Reference>
+				<Description>A fault may allow transient user-mode operations to
+				access kernel data cached in the L1D, potentially exposing the data
+				over a covert channel.
+				</Description>
+				<Link>https://www.cve.org/CVERecord?id=CVE-2017-5715</Link>
+			  </Observed_Example>
+			  <Observed_Example>
+				<Reference>CVE-2018-3615</Reference>
+				<Description>A fault may allow transient non-enclave operations to
+				access SGX enclave data cached in the L1D, potentially exposing the
+				data over a covert channel.
+				</Description>
+				<Link>https://www.cve.org/CVERecord?id=CVE-2018-3615</Link>
+			  </Observed_Example>
+			  <Observed_Example>
+				<Reference>CVE-2019-1135</Reference>
+				<Description>A TSX Asynchronous Abort may allow transient operations
+				to access architecturally restricted data, potentially exposing the
+				data over a covert channel.
+				</Description>
+				<Link>https://www.cve.org/CVERecord?id=CVE-2019-1135</Link>
+			  </Observed_Example>
+			</Observed_Examples>
+			<References>
+			  <Reference External_Reference_ID="REF-1404" />
+			  <Reference External_Reference_ID="REF-1405" />
+			  <Reference External_Reference_ID="REF-1406" />
+			  <Reference External_Reference_ID="REF-1401" />
+			  <Reference External_Reference_ID="REF-1408" />
+			  <Reference External_Reference_ID="REF-1409" />
+			  <Reference External_Reference_ID="REF-1410" />
+			  <Reference External_Reference_ID="REF-1411" />
+			  <Reference External_Reference_ID="REF-1400" />
+			  <Reference External_Reference_ID="REF-1389" />
+			  <Reference External_Reference_ID="REF-1430" />
+			  <Reference External_Reference_ID="REF-1417" />
+			  <Reference External_Reference_ID="REF-1418" />
+			  <Reference External_Reference_ID="REF-1419" />
+			  <Reference External_Reference_ID="REF-1420" />
+			</References>
+			<Mapping_Notes>
+              <Usage>Allowed</Usage>
+              <Rationale>This CWE entry is at the Base level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities</Rationale>
+              <Comments>If a weakness can potentially be exploited to
+			  infer data that is accessible inside or outside the current
+			  processor context, then the weakness could map to CWE-1421 and
+			  to another CWE such as CWE-1420.</Comments>
+              <Reasons>
+				<Reason Type="Acceptable-Use" />
+              </Reasons>
+			</Mapping_Notes>
+			<Content_History>
+			  <Submission>
+				<Submission_Name>Scott D. Constable</Submission_Name>
+				<Submission_Organization>Intel Corporation</Submission_Organization>
+				<Submission_Date>2023-09-19</Submission_Date>
+				<Submission_Version>4.14</Submission_Version>
+				<Submission_ReleaseDate>2024-02-29</Submission_ReleaseDate>
+			  </Submission>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-09-09</Modification_Date>
+					<Modification_Version>4.18</Modification_Version>
+					<Modification_ReleaseDate>2025-09-09</Modification_ReleaseDate>
+					<Modification_Comment>updated References, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated References, Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+				<Contribution Type="Content">
+				  <Contribution_Name>David Kaplan</Contribution_Name>
+				  <Contribution_Organization>AMD</Contribution_Organization>
+				  <Contribution_Date>2024-01-22</Contribution_Date>
+				  <Contribution_Version>4.14</Contribution_Version>
+				  <Contribution_ReleaseDate>2024-02-29</Contribution_ReleaseDate>
+				  <Contribution_Comment>Member of Microarchitectural Weaknesses Working Group</Contribution_Comment>
+				</Contribution>
+				<Contribution Type="Content">
+				  <Contribution_Name>Rafael Dossantos, Abraham Fernandez Rubio, Alric Althoff, Lyndon Fawcett</Contribution_Name>
+				  <Contribution_Organization>Arm</Contribution_Organization>
+				  <Contribution_Date>2024-01-22</Contribution_Date>
+				  <Contribution_Version>4.14</Contribution_Version>
+				  <Contribution_ReleaseDate>2024-02-29</Contribution_ReleaseDate>
+				  <Contribution_Comment>Members of Microarchitectural Weaknesses Working Group</Contribution_Comment>
+				</Contribution>
+				<Contribution Type="Content">
+				  <Contribution_Name>Jason Oberg</Contribution_Name>
+				  <Contribution_Organization>Cycuity</Contribution_Organization>
+				  <Contribution_Date>2024-01-22</Contribution_Date>
+				  <Contribution_Version>4.14</Contribution_Version>
+				  <Contribution_ReleaseDate>2024-02-29</Contribution_ReleaseDate>
+				  <Contribution_Comment>Member of Microarchitectural Weaknesses Working Group</Contribution_Comment>
+				</Contribution>
+				<Contribution Type="Content">
+				  <Contribution_Name>Priya B. Iyer</Contribution_Name>
+				  <Contribution_Organization>Intel Corporation</Contribution_Organization>
+				  <Contribution_Date>2024-01-22</Contribution_Date>
+				  <Contribution_Version>4.14</Contribution_Version>
+				  <Contribution_ReleaseDate>2024-02-29</Contribution_ReleaseDate>
+				  <Contribution_Comment>Member of Microarchitectural Weaknesses Working Group</Contribution_Comment>
+				</Contribution>
+				<Contribution Type="Content">
+				  <Contribution_Name>Nicole Fern</Contribution_Name>
+				  <Contribution_Organization>Riscure</Contribution_Organization>
+				  <Contribution_Date>2024-01-22</Contribution_Date>
+				  <Contribution_Version>4.14</Contribution_Version>
+				  <Contribution_ReleaseDate>2024-02-29</Contribution_ReleaseDate>
+				  <Contribution_Comment>Member of Microarchitectural Weaknesses Working Group</Contribution_Comment>
+				</Contribution>
+			</Content_History>
+		</Weakness>
+      

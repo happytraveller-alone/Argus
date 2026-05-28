@@ -1,0 +1,421 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="457" Name="Use of Uninitialized Variable" Abstraction="Variant" Structure="Simple" Status="Draft">
+         <Description>The code uses a variable that has not been initialized, leading to unpredictable or unintended results.</Description>
+         <Extended_Description>In some languages such as C and C++, stack variables are not initialized by default. They generally contain junk data with the contents of stack memory before the function was invoked. An attacker can sometimes control or read these contents. In other languages or conditions, a variable that is not explicitly initialized can be given a default value that has security implications, depending on the logic of the program. The presence of an uninitialized variable can sometimes indicate a typographic error in the code.</Extended_Description>
+         <Related_Weaknesses>
+             <Related_Weakness Nature="ChildOf" CWE_ID="908" View_ID="1000" Ordinal="Primary" />
+             <Related_Weakness Nature="ChildOf" CWE_ID="665" View_ID="1305" Ordinal="Primary" />
+			 <Related_Weakness Nature="ChildOf" CWE_ID="665" View_ID="1340" Ordinal="Primary" />
+         </Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+         <Applicable_Platforms>
+            <Language Name="C" Prevalence="Sometimes" />
+            <Language Name="C++" Prevalence="Sometimes" />
+            <Language Name="Perl" Prevalence="Often" />
+            <Language Name="PHP" Prevalence="Often" />
+            <Language Class="Not Language-Specific" Prevalence="Undetermined" />
+         </Applicable_Platforms>
+         <Modes_Of_Introduction>
+            <Introduction>
+               <Phase>Implementation</Phase>
+               <Note>In C, using an uninitialized char * in some string libraries will return incorrect results, as the libraries expect the null terminator to always be at the end of a string, even if the string is empty.</Note>
+            </Introduction>
+         </Modes_Of_Introduction>
+         <Likelihood_Of_Exploit>High</Likelihood_Of_Exploit>
+         <Common_Consequences>
+            <Consequence>
+               <Scope>Availability</Scope>
+               <Scope>Integrity</Scope>
+               <Scope>Other</Scope>
+               <Impact>Other</Impact>
+               <Note>Initial variables usually contain junk, which can not be trusted for consistency. This can lead to denial of service conditions, or modify control flow in unexpected ways. In some cases, an attacker can "pre-initialize" the variable using previous actions, which might enable code execution. This can cause a race condition if a lock variable check passes when it should not.</Note>
+            </Consequence>
+            <Consequence>
+               <Scope>Authorization</Scope>
+               <Scope>Other</Scope>
+               <Impact>Other</Impact>
+               <Note>Strings that are not initialized are especially dangerous, since many functions expect a null at the end -- and only at the end -- of a string.</Note>
+            </Consequence>
+         </Common_Consequences>
+         <Detection_Methods>
+           <Detection_Method Detection_Method_ID="DM-13">
+             <Method>Fuzzing</Method>
+             <Description>Fuzz testing (fuzzing) is a powerful technique for generating large numbers of diverse inputs - either randomly or algorithmically - and dynamically invoking the code with those inputs. Even with random inputs, it is often capable of generating unexpected results such as crashes, memory corruption, or resource consumption. Fuzzing effectively produces repeatable test cases that clearly indicate bugs, which helps developers to diagnose the issues.</Description>
+             <Effectiveness>High</Effectiveness>
+           </Detection_Method>
+           <Detection_Method Detection_Method_ID="DM-14">
+             <Method>Automated Static Analysis</Method>
+             <Description>Automated static analysis, commonly referred to as Static Application Security Testing (SAST), can find some instances of this weakness by analyzing source code (or binary/compiled code) without having to execute it. Typically, this is done by building a model of data flow and control flow, then searching for potentially-vulnerable patterns that connect "sources" (origins of input) with "sinks" (destinations where the data interacts with external components, a lower layer such as the OS, etc.)</Description>
+             <Effectiveness>High</Effectiveness>
+           </Detection_Method>
+         </Detection_Methods>
+         <Potential_Mitigations>
+            <Mitigation Mitigation_ID="MIT-57">
+               <Phase>Implementation</Phase>
+               <Strategy>Attack Surface Reduction</Strategy>
+               <Description>Ensure that critical variables are initialized before first use [REF-1485].</Description>
+            </Mitigation>
+            <Mitigation>
+               <Phase>Build and Compilation</Phase>
+               <Strategy>Compilation or Build Hardening</Strategy>
+               <Description>Most compilers will complain about the use of uninitialized variables if warnings are turned on.</Description>
+            </Mitigation>
+            <Mitigation>
+               <Phase>Implementation</Phase>
+               <Phase>Operation</Phase>
+               <Description>When using a language that does not require explicit declaration of variables, run or compile the software in a mode that reports undeclared or unknown variables. This may indicate the presence of a typographic error in the variable's name.</Description>
+            </Mitigation>
+            <Mitigation>
+               <Phase>Requirements</Phase>
+	       <Strategy>Language Selection</Strategy>
+               <Description>Choose a language that is not susceptible to these issues.</Description>
+            </Mitigation>
+            <Mitigation>
+               <Phase>Architecture and Design</Phase>
+               <Description>Mitigating technologies such as safe string libraries and container abstractions could be introduced.</Description>
+            </Mitigation>
+         </Potential_Mitigations>
+         <Demonstrative_Examples>
+            <Demonstrative_Example>
+               <Intro_Text>This code prints a greeting using information stored in a POST request:</Intro_Text>
+               <Example_Code Nature="Bad" Language="PHP">
+                  <xhtml:div>if (isset($_POST['names'])) {<xhtml:div style="margin-left:1em;">$nameArray = $_POST['names'];</xhtml:div>}<xhtml:br />echo "Hello " . $nameArray['first'];</xhtml:div>
+               </Example_Code>
+               <Body_Text>This code checks if the POST array 'names' is set before assigning it to the $nameArray variable. However, if the array is not in the POST request, $nameArray will remain uninitialized. This will cause an error when the array is accessed to print the greeting message, which could lead to further exploit.</Body_Text>
+            </Demonstrative_Example>
+            <Demonstrative_Example>
+               <Intro_Text>The following switch statement is intended to set the values of the variables aN and bN before they are used:</Intro_Text>
+               <Example_Code Nature="Bad" Language="C">
+                  <xhtml:div>int aN, Bn;<xhtml:br />switch (ctl) {<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>case -1:<xhtml:div style="margin-left:1em;">aN = 0;<xhtml:br />bN = 0;<xhtml:br />break;</xhtml:div>
+                           <xhtml:br />case 0:<xhtml:div style="margin-left:1em;">aN = i;<xhtml:br />bN = -i;<xhtml:br />break;</xhtml:div>
+                           <xhtml:br />case 1:<xhtml:div style="margin-left:1em;">aN = i + NEXT_SZ;<xhtml:br />bN = i - NEXT_SZ;<xhtml:br />break;</xhtml:div>
+                           <xhtml:br />default:<xhtml:div style="margin-left:1em;">aN = -1;<xhtml:br />aN = -1;<xhtml:br />break;</xhtml:div>
+                        </xhtml:div>
+                     </xhtml:div>}<xhtml:br />repaint(aN, bN);</xhtml:div>
+               </Example_Code>
+               <Body_Text>In the default case of the switch statement, the programmer has accidentally set the value of aN twice. As a result, bN will have an undefined value. Most uninitialized variable issues result in general software reliability problems, but if attackers can intentionally trigger the use of an uninitialized variable, they might be able to launch a denial of service attack by crashing the program. Under the right circumstances, an attacker may be able to control the value of an uninitialized variable by affecting the values on the stack prior to the invocation of the function.</Body_Text>
+            </Demonstrative_Example>
+			<Demonstrative_Example Demonstrative_Example_ID="DX-144">
+			  <Intro_Text>This example will leave test_string in an
+			  unknown condition when i is the same value as err_val,
+			  because test_string is not initialized
+			  (CWE-456). Depending on where this code segment appears
+			  (e.g. within a function body), test_string might be
+			  random if it is stored on the heap or stack. If the
+			  variable is declared in static memory, it might be zero
+			  or NULL. Compiler optimization might contribute to the
+			  unpredictability of this address.</Intro_Text>
+			  <Example_Code Nature="Bad" Language="C">
+                char *test_string;<xhtml:br />
+                if (i != err_val)<xhtml:br />
+                {<xhtml:br />
+                <xhtml:div style="margin-left:1em;">test_string = "Hello World!";</xhtml:div>
+                }<xhtml:br />
+                printf("%s", test_string);
+              </Example_Code>
+              <Body_Text><xhtml:p>When the printf() is reached,
+              test_string might be an unexpected address, so the
+              printf might print junk strings (CWE-457).</xhtml:p>
+			  <xhtml:p>
+			  To fix this code, there are a couple approaches to
+			  making sure that test_string has been properly set once
+			  it reaches the printf().</xhtml:p>
+			  <xhtml:p>One solution would be to set test_string to an
+			  acceptable default before the conditional:</xhtml:p>
+			  </Body_Text>
+			  <Example_Code Nature="Good" Language="C">
+				char *test_string = "Done at the beginning";<xhtml:br />
+				if (i != err_val)<xhtml:br />
+				{<xhtml:br />
+				<xhtml:div style="margin-left:1em;">test_string = "Hello World!";</xhtml:div>
+				}<xhtml:br />
+				printf("%s", test_string);
+			  </Example_Code>
+			  <Body_Text>Another solution is to ensure that each
+			  branch of the conditional - including the default/else
+			  branch - could ensure that test_string is set:</Body_Text>
+			  <Example_Code Nature="Good" Language="C">
+				char *test_string;<xhtml:br />
+				if (i != err_val)<xhtml:br />
+				{<xhtml:br />
+				<xhtml:div style="margin-left:1em;">test_string = "Hello World!";</xhtml:div>
+				}<xhtml:br />
+				else {<xhtml:br />
+				<xhtml:div style="margin-left:1em;">test_string = "Done on the other side!";</xhtml:div>
+				}<xhtml:br />
+				printf("%s", test_string);
+			  </Example_Code>
+			</Demonstrative_Example>
+         </Demonstrative_Examples>
+         <Observed_Examples>
+            <Observed_Example>
+               <Reference>CVE-2019-15900</Reference>
+               <Description>Chain: sscanf() call is used to check if a username and group exists, but the return value of sscanf() call is not checked (CWE-252), causing an uninitialized variable to be checked (CWE-457), returning success to allow authorization bypass for executing a privileged (CWE-863).</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2019-15900</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2008-3688</Reference>
+               <Description>Chain: A denial of service may be caused by an uninitialized variable (CWE-457) allowing an infinite loop (CWE-835) resulting from a connection to an unresponsive server.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2008-3688</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2008-0081</Reference>
+               <Description>Uninitialized variable leads to code execution in popular desktop application.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2008-0081</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2007-4682</Reference>
+               <Description>Crafted input triggers dereference of an uninitialized object pointer.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2007-4682</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2007-3468</Reference>
+               <Description>Crafted audio file triggers crash when an uninitialized variable is used.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2007-3468</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2007-2728</Reference>
+               <Description>Uninitialized random seed variable used.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2007-2728</Link>
+            </Observed_Example>
+         </Observed_Examples>
+         <Taxonomy_Mappings>
+            <Taxonomy_Mapping Taxonomy_Name="CLASP">
+               <Entry_Name>Uninitialized variable</Entry_Name>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="7 Pernicious Kingdoms">
+               <Entry_Name>Uninitialized Variable</Entry_Name>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="Software Fault Patterns">
+               <Entry_ID>SFP1</Entry_ID>
+               <Entry_Name>Glitch in computation</Entry_Name>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="SEI CERT Perl Coding Standard">
+               <Entry_ID>DCL33-PL</Entry_ID>
+               <Entry_Name>Declare identifiers before using them</Entry_Name>
+               <Mapping_Fit>Imprecise</Mapping_Fit>
+            </Taxonomy_Mapping>
+         </Taxonomy_Mappings>
+         <References>
+            <Reference External_Reference_ID="REF-18" />
+            <Reference External_Reference_ID="REF-436" />
+            <Reference External_Reference_ID="REF-437" />
+            <Reference External_Reference_ID="REF-44" Section="&quot;Sin 8: C++ Catastrophes.&quot; Page 143" />
+            <Reference External_Reference_ID="REF-62" Section="Chapter 7, &quot;Variable Initialization&quot;, Page 312" />
+            <Reference External_Reference_ID="REF-1485" />
+         </References>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Variant level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+         <Content_History>
+            <Submission>
+               <Submission_Name>CLASP</Submission_Name>
+               <Submission_Date>2006-07-19</Submission_Date>
+               <Submission_Version>Draft 3</Submission_Version>
+               <Submission_ReleaseDate>2006-07-19</Submission_ReleaseDate>
+            </Submission>
+            <Modification>
+               <Modification_Name>Eric Dalci</Modification_Name>
+               <Modification_Organization>Cigital</Modification_Organization>
+               <Modification_Date>2008-07-01</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>updated Time_of_Introduction</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Organization>KDM Analytics</Modification_Organization>
+               <Modification_Date>2008-08-01</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>added/updated white box definitions</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2008-09-08</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>updated Applicable_Platforms, Common_Consequences, Description, Relationships, Observed_Example, Other_Notes, References, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2009-01-12</Modification_Date>
+               <Modification_Version>1.2</Modification_Version>
+               <Modification_ReleaseDate>2009-01-12</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences, Demonstrative_Examples, Potential_Mitigations</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2009-03-10</Modification_Date>
+               <Modification_Version>1.3</Modification_Version>
+               <Modification_ReleaseDate>2009-03-10</Modification_ReleaseDate>
+               <Modification_Comment>updated Demonstrative_Examples</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2009-05-27</Modification_Date>
+               <Modification_Version>1.4</Modification_Version>
+               <Modification_ReleaseDate>2009-05-27</Modification_ReleaseDate>
+               <Modification_Comment>updated Demonstrative_Examples</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-06-01</Modification_Date>
+               <Modification_Version>1.13</Modification_Version>
+               <Modification_ReleaseDate>2011-06-01</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2012-05-11</Modification_Date>
+               <Modification_Version>2.2</Modification_Version>
+               <Modification_ReleaseDate>2012-05-15</Modification_ReleaseDate>
+               <Modification_Comment>updated References, Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2012-10-30</Modification_Date>
+               <Modification_Version>2.3</Modification_Version>
+               <Modification_ReleaseDate>2012-10-30</Modification_ReleaseDate>
+               <Modification_Comment>updated Demonstrative_Examples</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2013-02-21</Modification_Date>
+               <Modification_Version>2.4</Modification_Version>
+               <Modification_ReleaseDate>2013-02-21</Modification_ReleaseDate>
+               <Modification_Comment>updated Applicable_Platforms, Description, Other_Notes, Potential_Mitigations, Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2014-06-23</Modification_Date>
+               <Modification_Version>2.7</Modification_Version>
+               <Modification_ReleaseDate>2014-06-23</Modification_ReleaseDate>
+               <Modification_Comment>updated Modes_of_Introduction, Other_Notes</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2014-07-30</Modification_Date>
+               <Modification_Version>2.8</Modification_Version>
+               <Modification_ReleaseDate>2014-07-31</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2017-11-08</Modification_Date>
+               <Modification_Version>3.0</Modification_Version>
+               <Modification_ReleaseDate>2017-11-08</Modification_ReleaseDate>
+               <Modification_Comment>updated References, Relationships, Taxonomy_Mappings, White_Box_Definitions</Modification_Comment>
+            </Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2019-01-03</Modification_Date>
+					<Modification_Version>3.2</Modification_Version>
+					<Modification_ReleaseDate>2019-01-03</Modification_ReleaseDate>
+					<Modification_Comment>updated Taxonomy_Mappings</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2019-06-20</Modification_Date>
+					<Modification_Version>3.3</Modification_Version>
+					<Modification_ReleaseDate>2019-06-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships, Type</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-02-24</Modification_Date>
+					<Modification_Version>4.0</Modification_Version>
+					<Modification_ReleaseDate>2020-02-24</Modification_ReleaseDate>
+					<Modification_Comment>updated References, Relationships, Type</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-08-20</Modification_Date>
+					<Modification_Version>4.2</Modification_Version>
+					<Modification_ReleaseDate>2020-08-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-12-10</Modification_Date>
+					<Modification_Version>4.3</Modification_Version>
+					<Modification_ReleaseDate>2020-12-10</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-03-15</Modification_Date>
+					<Modification_Version>4.4</Modification_Version>
+					<Modification_ReleaseDate>2021-03-15</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples, Observed_Examples, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-07-20</Modification_Date>
+					<Modification_Version>4.5</Modification_Version>
+					<Modification_ReleaseDate>2021-07-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Observed_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Detection_Factors, References, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-09-09</Modification_Date>
+					<Modification_Version>4.18</Modification_Version>
+					<Modification_ReleaseDate>2025-09-09</Modification_ReleaseDate>
+					<Modification_Comment>updated Potential_Mitigations, References</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+            <Previous_Entry_Name Date="2008-04-11">Uninitialized Variable</Previous_Entry_Name>
+         </Content_History>
+      </Weakness>
+      

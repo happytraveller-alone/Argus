@@ -1,0 +1,758 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="362" Name="Concurrent Execution using Shared Resource with Improper Synchronization ('Race Condition')" Abstraction="Class" Structure="Simple" Status="Draft" Diagram="/data/images/CWE-362-Diagram.png">
+         <Description>The product contains a concurrent code sequence that requires temporary, exclusive access to a shared resource, but a timing window exists in which the shared resource can be modified by another code sequence operating concurrently.</Description>
+         <Extended_Description>
+            <xhtml:p>A race condition occurs within concurrent environments, and it is effectively a property of a code sequence. Depending on the context, a code sequence may be in the form of a function call, a small number of instructions, a series of program invocations, etc.</xhtml:p>
+            <xhtml:p>A race condition violates these properties, which are closely related:</xhtml:p>
+               <xhtml:ul>
+                  <xhtml:li>Exclusivity - the code sequence is given exclusive access to the shared resource, i.e., no other code sequence can modify properties of the shared resource before the original sequence has completed execution.</xhtml:li>
+                  <xhtml:li>Atomicity - the code sequence is behaviorally atomic, i.e., no other thread or process can concurrently execute the same sequence of instructions (or a subset) against the same resource.</xhtml:li>
+               </xhtml:ul>
+            <xhtml:p>A race condition exists when an "interfering code sequence" can still access the shared resource, violating exclusivity.</xhtml:p>
+            <xhtml:p>The interfering code sequence could be "trusted" or "untrusted." A trusted interfering code sequence occurs within the product; it cannot be modified by the attacker, and it can only be invoked indirectly. An untrusted interfering code sequence can be authored directly by the attacker, and typically it is external to the vulnerable product.</xhtml:p>
+         </Extended_Description>
+         <Related_Weaknesses>
+            <Related_Weakness Nature="ChildOf" CWE_ID="662" View_ID="1000" Ordinal="Primary" />
+            <Related_Weakness Nature="CanPrecede" CWE_ID="416" View_ID="1000" />
+            <Related_Weakness Nature="CanPrecede" CWE_ID="476" View_ID="1000" />
+         </Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+            <Weakness_Ordinality>
+               <Ordinality>Resultant</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+         <Applicable_Platforms>
+            <Language Name="C" Prevalence="Sometimes" />
+            <Language Name="C++" Prevalence="Sometimes" />
+            <Language Name="Java" Prevalence="Sometimes" />
+            <Technology Class="Mobile" Prevalence="Undetermined" />
+			<Technology Class="ICS/OT" Prevalence="Undetermined" />
+         </Applicable_Platforms>
+         <Alternate_Terms>
+            <Alternate_Term>
+               <Term>Race Condition</Term>
+            </Alternate_Term>
+         </Alternate_Terms>
+         <Modes_Of_Introduction>
+            <Introduction>
+               <Phase>Architecture and Design</Phase>
+            </Introduction>
+            <Introduction>
+               <Phase>Implementation</Phase>
+               <Note>Programmers may assume that certain code sequences execute too quickly to be affected by an interfering code sequence; when they are not, this violates atomicity. For example, the single "x++" statement may appear atomic at the code layer, but it is actually non-atomic at the instruction layer, since it involves a read (the original value of x), followed by a computation (x+1), followed by a write (save the result to x).</Note>
+            </Introduction>
+         </Modes_Of_Introduction>
+         <Likelihood_Of_Exploit>Medium</Likelihood_Of_Exploit>
+         <Common_Consequences>
+            <Consequence>
+               <Scope>Availability</Scope>
+               <Impact>DoS: Resource Consumption (CPU)</Impact>
+               <Impact>DoS: Resource Consumption (Memory)</Impact>
+               <Impact>DoS: Resource Consumption (Other)</Impact>
+               <Note>When a race condition makes it possible to bypass a resource cleanup routine or trigger multiple initialization routines, it may lead to resource exhaustion.</Note>
+            </Consequence>
+            <Consequence>
+               <Scope>Availability</Scope>
+               <Impact>DoS: Crash, Exit, or Restart</Impact>
+               <Impact>DoS: Instability</Impact>
+               <Note>When a race condition allows multiple control flows to access a resource simultaneously, it might lead the product(s) into unexpected states, possibly resulting in a crash.</Note>
+            </Consequence>
+            <Consequence>
+               <Scope>Confidentiality</Scope>
+               <Scope>Integrity</Scope>
+               <Impact>Read Files or Directories</Impact>
+               <Impact>Read Application Data</Impact>
+               <Note>When a race condition is combined with predictable resource names and loose permissions, it may be possible for an attacker to overwrite or access confidential data (CWE-59).</Note>
+            </Consequence>
+            <Consequence>
+               <Scope>Access Control</Scope>
+               <Impact>Execute Unauthorized Code or Commands</Impact>
+               <Impact>Gain Privileges or Assume Identity</Impact>
+               <Impact>Bypass Protection Mechanism</Impact>
+               <Note>This can have security implications when the expected synchronization is in security-critical code, such as recording whether a user is authenticated or modifying important state information that should not be influenced by an outsider.</Note>
+            </Consequence>
+         </Common_Consequences>
+         <Detection_Methods>
+            <Detection_Method>
+               <Method>Black Box</Method>
+               <Description>Black box methods may be able to identify evidence of race conditions via methods such as multiple simultaneous connections, which may cause the software to become instable or crash. However, race conditions with very narrow timing windows would not be detectable.</Description>
+            </Detection_Method>
+            <Detection_Method>
+               <Method>White Box</Method>
+               <Description>Common idioms are detectable in white box analysis, such as time-of-check-time-of-use (TOCTOU) file operations (CWE-367), or double-checked locking (CWE-609).</Description>
+            </Detection_Method>
+            <Detection_Method Detection_Method_ID="DM-2">
+               <Method>Automated Dynamic Analysis</Method>
+               <Description>
+                  <xhtml:p>This weakness can be detected using dynamic tools and techniques that interact with the software using large test suites with many diverse inputs, such as fuzz testing (fuzzing), robustness testing, and fault injection. The software's operation may slow down, but it should not become unstable, crash, or generate incorrect results.</xhtml:p>
+                  <xhtml:p>Race conditions may be detected with a stress-test by calling the software simultaneously from a large number of threads or processes, and look for evidence of any unexpected behavior.</xhtml:p>
+                  <xhtml:p>Insert breakpoints or delays in between relevant code statements to artificially expand the race window so that it will be easier to detect.</xhtml:p>
+               </Description>
+               <Effectiveness>Moderate</Effectiveness>
+            </Detection_Method>
+            <Detection_Method>
+               <Method>Automated Static Analysis - Binary or Bytecode</Method>
+               <Description>
+                  <xhtml:p>According to SOAR [REF-1479], the following detection techniques may be useful:</xhtml:p>
+                  <xhtml:div style="margin-left:1em;">
+                     <xhtml:div>Highly cost effective:</xhtml:div>
+                        <xhtml:ul>
+                           <xhtml:li>Bytecode Weakness Analysis - including disassembler + source code weakness analysis</xhtml:li>
+                        </xhtml:ul>
+                     <xhtml:div>Cost effective for partial coverage:</xhtml:div>
+                        <xhtml:ul>
+                           <xhtml:li>Binary Weakness Analysis - including disassembler + source code weakness analysis</xhtml:li>
+                        </xhtml:ul>
+                  </xhtml:div>
+               </Description>
+               <Effectiveness>High</Effectiveness>
+            </Detection_Method>
+            <Detection_Method>
+               <Method>Dynamic Analysis with Automated Results Interpretation</Method>
+               <Description>
+                  <xhtml:p>According to SOAR [REF-1479], the following detection techniques may be useful:</xhtml:p>
+                  <xhtml:div style="margin-left:1em;">
+                     <xhtml:div>Cost effective for partial coverage:</xhtml:div>
+                        <xhtml:ul>
+                           <xhtml:li>Web Application Scanner</xhtml:li>
+                           <xhtml:li>Web Services Scanner</xhtml:li>
+                           <xhtml:li>Database Scanners</xhtml:li>
+                        </xhtml:ul>
+                  </xhtml:div>
+               </Description>
+               <Effectiveness>SOAR Partial</Effectiveness>
+            </Detection_Method>
+            <Detection_Method>
+               <Method>Dynamic Analysis with Manual Results Interpretation</Method>
+               <Description>
+                  <xhtml:p>According to SOAR [REF-1479], the following detection techniques may be useful:</xhtml:p>
+                  <xhtml:div style="margin-left:1em;">
+                     <xhtml:div>Highly cost effective:</xhtml:div>
+                        <xhtml:ul>
+                           <xhtml:li>Framework-based Fuzzer</xhtml:li>
+                        </xhtml:ul>
+                     <xhtml:div>Cost effective for partial coverage:</xhtml:div>
+                        <xhtml:ul>
+                           <xhtml:li>Fuzz Tester</xhtml:li>
+                           <xhtml:li>Monitored Virtual Environment - run potentially malicious code in sandbox / wrapper / virtual machine, see if it does anything suspicious</xhtml:li>
+                        </xhtml:ul>
+                  </xhtml:div>
+               </Description>
+               <Effectiveness>High</Effectiveness>
+            </Detection_Method>
+            <Detection_Method>
+               <Method>Manual Static Analysis - Source Code</Method>
+               <Description>
+                  <xhtml:p>According to SOAR [REF-1479], the following detection techniques may be useful:</xhtml:p>
+                  <xhtml:div style="margin-left:1em;">
+                     <xhtml:div>Highly cost effective:</xhtml:div>
+                        <xhtml:ul>
+                           <xhtml:li>Manual Source Code Review (not inspections)</xhtml:li>
+                        </xhtml:ul>
+                     <xhtml:div>Cost effective for partial coverage:</xhtml:div>
+                        <xhtml:ul>
+                           <xhtml:li>Focused Manual Spotcheck - Focused manual analysis of source</xhtml:li>
+                        </xhtml:ul>
+                  </xhtml:div>
+               </Description>
+               <Effectiveness>High</Effectiveness>
+            </Detection_Method>
+            <Detection_Method>
+               <Method>Automated Static Analysis - Source Code</Method>
+               <Description>
+                  <xhtml:p>According to SOAR [REF-1479], the following detection techniques may be useful:</xhtml:p>
+                  <xhtml:div style="margin-left:1em;">
+                     <xhtml:div>Highly cost effective:</xhtml:div>
+                        <xhtml:ul>
+                           <xhtml:li>Source code Weakness Analyzer</xhtml:li>
+                           <xhtml:li>Context-configured Source Code Weakness Analyzer</xhtml:li>
+                        </xhtml:ul>
+                  </xhtml:div>
+               </Description>
+               <Effectiveness>High</Effectiveness>
+            </Detection_Method>
+            <Detection_Method>
+               <Method>Architecture or Design Review</Method>
+               <Description>
+                  <xhtml:p>According to SOAR [REF-1479], the following detection techniques may be useful:</xhtml:p>
+                  <xhtml:div style="margin-left:1em;">
+                     <xhtml:div>Highly cost effective:</xhtml:div>
+                        <xhtml:ul>
+                           <xhtml:li>Formal Methods / Correct-By-Construction</xhtml:li>
+                        </xhtml:ul>
+                     <xhtml:div>Cost effective for partial coverage:</xhtml:div>
+                        <xhtml:ul>
+                           <xhtml:li>Inspection (IEEE 1028 standard) (can apply to requirements, design, source code, etc.)</xhtml:li>
+                        </xhtml:ul>
+                  </xhtml:div>
+               </Description>
+               <Effectiveness>High</Effectiveness>
+            </Detection_Method>
+         </Detection_Methods>
+         <Potential_Mitigations>
+            <Mitigation>
+               <Phase>Architecture and Design</Phase>
+               <Description>In languages that support it, use synchronization primitives. Only wrap these around critical code to minimize the impact on performance.</Description>
+            </Mitigation>
+            <Mitigation>
+               <Phase>Architecture and Design</Phase>
+               <Description>Use thread-safe capabilities such as the data access abstraction in Spring.</Description>
+            </Mitigation>
+            <Mitigation>
+               <Phase>Architecture and Design</Phase>
+               <Description>
+                  <xhtml:p>Minimize the usage of shared resources in order to remove as much complexity as possible from the control flow and to reduce the likelihood of unexpected conditions occurring.</xhtml:p>
+                  <xhtml:p>Additionally, this will minimize the amount of synchronization necessary and may even help to reduce the likelihood of a denial of service where an attacker may be able to repeatedly trigger a critical section (CWE-400).</xhtml:p>
+               </Description>
+            </Mitigation>
+            <Mitigation>
+               <Phase>Implementation</Phase>
+               <Description>When using multithreading and operating on shared variables, only use thread-safe functions.</Description>
+            </Mitigation>
+            <Mitigation>
+               <Phase>Implementation</Phase>
+               <Description>Use atomic operations on shared variables. Be wary of innocent-looking constructs such as "x++". This may appear atomic at the code layer, but it is actually non-atomic at the instruction layer, since it involves a read, followed by a computation, followed by a write.</Description>
+            </Mitigation>
+            <Mitigation>
+               <Phase>Implementation</Phase>
+               <Description>Use a mutex if available, but be sure to avoid related weaknesses such as CWE-412.</Description>
+            </Mitigation>
+            <Mitigation>
+               <Phase>Implementation</Phase>
+               <Description>Avoid double-checked locking (CWE-609) and other implementation errors that arise when trying to avoid the overhead of synchronization.</Description>
+            </Mitigation>
+            <Mitigation>
+               <Phase>Implementation</Phase>
+               <Description>Disable interrupts or signals over critical parts of the code, but also make sure that the code does not go into a large or infinite loop.</Description>
+            </Mitigation>
+            <Mitigation>
+               <Phase>Implementation</Phase>
+               <Description>Use the volatile type modifier for critical variables to avoid unexpected compiler optimization or reordering. This does not necessarily solve the synchronization problem, but it can help.</Description>
+            </Mitigation>
+            <Mitigation Mitigation_ID="MIT-17">
+               <Phase>Architecture and Design</Phase>
+               <Phase>Operation</Phase>
+               <Strategy>Environment Hardening</Strategy>
+               <Description>Run your code using the lowest privileges that are required to accomplish the necessary tasks [REF-76]. If possible, create isolated accounts with limited privileges that are only used for a single task. That way, a successful attack will not immediately give the attacker access to the rest of the software or its environment. For example, database applications rarely need to run as the database administrator, especially in day-to-day operations.</Description>
+            </Mitigation>
+         </Potential_Mitigations>
+         <Demonstrative_Examples>
+            <Demonstrative_Example>
+               <Intro_Text>This code could be used in an e-commerce application that supports transfers between accounts. It takes the total amount of the transfer, sends it to the new account, and deducts the amount from the original account.</Intro_Text>
+               <Example_Code Nature="Bad" Language="Perl">
+                  <xhtml:div>$transfer_amount = GetTransferAmount();<xhtml:br />$balance = GetBalanceFromDatabase();<xhtml:br />
+                     <xhtml:br />if ($transfer_amount &lt; 0) {<xhtml:div style="margin-left:1em;">FatalError("Bad Transfer Amount");</xhtml:div>}<xhtml:br />$newbalance = $balance - $transfer_amount;<xhtml:br />if (($balance - $transfer_amount) &lt; 0) {<xhtml:div style="margin-left:1em;">FatalError("Insufficient Funds");</xhtml:div>}<xhtml:br />SendNewBalanceToDatabase($newbalance);<xhtml:br />NotifyUser("Transfer of $transfer_amount succeeded.");<xhtml:br />NotifyUser("New balance: $newbalance");</xhtml:div>
+               </Example_Code>
+               <Body_Text>A race condition could occur between the calls to GetBalanceFromDatabase() and SendNewBalanceToDatabase().</Body_Text>
+               <Body_Text>Suppose the balance is initially 100.00. An attack could be constructed as follows:</Body_Text>
+               <Example_Code Nature="Attack" Language="Other">
+                  <xhtml:div>In the following pseudocode, the attacker makes two simultaneous calls of the program, CALLER-1 and CALLER-2. Both callers are for the same user account.<xhtml:br />CALLER-1 (the attacker) is associated with PROGRAM-1 (the instance that handles CALLER-1). CALLER-2 is associated with PROGRAM-2.<xhtml:br />CALLER-1 makes a transfer request of 80.00.<xhtml:br />PROGRAM-1 calls GetBalanceFromDatabase and sets $balance to 100.00<xhtml:br />PROGRAM-1 calculates $newbalance as 20.00, then calls SendNewBalanceToDatabase().<xhtml:br />Due to high server load, the PROGRAM-1 call to SendNewBalanceToDatabase() encounters a delay.<xhtml:br />CALLER-2 makes a transfer request of 1.00.<xhtml:br />PROGRAM-2 calls GetBalanceFromDatabase() and sets $balance to 100.00. This happens because the previous PROGRAM-1 request was not processed yet.<xhtml:br />PROGRAM-2 determines the new balance as 99.00.<xhtml:br />After the initial delay, PROGRAM-1 commits its balance to the database, setting it to 20.00.<xhtml:br />PROGRAM-2 sends a request to update the database, setting the balance to 99.00</xhtml:div>
+               </Example_Code>
+               <Body_Text>At this stage, the attacker should have a balance of 19.00 (due to 81.00 worth of transfers), but the balance is 99.00, as recorded in the database.</Body_Text>
+               <Body_Text>To prevent this weakness, the programmer has several options, including using a lock to prevent multiple simultaneous requests to the web application, or using a synchronization mechanism that includes all the code between GetBalanceFromDatabase() and SendNewBalanceToDatabase().</Body_Text>
+            </Demonstrative_Example>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-24">
+               <Intro_Text>The following function attempts to acquire a lock in order to perform operations on a shared resource.</Intro_Text>
+               <Example_Code Nature="Bad" Language="C">
+                  <xhtml:div>void f(pthread_mutex_t *mutex) {<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>pthread_mutex_lock(mutex);<xhtml:br />
+                           <xhtml:br />
+                           <xhtml:i>/* access shared resource */</xhtml:i>
+                           <xhtml:br />
+                           <xhtml:br />
+                           <xhtml:br />pthread_mutex_unlock(mutex);</xhtml:div>
+                     </xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>However, the code does not check the value returned by pthread_mutex_lock() for errors. If pthread_mutex_lock() cannot acquire the mutex for any reason, the function may introduce a race condition into the program and result in undefined behavior.</Body_Text>
+               <Body_Text>In order to avoid data races, correctly written programs must check the result of thread synchronization functions and appropriately handle all errors, either by attempting to recover from them or reporting them to higher levels.</Body_Text>
+               <Example_Code Nature="Good" Language="C">
+                  <xhtml:div>int f(pthread_mutex_t *mutex) {<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>int result;<xhtml:br />
+                           <xhtml:br />result = pthread_mutex_lock(mutex);<xhtml:br />if (0 != result)<xhtml:div style="margin-left:1em;">return result;</xhtml:div>
+                           <xhtml:br />
+                           <xhtml:br />
+                           <xhtml:i>/* access shared resource */</xhtml:i>
+                           <xhtml:br />
+                           <xhtml:br />
+                           <xhtml:br />return pthread_mutex_unlock(mutex);</xhtml:div>
+                     </xhtml:div>}</xhtml:div>
+               </Example_Code>
+            </Demonstrative_Example>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-132">
+	       <Intro_Text>Suppose a processor's Memory Management Unit (MMU) has 5 other shadow MMUs to distribute its workload for its various cores. Each MMU has the start address and end address of "accessible" memory. Any time this accessible range changes (as per the processor's boot status), the main MMU sends an update message to all the shadow MMUs.</Intro_Text>
+	       <Body_Text>Suppose the interconnect fabric does not prioritize such "update" packets over other general traffic packets. This introduces a race condition. If an attacker can flood the target with enough messages so that some of those attack packets reach the target before the new access ranges gets updated, then the attacker can leverage this scenario.</Body_Text>
+            </Demonstrative_Example>
+         </Demonstrative_Examples>
+         <Observed_Examples>
+            <Observed_Example>
+               <Reference>CVE-2024-38106</Reference>
+               <Description>OS kernel stores sensitive data in improperly locked memory, allowing local users to gain privileges by winning a race condition</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2024-38106</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2022-29527</Reference>
+               <Description>Go application for cloud management creates a world-writable sudoers file that allows local attackers to inject sudo rules and escalate privileges to root by winning a race condition.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2022-29527</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2021-1782</Reference>
+               <Description>Chain: improper locking (CWE-667) leads to race condition (CWE-362), as exploited in the wild per CISA KEV.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2021-1782</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2021-0920</Reference>
+               <Description>Chain: mobile platform race condition (CWE-362) leading to use-after-free (CWE-416), as exploited in the wild per CISA KEV.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2021-0920</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2020-6819</Reference>
+               <Description>Chain: race condition (CWE-362) leads to use-after-free (CWE-416), as exploited in the wild per CISA KEV.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2020-6819</Link>
+            </Observed_Example>
+           <Observed_Example>
+             <Reference>CVE-2019-18827</Reference>
+             <Description>chain: JTAG interface is not disabled (CWE-1191) during ROM code execution, introducing a race condition (CWE-362) to extract encryption keys</Description>
+             <Link>https://www.cve.org/CVERecord?id=CVE-2019-18827</Link>
+           </Observed_Example>
+            <Observed_Example>
+            <Reference>CVE-2019-1161</Reference>
+            <Description>Chain: race condition (CWE-362) in anti-malware product allows deletion of files by creating a junction (CWE-1386) and using hard links during the time window in which a temporary file is created and deleted.</Description>
+            <Link>https://www.cve.org/CVERecord?id=CVE-2019-1161</Link>
+            </Observed_Example>
+            <Observed_Example>
+            <Reference>CVE-2015-1743</Reference>
+            <Description>TOCTOU in sandbox process allows installation of untrusted browser add-ons by replacing a file after it has been verified, but before it is executed</Description>
+            <Link>https://www.cve.org/CVERecord?id=CVE-2015-1743</Link>
+            </Observed_Example>
+            <Observed_Example>
+            <Reference>CVE-2014-8273</Reference>
+            <Description>Chain: chipset has a race condition (CWE-362) between when an interrupt handler detects an attempt to write-enable the BIOS (in violation of the lock bit), and when the handler resets the write-enable bit back to 0, allowing attackers to issue BIOS writes during the timing window [REF-1237].</Description>
+            <Link>https://www.cve.org/CVERecord?id=CVE-2014-8273</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2008-5044</Reference>
+               <Description>Race condition leading to a crash by calling a hook removal procedure while other activities are occurring at the same time.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2008-5044</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2008-2958</Reference>
+               <Description>chain: time-of-check time-of-use (TOCTOU) race condition in program allows bypass of protection mechanism that was designed to prevent symlink attacks.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2008-2958</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2008-1570</Reference>
+               <Description>chain: time-of-check time-of-use (TOCTOU) race condition in program allows bypass of protection mechanism that was designed to prevent symlink attacks.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2008-1570</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2008-0058</Reference>
+               <Description>Unsynchronized caching operation enables a race condition that causes messages to be sent to a deallocated object.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2008-0058</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2008-0379</Reference>
+               <Description>Race condition during initialization triggers a buffer overflow.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2008-0379</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2007-6599</Reference>
+               <Description>Daemon crash by quickly performing operations and undoing them, which eventually leads to an operation that does not acquire a lock.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2007-6599</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2007-6180</Reference>
+               <Description>chain: race condition triggers NULL pointer dereference</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2007-6180</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2007-5794</Reference>
+               <Description>Race condition in library function could cause data to be sent to the wrong process.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2007-5794</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2007-3970</Reference>
+               <Description>Race condition in file parser leads to heap corruption.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2007-3970</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2008-5021</Reference>
+               <Description>chain: race condition allows attacker to access an object while it is still being initialized, causing software to access uninitialized memory.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2008-5021</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2009-4895</Reference>
+               <Description>chain: race condition for an argument value, possibly resulting in NULL dereference</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2009-4895</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2009-3547</Reference>
+               <Description>Chain: race condition (CWE-362) might allow resource to be released before operating on it, leading to NULL dereference (CWE-476)</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2009-3547</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2006-5051</Reference>
+               <Description>Chain: Signal handler contains too much functionality (CWE-828), introducing a race condition (CWE-362) that leads to a double free (CWE-415).</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2006-5051</Link>
+            </Observed_Example>
+         </Observed_Examples>
+         <Affected_Resources>
+            <Affected_Resource>File or Directory</Affected_Resource>
+         </Affected_Resources>
+         <Taxonomy_Mappings>
+            <Taxonomy_Mapping Taxonomy_Name="PLOVER">
+               <Entry_Name>Race Conditions</Entry_Name>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="The CERT Oracle Secure Coding Standard for Java (2011)">
+               <Entry_ID>VNA03-J</Entry_ID>
+               <Entry_Name>Do not assume that a group of calls to independently atomic methods is atomic</Entry_Name>
+            </Taxonomy_Mapping>
+         </Taxonomy_Mappings>
+         <Related_Attack_Patterns>
+            <Related_Attack_Pattern CAPEC_ID="26" />
+            <Related_Attack_Pattern CAPEC_ID="29" />
+         </Related_Attack_Patterns>
+         <References>
+            <Reference External_Reference_ID="REF-44" Section="&quot;Sin 13: Race Conditions.&quot; Page 205" />
+            <Reference External_Reference_ID="REF-349" />
+            <Reference External_Reference_ID="REF-350" />
+            <Reference External_Reference_ID="REF-351" />
+            <Reference External_Reference_ID="REF-352" />
+            <Reference External_Reference_ID="REF-353" />
+            <Reference External_Reference_ID="REF-354" />
+            <Reference External_Reference_ID="REF-355" />
+            <Reference External_Reference_ID="REF-356" />
+            <Reference External_Reference_ID="REF-357" />
+            <Reference External_Reference_ID="REF-76" />
+	    <Reference External_Reference_ID="REF-1237" />
+            <Reference External_Reference_ID="REF-1479" />
+         </References>
+         <Mapping_Notes>
+            <Usage>Allowed-with-Review</Usage>
+            <Rationale>This CWE entry is a Class and might have Base-level children that would be more appropriate</Rationale>
+            <Comments>Examine children of this entry to see if there is a better fit</Comments>
+            <Reasons>
+               <Reason Type="Abstraction" />
+            </Reasons>
+         </Mapping_Notes>
+         <Notes>
+            <Note Type="Maintenance">The relationship between race conditions and synchronization problems (CWE-662) needs to be further developed. They are not necessarily two perspectives of the same core concept, since synchronization is only one technique for avoiding race conditions, and synchronization can be used for other purposes besides race condition prevention.</Note>
+            <Note Type="Research Gap">Race conditions in web applications are under-studied and probably under-reported. However, in 2008 there has been growing interest in this area.</Note>
+            <Note Type="Research Gap">Much of the focus of race condition research has been in Time-of-check Time-of-use (TOCTOU) variants (CWE-367), but many race conditions are related to synchronization problems that do not necessarily require a time-of-check.</Note>
+            <Note Type="Research Gap">From a classification/taxonomy perspective, the relationships between concurrency and program state need closer investigation and may be useful in organizing related issues.</Note>
+         </Notes>
+         <Content_History>
+            <Submission>
+               <Submission_Name>PLOVER</Submission_Name>
+               <Submission_Date>2006-07-19</Submission_Date>
+               <Submission_Version>Draft 3</Submission_Version>
+               <Submission_ReleaseDate>2006-07-19</Submission_ReleaseDate>
+            </Submission>
+            <Modification>
+               <Modification_Name>Eric Dalci</Modification_Name>
+               <Modification_Organization>Cigital</Modification_Organization>
+               <Modification_Date>2008-07-01</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>updated Time_of_Introduction</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2008-09-08</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2008-10-14</Modification_Date>
+               <Modification_Version>1.0.1</Modification_Version>
+               <Modification_ReleaseDate>2008-10-14</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2008-11-24</Modification_Date>
+               <Modification_Version>1.1</Modification_Version>
+               <Modification_ReleaseDate>2008-11-25</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2009-01-12</Modification_Date>
+               <Modification_Version>1.2</Modification_Version>
+               <Modification_ReleaseDate>2009-01-12</Modification_ReleaseDate>
+               <Modification_Comment>updated Applicable_Platforms, Common_Consequences, Demonstrative_Examples, Description, Likelihood_of_Exploit, Maintenance_Notes, Observed_Examples, Potential_Mitigations, References, Relationships, Research_Gaps</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2009-03-10</Modification_Date>
+               <Modification_Version>1.3</Modification_Version>
+               <Modification_ReleaseDate>2009-03-10</Modification_ReleaseDate>
+               <Modification_Comment>updated Demonstrative_Examples, Potential_Mitigations</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2009-05-27</Modification_Date>
+               <Modification_Version>1.4</Modification_Version>
+               <Modification_ReleaseDate>2009-05-27</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2010-02-16</Modification_Date>
+               <Modification_Version>1.8</Modification_Version>
+               <Modification_ReleaseDate>2010-02-16</Modification_ReleaseDate>
+               <Modification_Comment>updated Detection_Factors, References, Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2010-06-21</Modification_Date>
+               <Modification_Version>1.9</Modification_Version>
+               <Modification_ReleaseDate>2010-06-21</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences, Demonstrative_Examples, Detection_Factors, Potential_Mitigations, References</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2010-09-27</Modification_Date>
+               <Modification_Version>1.10</Modification_Version>
+               <Modification_ReleaseDate>2010-09-27</Modification_ReleaseDate>
+               <Modification_Comment>updated Observed_Examples, Potential_Mitigations, Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2010-12-13</Modification_Date>
+               <Modification_Version>1.11</Modification_Version>
+               <Modification_ReleaseDate>2010-12-13</Modification_ReleaseDate>
+               <Modification_Comment>updated Applicable_Platforms, Demonstrative_Examples, Description, Name, Potential_Mitigations, Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-06-01</Modification_Date>
+               <Modification_Version>1.13</Modification_Version>
+               <Modification_ReleaseDate>2011-06-01</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences, Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-06-27</Modification_Date>
+               <Modification_Version>2.0</Modification_Version>
+               <Modification_ReleaseDate>2011-06-27</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-09-13</Modification_Date>
+               <Modification_Version>2.1</Modification_Version>
+               <Modification_ReleaseDate>2011-09-13</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2012-05-11</Modification_Date>
+               <Modification_Version>2.2</Modification_Version>
+               <Modification_ReleaseDate>2012-05-15</Modification_ReleaseDate>
+               <Modification_Comment>updated Potential_Mitigations, References, Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2014-07-30</Modification_Date>
+               <Modification_Version>2.8</Modification_Version>
+               <Modification_ReleaseDate>2014-07-31</Modification_ReleaseDate>
+               <Modification_Comment>updated Detection_Factors, Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2015-12-07</Modification_Date>
+               <Modification_Version>2.9</Modification_Version>
+               <Modification_ReleaseDate>2015-12-07</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2017-11-08</Modification_Date>
+               <Modification_Version>3.0</Modification_Version>
+               <Modification_ReleaseDate>2017-11-08</Modification_ReleaseDate>
+               <Modification_Comment>updated Demonstrative_Examples, References, Research_Gaps, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2019-01-03</Modification_Date>
+					<Modification_Version>3.2</Modification_Version>
+					<Modification_ReleaseDate>2019-01-03</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships, Taxonomy_Mappings</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2019-06-20</Modification_Date>
+					<Modification_Version>3.3</Modification_Version>
+					<Modification_ReleaseDate>2019-06-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-02-24</Modification_Date>
+					<Modification_Version>4.0</Modification_Version>
+					<Modification_ReleaseDate>2020-02-24</Modification_ReleaseDate>
+					<Modification_Comment>updated Applicable_Platforms, Demonstrative_Examples, Observed_Examples, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-08-20</Modification_Date>
+					<Modification_Version>4.2</Modification_Version>
+					<Modification_ReleaseDate>2020-08-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-03-15</Modification_Date>
+					<Modification_Version>4.4</Modification_Version>
+					<Modification_ReleaseDate>2021-03-15</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-10-28</Modification_Date>
+					<Modification_Version>4.6</Modification_Version>
+					<Modification_ReleaseDate>2021-10-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Observed_Examples, References</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-04-28</Modification_Date>
+					<Modification_Version>4.7</Modification_Version>
+					<Modification_ReleaseDate>2022-04-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Observed_Examples, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-06-28</Modification_Date>
+					<Modification_Version>4.8</Modification_Version>
+					<Modification_ReleaseDate>2022-06-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Observed_Examples, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-10-13</Modification_Date>
+					<Modification_Version>4.9</Modification_Version>
+					<Modification_ReleaseDate>2022-10-13</Modification_ReleaseDate>
+					<Modification_Comment>updated Observed_Examples, References</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-01-31</Modification_Date>
+					<Modification_Version>4.10</Modification_Version>
+					<Modification_ReleaseDate>2023-01-31</Modification_ReleaseDate>
+					<Modification_Comment>updated Applicable_Platforms, Common_Consequences, Description</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated References, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2024-07-16</Modification_Date>
+					<Modification_Version>4.15</Modification_Version>
+					<Modification_ReleaseDate>2024-07-16</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2024-11-19</Modification_Date>
+					<Modification_Version>4.16</Modification_Version>
+					<Modification_ReleaseDate>2024-11-19</Modification_ReleaseDate>
+					<Modification_Comment>updated Alternate_Terms, Common_Consequences, Description, Diagram, Modes_of_Introduction</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-04-03</Modification_Date>
+					<Modification_Version>4.17</Modification_Version>
+					<Modification_ReleaseDate>2025-04-03</Modification_ReleaseDate>
+					<Modification_Comment>updated Affected_Resources</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-09-09</Modification_Date>
+					<Modification_Version>4.18</Modification_Version>
+					<Modification_ReleaseDate>2025-09-09</Modification_ReleaseDate>
+					<Modification_Comment>updated Detection_Factors, References</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Observed_Examples, Relationships, Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2026-04-30</Modification_Date>
+					<Modification_Version>4.20</Modification_Version>
+					<Modification_ReleaseDate>2026-04-30</Modification_ReleaseDate>
+					<Modification_Comment>updated Observed_Examples</Modification_Comment>
+				</Modification>
+            <Contribution Type="Content">
+               <Contribution_Name>Martin Sebor</Contribution_Name>
+               <Contribution_Organization>Cisco Systems, Inc.</Contribution_Organization>
+               <Contribution_Date>2010-04-30</Contribution_Date>
+               <Contribution_Comment>Provided Demonstrative Example</Contribution_Comment>
+            </Contribution>
+	    <Contribution Type="Content">
+	      <Contribution_Name>Abhi Balakrishnan</Contribution_Name>
+	      <Contribution_Date>2024-02-29</Contribution_Date>
+	      <Contribution_Version>4.16</Contribution_Version>
+	      <Contribution_ReleaseDate>2024-11-19</Contribution_ReleaseDate>
+	      <Contribution_Comment>Provided diagram to improve CWE usability</Contribution_Comment>
+	    </Contribution>
+            <Previous_Entry_Name Date="2008-04-11">Race Conditions</Previous_Entry_Name>
+            <Previous_Entry_Name Date="2010-12-13">Race Condition</Previous_Entry_Name>
+         </Content_History>
+      </Weakness>
+      

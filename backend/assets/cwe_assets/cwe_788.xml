@@ -1,0 +1,389 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="788" Name="Access of Memory Location After End of Buffer" Abstraction="Base" Structure="Simple" Status="Incomplete">
+         <Description>The product reads or writes to a buffer using an index or pointer that references a memory location after the end of the buffer.</Description>
+         <Extended_Description>This typically occurs when a pointer or its index is incremented to a position after the buffer; or when pointer arithmetic results in a position after the buffer.</Extended_Description>
+         <Related_Weaknesses>
+             <Related_Weakness Nature="ChildOf" CWE_ID="119" View_ID="1000" Ordinal="Primary" />
+             <Related_Weakness Nature="ChildOf" CWE_ID="119" View_ID="1305" Ordinal="Primary" />
+			 <Related_Weakness Nature="ChildOf" CWE_ID="119" View_ID="1340" Ordinal="Primary" />
+         </Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Resultant</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+         <Applicable_Platforms>
+	   <Language Class="Memory-Unsafe" Prevalence="Undetermined" />
+            <Language Name="C" Prevalence="Often" />
+            <Language Name="C++" Prevalence="Often" />
+         </Applicable_Platforms>
+		 <Modes_Of_Introduction>
+		   <Introduction>
+			 <Phase>Implementation</Phase>
+		   </Introduction>
+		 </Modes_Of_Introduction>
+         <Common_Consequences>
+            <Consequence>
+               <Scope>Confidentiality</Scope>
+               <Impact>Read Memory</Impact>
+               <Note>For an out-of-bounds read, the attacker may have access to sensitive information. If the sensitive information contains system details, such as the current buffer's position in memory, this knowledge can be used to craft further attacks, possibly with more severe consequences.</Note>
+            </Consequence>
+            <Consequence>
+               <Scope>Integrity</Scope>
+               <Scope>Availability</Scope>
+               <Impact>Modify Memory</Impact>
+               <Impact>DoS: Crash, Exit, or Restart</Impact>
+               <Note>Out of bounds memory access will very likely result in the corruption of relevant memory, and perhaps instructions, possibly leading to a crash. Other attacks leading to lack of availability are possible, including putting the program into an infinite loop.</Note>
+            </Consequence>
+            <Consequence>
+               <Scope>Integrity</Scope>
+               <Impact>Modify Memory</Impact>
+               <Impact>Execute Unauthorized Code or Commands</Impact>
+               <Note>If the memory accessible by the attacker can be effectively controlled, it may be possible to execute arbitrary code, as with a standard buffer overflow. If the attacker can overwrite a pointer's worth of memory (usually 32 or 64 bits), they can redirect a function pointer to their own malicious code. Even when the attacker can only modify a single byte arbitrary code execution can be possible. Sometimes this is because the same problem can be exploited repeatedly to the same effect. Other times it is because the attacker can overwrite security-critical application-specific data -- such as a flag indicating whether the user is an administrator.</Note>
+            </Consequence>
+         </Common_Consequences>
+         <Detection_Methods>
+           <Detection_Method Detection_Method_ID="DM-13">
+             <Method>Fuzzing</Method>
+             <Description>Fuzz testing (fuzzing) is a powerful technique for generating large numbers of diverse inputs - either randomly or algorithmically - and dynamically invoking the code with those inputs. Even with random inputs, it is often capable of generating unexpected results such as crashes, memory corruption, or resource consumption. Fuzzing effectively produces repeatable test cases that clearly indicate bugs, which helps developers to diagnose the issues.</Description>
+             <Effectiveness>High</Effectiveness>
+           </Detection_Method>
+           <Detection_Method Detection_Method_ID="DM-14">
+             <Method>Automated Static Analysis</Method>
+             <Description>Automated static analysis, commonly referred to as Static Application Security Testing (SAST), can find some instances of this weakness by analyzing source code (or binary/compiled code) without having to execute it. Typically, this is done by building a model of data flow and control flow, then searching for potentially-vulnerable patterns that connect "sources" (origins of input) with "sinks" (destinations where the data interacts with external components, a lower layer such as the OS, etc.)</Description>
+             <Effectiveness>High</Effectiveness>
+           </Detection_Method>
+	   <Detection_Method Detection_Method_ID="DM-15">
+	     <Method>Automated Dynamic Analysis</Method>
+	     <Description>Use tools that are integrated during
+	     compilation to insert runtime error-checking mechanisms
+	     related to memory safety errors, such as AddressSanitizer
+	     (ASan) for C/C++ [REF-1518].</Description>
+	     <Effectiveness>Moderate</Effectiveness>
+	     <Effectiveness_Notes>Crafted inputs are necessary to
+	     reach the code containing the error, such as generated
+	     by fuzzers.  Also, these tools may reduce performance,
+	     and they only report the error condition - not the
+	     original mistake that led to the
+	     error.</Effectiveness_Notes>
+	   </Detection_Method>
+         </Detection_Methods>
+         <Demonstrative_Examples>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-1">
+               <Intro_Text>This example takes an IP address from a user, verifies that it is well formed and then looks up the hostname and copies it into a buffer.</Intro_Text>
+               <Example_Code Nature="Bad" Language="C">
+                  <xhtml:div>void host_lookup(char *user_supplied_addr){<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>struct hostent *hp;<xhtml:br />in_addr_t *addr;<xhtml:br />char hostname[64];<xhtml:br />in_addr_t inet_addr(const char *cp);<xhtml:br />
+                           <xhtml:br />
+                           <xhtml:i>/*routine that ensures user_supplied_addr is in the right format for conversion */</xhtml:i>
+                           <xhtml:br />
+                           <xhtml:br />validate_addr_form(user_supplied_addr);<xhtml:br />addr = inet_addr(user_supplied_addr);<xhtml:br />hp = gethostbyaddr( addr, sizeof(struct in_addr), AF_INET);<xhtml:br />strcpy(hostname, hp-&gt;h_name);</xhtml:div>
+                     </xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>This function allocates a buffer of 64 bytes to store the hostname, however there is no guarantee that the hostname will not be larger than 64 bytes. If an attacker specifies an address which resolves to a very large hostname, then the function may overwrite sensitive data or even relinquish control flow to the attacker.</Body_Text>
+               <Body_Text>Note that this example also contains an unchecked return value (CWE-252) that can lead to a NULL pointer dereference (CWE-476).</Body_Text>
+            </Demonstrative_Example>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-114">
+               <Intro_Text>In the following example, it is possible to request that memcpy move a much larger segment of memory than assumed:</Intro_Text>
+               <Example_Code Nature="Bad" Language="C">
+                  <xhtml:div>int returnChunkSize(void *) {<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>
+                           <xhtml:br />
+                           <xhtml:i>/* if chunk info is valid, return the size of usable memory,</xhtml:i>
+                           <xhtml:br />
+                           <xhtml:br />
+                           <xhtml:i>* else, return -1 to indicate an error</xhtml:i>
+                           <xhtml:br />
+                           <xhtml:br />
+                           <xhtml:i>*/</xhtml:i>
+                           <xhtml:br />...</xhtml:div>
+                     </xhtml:div>}<xhtml:br />int main() {<xhtml:div style="margin-left:1em;">...<xhtml:br />memcpy(destBuf, srcBuf, (returnChunkSize(destBuf)-1));<xhtml:br />...</xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>If returnChunkSize() happens to encounter an error it will return -1. Notice that the return value is not checked before the memcpy operation (CWE-252), so -1 can be passed as the size argument to memcpy() (CWE-805). Because memcpy() assumes that the value is unsigned, it will be interpreted as MAXINT-1 (CWE-195), and therefore will copy far more memory than is likely available to the destination buffer (CWE-787, CWE-788).</Body_Text>
+            </Demonstrative_Example>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-19">
+               <Intro_Text>This example applies an encoding procedure to an input string and stores it into a buffer.</Intro_Text>
+               <Example_Code Nature="Bad" Language="C">
+                  <xhtml:div>char * copy_input(char *user_supplied_string){<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>int i, dst_index;<xhtml:br />char *dst_buf = (char*)malloc(4*sizeof(char) * MAX_SIZE);<xhtml:br />if ( MAX_SIZE &lt;= strlen(user_supplied_string) ){<xhtml:div style="margin-left:1em;">die("user string too long, die evil hacker!");</xhtml:div>}<xhtml:br />dst_index = 0;<xhtml:br />for ( i = 0; i &lt; strlen(user_supplied_string); i++ ){<xhtml:div style="margin-left:1em;">
+                              <xhtml:div>if( '&amp;' == user_supplied_string[i] ){<xhtml:div style="margin-left:1em;">dst_buf[dst_index++] = '&amp;';<xhtml:br />dst_buf[dst_index++] = 'a';<xhtml:br />dst_buf[dst_index++] = 'm';<xhtml:br />dst_buf[dst_index++] = 'p';<xhtml:br />dst_buf[dst_index++] = ';';</xhtml:div>}<xhtml:br />else if ('&lt;' == user_supplied_string[i] ){<xhtml:div style="margin-left:1em;">
+                                    <xhtml:div>
+                                       <xhtml:br />
+                                       <xhtml:i>/* encode to &amp;lt; */</xhtml:i>
+                                       <xhtml:br />
+                                    </xhtml:div>
+                                 </xhtml:div>}<xhtml:br />else dst_buf[dst_index++] = user_supplied_string[i];</xhtml:div>
+                           </xhtml:div>}<xhtml:br />return dst_buf;</xhtml:div>
+                     </xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>The programmer attempts to encode the ampersand character in the user-controlled string, however the length of the string is validated before the encoding procedure is applied. Furthermore, the programmer assumes encoding expansion will only expand a given character by a factor of 4, while the encoding of the ampersand expands by 5. As a result, when the encoding procedure expands the string it is possible to overflow the destination buffer if the attacker provides a string of many ampersands.</Body_Text>
+            </Demonstrative_Example>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-91">
+               <Intro_Text>In the following C/C++ example the method processMessageFromSocket() will get a message from a socket, placed into a buffer, and will parse the contents of the buffer into a structure that contains the message length and the message body. A for loop is used to copy the message body into a local character string which will be passed to another method for processing.</Intro_Text>
+               <Example_Code Nature="Bad" Language="C">
+                  <xhtml:div>int processMessageFromSocket(int socket) {<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>int success;<xhtml:br />
+                           <xhtml:br />char buffer[BUFFER_SIZE];<xhtml:br />char message[MESSAGE_SIZE];<xhtml:br />
+                           <xhtml:br />
+                           <xhtml:i>// get message from socket and store into buffer</xhtml:i>
+                           <xhtml:br />
+                           <xhtml:br />
+                           <xhtml:i>//Ignoring possibliity that buffer &gt; BUFFER_SIZE</xhtml:i>
+                           <xhtml:br />if (getMessage(socket, buffer, BUFFER_SIZE) &gt; 0) {<xhtml:div style="margin-left:1em;">
+                              <xhtml:div>
+                                 <xhtml:br />
+                                 <xhtml:i>// place contents of the buffer into message structure</xhtml:i>
+                                 <xhtml:br />ExMessage *msg = recastBuffer(buffer);<xhtml:br />
+                                 <xhtml:br />
+                                 <xhtml:i>// copy message body into string for processing</xhtml:i>
+                                 <xhtml:br />int index;<xhtml:br />for (index = 0; index &lt; msg-&gt;msgLength; index++) {<xhtml:div style="margin-left:1em;">message[index] = msg-&gt;msgBody[index];</xhtml:div>}<xhtml:br />message[index] = '\0';<xhtml:br />
+                                 <xhtml:br />
+                                 <xhtml:i>// process message</xhtml:i>
+                                 <xhtml:br />success = processMessage(message);</xhtml:div>
+                           </xhtml:div>}<xhtml:br />return success;</xhtml:div>
+                     </xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>However, the message length variable (msgLength) from the structure is used as the condition for ending the for loop without validating that msgLength accurately reflects the actual length of the message body (CWE-606). If msgLength indicates a length that is longer than the size of a message body (CWE-130), then this can result in a buffer over-read by reading past the end of the buffer (CWE-126).</Body_Text>
+            </Demonstrative_Example>
+         </Demonstrative_Examples>
+         <Observed_Examples>
+            <Observed_Example>
+               <Reference>CVE-2009-2550</Reference>
+               <Description>Classic stack-based buffer overflow in media player using a long entry in a playlist</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2009-2550</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2009-2403</Reference>
+               <Description>Heap-based buffer overflow in media player using a long entry in a playlist</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2009-2403</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2009-0689</Reference>
+               <Description>large precision value in a format string triggers overflow</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2009-0689</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2009-0558</Reference>
+               <Description>attacker-controlled array index leads to code execution</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2009-0558</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2008-4113</Reference>
+               <Description>OS kernel trusts userland-supplied length value, allowing reading of sensitive information</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2008-4113</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2007-4268</Reference>
+               <Description>Chain: integer signedness error (CWE-195) passes signed comparison, leading to heap overflow (CWE-122)</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2007-4268</Link>
+            </Observed_Example>
+         </Observed_Examples>
+         <Functional_Areas>
+            <Functional_Area>Memory Management</Functional_Area>
+         </Functional_Areas>
+         <Affected_Resources>
+            <Affected_Resource>Memory</Affected_Resource>
+         </Affected_Resources>
+         <Taxonomy_Mappings>
+            <Taxonomy_Mapping Taxonomy_Name="OMG ASCRM">
+                <Entry_ID>ASCRM-CWE-788</Entry_ID>
+            </Taxonomy_Mapping>
+         </Taxonomy_Mappings>
+         <References>
+            <Reference External_Reference_ID="REF-961" Section="ASCRM-CWE-788" />
+	    <Reference External_Reference_ID="REF-1518" />
+         </References>
+         <Mapping_Notes>
+            <Usage>Discouraged</Usage>
+            <Rationale>The CWE entry might be misused when lower-level CWE entries might be available. It also overlaps existing CWE entries and might be deprecated in the future.</Rationale>
+            <Comments>If the "Access" operation is known to be a read or a write, then investigate children of entries such as CWE-787: Out-of-bounds Write and CWE-125: Out-of-bounds Read.</Comments>
+            <Reasons>
+               <Reason Type="Potential Deprecation" />
+               <Reason Type="Frequent Misuse" />
+            </Reasons>
+         </Mapping_Notes>
+         <Content_History>
+            <Submission>
+               <Submission_Name>CWE Content Team</Submission_Name>
+               <Submission_Organization>MITRE</Submission_Organization>
+               <Submission_Date>2009-10-21</Submission_Date>
+               <Submission_Version>1.6</Submission_Version>
+               <Submission_ReleaseDate>2009-10-29</Submission_ReleaseDate>
+            </Submission>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-06-01</Modification_Date>
+               <Modification_Version>1.13</Modification_Version>
+               <Modification_ReleaseDate>2011-06-01</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2012-05-11</Modification_Date>
+               <Modification_Version>2.2</Modification_Version>
+               <Modification_ReleaseDate>2012-05-15</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences, Demonstrative_Examples, Observed_Examples, Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2013-02-21</Modification_Date>
+               <Modification_Version>2.4</Modification_Version>
+               <Modification_ReleaseDate>2013-02-21</Modification_ReleaseDate>
+               <Modification_Comment>updated Demonstrative_Examples</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2014-06-23</Modification_Date>
+               <Modification_Version>2.7</Modification_Version>
+               <Modification_ReleaseDate>2014-06-23</Modification_ReleaseDate>
+               <Modification_Comment>updated Demonstrative_Examples</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2015-12-07</Modification_Date>
+               <Modification_Version>2.9</Modification_Version>
+               <Modification_ReleaseDate>2015-12-07</Modification_ReleaseDate>
+               <Modification_Comment>updated Description</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2017-05-03</Modification_Date>
+               <Modification_Version>2.11</Modification_Version>
+               <Modification_ReleaseDate>2017-05-05</Modification_ReleaseDate>
+               <Modification_Comment>updated Description</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2017-11-08</Modification_Date>
+               <Modification_Version>3.0</Modification_Version>
+               <Modification_ReleaseDate>2017-11-08</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences, Demonstrative_Examples, Observed_Examples</Modification_Comment>
+            </Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2019-01-03</Modification_Date>
+					<Modification_Version>3.2</Modification_Version>
+					<Modification_ReleaseDate>2019-01-03</Modification_ReleaseDate>
+					<Modification_Comment>updated References, Relationships, Taxonomy_Mappings</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-02-24</Modification_Date>
+					<Modification_Version>4.0</Modification_Version>
+					<Modification_ReleaseDate>2020-02-24</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-06-25</Modification_Date>
+					<Modification_Version>4.1</Modification_Version>
+					<Modification_ReleaseDate>2020-06-25</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-08-20</Modification_Date>
+					<Modification_Version>4.2</Modification_Version>
+					<Modification_ReleaseDate>2020-08-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-12-10</Modification_Date>
+					<Modification_Version>4.3</Modification_Version>
+					<Modification_ReleaseDate>2020-12-10</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-07-20</Modification_Date>
+					<Modification_Version>4.5</Modification_Version>
+					<Modification_ReleaseDate>2021-07-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-04-28</Modification_Date>
+					<Modification_Version>4.7</Modification_Version>
+					<Modification_ReleaseDate>2022-04-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Description</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-01-31</Modification_Date>
+					<Modification_Version>4.10</Modification_Version>
+					<Modification_ReleaseDate>2023-01-31</Modification_ReleaseDate>
+					<Modification_Comment>updated Description</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Detection_Factors, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2024-07-16</Modification_Date>
+					<Modification_Version>4.15</Modification_Version>
+					<Modification_ReleaseDate>2024-07-16</Modification_ReleaseDate>
+					<Modification_Comment>updated Common_Consequences</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-04-03</Modification_Date>
+					<Modification_Version>4.17</Modification_Version>
+					<Modification_ReleaseDate>2025-04-03</Modification_ReleaseDate>
+					<Modification_Comment>updated Applicable_Platforms</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-09-09</Modification_Date>
+					<Modification_Version>4.18</Modification_Version>
+					<Modification_ReleaseDate>2025-09-09</Modification_ReleaseDate>
+					<Modification_Comment>updated Affected_Resources, Demonstrative_Examples, Functional_Areas</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Applicable_Platforms, Detection_Factors, References, Time_of_Introduction, Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+            <Contribution Type="Feedback">
+               <Contribution_Name>Eric Constantin Brinz</Contribution_Name>
+               <Contribution_Organization>GENIA-SEC IT-Sicherheitsmanagement GmbH</Contribution_Organization>
+               <Contribution_Date>2022-02-23</Contribution_Date>
+               <Contribution_Comment>Suggested corrections to extended description.</Contribution_Comment>
+            </Contribution>
+         </Content_History>
+      </Weakness>
+      

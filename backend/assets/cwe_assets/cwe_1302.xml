@@ -1,0 +1,209 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="1302" Name="Missing Source Identifier in Entity Transactions on a System-On-Chip (SOC)" Abstraction="Base" Structure="Simple" Status="Incomplete">
+			<Description>The product implements a security identifier mechanism to differentiate what actions are allowed or disallowed when a transaction originates from an entity. A transaction is sent without a security identifier.</Description>
+			<Extended_Description>
+				<xhtml:p>In a System-On-Chip (SoC), various integrated circuits and hardware engines generate transactions such as to access (reads/writes) assets or perform certain actions (e.g., reset, fetch, compute). A typical transaction is comprised of source identity (to identify the originator of the transaction) and a destination identity (to route the transaction to the respective entity) in addition to much more information in the message. Sometimes the transactions are qualified with a Security Identifier.  This Security Identifier helps the destination agent decide on the set of allowed or disallowed actions.</xhtml:p>
+				<xhtml:p>A weakness that can exist in such transaction schemes is that the source agent does not consistently include the necessary Security Identifier with the transaction.  If the Security Identifier is missing, the destination agent might drop the message (resulting in an inadvertent Denial-of-Service (DoS)) or take inappropriate action by default in its attempt to execute the transaction, resulting in privilege escalation or provision of unintended access.</xhtml:p>
+			</Extended_Description>
+			<Related_Weaknesses>
+				<Related_Weakness Nature="ChildOf" CWE_ID="1294" View_ID="1000" Ordinal="Primary" />
+			</Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+			<Applicable_Platforms>
+				<Language Class="Not Language-Specific" Prevalence="Undetermined" />
+				<Operating_System Class="Not OS-Specific" Prevalence="Undetermined" />
+				<Architecture Class="Not Architecture-Specific" Prevalence="Undetermined" />
+				<Technology Class="Not Technology-Specific" Prevalence="Undetermined" />
+			</Applicable_Platforms>
+			<Modes_Of_Introduction>
+				<Introduction>
+					<Phase>Architecture and Design</Phase>
+					<Note>Such issues could be introduced during hardware architecture and design and identified later during Testing or System Configuration phases.</Note>
+				</Introduction>
+				<Introduction>
+					<Phase>Implementation</Phase>
+					<Note>Such issues could be introduced during implementation and identified later during Testing or System Configuration phases.</Note>
+				</Introduction>
+			</Modes_Of_Introduction>
+			<Common_Consequences>
+				<Consequence>
+					<Scope>Confidentiality</Scope>
+					<Scope>Integrity</Scope>
+					<Scope>Availability</Scope>
+					<Scope>Access Control</Scope>
+					<Impact>Modify Memory</Impact>
+					<Impact>Read Memory</Impact>
+					<Impact>DoS: Crash, Exit, or Restart</Impact>
+					<Impact>Bypass Protection Mechanism</Impact>
+					<Impact>Execute Unauthorized Code or Commands</Impact>
+					<Likelihood>High</Likelihood>
+				</Consequence>
+			</Common_Consequences>
+			<Potential_Mitigations>
+				<Mitigation>
+					<Phase>Architecture and Design</Phase>
+					<Description>Transaction details must be reviewed for design inconsistency and common weaknesses.</Description>
+				</Mitigation>
+				<Mitigation>
+					<Phase>Implementation</Phase>
+					<Description>Security identifier definition and programming flow must be tested in pre-silicon and post-silicon testing.</Description>
+				</Mitigation>
+			</Potential_Mitigations>
+			<Demonstrative_Examples>
+				<Demonstrative_Example>
+					<Intro_Text>
+						<xhtml:p>Consider a system with a register for storing AES key for encryption or decryption. The key is of 128 bits implemented as a set of four 32-bit registers.  The key registers are assets, and the register AES_KEY_ACCESS_POLICY is defined to provide the necessary access controls.</xhtml:p>
+						<xhtml:p>The access-policy register defines which agents with a security identifier in the transaction can access the AES-key registers. Each bit in this 32-bit register defines a security identifier. There could be a maximum of 32 security identifiers that are allowed accesses to the AES-key registers. The number of the bit when set (i.e., "1") allows for a respective action from an agent whose identity matches the number of the bit; if set to "0" (i.e., Clear), it disallows the respective action to that corresponding agent.</xhtml:p>
+					</Intro_Text>
+					<Example_Code Nature="Bad" Language="Other">
+						<xhtml:table>
+							<xhtml:tr>
+								<xhtml:th>Register</xhtml:th>
+								<xhtml:th>Field description</xhtml:th>
+							</xhtml:tr>
+							<xhtml:tr>
+								<xhtml:td>AES_ENC_DEC_KEY_0</xhtml:td>
+								<xhtml:td>AES key [0:31] for encryption or decryption, Default 0x00000000</xhtml:td>
+							</xhtml:tr>
+							<xhtml:tr>
+								<xhtml:td>AES_ENC_DEC_KEY_1</xhtml:td>
+								<xhtml:td>AES key [32:63] for encryption or decryption, Default 0x00000000</xhtml:td>
+							</xhtml:tr>
+							<xhtml:tr>
+								<xhtml:td>AES_ENC_DEC_KEY_2</xhtml:td>
+								<xhtml:td>AES key [64:95] for encryption or decryption, Default 0x00000000</xhtml:td>
+							</xhtml:tr>
+							<xhtml:tr>
+								<xhtml:td>AES_ENC_DEC_KEY_4</xhtml:td>
+								<xhtml:td>AES key [96:127] for encryption or decryption, Default 0x00000000</xhtml:td>
+							</xhtml:tr>
+							<xhtml:tr>
+								<xhtml:td>AES_KEY_ACCESS_POLICY</xhtml:td>
+								<xhtml:td>[31:0] Default 0x00000004 - agent with Security Identifier "2" has access to AES_ENC_DEC_KEY_0 through AES_ENC_DEC_KEY_4 registers</xhtml:td>
+							</xhtml:tr>
+						</xhtml:table>
+					</Example_Code>
+					<Body_Text>The originator sends a transaction with no security identifier, i.e., meaning the value is "0" or NULL. The AES-Key-access register does not allow the necessary action and drops the transaction because the originator failed to include the required security identifier.</Body_Text>
+					<Example_Code Nature="Good" Language="Other">
+						<xhtml:table>
+							<xhtml:tr>
+								<xhtml:th>Register</xhtml:th>
+								<xhtml:th>Field description</xhtml:th>
+							</xhtml:tr>
+							<xhtml:tr>
+								<xhtml:td>AES_ENC_DEC_KEY_0</xhtml:td>
+								<xhtml:td>AES key [0:31] for encryption or decryption, Default 0x00000000</xhtml:td>
+							</xhtml:tr>
+							<xhtml:tr>
+								<xhtml:td>AES_ENC_DEC_KEY_1</xhtml:td>
+								<xhtml:td>AES key [32:63] for encryption or decryption, Default 0x00000000</xhtml:td>
+							</xhtml:tr>
+							<xhtml:tr>
+								<xhtml:td>AES_ENC_DEC_KEY_2</xhtml:td>
+								<xhtml:td>AES key [64:95] for encryption or decryption, Default 0x00000000</xhtml:td>
+							</xhtml:tr>
+							<xhtml:tr>
+								<xhtml:td>AES_ENC_DEC_KEY_4</xhtml:td>
+								<xhtml:td>AES key [96:127] for encryption or decryption, Default 0x00000000</xhtml:td>
+							</xhtml:tr>
+							<xhtml:tr>
+								<xhtml:td>AES_KEY_ACCESS_POLICY</xhtml:td>
+								<xhtml:td>[31:0] Default 0x00000002 - agent with security identifier "2" has access to AES_ENC_DEC_KEY_0 through AES_ENC_DEC_KEY_4 registers</xhtml:td>
+							</xhtml:tr>
+						</xhtml:table>
+					</Example_Code>
+					<Body_Text>The originator should send a transaction with Security Identifier "2" which will allow access to the AES-Key-access register and allow encryption and decryption operations.</Body_Text>
+				</Demonstrative_Example>
+			</Demonstrative_Examples>
+         <Related_Attack_Patterns>
+            <Related_Attack_Pattern CAPEC_ID="121" />
+            <Related_Attack_Pattern CAPEC_ID="681" />
+         </Related_Attack_Patterns>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Base level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+         <Content_History>
+				<Submission>
+					<Submission_Name>Arun Kanuparthi, Hareesh Khattri, Parbati Kumar Manna</Submission_Name>
+					<Submission_Organization>Intel Corporation</Submission_Organization>
+					<Submission_Date>2020-02-14</Submission_Date>
+					<Submission_Version>4.2</Submission_Version>
+					<Submission_ReleaseDate>2020-08-20</Submission_ReleaseDate>
+				</Submission>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-07-20</Modification_Date>
+					<Modification_Version>4.5</Modification_Version>
+					<Modification_ReleaseDate>2021-07-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Related_Attack_Patterns</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-10-28</Modification_Date>
+					<Modification_Version>4.6</Modification_Version>
+					<Modification_ReleaseDate>2021-10-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-04-28</Modification_Date>
+					<Modification_Version>4.7</Modification_Version>
+					<Modification_ReleaseDate>2022-04-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Related_Attack_Patterns</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-10-13</Modification_Date>
+					<Modification_Version>4.9</Modification_Version>
+					<Modification_ReleaseDate>2022-10-13</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2024-02-29</Modification_Date>
+					<Modification_Version>4.14</Modification_Version>
+					<Modification_ReleaseDate>2024-02-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Description, Name</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples, Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+			<Previous_Entry_Name Date="2024-02-29">Missing Security Identifier</Previous_Entry_Name>
+			</Content_History>
+		</Weakness>
+      

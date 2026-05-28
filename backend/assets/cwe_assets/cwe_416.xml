@@ -1,0 +1,656 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="416" Name="Use After Free" Abstraction="Variant" Structure="Simple" Status="Stable" Diagram="/data/images/CWE-416-Diagram.png">
+         <Description>The product reuses or references memory after it has been freed. At some point afterward, the memory may be allocated again and saved in another pointer, while the original pointer references a location somewhere within the new allocation. Any operations using the original pointer are no longer valid because the memory "belongs" to the code that operates on the new pointer.</Description>
+         <Related_Weaknesses>
+             <Related_Weakness Nature="ChildOf" CWE_ID="825" View_ID="1000" Ordinal="Primary" />
+             <Related_Weakness Nature="ChildOf" CWE_ID="672" View_ID="1003" Ordinal="Primary" />
+             <Related_Weakness Nature="ChildOf" CWE_ID="672" View_ID="1305" Ordinal="Primary" />
+			 <Related_Weakness Nature="ChildOf" CWE_ID="672" View_ID="1340" Ordinal="Primary" />
+             <Related_Weakness Nature="CanPrecede" CWE_ID="120" View_ID="1000" />
+             <Related_Weakness Nature="CanPrecede" CWE_ID="123" View_ID="1000" />
+         </Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Resultant</Ordinality>
+			   <Description>If the product accesses a previously-freed pointer, then it means that a separate weakness or error already occurred previously, such as a race condition, an unexpected or poorly handled error condition, confusion over which part of the program is responsible for freeing the memory, performing the free too soon, etc.</Description>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+         <Applicable_Platforms>
+	    <Language Class="Memory-Unsafe" Prevalence="Often" />
+            <Language Name="C" Prevalence="Often" />
+            <Language Name="C++" Prevalence="Often" />
+         </Applicable_Platforms>
+         <Alternate_Terms>
+            <Alternate_Term>
+               <Term>Dangling pointer</Term>
+			   <Description>a pointer that no longer points to valid memory, often after it has been freed</Description>
+            </Alternate_Term>
+            <Alternate_Term>
+               <Term>UAF</Term>
+			   <Description>commonly used acronym for Use After Free</Description>
+            </Alternate_Term>
+            <Alternate_Term>
+               <Term>Use-After-Free</Term>
+            </Alternate_Term>
+         </Alternate_Terms>
+         <Modes_Of_Introduction>
+            <Introduction>
+               <Phase>Implementation</Phase>
+            </Introduction>
+         </Modes_Of_Introduction>
+         <Likelihood_Of_Exploit>High</Likelihood_Of_Exploit>
+         <Common_Consequences>
+            <Consequence>
+               <Scope>Integrity</Scope>
+               <Impact>Modify Memory</Impact>
+               <Note>The use of previously freed memory may corrupt valid data, if the memory area in question has been allocated and used properly elsewhere.</Note>
+            </Consequence>
+            <Consequence>
+               <Scope>Availability</Scope>
+               <Impact>DoS: Crash, Exit, or Restart</Impact>
+               <Note>If chunk consolidation occurs after the use of previously freed data, the process may crash when invalid data is used as chunk information.</Note>
+            </Consequence>
+            <Consequence>
+               <Scope>Confidentiality</Scope>
+               <Impact>Read Memory</Impact>
+               <Note>Read operations on freed memory can sometimes leak sensitive information instead of causing a crash</Note>
+            </Consequence>
+            <Consequence>
+               <Scope>Integrity</Scope>
+               <Scope>Confidentiality</Scope>
+               <Scope>Availability</Scope>
+               <Impact>Execute Unauthorized Code or Commands</Impact>
+               <Note>If malicious data is entered before chunk consolidation can take place, it may be possible to take advantage of a write-what-where primitive to execute arbitrary code. If the newly allocated data happens to hold a class, in C++ for example, various function pointers may be scattered within the heap data. If one of these function pointers is overwritten with an address to valid shellcode, execution of arbitrary code can be achieved.</Note>
+            </Consequence>
+         </Common_Consequences>
+         <Detection_Methods>
+           <Detection_Method Detection_Method_ID="DM-13">
+             <Method>Fuzzing</Method>
+             <Description>Fuzz testing (fuzzing) is a powerful technique for generating large numbers of diverse inputs - either randomly or algorithmically - and dynamically invoking the code with those inputs. Even with random inputs, it is often capable of generating unexpected results such as crashes, memory corruption, or resource consumption. Fuzzing effectively produces repeatable test cases that clearly indicate bugs, which helps developers to diagnose the issues.</Description>
+             <Effectiveness>High</Effectiveness>
+           </Detection_Method>
+           <Detection_Method Detection_Method_ID="DM-14">
+             <Method>Automated Static Analysis</Method>
+             <Description>Automated static analysis, commonly referred to as Static Application Security Testing (SAST), can find some instances of this weakness by analyzing source code (or binary/compiled code) without having to execute it. Typically, this is done by building a model of data flow and control flow, then searching for potentially-vulnerable patterns that connect "sources" (origins of input) with "sinks" (destinations where the data interacts with external components, a lower layer such as the OS, etc.)</Description>
+             <Effectiveness>High</Effectiveness>
+           </Detection_Method>
+	   <Detection_Method Detection_Method_ID="DM-15">
+	     <Method>Automated Dynamic Analysis</Method>
+	     <Description>Use tools that are integrated during
+	     compilation to insert runtime error-checking mechanisms
+	     related to memory safety errors, such as AddressSanitizer
+	     (ASan) for C/C++ [REF-1518].</Description>
+	     <Effectiveness>Moderate</Effectiveness>
+	     <Effectiveness_Notes>Crafted inputs are necessary to
+	     reach the code containing the error, such as generated
+	     by fuzzers.  Also, these tools may reduce performance,
+	     and they only report the error condition - not the
+	     original mistake that led to the
+	     error.</Effectiveness_Notes>
+           </Detection_Method>
+         </Detection_Methods>
+         <Potential_Mitigations>
+            <Mitigation>
+               <Phase>Architecture and Design</Phase>
+			   <Strategy>Language Selection</Strategy>
+               <Description>Choose a language that provides automatic memory management.</Description>
+            </Mitigation>
+            <Mitigation>
+               <Phase>Implementation</Phase>
+			   <Strategy>Attack Surface Reduction</Strategy>
+               <Description>When freeing pointers, be sure to set them to NULL once they are freed. However, the utilization of multiple or complex data structures may lower the usefulness of this strategy.</Description>
+			   <Effectiveness>Defense in Depth</Effectiveness>
+			   <Effectiveness_Notes>If a bug causes an attempted access of this pointer, then a NULL dereference could still lead to a crash or other unexpected behavior, but it will reduce or eliminate the risk of code execution.</Effectiveness_Notes>
+            </Mitigation>
+         </Potential_Mitigations>
+         <Demonstrative_Examples>
+            <Demonstrative_Example>
+               <Intro_Text>The following example demonstrates the weakness.</Intro_Text>
+               <Example_Code Nature="Bad" Language="C">
+                  <xhtml:div>#include &lt;stdio.h&gt;<xhtml:br />#include &lt;unistd.h&gt;<xhtml:br />#define BUFSIZER1 512<xhtml:br />#define BUFSIZER2 ((BUFSIZER1/2) - 8)<xhtml:br />int main(int argc, char **argv) {<xhtml:div style="margin-left:1em;">char *buf1R1;<xhtml:br />char *buf2R1;<xhtml:br />char *buf2R2;<xhtml:br />char *buf3R2;<xhtml:br />buf1R1 = (char *) malloc(BUFSIZER1);<xhtml:br />buf2R1 = (char *) malloc(BUFSIZER1);<xhtml:br />free(buf2R1);<xhtml:br />buf2R2 = (char *) malloc(BUFSIZER2);<xhtml:br />buf3R2 = (char *) malloc(BUFSIZER2);<xhtml:br />strncpy(buf2R1, argv[1], BUFSIZER1-1);<xhtml:br />free(buf1R1);<xhtml:br />free(buf2R2);<xhtml:br />free(buf3R2);</xhtml:div>}</xhtml:div>
+               </Example_Code>
+            </Demonstrative_Example>
+            <Demonstrative_Example>
+               <Intro_Text>The following code illustrates a use after free error:</Intro_Text>
+               <Example_Code Nature="Bad" Language="C">
+                  <xhtml:div>char* ptr = (char*)malloc (SIZE);<xhtml:br />if (err) {<xhtml:div style="margin-left:1em;">abrt = 1;<xhtml:br />free(ptr);</xhtml:div>}<xhtml:br />...<xhtml:br />if (abrt) {<xhtml:div style="margin-left:1em;">logError("operation aborted before commit", ptr);</xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>When an error occurs, the pointer is immediately freed. However, this pointer is later incorrectly used in the logError function.</Body_Text>
+            </Demonstrative_Example>
+         </Demonstrative_Examples>
+         <Observed_Examples>
+	       <Observed_Example>
+             <Reference>CVE-2023-38160</Reference>
+             <Description>TCP/IP code for an OS has a use-after-free that can leak heap memory contents</Description>
+             <Link>https://www.cve.org/CVERecord?id=CVE-2023-38160</Link>
+           </Observed_Example>
+	    <Observed_Example>
+               <Reference>CVE-2022-20141</Reference>
+               <Description>Chain: an operating system kernel has insufficent resource locking (CWE-413) leading to a use after free (CWE-416).</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2022-20141</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2022-2621</Reference>
+               <Description>Chain: two threads in a web browser use the same resource (CWE-366), but one of those threads can destroy the resource before the other has completed (CWE-416).</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2022-2621</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2021-0920</Reference>
+               <Description>Chain: mobile platform race condition (CWE-362) leading to use-after-free (CWE-416), as exploited in the wild per CISA KEV.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2021-0920</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2020-6819</Reference>
+               <Description>Chain: race condition (CWE-362) leads to use-after-free (CWE-416), as exploited in the wild per CISA KEV.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2020-6819</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2010-4168</Reference>
+               <Description>Use-after-free triggered by closing a connection while data is still being transmitted.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2010-4168</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2010-2941</Reference>
+               <Description>Improper allocation for invalid data leads to use-after-free.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2010-2941</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2010-2547</Reference>
+               <Description>certificate with a large number of Subject Alternate Names not properly handled in realloc, leading to use-after-free</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2010-2547</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2010-1772</Reference>
+               <Description>Timers are not disabled when a related object is deleted</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2010-1772</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2010-1437</Reference>
+               <Description>Access to a "dead" object that is being cleaned up</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2010-1437</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2010-1208</Reference>
+               <Description>object is deleted even with a non-zero reference count, and later accessed</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2010-1208</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2010-0629</Reference>
+               <Description>use-after-free involving request containing an invalid version number</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2010-0629</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2010-0378</Reference>
+               <Description>unload of an object that is currently being accessed by other functionality</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2010-0378</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2010-0302</Reference>
+               <Description>incorrectly tracking a reference count leads to use-after-free</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2010-0302</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2010-0249</Reference>
+               <Description>use-after-free related to use of uninitialized memory</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2010-0249</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2010-0050</Reference>
+               <Description>HTML document with incorrectly-nested tags</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2010-0050</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2009-3658</Reference>
+               <Description>Use after free in ActiveX object by providing a malformed argument to a method</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2009-3658</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2009-3616</Reference>
+               <Description>use-after-free by disconnecting during data transfer, or a message containing incorrect data types</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2009-3616</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2009-3553</Reference>
+               <Description>disconnect during a large data transfer causes incorrect reference count, leading to use-after-free</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2009-3553</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2009-2416</Reference>
+               <Description>use-after-free found by fuzzing</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2009-2416</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2009-1837</Reference>
+               <Description>Chain: race condition (CWE-362) from improper handling of a page transition in web client while an applet is loading (CWE-368) leads to use after free (CWE-416)</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2009-1837</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2009-0749</Reference>
+               <Description>realloc generates new buffer and pointer, but previous pointer is still retained, leading to use after free</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2009-0749</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2010-3328</Reference>
+               <Description>Use-after-free in web browser, probably resultant from not initializing memory.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2010-3328</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2008-5038</Reference>
+               <Description>use-after-free when one thread accessed memory that was freed by another thread</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2008-5038</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2008-0077</Reference>
+               <Description>assignment of malformed values to certain properties triggers use after free</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2008-0077</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2006-4434</Reference>
+               <Description>mail server does not properly handle a long header.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2006-4434</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2010-2753</Reference>
+               <Description>chain: integer overflow leads to use-after-free</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2010-2753</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2006-4997</Reference>
+               <Description>freed pointer dereference</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2006-4997</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2003-0813</Reference>
+               <Description>Chain: A multi-threaded race condition (CWE-367) allows attackers to cause two threads to process the same RPC request, which causes a use-after-free (CWE-416) in one thread</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2003-0813</Link>
+            </Observed_Example>
+         </Observed_Examples>
+         <Functional_Areas>
+            <Functional_Area>Memory Management</Functional_Area>
+         </Functional_Areas>
+         <Affected_Resources>
+            <Affected_Resource>Memory</Affected_Resource>
+         </Affected_Resources>
+         <Taxonomy_Mappings>
+		   <Taxonomy_Mapping Taxonomy_Name="ISA/IEC 62443">
+			 <Entry_ID>Part 4-1</Entry_ID>
+			 <Entry_Name>Req SI-1</Entry_Name>
+		   </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="7 Pernicious Kingdoms">
+               <Entry_Name>Use After Free</Entry_Name>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="CLASP">
+               <Entry_Name>Using freed memory</Entry_Name>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="CERT C Secure Coding">
+               <Entry_ID>MEM00-C</Entry_ID>
+               <Entry_Name>Allocate and free memory in the same module, at the same level of abstraction</Entry_Name>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="CERT C Secure Coding">
+               <Entry_ID>MEM01-C</Entry_ID>
+               <Entry_Name>Store a new value in pointers immediately after free()</Entry_Name>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="CERT C Secure Coding">
+               <Entry_ID>MEM30-C</Entry_ID>
+               <Entry_Name>Do not access freed memory</Entry_Name>
+               <Mapping_Fit>Exact</Mapping_Fit>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="Software Fault Patterns">
+               <Entry_ID>SFP15</Entry_ID>
+               <Entry_Name>Faulty Resource Use</Entry_Name>
+            </Taxonomy_Mapping>
+         </Taxonomy_Mappings>
+         <References>
+            <Reference External_Reference_ID="REF-6" />
+            <Reference External_Reference_ID="REF-18" />
+            <Reference External_Reference_ID="REF-44" Section="&quot;Sin 8: C++ Catastrophes.&quot; Page 143" />
+	    <Reference External_Reference_ID="REF-1518" />
+         </References>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Variant level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+         <Content_History>
+            <Submission>
+               <Submission_Name>7 Pernicious Kingdoms</Submission_Name>
+               <Submission_Date>2006-07-19</Submission_Date>
+               <Submission_Version>Draft 3</Submission_Version>
+               <Submission_ReleaseDate>2006-07-19</Submission_ReleaseDate>
+            </Submission>
+            <Modification>
+               <Modification_Name>Eric Dalci</Modification_Name>
+               <Modification_Organization>Cigital</Modification_Organization>
+               <Modification_Date>2008-07-01</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>updated Potential_Mitigations, Time_of_Introduction</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Organization>KDM Analytics</Modification_Organization>
+               <Modification_Date>2008-08-01</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>added/updated white box definitions</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2008-09-08</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>updated Applicable_Platforms, Common_Consequences, Relationships, Observed_Example, Other_Notes, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2008-11-24</Modification_Date>
+               <Modification_Version>1.1</Modification_Version>
+               <Modification_ReleaseDate>2008-11-25</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2009-03-10</Modification_Date>
+               <Modification_Version>1.3</Modification_Version>
+               <Modification_ReleaseDate>2009-03-10</Modification_ReleaseDate>
+               <Modification_Comment>updated Demonstrative_Examples</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2009-05-27</Modification_Date>
+               <Modification_Version>1.4</Modification_Version>
+               <Modification_ReleaseDate>2009-05-27</Modification_ReleaseDate>
+               <Modification_Comment>updated Demonstrative_Examples</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2009-10-29</Modification_Date>
+               <Modification_Version>1.6</Modification_Version>
+               <Modification_ReleaseDate>2009-10-29</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2010-02-16</Modification_Date>
+               <Modification_Version>1.8</Modification_Version>
+               <Modification_ReleaseDate>2010-02-16</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2010-06-21</Modification_Date>
+               <Modification_Version>1.9</Modification_Version>
+               <Modification_ReleaseDate>2010-06-21</Modification_ReleaseDate>
+               <Modification_Comment>updated Potential_Mitigations</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2010-09-27</Modification_Date>
+               <Modification_Version>1.10</Modification_Version>
+               <Modification_ReleaseDate>2010-09-27</Modification_ReleaseDate>
+               <Modification_Comment>updated Observed_Examples, Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2010-12-13</Modification_Date>
+               <Modification_Version>1.11</Modification_Version>
+               <Modification_ReleaseDate>2010-12-13</Modification_ReleaseDate>
+               <Modification_Comment>updated Alternate_Terms, Common_Consequences, Description, Observed_Examples, Other_Notes, Potential_Mitigations, Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-03-29</Modification_Date>
+               <Modification_Version>1.12</Modification_Version>
+               <Modification_ReleaseDate>2011-03-30</Modification_ReleaseDate>
+               <Modification_Comment>updated Description</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-06-01</Modification_Date>
+               <Modification_Version>1.13</Modification_Version>
+               <Modification_ReleaseDate>2011-06-01</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-06-27</Modification_Date>
+               <Modification_Version>2.0</Modification_Version>
+               <Modification_ReleaseDate>2011-06-27</Modification_ReleaseDate>
+               <Modification_Comment>updated Demonstrative_Examples</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-09-13</Modification_Date>
+               <Modification_Version>2.1</Modification_Version>
+               <Modification_ReleaseDate>2011-09-13</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2012-05-11</Modification_Date>
+               <Modification_Version>2.2</Modification_Version>
+               <Modification_ReleaseDate>2012-05-15</Modification_ReleaseDate>
+               <Modification_Comment>updated References, Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2014-07-30</Modification_Date>
+               <Modification_Version>2.8</Modification_Version>
+               <Modification_ReleaseDate>2014-07-31</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2015-12-07</Modification_Date>
+               <Modification_Version>2.9</Modification_Version>
+               <Modification_ReleaseDate>2015-12-07</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2017-11-08</Modification_Date>
+               <Modification_Version>3.0</Modification_Version>
+               <Modification_ReleaseDate>2017-11-08</Modification_ReleaseDate>
+               <Modification_Comment>updated Demonstrative_Examples, Relationships, Taxonomy_Mappings, White_Box_Definitions</Modification_Comment>
+            </Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2019-01-03</Modification_Date>
+					<Modification_Version>3.2</Modification_Version>
+					<Modification_ReleaseDate>2019-01-03</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2019-06-20</Modification_Date>
+					<Modification_Version>3.3</Modification_Version>
+					<Modification_ReleaseDate>2019-06-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships, Type</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2019-09-19</Modification_Date>
+					<Modification_Version>3.4</Modification_Version>
+					<Modification_ReleaseDate>2019-09-19</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-02-24</Modification_Date>
+					<Modification_Version>4.0</Modification_Version>
+					<Modification_ReleaseDate>2020-02-24</Modification_ReleaseDate>
+					<Modification_Comment>updated References, Relationships, Taxonomy_Mappings</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-06-25</Modification_Date>
+					<Modification_Version>4.1</Modification_Version>
+					<Modification_ReleaseDate>2020-06-25</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-08-20</Modification_Date>
+					<Modification_Version>4.2</Modification_Version>
+					<Modification_ReleaseDate>2020-08-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-12-10</Modification_Date>
+					<Modification_Version>4.3</Modification_Version>
+					<Modification_ReleaseDate>2020-12-10</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-07-20</Modification_Date>
+					<Modification_Version>4.5</Modification_Version>
+					<Modification_ReleaseDate>2021-07-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-06-28</Modification_Date>
+					<Modification_Version>4.8</Modification_Version>
+					<Modification_ReleaseDate>2022-06-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Observed_Examples, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-10-13</Modification_Date>
+					<Modification_Version>4.9</Modification_Version>
+					<Modification_ReleaseDate>2022-10-13</Modification_ReleaseDate>
+					<Modification_Comment>updated Description, Relationships, Taxonomy_Mappings</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Detection_Factors, Relationships, Time_of_Introduction</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-10-26</Modification_Date>
+					<Modification_Version>4.13</Modification_Version>
+					<Modification_ReleaseDate>2023-10-26</Modification_ReleaseDate>
+					<Modification_Comment>updated Observed_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2024-02-29</Modification_Date>
+					<Modification_Version>4.14</Modification_Version>
+					<Modification_ReleaseDate>2024-02-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Taxonomy_Mappings</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2024-07-16</Modification_Date>
+					<Modification_Version>4.15</Modification_Version>
+					<Modification_ReleaseDate>2024-07-16</Modification_ReleaseDate>
+					<Modification_Comment>updated Alternate_Terms, Common_Consequences, Description, Diagram, Potential_Mitigations, Relationships, Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2024-11-19</Modification_Date>
+					<Modification_Version>4.16</Modification_Version>
+					<Modification_ReleaseDate>2024-11-19</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-04-03</Modification_Date>
+					<Modification_Version>4.17</Modification_Version>
+					<Modification_ReleaseDate>2025-04-03</Modification_ReleaseDate>
+					<Modification_Comment>updated Observed_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-09-09</Modification_Date>
+					<Modification_Version>4.18</Modification_Version>
+					<Modification_ReleaseDate>2025-09-09</Modification_ReleaseDate>
+					<Modification_Comment>updated Functional_Areas</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Applicable_Platforms, Detection_Factors, References, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2026-04-30</Modification_Date>
+					<Modification_Version>4.20</Modification_Version>
+					<Modification_ReleaseDate>2026-04-30</Modification_ReleaseDate>
+					<Modification_Comment>updated Common_Consequences, Observed_Examples</Modification_Comment>
+				</Modification>
+            <Contribution Type="Feedback">
+               <Contribution_Name>Anonymous External Contributor</Contribution_Name>
+               <Contribution_Date>2022-06-28</Contribution_Date>
+               <Contribution_Comment>Suggested rephrase for extended description</Contribution_Comment>
+            </Contribution>
+			<Contribution Type="Content">
+			  <Contribution_Name>participants in the CWE ICS/OT SIG 62443 Mapping Fall Workshop</Contribution_Name>
+			  <Contribution_Date>2023-11-14</Contribution_Date>
+			  <Contribution_Version>4.14</Contribution_Version>
+			  <Contribution_ReleaseDate>2024-02-29</Contribution_ReleaseDate>
+			  <Contribution_Comment>Contributed or reviewed taxonomy mappings for ISA/IEC 62443</Contribution_Comment>
+			</Contribution>
+			<Contribution Type="Content">
+			  <Contribution_Name>Abhi Balakrishnan</Contribution_Name>
+			  <Contribution_Date>2024-02-29</Contribution_Date>
+			  <Contribution_Version>4.15</Contribution_Version>
+			  <Contribution_ReleaseDate>2024-07-16</Contribution_ReleaseDate>
+			  <Contribution_Comment>Provided diagram to improve CWE usability</Contribution_Comment>
+			</Contribution>
+         </Content_History>
+      </Weakness>
+      

@@ -1,0 +1,245 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="1395" Name="Dependency on Vulnerable Third-Party Component" Abstraction="Class" Structure="Simple" Status="Incomplete">
+	    <Description>The product has a dependency on a third-party component that contains one or more known vulnerabilities.</Description>
+	    <Extended_Description>
+	      <xhtml:p>Many products are large enough or complex enough that part of their functionality uses libraries, modules, or other intellectual property developed by third parties who are not the product creator. For example, even an entire operating system might be from a third-party supplier in some hardware products. Whether open or closed source, these components may contain publicly known vulnerabilities or hidden functionality such as malware that could be exploited by adversaries to compromise the product.</xhtml:p>
+	    </Extended_Description>
+	    <Related_Weaknesses>
+	      <Related_Weakness Nature="ChildOf" CWE_ID="1357" View_ID="1000" Ordinal="Primary" />
+	      <Related_Weakness Nature="ChildOf" CWE_ID="657" View_ID="1000" />
+	    </Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+	    <Applicable_Platforms>
+	      <Language Class="Not Language-Specific" Prevalence="Undetermined" />
+	      <Operating_System Class="Not OS-Specific" Prevalence="Undetermined" />
+	      <Architecture Class="Not Architecture-Specific" Prevalence="Undetermined" />
+	      <Technology Class="Not Technology-Specific" Prevalence="Undetermined" />
+	    </Applicable_Platforms>
+	    <Modes_Of_Introduction>
+	      <Introduction>
+		<Phase>Architecture and Design</Phase>
+		<Note>The product architect or designer might choose a component that is already known to contain vulnerabilities or has a high likelihood of containing vulnerabilities in the future.</Note>
+	      </Introduction>
+	      <Introduction>
+		<Phase>Implementation</Phase>
+		<Note>For reasons of compatibility or stability, developers might choose a third-party component, such as a library, that is already known to contain vulnerabilities. </Note>
+	      </Introduction>
+	      <Introduction>
+		<Phase>Patching and Maintenance</Phase>
+		<Note>Since all products contain vulnerabilities, over time, a third-party component will be discovered to have a vulnerability.</Note>
+	      </Introduction>
+	    </Modes_Of_Introduction>
+	    <Common_Consequences>
+	      <Consequence>
+		<Scope>Confidentiality</Scope>
+		<Scope>Integrity</Scope>
+		<Scope>Availability</Scope>
+		<Impact>Varies by Context</Impact>
+		<Note>The consequences vary widely, depending on the vulnerabilities that exist in the component; how those vulnerabilities can be "reached" by adversaries, as the exploitation paths and attack surface will vary depending on how the component is used; and the criticality of the privilege levels and features for which the product relies on the component.</Note>
+	      </Consequence>
+	    </Common_Consequences>
+	    <Detection_Methods>
+	      <Detection_Method>
+		<Method>Automated Analysis</Method>
+		<Description>For software, use Software Composition Analysis (SCA) tools, which automatically analyze products to identify third-party dependencies. Often, SCA tools can be used to link with known vulnerabilities in the dependencies that they detect. There are commercial and open-source alternatives, such as OWASP Dependency-Check [REF-1312]. Many languages or frameworks have package managers with similar capabilities, such as npm audit for JavaScript, pip-audit for Python, govulncheck for Go, and many others. Dynamic methods can detect loading of third-party components.</Description>
+		<Effectiveness>High</Effectiveness>
+		<Effectiveness_Notes>Software Composition Analysis (SCA) tools face a number of technical challenges that can lead to false positives and false negatives. Dynamic methods have other technical challenges.</Effectiveness_Notes>
+	      </Detection_Method>
+	    </Detection_Methods>
+	    <Potential_Mitigations>
+	      <Mitigation>
+		<Phase>Requirements</Phase>
+		<Phase>Policy</Phase>
+		<Description>In some industries such as healthcare [REF-1320] [REF-1322] or technologies such as the cloud [REF-1321], it might be unclear about who is responsible for applying patches for third-party vulnerabilities: the vendor, the operator/customer, or a separate service. Clarifying roles and responsibilities can be important to minimize confusion or unnecessary delay when third-party vulnerabilities are disclosed.</Description>
+	      </Mitigation>
+	      <Mitigation>
+		<Phase>Requirements</Phase>
+		<Description>Require a Bill of Materials for all components and sub-components of the product. For software, require a Software Bill of Materials (SBOM) [REF-1247] [REF-1311].</Description>
+	      </Mitigation>
+	      <Mitigation>
+		<Phase>Architecture and Design</Phase>
+		<Phase>Implementation</Phase>
+		<Phase>Integration</Phase>
+		<Phase>Manufacturing</Phase>
+		<Description>Maintain a Bill of Materials for all components and sub-components of the product. For software, maintain a Software Bill of Materials (SBOM). According to [REF-1247], "An SBOM is a formal, machine-readable inventory of software components and dependencies, information about those components, and their hierarchical relationships."</Description>
+	      </Mitigation>
+	      <Mitigation>
+		<Phase>Operation</Phase>
+		<Phase>Patching and Maintenance</Phase>
+		<Description>Actively monitor when a third-party component vendor announces vulnerability patches; fix the third-party component as soon as possible; and make it easy for operators/customers to obtain and apply the patch.</Description>
+	      </Mitigation>
+	      <Mitigation>
+		<Phase>Operation</Phase>
+		<Phase>Patching and Maintenance</Phase>
+		<Description>Continuously monitor changes in each of the product's components, especially when the changes indicate new vulnerabilities, end-of-life (EOL) plans, etc.</Description>
+	      </Mitigation>
+	    </Potential_Mitigations>
+	    <Demonstrative_Examples>
+	      <Demonstrative_Example Demonstrative_Example_ID="DX-169">
+		<Intro_Text>The "SweynTooth" vulnerabilities in Bluetooth Low Energy (BLE) software development kits (SDK) were found to affect multiple Bluetooth System-on-Chip (SoC) manufacturers. These SoCs were used by many products such as medical devices, Smart Home devices, wearables, and other IoT devices. [REF-1314] [REF-1315]</Intro_Text>
+	      </Demonstrative_Example>
+	      <Demonstrative_Example>
+		<Intro_Text>log4j, a Java-based logging framework, is used in a large number of products, with estimates in the range of 3 billion affected devices [REF-1317]. When the "log4shell" (CVE-2021-44228) vulnerability was initially announced, it was actively exploited for remote code execution, requiring urgent mitigation in many organizations. However, it was unclear how many products were affected, as Log4j would sometimes be part of a long sequence of transitive dependencies. [REF-1316]</Intro_Text>
+	      </Demonstrative_Example>
+	    </Demonstrative_Examples>
+         <Observed_Examples>
+            <Observed_Example>
+               <Reference>CVE-2025-45612</Reference>
+               <Description>product uses a vulnerable version of an authentication framework, allowing authentication bypass</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2025-45612</Link>
+            </Observed_Example>
+         </Observed_Examples>
+		<Taxonomy_Mappings>
+		  <Taxonomy_Mapping Taxonomy_Name="ISA/IEC 62443">
+			<Entry_ID>Part 4-2</Entry_ID>
+			<Entry_Name>Req CR 2.4</Entry_Name>
+		  </Taxonomy_Mapping>
+		  <Taxonomy_Mapping Taxonomy_Name="ISA/IEC 62443">
+			<Entry_ID>Part 4-2</Entry_ID>
+			<Entry_Name>Req CR 6.2</Entry_Name>
+		  </Taxonomy_Mapping>
+		  <Taxonomy_Mapping Taxonomy_Name="ISA/IEC 62443">
+			<Entry_ID>Part 4-2</Entry_ID>
+			<Entry_Name>Req CR 7.2</Entry_Name>
+		  </Taxonomy_Mapping>
+		  <Taxonomy_Mapping Taxonomy_Name="ISA/IEC 62443">
+			<Entry_ID>Part 4-1</Entry_ID>
+			<Entry_Name>Req SM-9</Entry_Name>
+		  </Taxonomy_Mapping>
+		  <Taxonomy_Mapping Taxonomy_Name="ISA/IEC 62443">
+			<Entry_ID>Part 4-1</Entry_ID>
+			<Entry_Name>Req SM-10</Entry_Name>
+		  </Taxonomy_Mapping>
+		  <Taxonomy_Mapping Taxonomy_Name="ISA/IEC 62443">
+			<Entry_ID>Part 4-1</Entry_ID>
+			<Entry_Name>Req SR-2</Entry_Name>
+		  </Taxonomy_Mapping>
+		  <Taxonomy_Mapping Taxonomy_Name="ISA/IEC 62443">
+			<Entry_ID>Part 4-1</Entry_ID>
+			<Entry_Name>Req DM-1</Entry_Name>
+		  </Taxonomy_Mapping>
+		  <Taxonomy_Mapping Taxonomy_Name="ISA/IEC 62443">
+			<Entry_ID>Part 4-1</Entry_ID>
+			<Entry_Name>Req DM-3</Entry_Name>
+		  </Taxonomy_Mapping>
+		  <Taxonomy_Mapping Taxonomy_Name="ISA/IEC 62443">
+			<Entry_ID>Part 4-1</Entry_ID>
+			<Entry_Name>Req DM-4</Entry_Name>
+		  </Taxonomy_Mapping>
+		  <Taxonomy_Mapping Taxonomy_Name="ISA/IEC 62443">
+			<Entry_ID>Part 4-1</Entry_ID>
+			<Entry_Name>Req SVV-1</Entry_Name>
+		  </Taxonomy_Mapping>
+		  <Taxonomy_Mapping Taxonomy_Name="ISA/IEC 62443">
+			<Entry_ID>Part 4-1</Entry_ID>
+			<Entry_Name>Req SVV-3</Entry_Name>
+		  </Taxonomy_Mapping>
+		</Taxonomy_Mappings>
+	    <References>
+	      <Reference External_Reference_ID="REF-1313" />
+	      <Reference External_Reference_ID="REF-1212" />
+	      <Reference External_Reference_ID="REF-1247" />
+	      <Reference External_Reference_ID="REF-1311" />
+	      <Reference External_Reference_ID="REF-1312" />
+	      <Reference External_Reference_ID="REF-1314" />
+	      <Reference External_Reference_ID="REF-1315" />
+	      <Reference External_Reference_ID="REF-1316" />
+	      <Reference External_Reference_ID="REF-1317" />
+	      <Reference External_Reference_ID="REF-1320" />
+	      <Reference External_Reference_ID="REF-1321" />
+	      <Reference External_Reference_ID="REF-1322" Section="Section 6.1: Medical Device Procurement" />
+	    </References>
+         <Mapping_Notes>
+            <Usage>Allowed-with-Review</Usage>
+            <Rationale>This CWE entry is a Class, but it does not have Base-level children.</Rationale>
+            <Comments>This entry is classified in a part of CWE's hierarchy that does not have sufficiently low-level coverage, which might reflect a lack of classification-oriented weakness research in the software security community. Conduct careful root cause analysis to determine the original mistake that led to this weakness. If closer analysis reveals that this weakness is appropriate, then this might be the best available CWE to use for mapping. If no other option is available, then it is acceptable to map to this CWE.</Comments>
+            <Reasons>
+               <Reason Type="Abstraction" />
+               <Reason Type="Other" />
+            </Reasons>
+         </Mapping_Notes>
+	    <Content_History>
+	      <Submission>
+		<Submission_Name>CWE Content Team</Submission_Name>
+		<Submission_Organization>MITRE</Submission_Organization>
+		<Submission_Date>2023-01-25</Submission_Date>
+		<Submission_Version>4.10</Submission_Version>
+		<Submission_ReleaseDate>2023-01-31</Submission_ReleaseDate>
+	      </Submission>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated References, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes, Taxonomy_Mappings</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-10-26</Modification_Date>
+					<Modification_Version>4.13</Modification_Version>
+					<Modification_ReleaseDate>2023-10-26</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-04-03</Modification_Date>
+					<Modification_Version>4.17</Modification_Version>
+					<Modification_ReleaseDate>2025-04-03</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-09-09</Modification_Date>
+					<Modification_Version>4.18</Modification_Version>
+					<Modification_ReleaseDate>2025-09-09</Modification_ReleaseDate>
+					<Modification_Comment>updated References</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Observed_Examples, Relationships, Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2026-04-30</Modification_Date>
+					<Modification_Version>4.20</Modification_Version>
+					<Modification_ReleaseDate>2026-04-30</Modification_ReleaseDate>
+					<Modification_Comment>updated Description, Relationships</Modification_Comment>
+				</Modification>
+	      <Contribution Type="Feedback">
+		<Contribution_Name>Samreen Arshad</Contribution_Name>
+		<Contribution_Organization>Balochistan University of Information Technology, Engineering and Management Sciences</Contribution_Organization>
+		<Contribution_Date>2022-04-18</Contribution_Date>
+		<Contribution_Comment>Submitted a request for coverage of "Vulnerable and Outdated Components"</Contribution_Comment>
+	      </Contribution>
+		  <Contribution Type="Content">
+			<Contribution_Name>"Mapping CWE to 62443" Sub-Working Group</Contribution_Name>
+			<Contribution_Organization>CWE-CAPEC ICS/OT SIG</Contribution_Organization>
+			<Contribution_Date>2023-06-29</Contribution_Date>
+            <Contribution_Version>4.12</Contribution_Version>
+            <Contribution_ReleaseDate>2023-06-29</Contribution_ReleaseDate>
+			<Contribution_Comment>Suggested mappings to ISA/IEC 62443.</Contribution_Comment>
+		  </Contribution>
+	    </Content_History>
+	  </Weakness>
+      

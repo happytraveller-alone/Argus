@@ -1,0 +1,244 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="1321" Name="Improperly Controlled Modification of Object Prototype Attributes ('Prototype Pollution')" Abstraction="Variant" Structure="Simple" Status="Incomplete" Diagram="/data/images/CWE-1321-Diagram.png">
+			<Description>The product receives input from an upstream component that specifies attributes that are to be initialized or updated in an object, but it does not properly control modifications of attributes of the object prototype.</Description>
+			<Related_Weaknesses>
+				<Related_Weakness Nature="ChildOf" CWE_ID="915" View_ID="1000" Ordinal="Primary" />
+				<Related_Weakness Nature="ChildOf" CWE_ID="913" View_ID="1003" Ordinal="Primary" />
+				<Related_Weakness Nature="CanPrecede" CWE_ID="471" View_ID="1000" Ordinal="Primary" />
+			</Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+			<Applicable_Platforms>
+				<Language Name="JavaScript" Prevalence="Undetermined" />
+			</Applicable_Platforms>
+			<Modes_Of_Introduction>
+				<Introduction>
+					<Phase>Architecture and Design</Phase>
+				</Introduction>
+				<Introduction>
+					<Phase>Implementation</Phase>
+					<Note>This weakness is often found in code that assigns object attributes based on user input, or merges or clones objects recursively.</Note>
+				</Introduction>
+			</Modes_Of_Introduction>
+			<Common_Consequences>
+				<Consequence>
+					<Scope>Confidentiality</Scope>
+					<Scope>Integrity</Scope>
+					<Scope>Availability</Scope>
+					<Impact>Read Application Data</Impact>
+					<Impact>Modify Application Data</Impact>
+					<Likelihood>High</Likelihood>
+					<Note>This weakness is usually exploited by using a special attribute of objects called proto, constructor, or prototype. Such attributes give access to the object prototype. An attacker can inject attributes that are used in other components by adding or modifying attributes of an object prototype. This creates attributes that exist on every object, or replace critical attributes with malicious ones. This can be problematic if the product depends on existence or non-existence of certain attributes, or uses pre-defined attributes of the object prototype (such as hasOwnProperty, toString, or valueOf).</Note>
+				</Consequence>
+				<Consequence>
+					<Scope>Availability</Scope>
+					<Impact>DoS: Crash, Exit, or Restart</Impact>
+					<Likelihood>High</Likelihood>
+					<Note>An attacker can override existing attributes with ones that have incompatible type, which may lead to a crash.</Note>
+				</Consequence>
+			</Common_Consequences>
+			<Detection_Methods>
+			  <Detection_Method Detection_Method_ID="DM-14">
+			    <Method>Automated Static Analysis</Method>
+			    <Description>Automated static analysis, commonly referred to as Static Application Security Testing (SAST), can find some instances of this weakness by analyzing source code (or binary/compiled code) without having to execute it. Typically, this is done by building a model of data flow and control flow, then searching for potentially-vulnerable patterns that connect "sources" (origins of input) with "sinks" (destinations where the data interacts with external components, a lower layer such as the OS, etc.)</Description>
+			    <Effectiveness>High</Effectiveness>
+			  </Detection_Method>
+			</Detection_Methods>
+			<Potential_Mitigations>
+				<Mitigation>
+					<Phase>Implementation</Phase>
+					<Description>By freezing the object prototype first (for example, Object.freeze(Object.prototype)), modification of the prototype becomes impossible.</Description>
+					<Effectiveness>High</Effectiveness>
+					<Effectiveness_Notes>While this can mitigate this weakness completely, other methods are recommended when possible, especially in components used by upstream software ("libraries").</Effectiveness_Notes>
+				</Mitigation>
+				<Mitigation>
+					<Phase>Architecture and Design</Phase>
+					<Description>By blocking modifications of attributes that resolve to object prototype, such as proto or prototype, this weakness can be mitigated.</Description>
+					<Effectiveness>High</Effectiveness>
+				</Mitigation>
+				<Mitigation>
+					<Phase>Implementation</Phase>
+					<Strategy>Input Validation</Strategy>
+					<Description>When handling untrusted objects, validating using a schema can be used.</Description>
+					<Effectiveness>Limited</Effectiveness>
+				</Mitigation>
+				<Mitigation>
+					<Phase>Implementation</Phase>
+					<Description>By using an object without prototypes (via Object.create(null) ), adding object prototype attributes by accessing the prototype via the special attributes becomes impossible, mitigating this weakness.</Description>
+					<Effectiveness>High</Effectiveness>
+				</Mitigation>
+				<Mitigation>
+					<Phase>Implementation</Phase>
+					<Description>Map can be used instead of objects in most cases. If Map methods are used instead of object attributes, it is not possible to access the object prototype or modify it.</Description>
+					<Effectiveness>Moderate</Effectiveness>
+				</Mitigation>
+			</Potential_Mitigations>
+			<Demonstrative_Examples>
+				<Demonstrative_Example Demonstrative_Example_ID="DX-206">
+					<Intro_Text>This function sets object attributes based on a dot-separated path.</Intro_Text>
+					<Example_Code Nature="Bad" Language="JavaScript">
+
+					<xhtml:div>function setValueByPath (object, path, value) {<xhtml:br />
+					<xhtml:div style="margin-left:1em;">
+					    const pathArray = path.split(".");<xhtml:br />
+					    const attributeToSet = pathArray.pop();<xhtml:br />
+					    let objectToModify = object;<xhtml:br />
+					    for (const attr of pathArray) {<xhtml:br />
+					    <xhtml:div style="margin-left:1em;">if (typeof objectToModify[attr] !== 'object') {<xhtml:br />
+					    <xhtml:div style="margin-left:1em;">objectToModify[attr] = {};<xhtml:br />
+					        }</xhtml:div><xhtml:br />
+					        objectToModify = objectToModify[attr];<xhtml:br />
+					    }</xhtml:div><xhtml:br />
+					    objectToModify[attributeToSet] = value;<xhtml:br />
+					    return object;<xhtml:br />
+					}<xhtml:br />
+					</xhtml:div>
+					</xhtml:div>
+					</Example_Code>
+					<Body_Text>This function does not check if the attribute resolves to the object prototype. These codes can be used to add "isAdmin: true" to the object prototype.</Body_Text>
+					<Example_Code Nature="Bad" Language="JavaScript">
+					<xhtml:div>
+					  setValueByPath({}, "__proto__.isAdmin", true)<xhtml:br />
+					  setValueByPath({}, "constructor.prototype.isAdmin", true)<xhtml:br />
+					</xhtml:div>
+					</Example_Code>
+					<Body_Text>By using a denylist of dangerous attributes, this weakness can be eliminated.</Body_Text>
+					<Example_Code Nature="Good" Language="JavaScript">
+					<xhtml:div>
+					function setValueByPath (object, path, value) {<xhtml:br />
+					<xhtml:div style="margin-left:1em;">
+					    const pathArray = path.split(".");<xhtml:br />
+					    const attributeToSet = pathArray.pop();<xhtml:br />
+					    let objectToModify = object;<xhtml:br />
+					    for (const attr of pathArray) {<xhtml:br />
+					<xhtml:div style="margin-left:1em;">
+					        <xhtml:i>// Ignore attributes which resolve to object prototype</xhtml:i><xhtml:br />
+					        if (attr === "__proto__" || attr === "constructor" || attr === "prototype") {<xhtml:br />
+					<xhtml:div style="margin-left:1em;">
+					            continue;<xhtml:br />
+					        }<xhtml:br />
+					</xhtml:div>
+					        if (typeof objectToModify[attr] !== "object") {<xhtml:br />
+					<xhtml:div style="margin-left:1em;">
+					            objectToModify[attr] = {};<xhtml:br />
+					        }<xhtml:br />
+					</xhtml:div>
+					        objectToModify = objectToModify[attr];<xhtml:br />
+					    }<xhtml:br />
+					</xhtml:div>
+					    objectToModify[attributeToSet] = value;<xhtml:br />
+					    return object;<xhtml:br />
+					}<xhtml:br />
+					</xhtml:div>
+					</xhtml:div>
+					</Example_Code>
+				</Demonstrative_Example>
+			</Demonstrative_Examples>
+			<Observed_Examples>
+				<Observed_Example>
+					<Reference>CVE-2018-3721</Reference>
+					<Description>Prototype pollution by merging objects.</Description>
+					<Link>https://www.cve.org/CVERecord?id=CVE-2018-3721</Link>
+				</Observed_Example>
+				<Observed_Example>
+					<Reference>CVE-2019-10744</Reference>
+					<Description>Prototype pollution by setting default values to object attributes recursively.</Description>
+					<Link>https://www.cve.org/CVERecord?id=CVE-2019-10744</Link>
+				</Observed_Example>
+				<Observed_Example>
+					<Reference>CVE-2019-11358</Reference>
+					<Description>Prototype pollution by merging objects recursively.</Description>
+					<Link>https://www.cve.org/CVERecord?id=CVE-2019-11358</Link>
+				</Observed_Example>
+				<Observed_Example>
+					<Reference>CVE-2020-8203</Reference>
+					<Description>Prototype pollution by setting object attributes based on dot-separated path.</Description>
+					<Link>https://www.cve.org/CVERecord?id=CVE-2020-8203</Link>
+				</Observed_Example>
+			</Observed_Examples>
+         <Related_Attack_Patterns>
+            <Related_Attack_Pattern CAPEC_ID="1" />
+            <Related_Attack_Pattern CAPEC_ID="180" />
+            <Related_Attack_Pattern CAPEC_ID="77" />
+         </Related_Attack_Patterns>
+         <References>
+				<Reference External_Reference_ID="REF-1148" />
+				<Reference External_Reference_ID="REF-1149" />
+			</References>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Variant level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+			<Content_History>
+				<Submission>
+					<Submission_Name>Anonymous External Contributor</Submission_Name>
+					<Submission_Date>2020-08-25</Submission_Date>
+					<Submission_Version>4.3</Submission_Version>
+					<Submission_ReleaseDate>2020-12-10</Submission_ReleaseDate>
+				</Submission>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-10-28</Modification_Date>
+					<Modification_Version>4.6</Modification_Version>
+					<Modification_ReleaseDate>2021-10-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-01-31</Modification_Date>
+					<Modification_Version>4.10</Modification_Version>
+					<Modification_ReleaseDate>2023-01-31</Modification_ReleaseDate>
+					<Modification_Comment>updated Description</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2024-02-29</Modification_Date>
+					<Modification_Version>4.14</Modification_Version>
+					<Modification_ReleaseDate>2024-02-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-09-09</Modification_Date>
+					<Modification_Version>4.18</Modification_Version>
+					<Modification_ReleaseDate>2025-09-09</Modification_ReleaseDate>
+					<Modification_Comment>updated Common_Consequences, Description, Diagram, Modes_of_Introduction</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Detection_Factors, Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+			</Content_History>
+		</Weakness>
+      

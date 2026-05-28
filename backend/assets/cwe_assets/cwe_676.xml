@@ -1,0 +1,458 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="676" Name="Use of Potentially Dangerous Function" Abstraction="Base" Structure="Simple" Status="Draft">
+         <Description>The product invokes a potentially dangerous function that could introduce a vulnerability if it is used incorrectly, but the function can also be used safely.</Description>
+         <Related_Weaknesses>
+            <Related_Weakness Nature="ChildOf" CWE_ID="1177" View_ID="1000" Ordinal="Primary" />
+         </Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+            <Weakness_Ordinality>
+               <Ordinality>Indirect</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+         <Applicable_Platforms>
+            <Language Name="C" Prevalence="Undetermined" />
+            <Language Name="C++" Prevalence="Undetermined" />
+         </Applicable_Platforms>
+         <Modes_Of_Introduction>
+            <Introduction>
+               <Phase>Implementation</Phase>
+            </Introduction>
+         </Modes_Of_Introduction>
+         <Likelihood_Of_Exploit>High</Likelihood_Of_Exploit>
+         <Common_Consequences>
+            <Consequence>
+               <Scope>Other</Scope>
+               <Impact>Varies by Context</Impact>
+               <Impact>Quality Degradation</Impact>
+               <Impact>Unexpected State</Impact>
+               <Note>If the function is used incorrectly, then it could result in security problems.</Note>
+            </Consequence>
+         </Common_Consequences>
+         <Detection_Methods>
+            <Detection_Method>
+               <Method>Automated Static Analysis - Binary or Bytecode</Method>
+               <Description>
+                  <xhtml:p>According to SOAR [REF-1479], the following detection techniques may be useful:</xhtml:p>
+                  <xhtml:div style="margin-left:1em;">
+                     <xhtml:div>Highly cost effective:</xhtml:div>
+                        <xhtml:ul>
+                           <xhtml:li>Bytecode Weakness Analysis - including disassembler + source code weakness analysis</xhtml:li>
+                           <xhtml:li>Binary Weakness Analysis - including disassembler + source code weakness analysis</xhtml:li>
+                        </xhtml:ul>
+                     <xhtml:div>Cost effective for partial coverage:</xhtml:div>
+                        <xhtml:ul>
+                           <xhtml:li>Binary / Bytecode Quality Analysis</xhtml:li>
+                           <xhtml:li>Binary / Bytecode simple extractor - strings, ELF readers, etc.</xhtml:li>
+                        </xhtml:ul>
+                  </xhtml:div>
+               </Description>
+               <Effectiveness>High</Effectiveness>
+            </Detection_Method>
+            <Detection_Method>
+               <Method>Manual Static Analysis - Binary or Bytecode</Method>
+               <Description>
+                  <xhtml:p>According to SOAR [REF-1479], the following detection techniques may be useful:</xhtml:p>
+                  <xhtml:div style="margin-left:1em;">
+                     <xhtml:div>Cost effective for partial coverage:</xhtml:div>
+                        <xhtml:ul>
+                           <xhtml:li>Binary / Bytecode disassembler - then use manual analysis for vulnerabilities &amp; anomalies</xhtml:li>
+                        </xhtml:ul>
+                  </xhtml:div>
+               </Description>
+               <Effectiveness>SOAR Partial</Effectiveness>
+            </Detection_Method>
+            <Detection_Method>
+               <Method>Dynamic Analysis with Manual Results Interpretation</Method>
+               <Description>
+                  <xhtml:p>According to SOAR [REF-1479], the following detection techniques may be useful:</xhtml:p>
+                  <xhtml:div style="margin-left:1em;">
+                     <xhtml:div>Highly cost effective:</xhtml:div>
+                        <xhtml:ul>
+                           <xhtml:li>Debugger</xhtml:li>
+                        </xhtml:ul>
+                     <xhtml:div>Cost effective for partial coverage:</xhtml:div>
+                        <xhtml:ul>
+                           <xhtml:li>Monitored Virtual Environment - run potentially malicious code in sandbox / wrapper / virtual machine, see if it does anything suspicious</xhtml:li>
+                        </xhtml:ul>
+                  </xhtml:div>
+               </Description>
+               <Effectiveness>High</Effectiveness>
+            </Detection_Method>
+            <Detection_Method>
+               <Method>Manual Static Analysis - Source Code</Method>
+               <Description>
+                  <xhtml:p>According to SOAR [REF-1479], the following detection techniques may be useful:</xhtml:p>
+                  <xhtml:div style="margin-left:1em;">
+                     <xhtml:div>Highly cost effective:</xhtml:div>
+                        <xhtml:ul>
+                           <xhtml:li>Manual Source Code Review (not inspections)</xhtml:li>
+                        </xhtml:ul>
+                     <xhtml:div>Cost effective for partial coverage:</xhtml:div>
+                        <xhtml:ul>
+                           <xhtml:li>Focused Manual Spotcheck - Focused manual analysis of source</xhtml:li>
+                        </xhtml:ul>
+                  </xhtml:div>
+               </Description>
+               <Effectiveness>High</Effectiveness>
+            </Detection_Method>
+            <Detection_Method>
+               <Method>Automated Static Analysis - Source Code</Method>
+               <Description>
+                  <xhtml:p>According to SOAR [REF-1479], the following detection techniques may be useful:</xhtml:p>
+                  <xhtml:div style="margin-left:1em;">
+                     <xhtml:div>Highly cost effective:</xhtml:div>
+                        <xhtml:ul>
+                           <xhtml:li>Source code Weakness Analyzer</xhtml:li>
+                           <xhtml:li>Context-configured Source Code Weakness Analyzer</xhtml:li>
+                        </xhtml:ul>
+                     <xhtml:div>Cost effective for partial coverage:</xhtml:div>
+                        <xhtml:ul>
+                           <xhtml:li>Warning Flags</xhtml:li>
+                           <xhtml:li>Source Code Quality Analyzer</xhtml:li>
+                        </xhtml:ul>
+                  </xhtml:div>
+               </Description>
+               <Effectiveness>High</Effectiveness>
+            </Detection_Method>
+            <Detection_Method>
+               <Method>Automated Static Analysis</Method>
+               <Description>
+                  <xhtml:p>According to SOAR [REF-1479], the following detection techniques may be useful:</xhtml:p>
+                  <xhtml:div style="margin-left:1em;">
+                     <xhtml:div>Cost effective for partial coverage:</xhtml:div>
+                        <xhtml:ul>
+                           <xhtml:li>Origin Analysis</xhtml:li>
+                        </xhtml:ul>
+                  </xhtml:div>
+               </Description>
+               <Effectiveness>SOAR Partial</Effectiveness>
+            </Detection_Method>
+            <Detection_Method>
+               <Method>Architecture or Design Review</Method>
+               <Description>
+                  <xhtml:p>According to SOAR [REF-1479], the following detection techniques may be useful:</xhtml:p>
+                  <xhtml:div style="margin-left:1em;">
+                     <xhtml:div>Highly cost effective:</xhtml:div>
+                        <xhtml:ul>
+                           <xhtml:li>Formal Methods / Correct-By-Construction</xhtml:li>
+                           <xhtml:li>Inspection (IEEE 1028 standard) (can apply to requirements, design, source code, etc.)</xhtml:li>
+                        </xhtml:ul>
+                  </xhtml:div>
+               </Description>
+               <Effectiveness>High</Effectiveness>
+            </Detection_Method>
+         </Detection_Methods>
+         <Potential_Mitigations>
+            <Mitigation Mitigation_ID="MIT-58">
+               <Phase>Build and Compilation</Phase>
+               <Phase>Implementation</Phase>
+               <Description>Identify a list of prohibited API functions and prohibit developers from using these functions, providing safer alternatives. In some cases, automatic code analysis tools or the compiler can be instructed to spot use of prohibited functions, such as the "banned.h" include file from Microsoft's SDL. [REF-554] [REF-1009] [REF-7]</Description>
+            </Mitigation>
+         </Potential_Mitigations>
+         <Demonstrative_Examples>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-6">
+               <Intro_Text>The following code attempts to create a local copy of a buffer to perform some manipulations to the data.</Intro_Text>
+               <Example_Code Nature="Bad" Language="C">
+                  <xhtml:div>void manipulate_string(char * string){<xhtml:div style="margin-left:1em;">char buf[24];<xhtml:br />strcpy(buf, string);<xhtml:br />...</xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>However, the programmer does not ensure that the size of the data pointed to by string will fit in the local buffer and copies the data with the potentially dangerous strcpy() function. This may result in a buffer overflow condition if an attacker can influence the contents of the string parameter.</Body_Text>
+            </Demonstrative_Example>
+         </Demonstrative_Examples>
+         <Observed_Examples>
+            <Observed_Example>
+               <Reference>CVE-2007-1470</Reference>
+               <Description>Library has multiple buffer overflows using sprintf() and strcpy()</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2007-1470</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2009-3849</Reference>
+               <Description>Buffer overflow using strcat()</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2009-3849</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2006-2114</Reference>
+               <Description>Buffer overflow using strcpy()</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2006-2114</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2006-0963</Reference>
+               <Description>Buffer overflow using strcpy()</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2006-0963</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2011-0712</Reference>
+               <Description>Vulnerable use of strcpy() changed to use safer strlcpy()</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2011-0712</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2008-5005</Reference>
+               <Description>Buffer overflow using strcpy()</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2008-5005</Link>
+            </Observed_Example>
+         </Observed_Examples>
+         <Taxonomy_Mappings>
+            <Taxonomy_Mapping Taxonomy_Name="7 Pernicious Kingdoms">
+               <Entry_Name>Dangerous Functions</Entry_Name>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="CERT C Secure Coding">
+               <Entry_ID>CON33-C</Entry_ID>
+               <Entry_Name>Avoid race conditions when using library functions</Entry_Name>
+               <Mapping_Fit>CWE More Abstract</Mapping_Fit>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="CERT C Secure Coding">
+               <Entry_ID>ENV33-C</Entry_ID>
+               <Entry_Name>Do not call system()</Entry_Name>
+               <Mapping_Fit>CWE More Abstract</Mapping_Fit>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="CERT C Secure Coding">
+               <Entry_ID>ERR07-C</Entry_ID>
+               <Entry_Name>Prefer functions that support error checking over equivalent functions that don't</Entry_Name>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="CERT C Secure Coding">
+               <Entry_ID>ERR34-C</Entry_ID>
+               <Entry_Name>Detect errors when converting a string to a number</Entry_Name>
+               <Mapping_Fit>CWE More Abstract</Mapping_Fit>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="CERT C Secure Coding">
+               <Entry_ID>FIO01-C</Entry_ID>
+               <Entry_Name>Be careful using functions that use file names for identification</Entry_Name>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="CERT C Secure Coding">
+               <Entry_ID>MSC30-C</Entry_ID>
+               <Entry_Name>Do not use the rand() function for generating pseudorandom numbers</Entry_Name>
+               <Mapping_Fit>CWE More Abstract</Mapping_Fit>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="CERT C Secure Coding">
+               <Entry_ID>STR31-C</Entry_ID>
+               <Entry_Name>Guarantee that storage for strings has sufficient space for character data and the null terminator</Entry_Name>
+               <Mapping_Fit>Imprecise</Mapping_Fit>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="Software Fault Patterns">
+               <Entry_ID>SFP3</Entry_ID>
+               <Entry_Name>Use of an improper API</Entry_Name>
+            </Taxonomy_Mapping>
+         </Taxonomy_Mappings>
+         <References>
+            <Reference External_Reference_ID="REF-6" />
+            <Reference External_Reference_ID="REF-554" />
+            <Reference External_Reference_ID="REF-1009" />
+            <Reference External_Reference_ID="REF-7" Section="Chapter 5, &quot;Safe String Handling&quot; Page 156, 160" />
+            <Reference External_Reference_ID="REF-62" Section="Chapter 8, &quot;C String Handling&quot;, Page 388" />
+            <Reference External_Reference_ID="REF-1479" />
+         </References>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Base level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+         <Notes>
+            <Note Type="Relationship">This weakness is different than CWE-242 (Use of Inherently Dangerous Function). CWE-242 covers functions with such significant security problems that they can never be guaranteed to be safe. Some functions, if used properly, do not directly pose a security risk, but can introduce a weakness if not called correctly. These are regarded as potentially dangerous. A well-known example is the strcpy() function. When provided with a destination buffer that is larger than its source, strcpy() will not overflow. However, it is so often misused that some developers prohibit strcpy() entirely.</Note>
+         </Notes>
+         <Content_History>
+            <Submission>
+               <Submission_Name>7 Pernicious Kingdoms</Submission_Name>
+               <Submission_Date>2008-04-11</Submission_Date>
+               <Submission_Version>Draft 9</Submission_Version>
+               <Submission_ReleaseDate>2008-04-11</Submission_ReleaseDate>
+            </Submission>
+            <Modification>
+               <Modification_Name>Sean Eidemiller</Modification_Name>
+               <Modification_Organization>Cigital</Modification_Organization>
+               <Modification_Date>2008-07-01</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>added/updated demonstrative examples</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>Eric Dalci</Modification_Name>
+               <Modification_Organization>Cigital</Modification_Organization>
+               <Modification_Date>2008-07-01</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>updated Potential_Mitigations, Time_of_Introduction</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2008-09-08</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>updated Applicable_Platforms, Relationships, Other_Notes, Taxonomy_Mappings, Weakness_Ordinalities</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2008-11-24</Modification_Date>
+               <Modification_Version>1.1</Modification_Version>
+               <Modification_ReleaseDate>2008-11-25</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2009-07-27</Modification_Date>
+               <Modification_Version>1.5</Modification_Version>
+               <Modification_ReleaseDate>2009-07-27</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2010-02-16</Modification_Date>
+               <Modification_Version>1.8</Modification_Version>
+               <Modification_ReleaseDate>2010-02-16</Modification_ReleaseDate>
+               <Modification_Comment>updated Demonstrative_Examples, Other_Notes, References, Relationship_Notes</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-06-01</Modification_Date>
+               <Modification_Version>1.13</Modification_Version>
+               <Modification_ReleaseDate>2011-06-01</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-06-27</Modification_Date>
+               <Modification_Version>2.0</Modification_Version>
+               <Modification_ReleaseDate>2011-06-27</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences, Observed_Examples, Potential_Mitigations, References, Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-09-13</Modification_Date>
+               <Modification_Version>2.1</Modification_Version>
+               <Modification_ReleaseDate>2011-09-13</Modification_ReleaseDate>
+               <Modification_Comment>updated Potential_Mitigations, Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2012-05-11</Modification_Date>
+               <Modification_Version>2.2</Modification_Version>
+               <Modification_ReleaseDate>2012-05-15</Modification_ReleaseDate>
+               <Modification_Comment>updated References, Related_Attack_Patterns, Relationships, Weakness_Ordinalities</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2014-07-30</Modification_Date>
+               <Modification_Version>2.8</Modification_Version>
+               <Modification_ReleaseDate>2014-07-31</Modification_ReleaseDate>
+               <Modification_Comment>updated Detection_Factors, Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2017-05-03</Modification_Date>
+               <Modification_Version>2.11</Modification_Version>
+               <Modification_ReleaseDate>2017-05-05</Modification_ReleaseDate>
+               <Modification_Comment>updated Related_Attack_Patterns</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2017-11-08</Modification_Date>
+               <Modification_Version>3.0</Modification_Version>
+               <Modification_ReleaseDate>2017-11-08</Modification_ReleaseDate>
+               <Modification_Comment>updated Causal_Nature, References, Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2018-03-27</Modification_Date>
+               <Modification_Version>3.1</Modification_Version>
+               <Modification_ReleaseDate>2018-03-27</Modification_ReleaseDate>
+               <Modification_Comment>updated References</Modification_Comment>
+            </Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2019-01-03</Modification_Date>
+					<Modification_Version>3.2</Modification_Version>
+					<Modification_ReleaseDate>2019-01-03</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships, Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-02-24</Modification_Date>
+					<Modification_Version>4.0</Modification_Version>
+					<Modification_ReleaseDate>2020-02-24</Modification_ReleaseDate>
+					<Modification_Comment>updated Detection_Factors, References, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-12-10</Modification_Date>
+					<Modification_Version>4.3</Modification_Version>
+					<Modification_ReleaseDate>2020-12-10</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-03-15</Modification_Date>
+					<Modification_Version>4.4</Modification_Version>
+					<Modification_ReleaseDate>2021-03-15</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-01-31</Modification_Date>
+					<Modification_Version>4.10</Modification_Version>
+					<Modification_ReleaseDate>2023-01-31</Modification_ReleaseDate>
+					<Modification_Comment>updated Description</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated References, Relationships, Time_of_Introduction</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-09-09</Modification_Date>
+					<Modification_Version>4.18</Modification_Version>
+					<Modification_ReleaseDate>2025-09-09</Modification_ReleaseDate>
+					<Modification_Comment>updated Detection_Factors, References</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2026-04-30</Modification_Date>
+					<Modification_Version>4.20</Modification_Version>
+					<Modification_ReleaseDate>2026-04-30</Modification_ReleaseDate>
+					<Modification_Comment>updated Potential_Mitigations, References</Modification_Comment>
+				</Modification>
+         </Content_History>
+      </Weakness>
+      

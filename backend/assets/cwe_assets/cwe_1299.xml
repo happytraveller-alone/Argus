@@ -1,0 +1,302 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="1299" Name="Missing Protection Mechanism for Alternate Hardware Interface" Abstraction="Base" Structure="Simple" Status="Draft">
+            <Description>The lack of protections on alternate paths to access
+                control-protected assets (such as unprotected shadow registers
+                and other external facing unguarded interfaces) allows an
+                attacker to bypass existing protections to the asset that are
+		only performed against the primary path.</Description>
+			<Extended_Description>
+                <xhtml:p>An asset inside a chip might have access-control
+                    protections through one interface. However, if all paths to
+                    the asset are not protected, an attacker might compromise
+                    the asset through alternate paths. These alternate paths
+                    could be through shadow or mirror registers inside the IP
+                    core, or could be paths from other external-facing
+                    interfaces to the IP core or SoC.</xhtml:p>
+                <xhtml:p>Consider an SoC with various interfaces such as UART,
+                    SMBUS, PCIe, USB, etc. If access control is implemented for
+                    SoC internal registers only over the PCIe interface, then
+                    an attacker could still modify the SoC internal registers
+                    through alternate paths by coming through interfaces such
+                    as UART, SMBUS, USB, etc. </xhtml:p>
+                <xhtml:p>Alternatively, attackers might be able to bypass
+                    existing protections by exploiting unprotected, shadow
+                    registers. Shadow registers and mirror registers typically
+                    refer to registers that can be accessed from multiple
+                    addresses. Writing to or reading from the aliased/mirrored
+                    address has the same effect as writing to the address of
+                    the main register. They are typically implemented within an
+                    IP core or SoC to temporarily hold certain data. These data
+                    will later be updated to the main register, and both
+                    registers will be in synch. If the shadow registers are not
+                    access-protected, attackers could simply initiate
+                    transactions to the shadow registers and compromise system
+                    security. </xhtml:p>
+			</Extended_Description>
+			<Related_Weaknesses>
+				<Related_Weakness Nature="PeerOf" CWE_ID="1191" View_ID="1194" Ordinal="Primary" />
+				<Related_Weakness Nature="ChildOf" CWE_ID="420" View_ID="1000" Ordinal="Primary" />
+				<Related_Weakness Nature="ChildOf" CWE_ID="288" View_ID="1000" />
+			</Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+			<Applicable_Platforms>
+				<Language Class="Not Language-Specific" Prevalence="Undetermined" />
+				<Operating_System Class="Not OS-Specific" Prevalence="Undetermined" />
+				<Architecture Class="Not Architecture-Specific" Prevalence="Undetermined" />
+				<Technology Name="Microcontroller Hardware" Prevalence="Undetermined" />
+				<Technology Name="Processor Hardware" Prevalence="Undetermined" />
+				<Technology Name="Bus/Interface Hardware" Prevalence="Undetermined" />
+				<Technology Class="Not Technology-Specific" Prevalence="Undetermined" />
+            </Applicable_Platforms>
+			<Modes_Of_Introduction>
+				<Introduction>
+					<Phase>Architecture and Design</Phase>
+				</Introduction>
+				<Introduction>
+					<Phase>Implementation</Phase>
+				</Introduction>
+			</Modes_Of_Introduction>
+			<Common_Consequences>
+				<Consequence>
+					<Scope>Confidentiality</Scope>
+					<Scope>Integrity</Scope>
+					<Scope>Availability</Scope>
+					<Scope>Access Control</Scope>
+					<Impact>Modify Memory</Impact>
+					<Impact>Read Memory</Impact>
+					<Impact>DoS: Resource Consumption (Other)</Impact>
+					<Impact>Execute Unauthorized Code or Commands</Impact>
+					<Impact>Gain Privileges or Assume Identity</Impact>
+					<Impact>Alter Execution Logic</Impact>
+					<Impact>Bypass Protection Mechanism</Impact>
+					<Impact>Quality Degradation</Impact>
+					<Likelihood>High</Likelihood>
+				</Consequence>
+			</Common_Consequences>
+			<Potential_Mitigations>
+				<Mitigation>
+					<Phase>Requirements</Phase>
+                    <Description>Protect assets from accesses against all potential interfaces and alternate paths. </Description>
+                    <Effectiveness>Defense in Depth</Effectiveness>
+				</Mitigation>
+				<Mitigation>
+					<Phase>Architecture and Design</Phase>
+                    <Description>Protect assets from accesses against all potential interfaces and alternate paths. </Description>
+                    <Effectiveness>Defense in Depth</Effectiveness>
+				</Mitigation>
+				<Mitigation>
+					<Phase>Implementation</Phase>
+                    <Description>Protect assets from accesses against all potential interfaces and alternate paths. </Description>
+                    <Effectiveness>Defense in Depth</Effectiveness>
+				</Mitigation>
+			</Potential_Mitigations>
+			<Demonstrative_Examples>
+				<Demonstrative_Example Demonstrative_Example_ID="DX-176">
+                    <Intro_Text>
+                        <xhtml:p>
+                            Register SECURE_ME is located at address 0xF00. A
+                            mirror of this register called COPY_OF_SECURE_ME is
+                            at location 0x800F00. The register SECURE_ME is
+                            protected from malicious agents and only allows
+                            access to select, while COPY_OF_SECURE_ME is not. 
+                        </xhtml:p>
+                        <xhtml:p>
+                            Access control is implemented using an allowlist (as
+                            indicated by acl_oh_allowlist). The identity of the
+                            initiator of the transaction is indicated by the
+                            one hot input, incoming_id. This is checked against
+                            the acl_oh_allowlist (which contains a list of
+                            initiators that are allowed to access the asset). 
+                        </xhtml:p>
+                        <xhtml:p>
+                            Though this example is shown in Verilog, it will
+                            apply to VHDL as well. 
+                        </xhtml:p>
+                    </Intro_Text>
+                    <Example_Code Nature="Informative" Language="Verilog">
+                        module foo_bar(data_out, data_in, incoming_id, address, clk, rst_n);<xhtml:br />
+                        output [31:0] data_out;<xhtml:br />
+                        input [31:0] data_in, incoming_id, address;<xhtml:br />
+                        input clk, rst_n;<xhtml:br />
+                        wire write_auth, addr_auth;<xhtml:br />
+                        reg [31:0] data_out, acl_oh_allowlist, q;<xhtml:br />
+                        assign write_auth = | (incoming_id &amp; acl_oh_allowlist) ? 1 : 0; <xhtml:br />
+                        always @*<xhtml:br />
+                        <xhtml:div style="margin-left:1em;">
+                            acl_oh_allowlist &lt;= 32'h8312; <xhtml:br />
+                        </xhtml:div>
+                        assign addr_auth = (address == 32'hF00) ? 1: 0;<xhtml:br />
+                        always @ (posedge clk or negedge rst_n)<xhtml:br />
+                        <xhtml:div style="margin-left:1em;">
+                            if (!rst_n)<xhtml:br />
+                            <xhtml:div style="margin-left:1em;">
+                                begin<xhtml:br />
+                                <xhtml:div style="margin-left:1em;">
+                                    q &lt;= 32'h0;<xhtml:br />
+                                    data_out &lt;= 32'h0;<xhtml:br />
+                                </xhtml:div>
+                                end<xhtml:br />
+                            </xhtml:div>
+                            else<xhtml:br />
+                            <xhtml:div style="margin-left:1em;">
+                                begin<xhtml:br />
+                                <xhtml:div style="margin-left:1em;">
+                                    q &lt;= (addr_auth &amp; write_auth) ? data_in: q;<xhtml:br />
+                                    data_out &lt;= q;<xhtml:br />
+                                </xhtml:div>
+                                end<xhtml:br />
+                            </xhtml:div>
+                            end<xhtml:br />
+                        </xhtml:div>
+                        endmodule<xhtml:br />
+                    </Example_Code>
+					<Example_Code Nature="Bad" Language="Verilog">assign addr_auth = (address == 32'hF00) ? 1: 0;</Example_Code>
+                    <Body_Text>The bugged line of code is repeated in the Bad
+                        example above. The weakness arises from the fact that the
+                        SECURE_ME register can be modified by writing to the
+                        shadow register COPY_OF_SECURE_ME. The address of
+                        COPY_OF_SECURE_ME should also be included in the check.
+                        That buggy line of code should instead be replaced as
+                        shown in the Good Code Snippet below. 
+                    </Body_Text>
+					<Example_Code Nature="Good" Language="Verilog">assign addr_auth = (address == 32'hF00 || address == 32'h800F00) ? 1: 0;</Example_Code>
+				</Demonstrative_Example>
+			</Demonstrative_Examples>
+			<Observed_Examples>
+                <Observed_Example>
+                    <Reference>CVE-2022-38399</Reference>
+                    <Description>Missing protection mechanism on serial connection allows for arbitrary OS command execution.</Description>
+                    <Link>https://www.cve.org/CVERecord?id=CVE-2022-38399</Link>
+                </Observed_Example>
+                <Observed_Example>
+                    <Reference>CVE-2020-9285</Reference>
+                    <Description>Mini-PCI Express slot does not restrict direct memory access.</Description>
+                    <Link>https://www.cve.org/CVERecord?id=CVE-2020-9285</Link>
+                </Observed_Example>
+                <Observed_Example>
+                    <Reference>CVE-2020-8004</Reference>
+                    <Description>When the internal flash is protected by blocking access on the Data Bus (DBUS), it can still be indirectly accessed through the Instruction Bus (IBUS).</Description>
+                    <Link>https://www.cve.org/CVERecord?id=CVE-2020-8004</Link>
+                </Observed_Example>
+				<Observed_Example>
+					<Reference>CVE-2017-18293</Reference>
+                    <Description>When GPIO is protected by blocking access
+                        to corresponding GPIO resource registers,
+                        protection can be bypassed by writing to the
+                        corresponding banked GPIO registers instead.
+                    </Description>
+		    <Link>https://www.cve.org/CVERecord?id=CVE-2017-18293</Link>
+				</Observed_Example>
+				<Observed_Example>
+				  <Reference>CVE-2020-15483</Reference>
+				  <Description>monitor device allows access to physical UART debug port without authentication</Description>
+				  <Link>https://www.cve.org/CVERecord?id=CVE-2020-15483</Link>
+				</Observed_Example>
+			</Observed_Examples>
+         <Related_Attack_Patterns>
+            <Related_Attack_Pattern CAPEC_ID="457" />
+            <Related_Attack_Pattern CAPEC_ID="554" />
+         </Related_Attack_Patterns>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Base level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+         <Content_History>
+				<Submission>
+					<Submission_Name>Arun Kanuparthi, Hareesh Khattri, Parbati Kumar Manna, Narasimha Kumar V Mangipudi</Submission_Name>
+					<Submission_Organization>Intel Corporation</Submission_Organization>
+					<Submission_Date>2019-10-02</Submission_Date>
+					<Submission_Version>4.2</Submission_Version>
+					<Submission_ReleaseDate>2020-08-20</Submission_ReleaseDate>
+				</Submission>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-12-10</Modification_Date>
+					<Modification_Version>4.3</Modification_Version>
+					<Modification_ReleaseDate>2020-12-10</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-07-20</Modification_Date>
+					<Modification_Version>4.5</Modification_Version>
+					<Modification_ReleaseDate>2021-07-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Observed_Examples, Related_Attack_Patterns</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-04-28</Modification_Date>
+					<Modification_Version>4.7</Modification_Version>
+					<Modification_ReleaseDate>2022-04-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Applicable_Platforms, Common_Consequences, Related_Attack_Patterns</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-06-28</Modification_Date>
+					<Modification_Version>4.8</Modification_Version>
+					<Modification_ReleaseDate>2022-06-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Applicable_Platforms</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-01-31</Modification_Date>
+					<Modification_Version>4.10</Modification_Version>
+					<Modification_ReleaseDate>2023-01-31</Modification_ReleaseDate>
+					<Modification_Comment>updated Related_Attack_Patterns</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-10-26</Modification_Date>
+					<Modification_Version>4.13</Modification_Version>
+					<Modification_ReleaseDate>2023-10-26</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples, Observed_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2024-02-29</Modification_Date>
+					<Modification_Version>4.14</Modification_Version>
+					<Modification_ReleaseDate>2024-02-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+			</Content_History>
+		</Weakness>
+      

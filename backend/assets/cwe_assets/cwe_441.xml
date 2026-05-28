@@ -1,0 +1,401 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="441" Name="Unintended Proxy or Intermediary ('Confused Deputy')" Abstraction="Class" Structure="Simple" Status="Draft">
+         <Description>The product receives a request, message, or directive from an upstream component, but the product does not sufficiently preserve the original source of the request before forwarding the request to an external actor that is outside of the product's control sphere. This causes the product to appear to be the source of the request, leading it to act as a proxy or other intermediary between the upstream component and the external actor.</Description>
+         <Extended_Description>
+            <xhtml:p>If an attacker cannot directly contact a target, but the product has access to the target, then the attacker can send a request to the product and have it be forwarded to the target. The request would appear to be coming from the product's system, not the attacker's system. As a result, the attacker can bypass access controls (such as firewalls) or hide the source of malicious requests, since the requests would not be coming directly from the attacker.</xhtml:p>
+            <xhtml:p>Since proxy functionality and message-forwarding often serve a legitimate purpose, this issue only becomes a vulnerability when:</xhtml:p>
+               <xhtml:ul>
+                  <xhtml:li>The product runs with different privileges or on a different system, or otherwise has different levels of access than the upstream component;</xhtml:li>
+                  <xhtml:li>The attacker is prevented from making the request directly to the target; and</xhtml:li>
+                  <xhtml:li>The attacker can create a request that the proxy does not explicitly intend to be forwarded on the behalf of the requester. Such a request might point to an unexpected hostname, port number, hardware IP, or service. Or, the request might be sent to an allowed service, but the request could contain disallowed directives, commands, or resources.</xhtml:li>
+               </xhtml:ul>
+         </Extended_Description>
+         <Related_Weaknesses>
+            <Related_Weakness Nature="ChildOf" CWE_ID="610" View_ID="1000" Ordinal="Primary" />
+            <Related_Weakness Nature="CanPrecede" CWE_ID="668" View_ID="1000" />
+         </Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+            <Weakness_Ordinality>
+               <Ordinality>Resultant</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+         <Applicable_Platforms>
+            <Language Class="Not Language-Specific" Prevalence="Undetermined" />
+			<Operating_System Class="Not OS-Specific" Prevalence="Undetermined" />
+			<Architecture Class="Not Architecture-Specific" Prevalence="Undetermined" />
+			<Technology Class="Not Technology-Specific" Prevalence="Undetermined" />
+         </Applicable_Platforms>
+         <Alternate_Terms>
+            <Alternate_Term>
+               <Term>Confused Deputy</Term>
+               <Description>This weakness is sometimes referred to as the "Confused deputy" problem, in which an attacker misuses the authority of one victim (the "confused deputy") to use that victim's legitimate (restricted) capabilities to target another victim.</Description>
+            </Alternate_Term>
+         </Alternate_Terms>
+         <Modes_Of_Introduction>
+            <Introduction>
+               <Phase>Architecture and Design</Phase>
+               <Note>REALIZATION: This weakness is caused during implementation of an architectural security tactic.</Note>
+            </Introduction>
+         </Modes_Of_Introduction>
+         <Common_Consequences>
+            <Consequence>
+               <Scope>Non-Repudiation</Scope>
+               <Scope>Access Control</Scope>
+               <Impact>Gain Privileges or Assume Identity</Impact>
+               <Impact>Hide Activities</Impact>
+               <Impact>Execute Unauthorized Code or Commands</Impact>
+            </Consequence>
+         </Common_Consequences>
+         <Detection_Methods>
+           <Detection_Method Detection_Method_ID="DM-14">
+             <Method>Automated Static Analysis</Method>
+             <Description>Automated static analysis, commonly referred to as Static Application Security Testing (SAST), can find some instances of this weakness by analyzing source code (or binary/compiled code) without having to execute it. Typically, this is done by building a model of data flow and control flow, then searching for potentially-vulnerable patterns that connect "sources" (origins of input) with "sinks" (destinations where the data interacts with external components, a lower layer such as the OS, etc.)</Description>
+             <Effectiveness>High</Effectiveness>
+           </Detection_Method>
+         </Detection_Methods>
+         <Potential_Mitigations>
+            <Mitigation>
+               <Phase>Architecture and Design</Phase>
+               <Description>Enforce the use of strong mutual authentication mechanism between the two parties.</Description>
+            </Mitigation>
+            <Mitigation>
+               <Phase>Architecture and Design</Phase>
+               <Description>Whenever a product is an intermediary or proxy for
+                   transactions between two other components, the proxy core
+                   should not drop the identity of the initiator of the
+                   transaction. The immutability of the identity of the
+                   initiator must be maintained and should be forwarded all the
+                   way to the target. </Description>
+            </Mitigation>
+         </Potential_Mitigations>
+         <Demonstrative_Examples>
+             <Demonstrative_Example>
+                 <Intro_Text>
+                     A SoC contains a microcontroller (running ring-3
+                     (least trusted ring) code), a Memory Mapped Input Output
+                     (MMIO) mapped IP core (containing design-house secrets),
+                     and a Direct Memory Access (DMA) controller, among several
+                     other compute elements and peripherals. The SoC implements
+                     access control to protect the registers in the IP core
+                     (which registers store the design-house secrets) from
+                     malicious, ring-3 (least trusted ring) code executing on
+                     the microcontroller.  The DMA controller, however, is not
+                     blocked off from accessing the IP core for functional
+                     reasons.
+                 </Intro_Text>
+                 <Example_Code Nature="Bad" Language="Other">
+                     The code in ring-3 (least trusted ring) of the
+                     microcontroller attempts to directly read the protected
+                     registers in IP core through MMIO transactions. However,
+                     this attempt is blocked due to the implemented access
+                     control. Now, the microcontroller configures the DMA core
+                     to transfer data from the protected registers to a memory
+                     region that it has access to. The DMA core, which is
+                     acting as an intermediary in this transaction, does not
+                     preserve the identity of the microcontroller and, instead,
+                     initiates a new transaction with its own identity. Since
+                     the DMA core has access, the transaction (and hence, the
+                     attack) is successful.
+                 </Example_Code>
+                 <Body_Text>The weakness here is that the intermediary or the
+                     proxy agent did not ensure the immutability of the
+                     identity of the microcontroller initiating the
+                     transaction. 
+                 </Body_Text>
+                 <Example_Code Nature="Good" Language="Other">The DMA
+                     core forwards this transaction with the identity of the
+                     code executing on the microcontroller, which is the
+                     original initiator of the end-to-end transaction. Now the
+                     transaction is blocked, as a result of forwarding the
+                     identity of the true initiator which lacks the permission
+                     to access the confidential MMIO mapped IP core.
+                 </Example_Code>
+             </Demonstrative_Example>
+         </Demonstrative_Examples>
+         <Observed_Examples>
+            <Observed_Example>
+               <Reference>CVE-1999-0017</Reference>
+               <Description>FTP bounce attack. The design of the protocol allows an attacker to modify the PORT command to cause the FTP server to connect to other machines besides the attacker's.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-1999-0017</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-1999-0168</Reference>
+               <Description>RPC portmapper could redirect service requests from an attacker to another entity, which thinks the requests came from the portmapper.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-1999-0168</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2005-0315</Reference>
+               <Description>FTP server does not ensure that the IP address in a PORT command is the same as the FTP user's session, allowing port scanning by proxy.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2005-0315</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2002-1484</Reference>
+               <Description>Web server allows attackers to request a URL from another server, including other ports, which allows proxied scanning.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2002-1484</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2004-2061</Reference>
+               <Description>CGI script accepts and retrieves incoming URLs.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2004-2061</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2001-1484</Reference>
+               <Description>Bounce attack allows access to TFTP from trusted side.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2001-1484</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2010-1637</Reference>
+               <Description>Web-based mail program allows internal network scanning using a modified POP3 port number.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2010-1637</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2009-0037</Reference>
+               <Description>URL-downloading library automatically follows redirects to file:// and scp:// URLs</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2009-0037</Link>
+            </Observed_Example>
+         </Observed_Examples>
+         <Taxonomy_Mappings>
+            <Taxonomy_Mapping Taxonomy_Name="PLOVER">
+               <Entry_Name>Unintended proxy/intermediary</Entry_Name>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="PLOVER">
+               <Entry_Name>Proxied Trusted Channel</Entry_Name>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="WASC">
+               <Entry_ID>32</Entry_ID>
+               <Entry_Name>Routing Detour</Entry_Name>
+            </Taxonomy_Mapping>
+         </Taxonomy_Mappings>
+         <Related_Attack_Patterns>
+            <Related_Attack_Pattern CAPEC_ID="219" />
+            <Related_Attack_Pattern CAPEC_ID="465" />
+         </Related_Attack_Patterns>
+         <References>
+            <Reference External_Reference_ID="REF-432" />
+            <Reference External_Reference_ID="REF-1125" />
+         </References>
+         <Mapping_Notes>
+            <Usage>Allowed-with-Review</Usage>
+            <Rationale>This CWE entry is a Class and might have Base-level children that would be more appropriate</Rationale>
+            <Comments>Examine children of this entry to see if there is a better fit</Comments>
+            <Reasons>
+               <Reason Type="Abstraction" />
+            </Reasons>
+         </Mapping_Notes>
+         <Notes>
+            <Note Type="Relationship">This weakness has a chaining relationship with CWE-668 (Exposure of Resource to Wrong Sphere) because the proxy effectively provides the attacker with access to the target's resources that the attacker cannot directly obtain.</Note>
+            <Note Type="Maintenance">This could possibly be considered as an emergent resource.</Note>
+            <Note Type="Theoretical">It could be argued that the "confused deputy" is a fundamental aspect of most vulnerabilities that require an active attacker. Even for common implementation issues such as buffer overflows, SQL injection, OS command injection, and path traversal, the vulnerable program already has the authorization to run code or access files. The vulnerability arises when the attacker causes the program to run unexpected code or access unexpected files.</Note>
+         </Notes>
+         <Content_History>
+            <Submission>
+               <Submission_Name>PLOVER</Submission_Name>
+               <Submission_Date>2006-07-19</Submission_Date>
+               <Submission_Version>Draft 3</Submission_Version>
+               <Submission_ReleaseDate>2006-07-19</Submission_ReleaseDate>
+            </Submission>
+            <Modification>
+               <Modification_Name>Eric Dalci</Modification_Name>
+               <Modification_Organization>Cigital</Modification_Organization>
+               <Modification_Date>2008-07-01</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>updated Potential_Mitigations, Time_of_Introduction</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2008-09-08</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships, Observed_Example, Other_Notes, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2008-11-24</Modification_Date>
+               <Modification_Version>1.1</Modification_Version>
+               <Modification_ReleaseDate>2008-11-25</Modification_ReleaseDate>
+               <Modification_Comment>updated Maintenance_Notes, Relationships, Taxonomy_Mappings, Time_of_Introduction</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2010-02-16</Modification_Date>
+               <Modification_Version>1.8</Modification_Version>
+               <Modification_ReleaseDate>2010-02-16</Modification_ReleaseDate>
+               <Modification_Comment>updated Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2010-04-05</Modification_Date>
+               <Modification_Version>1.8.1</Modification_Version>
+               <Modification_ReleaseDate>2010-04-05</Modification_ReleaseDate>
+               <Modification_Comment>updated Related_Attack_Patterns</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2010-06-21</Modification_Date>
+               <Modification_Version>1.9</Modification_Version>
+               <Modification_ReleaseDate>2010-06-21</Modification_ReleaseDate>
+               <Modification_Comment>updated Other_Notes</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-06-01</Modification_Date>
+               <Modification_Version>1.13</Modification_Version>
+               <Modification_ReleaseDate>2011-06-01</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-06-27</Modification_Date>
+               <Modification_Version>2.0</Modification_Version>
+               <Modification_ReleaseDate>2011-06-27</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2012-05-11</Modification_Date>
+               <Modification_Version>2.2</Modification_Version>
+               <Modification_ReleaseDate>2012-05-15</Modification_ReleaseDate>
+               <Modification_Comment>updated Related_Attack_Patterns, Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2012-10-30</Modification_Date>
+               <Modification_Version>2.3</Modification_Version>
+               <Modification_ReleaseDate>2012-10-30</Modification_ReleaseDate>
+               <Modification_Comment>updated Potential_Mitigations</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2013-02-21</Modification_Date>
+               <Modification_Version>2.4</Modification_Version>
+               <Modification_ReleaseDate>2013-02-21</Modification_ReleaseDate>
+               <Modification_Comment>updated Alternate_Terms, Applicable_Platforms, Description, Maintenance_Notes, Name, Observed_Examples, References, Relationship_Notes, Relationships, Theoretical_Notes, Type</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2014-07-30</Modification_Date>
+               <Modification_Version>2.8</Modification_Version>
+               <Modification_ReleaseDate>2014-07-31</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2015-12-07</Modification_Date>
+               <Modification_Version>2.9</Modification_Version>
+               <Modification_ReleaseDate>2015-12-07</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2017-01-19</Modification_Date>
+               <Modification_Version>2.10</Modification_Version>
+               <Modification_ReleaseDate>2017-01-19</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2017-11-08</Modification_Date>
+               <Modification_Version>3.0</Modification_Version>
+               <Modification_ReleaseDate>2017-11-08</Modification_ReleaseDate>
+               <Modification_Comment>updated Modes_of_Introduction, Relationships</Modification_Comment>
+            </Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2019-06-20</Modification_Date>
+					<Modification_Version>3.3</Modification_Version>
+					<Modification_ReleaseDate>2019-06-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-02-24</Modification_Date>
+					<Modification_Version>4.0</Modification_Version>
+					<Modification_ReleaseDate>2020-02-24</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2020-08-14</Modification_Date>
+               <Modification_Version>4.3</Modification_Version>
+               <Modification_ReleaseDate>2020-12-10</Modification_ReleaseDate>
+               <Modification_Comment>Per Intel Corporation suggestion, added language to be inclusive to hardware: updated Demonstrative_Examples, Description, Extended_Description, Applicable_Platforms, Potential_Mitigation, Common_Consequences, References</Modification_Comment>
+            </Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-08-20</Modification_Date>
+					<Modification_Version>4.2</Modification_Version>
+					<Modification_ReleaseDate>2020-08-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Applicable_Platforms, Common_Consequences, Demonstrative_Examples, Description, Potential_Mitigations, References, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-10-28</Modification_Date>
+					<Modification_Version>4.6</Modification_Version>
+					<Modification_ReleaseDate>2021-10-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-10-13</Modification_Date>
+					<Modification_Version>4.9</Modification_Version>
+					<Modification_ReleaseDate>2022-10-13</Modification_ReleaseDate>
+					<Modification_Comment>updated Related_Attack_Patterns</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Detection_Factors, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Alternate_Terms, Relationships, Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+            <Contribution Type="Content">
+               <Contribution_Name>Arun Kanuparthi, Hareesh Khattri, Parbati K. Manna</Contribution_Name>
+               <Contribution_Organization>Intel Corporation</Contribution_Organization>
+               <Contribution_Date>2020-08-14</Contribution_Date>
+               <Contribution_Comment>Provided demonstrative example</Contribution_Comment>
+            </Contribution>
+            <Previous_Entry_Name Date="2013-02-21">Unintended Proxy/Intermediary</Previous_Entry_Name>
+         </Content_History>
+      </Weakness>
+      

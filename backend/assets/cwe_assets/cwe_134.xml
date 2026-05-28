@@ -1,0 +1,576 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="134" Name="Use of Externally-Controlled Format String" Abstraction="Base" Structure="Simple" Status="Draft" Diagram="/data/images/CWE-134-Diagram.png">
+         <Description>The product uses a function that accepts a format string as an argument, but the format string originates from an external source.</Description>
+         <Related_Weaknesses>
+            <Related_Weakness Nature="ChildOf" CWE_ID="668" View_ID="1000" Ordinal="Primary" />
+            <Related_Weakness Nature="ChildOf" CWE_ID="668" View_ID="1003" Ordinal="Primary" />
+            <Related_Weakness Nature="CanPrecede" CWE_ID="123" View_ID="1000" />
+            <Related_Weakness Nature="ChildOf" CWE_ID="20" View_ID="700" Ordinal="Primary" />
+         </Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+         <Applicable_Platforms>
+            <Language Class="Not Language-Specific" Prevalence="Undetermined" />
+            <Language Name="C" Prevalence="Often" />
+            <Language Name="C++" Prevalence="Often" />
+            <Language Name="Perl" Prevalence="Rarely" />
+         </Applicable_Platforms>
+         <Modes_Of_Introduction>
+            <Introduction>
+               <Phase>Implementation</Phase>
+               <Note>The programmer rarely intends for a format string to be externally-controlled at all. This weakness is frequently introduced in code that constructs log messages, where a constant format string is omitted.</Note>
+            </Introduction>
+            <Introduction>
+               <Phase>Implementation</Phase>
+               <Note>In cases such as localization and internationalization, the language-specific message repositories could be an avenue for exploitation, but the format string issue would be resultant, since attacker control of those repositories would also allow modification of message length, format, and content.</Note>
+            </Introduction>
+         </Modes_Of_Introduction>
+         <Likelihood_Of_Exploit>High</Likelihood_Of_Exploit>
+         <Common_Consequences>
+            <Consequence>
+               <Scope>Confidentiality</Scope>
+               <Impact>Read Memory</Impact>
+               <Note>Format string problems allow for information disclosure which can severely simplify exploitation of the program.</Note>
+            </Consequence>
+            <Consequence>
+               <Scope>Integrity</Scope>
+               <Scope>Confidentiality</Scope>
+               <Scope>Availability</Scope>
+               <Impact>Modify Memory</Impact>
+               <Impact>Execute Unauthorized Code or Commands</Impact>
+               <Note>Format string problems can result in the execution of arbitrary code, buffer overflows, denial of service, or incorrect data representation.</Note>
+            </Consequence>
+         </Common_Consequences>
+         <Detection_Methods>
+            <Detection_Method Detection_Method_ID="DM-1">
+               <Method>Automated Static Analysis</Method>
+               <Description>This weakness can often be detected using automated static analysis tools. Many modern tools use data flow analysis or constraint-based techniques to minimize the number of false positives.</Description>
+            </Detection_Method>
+            <Detection_Method>
+               <Method>Black Box</Method>
+               <Description>Since format strings often occur in rarely-occurring erroneous conditions (e.g. for error message logging), they can be difficult to detect using black box methods. It is highly likely that many latent issues exist in executables that do not have associated source code (or equivalent source.</Description>
+               <Effectiveness>Limited</Effectiveness>
+            </Detection_Method>
+            <Detection_Method>
+               <Method>Automated Static Analysis - Binary or Bytecode</Method>
+               <Description>
+                  <xhtml:p>According to SOAR [REF-1479], the following detection techniques may be useful:</xhtml:p>
+                  <xhtml:div style="margin-left:1em;">
+                     <xhtml:div>Highly cost effective:</xhtml:div>
+                        <xhtml:ul>
+                           <xhtml:li>Bytecode Weakness Analysis - including disassembler + source code weakness analysis</xhtml:li>
+                           <xhtml:li>Binary Weakness Analysis - including disassembler + source code weakness analysis</xhtml:li>
+                        </xhtml:ul>
+                     <xhtml:div>Cost effective for partial coverage:</xhtml:div>
+                        <xhtml:ul>
+                           <xhtml:li>Binary / Bytecode simple extractor - strings, ELF readers, etc.</xhtml:li>
+                        </xhtml:ul>
+                  </xhtml:div>
+               </Description>
+               <Effectiveness>High</Effectiveness>
+            </Detection_Method>
+            <Detection_Method>
+               <Method>Manual Static Analysis - Binary or Bytecode</Method>
+               <Description>
+                  <xhtml:p>According to SOAR [REF-1479], the following detection techniques may be useful:</xhtml:p>
+                  <xhtml:div style="margin-left:1em;">
+                     <xhtml:div>Cost effective for partial coverage:</xhtml:div>
+                        <xhtml:ul>
+                           <xhtml:li>Binary / Bytecode disassembler - then use manual analysis for vulnerabilities &amp; anomalies</xhtml:li>
+                        </xhtml:ul>
+                  </xhtml:div>
+               </Description>
+               <Effectiveness>SOAR Partial</Effectiveness>
+            </Detection_Method>
+            <Detection_Method>
+               <Method>Dynamic Analysis with Automated Results Interpretation</Method>
+               <Description>
+                  <xhtml:p>According to SOAR [REF-1479], the following detection techniques may be useful:</xhtml:p>
+                  <xhtml:div style="margin-left:1em;">
+                     <xhtml:div>Cost effective for partial coverage:</xhtml:div>
+                        <xhtml:ul>
+                           <xhtml:li>Web Application Scanner</xhtml:li>
+                           <xhtml:li>Web Services Scanner</xhtml:li>
+                           <xhtml:li>Database Scanners</xhtml:li>
+                        </xhtml:ul>
+                  </xhtml:div>
+               </Description>
+               <Effectiveness>SOAR Partial</Effectiveness>
+            </Detection_Method>
+            <Detection_Method>
+               <Method>Dynamic Analysis with Manual Results Interpretation</Method>
+               <Description>
+                  <xhtml:p>According to SOAR [REF-1479], the following detection techniques may be useful:</xhtml:p>
+                  <xhtml:div style="margin-left:1em;">
+                     <xhtml:div>Cost effective for partial coverage:</xhtml:div>
+                        <xhtml:ul>
+                           <xhtml:li>Fuzz Tester</xhtml:li>
+                           <xhtml:li>Framework-based Fuzzer</xhtml:li>
+                        </xhtml:ul>
+                  </xhtml:div>
+               </Description>
+               <Effectiveness>SOAR Partial</Effectiveness>
+            </Detection_Method>
+            <Detection_Method>
+               <Method>Manual Static Analysis - Source Code</Method>
+               <Description>
+                  <xhtml:p>According to SOAR [REF-1479], the following detection techniques may be useful:</xhtml:p>
+                  <xhtml:div style="margin-left:1em;">
+                     <xhtml:div>Highly cost effective:</xhtml:div>
+                        <xhtml:ul>
+                           <xhtml:li>Manual Source Code Review (not inspections)</xhtml:li>
+                        </xhtml:ul>
+                     <xhtml:div>Cost effective for partial coverage:</xhtml:div>
+                        <xhtml:ul>
+                           <xhtml:li>Focused Manual Spotcheck - Focused manual analysis of source</xhtml:li>
+                        </xhtml:ul>
+                  </xhtml:div>
+               </Description>
+               <Effectiveness>High</Effectiveness>
+            </Detection_Method>
+            <Detection_Method>
+               <Method>Automated Static Analysis - Source Code</Method>
+               <Description>
+                  <xhtml:p>According to SOAR [REF-1479], the following detection techniques may be useful:</xhtml:p>
+                  <xhtml:div style="margin-left:1em;">
+                     <xhtml:div>Highly cost effective:</xhtml:div>
+                        <xhtml:ul>
+                           <xhtml:li>Source code Weakness Analyzer</xhtml:li>
+                           <xhtml:li>Context-configured Source Code Weakness Analyzer</xhtml:li>
+                        </xhtml:ul>
+                     <xhtml:div>Cost effective for partial coverage:</xhtml:div>
+                        <xhtml:ul>
+                           <xhtml:li>Warning Flags</xhtml:li>
+                        </xhtml:ul>
+                  </xhtml:div>
+               </Description>
+               <Effectiveness>High</Effectiveness>
+            </Detection_Method>
+            <Detection_Method>
+               <Method>Architecture or Design Review</Method>
+               <Description>
+                  <xhtml:p>According to SOAR [REF-1479], the following detection techniques may be useful:</xhtml:p>
+                  <xhtml:div style="margin-left:1em;">
+                     <xhtml:div>Highly cost effective:</xhtml:div>
+                        <xhtml:ul>
+                           <xhtml:li>Formal Methods / Correct-By-Construction</xhtml:li>
+                        </xhtml:ul>
+                     <xhtml:div>Cost effective for partial coverage:</xhtml:div>
+                        <xhtml:ul>
+                           <xhtml:li>Inspection (IEEE 1028 standard) (can apply to requirements, design, source code, etc.)</xhtml:li>
+                        </xhtml:ul>
+                  </xhtml:div>
+               </Description>
+               <Effectiveness>High</Effectiveness>
+            </Detection_Method>
+         </Detection_Methods>
+         <Potential_Mitigations>
+            <Mitigation>
+               <Phase>Requirements</Phase>
+               <Description>Choose a language that is not subject to this flaw.</Description>
+            </Mitigation>
+            <Mitigation>
+               <Phase>Implementation</Phase>
+               <Description>Ensure that all format string functions are passed a static string which cannot be controlled by the user, and that the proper number of arguments are always sent to that function as well. If at all possible, use functions that do not support the %n operator in format strings. [REF-116] [REF-117]</Description>
+            </Mitigation>
+            <Mitigation>
+               <Phase>Build and Compilation</Phase>
+               <Description>Run compilers and linkers with high warning levels, since they may detect incorrect usage.</Description>
+            </Mitigation>
+         </Potential_Mitigations>
+         <Demonstrative_Examples>
+            <Demonstrative_Example>
+               <Intro_Text>The following program prints a string provided as an argument.</Intro_Text>
+               <Example_Code Nature="Bad" Language="C">
+                  <xhtml:div>#include &lt;stdio.h&gt;<xhtml:br />
+                     <xhtml:br />void printWrapper(char *string) {<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>
+                           <xhtml:br />printf(string);</xhtml:div>
+                     </xhtml:div>}<xhtml:br />
+                     <xhtml:br />int main(int argc, char **argv) {<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>
+                           <xhtml:br />char buf[5012];<xhtml:br />memcpy(buf, argv[1], 5012);<xhtml:br />printWrapper(argv[1]);<xhtml:br />return (0);</xhtml:div>
+                     </xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>The example is exploitable, because of the call to printf() in the printWrapper() function. Note: The stack buffer was added to make exploitation more simple.</Body_Text>
+            </Demonstrative_Example>
+            <Demonstrative_Example>
+               <Intro_Text>The following code copies a command line argument into a buffer using snprintf().</Intro_Text>
+               <Example_Code Nature="Bad" Language="C">
+                  <xhtml:div>int main(int argc, char **argv){<xhtml:div style="margin-left:1em;">char buf[128];<xhtml:br />...<xhtml:br />snprintf(buf,128,argv[1]);</xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>This code allows an attacker to view the contents of the stack and write to the stack using a command line argument containing a sequence of formatting directives. The attacker can read from the stack by providing more formatting directives, such as %x, than the function takes as arguments to be formatted. (In this example, the function takes no arguments to be formatted.) By using the %n formatting directive, the attacker can write to the stack, causing snprintf() to write the number of bytes output thus far to the specified argument (rather than reading a value from the argument, which is the intended behavior). A sophisticated version of this attack will use four staggered writes to completely control the value of a pointer on the stack.</Body_Text>
+            </Demonstrative_Example>
+            <Demonstrative_Example>
+               <Intro_Text>Certain implementations make more advanced attacks even easier by providing format directives that control the location in memory to read from or write to. An example of these directives is shown in the following code, written for glibc:</Intro_Text>
+               <Example_Code Nature="Bad" Language="C">
+                  <xhtml:div>printf("%d %d %1$d %1$d\n", 5, 9);</xhtml:div>
+               </Example_Code>
+               <Body_Text>This code produces the following output: 5 9 5 5 It is also possible to use half-writes (%hn) to accurately control arbitrary DWORDS in memory, which greatly reduces the complexity needed to execute an attack that would otherwise require four staggered writes, such as the one mentioned in a separate example.</Body_Text>
+            </Demonstrative_Example>
+         </Demonstrative_Examples>
+         <Observed_Examples>
+            <Observed_Example>
+               <Reference>CVE-2002-1825</Reference>
+               <Description>format string in Perl program</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2002-1825</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2001-0717</Reference>
+               <Description>format string in bad call to syslog function</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2001-0717</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2002-0573</Reference>
+               <Description>format string in bad call to syslog function</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2002-0573</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2002-1788</Reference>
+               <Description>format strings in NNTP server responses</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2002-1788</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2006-2480</Reference>
+               <Description>Format string vulnerability exploited by triggering errors or warnings, as demonstrated via format string specifiers in a .bmp filename.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2006-2480</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2007-2027</Reference>
+               <Description>Chain: untrusted search path enabling resultant format string by loading malicious internationalization messages</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2007-2027</Link>
+            </Observed_Example>
+         </Observed_Examples>
+         <Functional_Areas>
+            <Functional_Area>Logging</Functional_Area>
+            <Functional_Area>Error Handling</Functional_Area>
+            <Functional_Area>String Processing</Functional_Area>
+            <Functional_Area>Memory Management</Functional_Area>
+         </Functional_Areas>
+         <Affected_Resources>
+            <Affected_Resource>Memory</Affected_Resource>
+         </Affected_Resources>
+         <Taxonomy_Mappings>
+            <Taxonomy_Mapping Taxonomy_Name="PLOVER">
+               <Entry_Name>Format string vulnerability</Entry_Name>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="7 Pernicious Kingdoms">
+               <Entry_Name>Format String</Entry_Name>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="CLASP">
+               <Entry_Name>Format string problem</Entry_Name>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="CERT C Secure Coding">
+               <Entry_ID>FIO30-C</Entry_ID>
+               <Entry_Name>Exclude user input from format strings</Entry_Name>
+               <Mapping_Fit>Exact</Mapping_Fit>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="CERT C Secure Coding">
+               <Entry_ID>FIO47-C</Entry_ID>
+               <Entry_Name>Use valid format strings</Entry_Name>
+               <Mapping_Fit>CWE More Specific</Mapping_Fit>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="OWASP Top Ten 2004">
+               <Entry_ID>A1</Entry_ID>
+               <Entry_Name>Unvalidated Input</Entry_Name>
+               <Mapping_Fit>CWE More Specific</Mapping_Fit>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="WASC">
+               <Entry_ID>6</Entry_ID>
+               <Entry_Name>Format String</Entry_Name>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="The CERT Oracle Secure Coding Standard for Java (2011)">
+               <Entry_ID>IDS06-J</Entry_ID>
+               <Entry_Name>Exclude user input from format strings</Entry_Name>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="SEI CERT Perl Coding Standard">
+               <Entry_ID>IDS30-PL</Entry_ID>
+               <Entry_Name>Exclude user input from format strings</Entry_Name>
+               <Mapping_Fit>Exact</Mapping_Fit>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="Software Fault Patterns">
+               <Entry_ID>SFP24</Entry_ID>
+               <Entry_Name>Tainted input to command</Entry_Name>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="OMG ASCSM">
+                <Entry_ID>ASCSM-CWE-134</Entry_ID>
+            </Taxonomy_Mapping>
+         </Taxonomy_Mappings>
+         <Related_Attack_Patterns>
+            <Related_Attack_Pattern CAPEC_ID="135" />
+            <Related_Attack_Pattern CAPEC_ID="67" />
+         </Related_Attack_Patterns>
+         <References>
+            <Reference External_Reference_ID="REF-116" />
+            <Reference External_Reference_ID="REF-117" />
+            <Reference External_Reference_ID="REF-118" />
+            <Reference External_Reference_ID="REF-7" Section="Chapter 5, &quot;Format String Bugs&quot; Page 147" />
+            <Reference External_Reference_ID="REF-44" Section="&quot;Sin 6: Format String Problems.&quot; Page 109" />
+            <Reference External_Reference_ID="REF-62" Section="Chapter 8, &quot;C Format Strings&quot;, Page 422" />
+            <Reference External_Reference_ID="REF-962" Section="ASCSM-CWE-134" />
+            <Reference External_Reference_ID="REF-1479" />
+         </References>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Base level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+         <Notes>
+            <Note Type="Applicable Platform">
+               <xhtml:p>This weakness is possible in any programming language that support format strings.</xhtml:p>
+            </Note>
+            <Note Type="Other">
+               <xhtml:p>In some circumstances, such as internationalization, the set of format strings is externally controlled by design. If the source of these format strings is trusted (e.g. only contained in library files that are only modifiable by the system administrator), then the external control might not itself pose a vulnerability.</xhtml:p>
+			   <xhtml:p>While Format String vulnerabilities typically fall under the Buffer Overflow category, technically they are not overflowed buffers. The Format String vulnerability is fairly new (circa 1999) and stems from the fact that there is no realistic way for a function that takes a variable number of arguments to determine just how many arguments were passed in. The most common functions that take a variable number of arguments, including C-runtime functions, are the printf() family of calls. The Format String problem appears in a number of ways. A *printf() call without a format specifier is dangerous and can be exploited. For example, printf(input); is exploitable, while printf(y, input); is not exploitable in that context. The result of the first call, used incorrectly, allows for an attacker to be able to peek at stack memory since the input string will be used as the format specifier. The attacker can stuff the input string with format specifiers and begin reading stack values, since the remaining parameters will be pulled from the stack. Worst case, this improper use may give away enough control to allow an arbitrary value (or values in the case of an exploit program) to be written into the memory of the running program.</xhtml:p>
+               <xhtml:p>Frequently targeted entities are file names, process names, identifiers.</xhtml:p>
+               <xhtml:p>Format string problems are a classic C/C++ issue that are now rare due to the ease of discovery. One main reason format string vulnerabilities can be exploited is due to the %n operator. The %n operator will write the number of characters, which have been printed by the format string therefore far, to the memory pointed to by its argument. Through skilled creation of a format string, a malicious user may use values on the stack to create a write-what-where condition. Once this is achieved, they can execute arbitrary code. Other operators can be used as well; for example, a %9999s operator could also trigger a buffer overflow, or when used in file-formatting functions like fprintf, it can generate a much larger output than intended.</xhtml:p>
+            </Note>
+            <Note Type="Research Gap">Format string issues are under-studied for languages other than C. Memory or disk consumption, control flow or variable alteration, and data corruption may result from format string exploitation in applications written in other languages such as Perl, PHP, Python, etc.</Note>
+         </Notes>
+         <Content_History>
+            <Submission>
+               <Submission_Name>PLOVER</Submission_Name>
+               <Submission_Date>2006-07-19</Submission_Date>
+               <Submission_Version>Draft 3</Submission_Version>
+               <Submission_ReleaseDate>2006-07-19</Submission_ReleaseDate>
+            </Submission>
+            <Modification>
+               <Modification_Organization>KDM Analytics</Modification_Organization>
+               <Modification_Date>2008-08-01</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>added/updated white box definitions</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2008-09-08</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>updated Applicable_Platforms, Common_Consequences, Detection_Factors, Modes_of_Introduction, Relationships, Other_Notes, Research_Gaps, Taxonomy_Mappings, Weakness_Ordinalities</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2008-11-24</Modification_Date>
+               <Modification_Version>1.1</Modification_Version>
+               <Modification_ReleaseDate>2008-11-25</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2009-03-10</Modification_Date>
+               <Modification_Version>1.3</Modification_Version>
+               <Modification_ReleaseDate>2009-03-10</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2009-05-27</Modification_Date>
+               <Modification_Version>1.4</Modification_Version>
+               <Modification_ReleaseDate>2009-05-27</Modification_ReleaseDate>
+               <Modification_Comment>updated Demonstrative_Examples</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>KDM Analytics</Modification_Name>
+               <Modification_Date>2009-07-17</Modification_Date>
+               <Modification_Version>1.5</Modification_Version>
+               <Modification_ReleaseDate>2009-07-27</Modification_ReleaseDate>
+               <Modification_Comment>Improved the White_Box_Definition</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2009-07-27</Modification_Date>
+               <Modification_Version>1.5</Modification_Version>
+               <Modification_ReleaseDate>2009-07-27</Modification_ReleaseDate>
+               <Modification_Comment>updated White_Box_Definitions</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2010-02-16</Modification_Date>
+               <Modification_Version>1.8</Modification_Version>
+               <Modification_ReleaseDate>2010-02-16</Modification_ReleaseDate>
+               <Modification_Comment>updated Detection_Factors, References, Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-06-01</Modification_Date>
+               <Modification_Version>1.13</Modification_Version>
+               <Modification_ReleaseDate>2011-06-01</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences, Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-06-27</Modification_Date>
+               <Modification_Version>2.0</Modification_Version>
+               <Modification_ReleaseDate>2011-06-27</Modification_ReleaseDate>
+               <Modification_Comment>updated Modes_of_Introduction, Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-09-13</Modification_Date>
+               <Modification_Version>2.1</Modification_Version>
+               <Modification_ReleaseDate>2011-09-13</Modification_ReleaseDate>
+               <Modification_Comment>updated Potential_Mitigations, References, Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2012-05-11</Modification_Date>
+               <Modification_Version>2.2</Modification_Version>
+               <Modification_ReleaseDate>2012-05-15</Modification_ReleaseDate>
+               <Modification_Comment>updated Observed_Examples, References, Related_Attack_Patterns, Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2014-07-30</Modification_Date>
+               <Modification_Version>2.8</Modification_Version>
+               <Modification_ReleaseDate>2014-07-31</Modification_ReleaseDate>
+               <Modification_Comment>updated Demonstrative_Examples, Detection_Factors, Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2015-12-07</Modification_Date>
+               <Modification_Version>2.9</Modification_Version>
+               <Modification_ReleaseDate>2015-12-07</Modification_ReleaseDate>
+               <Modification_Comment>updated Description, Modes_of_Introduction, Name, Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2017-11-08</Modification_Date>
+               <Modification_Version>3.0</Modification_Version>
+               <Modification_ReleaseDate>2017-11-08</Modification_ReleaseDate>
+               <Modification_Comment>updated Applicable_Platforms, Causal_Nature, Functional_Areas, Likelihood_of_Exploit, Other_Notes, References, Relationships, Taxonomy_Mappings, White_Box_Definitions</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2018-03-27</Modification_Date>
+               <Modification_Version>3.1</Modification_Version>
+               <Modification_ReleaseDate>2018-03-27</Modification_ReleaseDate>
+               <Modification_Comment>updated References</Modification_Comment>
+            </Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2019-01-03</Modification_Date>
+					<Modification_Version>3.2</Modification_Version>
+					<Modification_ReleaseDate>2019-01-03</Modification_ReleaseDate>
+					<Modification_Comment>updated References, Relationships, Taxonomy_Mappings</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2019-06-20</Modification_Date>
+					<Modification_Version>3.3</Modification_Version>
+					<Modification_ReleaseDate>2019-06-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2019-09-19</Modification_Date>
+					<Modification_Version>3.4</Modification_Version>
+					<Modification_ReleaseDate>2019-09-19</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-02-24</Modification_Date>
+					<Modification_Version>4.0</Modification_Version>
+					<Modification_ReleaseDate>2020-02-24</Modification_ReleaseDate>
+					<Modification_Comment>updated Detection_Factors, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-08-20</Modification_Date>
+					<Modification_Version>4.2</Modification_Version>
+					<Modification_ReleaseDate>2020-08-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-12-10</Modification_Date>
+					<Modification_Version>4.3</Modification_Version>
+					<Modification_ReleaseDate>2020-12-10</Modification_ReleaseDate>
+					<Modification_Comment>updated Common_Consequences, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-03-15</Modification_Date>
+					<Modification_Version>4.4</Modification_Version>
+					<Modification_ReleaseDate>2021-03-15</Modification_ReleaseDate>
+					<Modification_Comment>updated Potential_Mitigations, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-01-31</Modification_Date>
+					<Modification_Version>4.10</Modification_Version>
+					<Modification_ReleaseDate>2023-01-31</Modification_ReleaseDate>
+					<Modification_Comment>updated Description</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated References, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-04-03</Modification_Date>
+					<Modification_Version>4.17</Modification_Version>
+					<Modification_ReleaseDate>2025-04-03</Modification_ReleaseDate>
+					<Modification_Comment>updated Common_Consequences, Demonstrative_Examples, Description, Diagram, Other_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-09-09</Modification_Date>
+					<Modification_Version>4.18</Modification_Version>
+					<Modification_ReleaseDate>2025-09-09</Modification_ReleaseDate>
+					<Modification_Comment>updated Detection_Factors, Functional_Areas, References</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Applicable_Platforms</Modification_Comment>
+				</Modification>
+            <Previous_Entry_Name Date="2015-12-07">Uncontrolled Format String</Previous_Entry_Name>
+         </Content_History>
+      </Weakness>
+      

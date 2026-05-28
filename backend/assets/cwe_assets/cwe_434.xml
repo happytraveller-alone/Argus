@@ -1,0 +1,704 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="434" Name="Unrestricted Upload of File with Dangerous Type" Abstraction="Base" Structure="Simple" Status="Draft" Diagram="/data/images/CWE-434-Diagram.png">
+         <Description>The product allows the upload or transfer of dangerous file types that are automatically processed within its environment.</Description>
+         <Related_Weaknesses>
+            <Related_Weakness Nature="ChildOf" CWE_ID="669" View_ID="1000" Ordinal="Primary" />
+            <Related_Weakness Nature="ChildOf" CWE_ID="669" View_ID="1003" Ordinal="Primary" />
+            <Related_Weakness Nature="PeerOf" CWE_ID="351" View_ID="1000" />
+            <Related_Weakness Nature="PeerOf" CWE_ID="436" View_ID="1000" />
+            <Related_Weakness Nature="PeerOf" CWE_ID="430" View_ID="1000" />
+         </Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+               <Description>This can be primary when there is no check for the file type at all.</Description>
+            </Weakness_Ordinality>
+            <Weakness_Ordinality>
+               <Ordinality>Resultant</Ordinality>
+               <Description>This can be resultant when use of double extensions (e.g. ".php.gif") bypasses a check.</Description>
+            </Weakness_Ordinality>
+            <Weakness_Ordinality>
+               <Ordinality>Resultant</Ordinality>
+               <Description>This can be resultant from client-side enforcement (CWE-602); some products will include web script in web clients to check the filename, without verifying on the server side.</Description>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+         <Applicable_Platforms>
+            <Language Name="ASP.NET" Prevalence="Sometimes" />
+            <Language Name="PHP" Prevalence="Often" />
+            <Language Class="Not Language-Specific" Prevalence="Undetermined" />
+            <Technology Name="Web Server" Prevalence="Sometimes" />
+	    <Technology Name="AI/ML" Prevalence="Undetermined" />
+         </Applicable_Platforms>
+         <Alternate_Terms>
+            <Alternate_Term>
+               <Term>Unrestricted File Upload</Term>
+               <Description>Used in vulnerability databases and elsewhere, but it is insufficiently precise. The phrase could be interpreted as the lack of restrictions on the size or number of uploaded files, which is a resource consumption issue.</Description>
+            </Alternate_Term>
+         </Alternate_Terms>
+         <Modes_Of_Introduction>
+            <Introduction>
+               <Phase>Implementation</Phase>
+            </Introduction>
+            <Introduction>
+               <Phase>Architecture and Design</Phase>
+               <Note>OMISSION: This weakness is caused by missing a security tactic during the architecture and design phase.</Note>
+            </Introduction>
+         </Modes_Of_Introduction>
+         <Likelihood_Of_Exploit>Medium</Likelihood_Of_Exploit>
+         <Common_Consequences>
+            <Consequence>
+               <Scope>Integrity</Scope>
+               <Scope>Confidentiality</Scope>
+               <Scope>Availability</Scope>
+               <Impact>Execute Unauthorized Code or Commands</Impact>
+               <Note>Arbitrary code execution is possible if an uploaded file is interpreted and executed as code by the recipient. This is especially true for web-server extensions such as .asp and .php because these file types are often treated as automatically executable, even when file system permissions do not specify execution. For example, in Unix environments, programs typically cannot run unless the execute bit is set, but PHP programs may be executed by the web server without directly invoking them on the operating system.</Note>
+            </Consequence>
+         </Common_Consequences>
+         <Detection_Methods>
+            <Detection_Method>
+               <Method>Dynamic Analysis with Automated Results Interpretation</Method>
+               <Description>
+                  <xhtml:p>According to SOAR [REF-1479], the following detection techniques may be useful:</xhtml:p>
+                  <xhtml:div style="margin-left:1em;">
+                     <xhtml:div>Cost effective for partial coverage:</xhtml:div>
+                        <xhtml:ul>
+                           <xhtml:li>Web Application Scanner</xhtml:li>
+                           <xhtml:li>Web Services Scanner</xhtml:li>
+                           <xhtml:li>Database Scanners</xhtml:li>
+                        </xhtml:ul>
+                  </xhtml:div>
+               </Description>
+               <Effectiveness>SOAR Partial</Effectiveness>
+            </Detection_Method>
+            <Detection_Method>
+               <Method>Dynamic Analysis with Manual Results Interpretation</Method>
+               <Description>
+                  <xhtml:p>According to SOAR [REF-1479], the following detection techniques may be useful:</xhtml:p>
+                  <xhtml:div style="margin-left:1em;">
+                     <xhtml:div>Cost effective for partial coverage:</xhtml:div>
+                        <xhtml:ul>
+                           <xhtml:li>Fuzz Tester</xhtml:li>
+                           <xhtml:li>Framework-based Fuzzer</xhtml:li>
+                        </xhtml:ul>
+                  </xhtml:div>
+               </Description>
+               <Effectiveness>SOAR Partial</Effectiveness>
+            </Detection_Method>
+            <Detection_Method>
+               <Method>Manual Static Analysis - Source Code</Method>
+               <Description>
+                  <xhtml:p>According to SOAR [REF-1479], the following detection techniques may be useful:</xhtml:p>
+                  <xhtml:div style="margin-left:1em;">
+                     <xhtml:div>Highly cost effective:</xhtml:div>
+                        <xhtml:ul>
+                           <xhtml:li>Focused Manual Spotcheck - Focused manual analysis of source</xhtml:li>
+                           <xhtml:li>Manual Source Code Review (not inspections)</xhtml:li>
+                        </xhtml:ul>
+                  </xhtml:div>
+               </Description>
+               <Effectiveness>High</Effectiveness>
+            </Detection_Method>
+            <Detection_Method>
+               <Method>Automated Static Analysis - Source Code</Method>
+               <Description>
+                  <xhtml:p>According to SOAR [REF-1479], the following detection techniques may be useful:</xhtml:p>
+                  <xhtml:div style="margin-left:1em;">
+                     <xhtml:div>Highly cost effective:</xhtml:div>
+                        <xhtml:ul>
+                           <xhtml:li>Source code Weakness Analyzer</xhtml:li>
+                           <xhtml:li>Context-configured Source Code Weakness Analyzer</xhtml:li>
+                        </xhtml:ul>
+                  </xhtml:div>
+               </Description>
+               <Effectiveness>High</Effectiveness>
+            </Detection_Method>
+            <Detection_Method>
+               <Method>Architecture or Design Review</Method>
+               <Description>
+                  <xhtml:p>According to SOAR [REF-1479], the following detection techniques may be useful:</xhtml:p>
+                  <xhtml:div style="margin-left:1em;">
+                     <xhtml:div>Highly cost effective:</xhtml:div>
+                        <xhtml:ul>
+                           <xhtml:li>Formal Methods / Correct-By-Construction</xhtml:li>
+                        </xhtml:ul>
+                     <xhtml:div>Cost effective for partial coverage:</xhtml:div>
+                        <xhtml:ul>
+                           <xhtml:li>Inspection (IEEE 1028 standard) (can apply to requirements, design, source code, etc.)</xhtml:li>
+                        </xhtml:ul>
+                  </xhtml:div>
+               </Description>
+               <Effectiveness>High</Effectiveness>
+            </Detection_Method>
+         </Detection_Methods>
+         <Potential_Mitigations>
+            <Mitigation>
+               <Phase>Architecture and Design</Phase>
+               <Description>Generate a new, unique filename for an uploaded file instead of using the user-supplied filename, so that no external input is used at all.[REF-422] [REF-423]</Description>
+            </Mitigation>
+            <Mitigation Mitigation_ID="MIT-21">
+               <Phase>Architecture and Design</Phase>
+               <Strategy>Enforcement by Conversion</Strategy>
+               <Description>When the set of acceptable objects, such as filenames or URLs, is limited or known, create a mapping from a set of fixed input values (such as numeric IDs) to the actual filenames or URLs, and reject all other inputs.</Description>
+            </Mitigation>
+            <Mitigation>
+               <Phase>Architecture and Design</Phase>
+               <Description>Consider storing the uploaded files outside of the web document root entirely. Then, use other mechanisms to deliver the files dynamically. [REF-423]</Description>
+            </Mitigation>
+            <Mitigation Mitigation_ID="MIT-5">
+               <Phase>Implementation</Phase>
+               <Strategy>Input Validation</Strategy>
+               <Description>
+                  <xhtml:p>Assume all input is malicious. Use an "accept known good" input validation strategy, i.e., use a list of acceptable inputs that strictly conform to specifications. Reject any input that does not strictly conform to specifications, or transform it into something that does.</xhtml:p>
+                  <xhtml:p>When performing input validation, consider all potentially relevant properties, including length, type of input, the full range of acceptable values, missing or extra inputs, syntax, consistency across related fields, and conformance to business rules. As an example of business rule logic, "boat" may be syntactically valid because it only contains alphanumeric characters, but it is not valid if the input is only expected to contain colors such as "red" or "blue."</xhtml:p>
+                  <xhtml:p>Do not rely exclusively on looking for malicious or malformed inputs.  This is likely to miss at least one undesirable input, especially if the code's environment changes. This can give attackers enough room to bypass the intended validation. However, denylists can be useful for detecting potential attacks or determining which inputs are so malformed that they should be rejected outright.</xhtml:p>
+                  <xhtml:p>For example, limiting filenames to alphanumeric characters can help to restrict the introduction of unintended file extensions.</xhtml:p>
+               </Description>
+            </Mitigation>
+            <Mitigation>
+               <Phase>Architecture and Design</Phase>
+               <Description>Define a very limited set of allowable extensions and only generate filenames that end in these extensions. Consider the possibility of XSS (CWE-79) before allowing .html or .htm file types.</Description>
+            </Mitigation>
+            <Mitigation>
+               <Phase>Implementation</Phase>
+               <Strategy>Input Validation</Strategy>
+               <Description>Ensure that only one extension is used in the filename. Some web servers, including some versions of Apache, may process files based on inner extensions so that "filename.php.gif" is fed to the PHP interpreter.[REF-422] [REF-423]</Description>
+            </Mitigation>
+            <Mitigation>
+               <Phase>Implementation</Phase>
+               <Description>When running on a web server that supports case-insensitive filenames, perform case-insensitive evaluations of the extensions that are provided.</Description>
+            </Mitigation>
+            <Mitigation Mitigation_ID="MIT-15">
+               <Phase>Architecture and Design</Phase>
+               <Description>For any security checks that are performed on the client side, ensure that these checks are duplicated on the server side, in order to avoid CWE-602. Attackers can bypass the client-side checks by modifying values after the checks have been performed, or by changing the client to remove the client-side checks entirely. Then, these modified values would be submitted to the server.</Description>
+            </Mitigation>
+            <Mitigation>
+               <Phase>Implementation</Phase>
+               <Description>Do not rely exclusively on sanity checks of file contents to ensure that the file is of the expected type and size. It may be possible for an attacker to hide code in some file segments that will still be executed by the server. For example, GIF images may contain a free-form comments field.</Description>
+            </Mitigation>
+            <Mitigation>
+               <Phase>Implementation</Phase>
+               <Description>Do not rely exclusively on the MIME content type or filename attribute when determining how to render a file. Validating the MIME content type and ensuring that it matches the extension is only a partial solution.</Description>
+            </Mitigation>
+            <Mitigation Mitigation_ID="MIT-17">
+               <Phase>Architecture and Design</Phase>
+               <Phase>Operation</Phase>
+               <Strategy>Environment Hardening</Strategy>
+               <Description>Run your code using the lowest privileges that are required to accomplish the necessary tasks [REF-76]. If possible, create isolated accounts with limited privileges that are only used for a single task. That way, a successful attack will not immediately give the attacker access to the rest of the software or its environment. For example, database applications rarely need to run as the database administrator, especially in day-to-day operations.</Description>
+            </Mitigation>
+            <Mitigation Mitigation_ID="MIT-22">
+               <Phase>Architecture and Design</Phase>
+               <Phase>Operation</Phase>
+               <Strategy>Sandbox or Jail</Strategy>
+               <Description>
+                  <xhtml:p>Run the code in a "jail" or similar sandbox environment that enforces strict boundaries between the process and the operating system. This may effectively restrict which files can be accessed in a particular directory or which commands can be executed by the software.</xhtml:p>
+                  <xhtml:p>OS-level examples include the Unix chroot jail, AppArmor, and SELinux. In general, managed code may provide some protection. For example, java.io.FilePermission in the Java SecurityManager allows the software to specify restrictions on file operations.</xhtml:p>
+                  <xhtml:p>This may not be a feasible solution, and it only limits the impact to the operating system; the rest of the application may still be subject to compromise.</xhtml:p>
+                  <xhtml:p>Be careful to avoid CWE-243 and other weaknesses related to jails.</xhtml:p>
+               </Description>
+               <Effectiveness>Limited</Effectiveness>
+               <Effectiveness_Notes>The effectiveness of this mitigation depends on the prevention capabilities of the specific sandbox or jail being used and might only help to reduce the scope of an attack, such as restricting the attacker to certain system calls or limiting the portion of the file system that can be accessed.</Effectiveness_Notes>
+            </Mitigation>
+         </Potential_Mitigations>
+         <Demonstrative_Examples>
+            <Demonstrative_Example>
+               <Intro_Text>The following code intends to allow a user to upload a picture to the web server. The HTML code that drives the form on the user end has an input field of type "file".</Intro_Text>
+               <Example_Code Nature="Good" Language="HTML">
+                  <xhtml:div>&lt;form action="upload_picture.php" method="post" enctype="multipart/form-data"&gt;<xhtml:br />
+                     <xhtml:br />Choose a file to upload:<xhtml:br />&lt;input type="file" name="filename"/&gt;<xhtml:br />&lt;br/&gt;<xhtml:br />&lt;input type="submit" name="submit" value="Submit"/&gt;<xhtml:br />
+                     <xhtml:br />&lt;/form&gt;</xhtml:div>
+               </Example_Code>
+               <Body_Text>Once submitted, the form above sends the file to upload_picture.php on the web server. PHP stores the file in a temporary location until it is retrieved (or discarded) by the server side code. In this example, the file is moved to a more permanent pictures/ directory.</Body_Text>
+               <Example_Code Nature="Bad" Language="PHP">
+                  <xhtml:div>
+                     <xhtml:br />
+                     <xhtml:i>// Define the target location where the picture being</xhtml:i>
+                     <xhtml:br />
+                     <xhtml:br />
+                     <xhtml:i>// uploaded is going to be saved.</xhtml:i>
+                     <xhtml:br />$target = "pictures/" . basename($_FILES['uploadedfile']['name']);<xhtml:br />
+                     <xhtml:br />
+                     <xhtml:i>// Move the uploaded file to the new location.</xhtml:i>
+                     <xhtml:br />if(move_uploaded_file($_FILES['uploadedfile']['tmp_name'], $target))<xhtml:br />{<xhtml:div style="margin-left:1em;">echo "The picture has been successfully uploaded.";</xhtml:div>}<xhtml:br />else<xhtml:br />{<xhtml:div style="margin-left:1em;">echo "There was an error uploading the picture, please try again.";</xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>The problem with the above code is that there is no check regarding type of file being uploaded. Assuming that pictures/ is available in the web document root, an attacker could upload a file with the name:</Body_Text>
+               <Example_Code Nature="Attack">
+                  <xhtml:div>malicious.php</xhtml:div>
+               </Example_Code>
+               <Body_Text>Since this filename ends in ".php" it can be executed by the web server. In the contents of this uploaded file, the attacker could use:</Body_Text>
+               <Example_Code Nature="Attack" Language="PHP">
+                  <xhtml:div>&lt;?php<xhtml:div style="margin-left:1em;">system($_GET['cmd']);</xhtml:div>
+                     <xhtml:br />?&gt;</xhtml:div>
+               </Example_Code>
+               <Body_Text>Once this file has been installed, the attacker can enter arbitrary commands to execute using a URL such as:</Body_Text>
+               <Example_Code Nature="Attack">
+                  <xhtml:div>http://server.example.com/upload_dir/malicious.php?cmd=ls%20-l</xhtml:div>
+               </Example_Code>
+               <Body_Text>which runs the "ls -l" command - or any other type of command that the attacker wants to specify.</Body_Text>
+            </Demonstrative_Example>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-22">
+               <Intro_Text>The following code demonstrates the unrestricted upload of a file with a Java servlet and a path traversal vulnerability. The action attribute of an HTML form is sending the upload file request to the Java servlet.</Intro_Text>
+               <Example_Code Nature="Good" Language="HTML">
+                  <xhtml:div>&lt;form action="FileUploadServlet" method="post" enctype="multipart/form-data"&gt;<xhtml:br />
+                     <xhtml:br />Choose a file to upload:<xhtml:br />&lt;input type="file" name="filename"/&gt;<xhtml:br />&lt;br/&gt;<xhtml:br />&lt;input type="submit" name="submit" value="Submit"/&gt;<xhtml:br />
+                     <xhtml:br />&lt;/form&gt;</xhtml:div>
+               </Example_Code>
+               <Body_Text>When submitted the Java servlet's doPost method will receive the request, extract the name of the file from the Http request header, read the file contents from the request and output the file to the local upload directory.</Body_Text>
+               <Example_Code Nature="Bad" Language="Java">
+                  <xhtml:div>public class FileUploadServlet extends HttpServlet {<xhtml:br />
+                     <xhtml:div style="margin-left:1em;">
+                        <xhtml:div>...<xhtml:br />
+                           <xhtml:br />protected void doPost(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {<xhtml:br />
+                           <xhtml:div style="margin-left:1em;">
+                              <xhtml:div>response.setContentType("text/html");<xhtml:br />PrintWriter out = response.getWriter();<xhtml:br />String contentType = request.getContentType();<xhtml:br />
+                                 <xhtml:br />// the starting position of the boundary header<xhtml:br />int ind = contentType.indexOf("boundary=");<xhtml:br />String boundary = contentType.substring(ind+9);<xhtml:br />
+                                 <xhtml:br />String pLine = new String();<xhtml:br />String uploadLocation = new String(UPLOAD_DIRECTORY_STRING); //Constant value<xhtml:br />
+                                 <xhtml:br />// verify that content type is multipart form data<xhtml:br />if (contentType != null &amp;&amp; contentType.indexOf("multipart/form-data") != -1) {<xhtml:br />
+                                 <xhtml:div style="margin-left:1em;">
+                                    <xhtml:div>// extract the filename from the Http header<xhtml:br />BufferedReader br = new BufferedReader(new InputStreamReader(request.getInputStream()));<xhtml:br />...<xhtml:br />pLine = br.readLine();<xhtml:br />String filename = pLine.substring(pLine.lastIndexOf("\\"), pLine.lastIndexOf("\""));<xhtml:br />...<xhtml:br />
+                                       <xhtml:br />// output the file to the local upload directory<xhtml:br />try {<xhtml:div style="margin-left:1em;">
+                                          <xhtml:div>BufferedWriter bw = new BufferedWriter(new FileWriter(uploadLocation+filename, true));<xhtml:br />for (String line; (line=br.readLine())!=null; ) {<xhtml:div style="margin-left:1em;">if (line.indexOf(boundary) == -1) {<xhtml:div style="margin-left:1em;">bw.write(line);<xhtml:br />bw.newLine();<xhtml:br />bw.flush();</xhtml:div>}</xhtml:div>} //end of for loop<xhtml:br />bw.close();</xhtml:div>
+                                       </xhtml:div>
+                                       <xhtml:br />
+                                       <xhtml:br />} catch (IOException ex) {...}<xhtml:br />// output successful upload response HTML page</xhtml:div>
+                                 </xhtml:div>}<xhtml:br />// output unsuccessful upload response HTML page<xhtml:br />else<xhtml:br />{...}</xhtml:div>
+                           </xhtml:div>}<xhtml:div style="margin-left:1em;">...</xhtml:div>
+                        </xhtml:div>
+                     </xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>This code does not perform a check on the type of the file being uploaded (CWE-434). This could allow an attacker to upload any executable file or other file with malicious code.</Body_Text>
+               <Body_Text>Additionally, the creation of the BufferedWriter object is subject to relative path traversal (CWE-23). Since the code does not check the filename that is provided in the header, an attacker can use "../" sequences to write to files outside of the intended directory. Depending on the executing environment, the attacker may be able to specify arbitrary files to write to, leading to a wide variety of consequences, from code execution, XSS (CWE-79), or system crash.</Body_Text>
+            </Demonstrative_Example>
+         </Demonstrative_Examples>
+         <Observed_Examples>
+            <Observed_Example>
+               <Reference>CVE-2023-5227</Reference>
+               <Description>PHP-based FAQ management app does not check the MIME type for uploaded images</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2023-5227</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2001-0901</Reference>
+               <Description>Web-based mail product stores ".shtml" attachments that could contain SSI</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2001-0901</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2002-1841</Reference>
+               <Description>PHP upload does not restrict file types</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2002-1841</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2005-1868</Reference>
+               <Description>upload and execution of .php file</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2005-1868</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2005-1881</Reference>
+               <Description>upload file with dangerous extension</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2005-1881</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2005-0254</Reference>
+               <Description>program does not restrict file types</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2005-0254</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2004-2262</Reference>
+               <Description>improper type checking of uploaded files</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2004-2262</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2006-4558</Reference>
+               <Description>Double "php" extension leaves an active php extension in the generated filename.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2006-4558</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2006-6994</Reference>
+               <Description>ASP program allows upload of .asp files by bypassing client-side checks</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2006-6994</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2005-3288</Reference>
+               <Description>ASP file upload</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2005-3288</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2006-2428</Reference>
+               <Description>ASP file upload</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2006-2428</Link>
+            </Observed_Example>
+         </Observed_Examples>
+         <Functional_Areas>
+            <Functional_Area>File Processing</Functional_Area>
+         </Functional_Areas>
+         <Affected_Resources>
+            <Affected_Resource>File or Directory</Affected_Resource>
+         </Affected_Resources>
+         <Taxonomy_Mappings>
+            <Taxonomy_Mapping Taxonomy_Name="PLOVER">
+               <Entry_Name>Unrestricted File Upload</Entry_Name>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="OWASP Top Ten 2007">
+               <Entry_ID>A3</Entry_ID>
+               <Entry_Name>Malicious File Execution</Entry_Name>
+               <Mapping_Fit>CWE More Specific</Mapping_Fit>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="OMG ASCSM">
+                <Entry_ID>ASCSM-CWE-434</Entry_ID>
+            </Taxonomy_Mapping>
+         </Taxonomy_Mappings>
+         <Related_Attack_Patterns>
+            <Related_Attack_Pattern CAPEC_ID="1" />
+         </Related_Attack_Patterns>
+         <References>
+            <Reference External_Reference_ID="REF-422" />
+            <Reference External_Reference_ID="REF-423" />
+            <Reference External_Reference_ID="REF-424" />
+            <Reference External_Reference_ID="REF-76" />
+            <Reference External_Reference_ID="REF-62" Section="Chapter 17, &quot;File Uploading&quot;, Page 1068" />
+            <Reference External_Reference_ID="REF-962" Section="ASCSM-CWE-434" />
+            <Reference External_Reference_ID="REF-1479" />
+         </References>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Base level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+         <Notes>
+            <Note Type="Relationship">
+               <xhtml:p>This can have a chaining relationship with incomplete denylist / permissive allowlist errors when the product tries, but fails, to properly limit which types of files are allowed (CWE-183, CWE-184).</xhtml:p>
+               <xhtml:p>This can also overlap multiple interpretation errors for intermediaries, e.g. anti-virus products that do not remove or quarantine attachments with certain file extensions that can be processed by client systems.</xhtml:p>
+            </Note>
+         </Notes>
+         <Content_History>
+            <Submission>
+               <Submission_Name>PLOVER</Submission_Name>
+               <Submission_Date>2006-07-19</Submission_Date>
+               <Submission_Version>Draft 3</Submission_Version>
+               <Submission_ReleaseDate>2006-07-19</Submission_ReleaseDate>
+            </Submission>
+            <Modification>
+               <Modification_Name>Eric Dalci</Modification_Name>
+               <Modification_Organization>Cigital</Modification_Organization>
+               <Modification_Date>2008-07-01</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>updated Time_of_Introduction</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2008-09-08</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>updated Alternate_Terms, Relationships, Other_Notes, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2009-01-12</Modification_Date>
+               <Modification_Version>1.2</Modification_Version>
+               <Modification_ReleaseDate>2009-01-12</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2009-12-28</Modification_Date>
+               <Modification_Version>1.7</Modification_Version>
+               <Modification_ReleaseDate>2009-12-28</Modification_ReleaseDate>
+               <Modification_Comment>updated Applicable_Platforms, Functional_Areas, Likelihood_of_Exploit, Potential_Mitigations, Time_of_Introduction</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2010-02-16</Modification_Date>
+               <Modification_Version>1.8</Modification_Version>
+               <Modification_ReleaseDate>2010-02-16</Modification_ReleaseDate>
+               <Modification_Importance>Critical</Modification_Importance>
+               <Modification_Comment>converted from Compound_Element to Weakness</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2010-02-16</Modification_Date>
+               <Modification_Version>1.8</Modification_Version>
+               <Modification_ReleaseDate>2010-02-16</Modification_ReleaseDate>
+               <Modification_Comment>updated Alternate_Terms, Applicable_Platforms, Common_Consequences, Demonstrative_Examples, Name, Other_Notes, Potential_Mitigations, References, Related_Attack_Patterns, Relationship_Notes, Relationships, Type, Weakness_Ordinalities</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2010-04-05</Modification_Date>
+               <Modification_Version>1.8.1</Modification_Version>
+               <Modification_ReleaseDate>2010-04-05</Modification_ReleaseDate>
+               <Modification_Comment>updated Related_Attack_Patterns</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2010-06-21</Modification_Date>
+               <Modification_Version>1.9</Modification_Version>
+               <Modification_ReleaseDate>2010-06-21</Modification_ReleaseDate>
+               <Modification_Comment>updated References, Relationship_Notes</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2010-09-27</Modification_Date>
+               <Modification_Version>1.10</Modification_Version>
+               <Modification_ReleaseDate>2010-09-27</Modification_ReleaseDate>
+               <Modification_Comment>updated Potential_Mitigations</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2010-12-13</Modification_Date>
+               <Modification_Version>1.11</Modification_Version>
+               <Modification_ReleaseDate>2010-12-13</Modification_ReleaseDate>
+               <Modification_Comment>updated Potential_Mitigations</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-06-27</Modification_Date>
+               <Modification_Version>2.0</Modification_Version>
+               <Modification_ReleaseDate>2011-06-27</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-09-13</Modification_Date>
+               <Modification_Version>2.1</Modification_Version>
+               <Modification_ReleaseDate>2011-09-13</Modification_ReleaseDate>
+               <Modification_Comment>updated Potential_Mitigations, References, Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2012-05-11</Modification_Date>
+               <Modification_Version>2.2</Modification_Version>
+               <Modification_ReleaseDate>2012-05-15</Modification_ReleaseDate>
+               <Modification_Comment>updated References, Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2012-10-30</Modification_Date>
+               <Modification_Version>2.3</Modification_Version>
+               <Modification_ReleaseDate>2012-10-30</Modification_ReleaseDate>
+               <Modification_Comment>updated Potential_Mitigations</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2014-07-30</Modification_Date>
+               <Modification_Version>2.8</Modification_Version>
+               <Modification_ReleaseDate>2014-07-31</Modification_ReleaseDate>
+               <Modification_Comment>updated Detection_Factors</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2015-12-07</Modification_Date>
+               <Modification_Version>2.9</Modification_Version>
+               <Modification_ReleaseDate>2015-12-07</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2017-11-08</Modification_Date>
+               <Modification_Version>3.0</Modification_Version>
+               <Modification_ReleaseDate>2017-11-08</Modification_ReleaseDate>
+               <Modification_Comment>updated Affected_Resources, Applicable_Platforms, Likelihood_of_Exploit, Modes_of_Introduction, References, Relationships, Weakness_Ordinalities</Modification_Comment>
+            </Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2019-01-03</Modification_Date>
+					<Modification_Version>3.2</Modification_Version>
+					<Modification_ReleaseDate>2019-01-03</Modification_ReleaseDate>
+					<Modification_Comment>updated References, Relationships, Taxonomy_Mappings</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2019-06-20</Modification_Date>
+					<Modification_Version>3.3</Modification_Version>
+					<Modification_ReleaseDate>2019-06-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Related_Attack_Patterns</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2019-09-19</Modification_Date>
+					<Modification_Version>3.4</Modification_Version>
+					<Modification_ReleaseDate>2019-09-19</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-02-24</Modification_Date>
+					<Modification_Version>4.0</Modification_Version>
+					<Modification_ReleaseDate>2020-02-24</Modification_ReleaseDate>
+					<Modification_Comment>updated Applicable_Platforms, Potential_Mitigations</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-06-25</Modification_Date>
+					<Modification_Version>4.1</Modification_Version>
+					<Modification_ReleaseDate>2020-06-25</Modification_ReleaseDate>
+					<Modification_Comment>updated Potential_Mitigations, Relationship_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-08-20</Modification_Date>
+					<Modification_Version>4.2</Modification_Version>
+					<Modification_ReleaseDate>2020-08-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-12-10</Modification_Date>
+					<Modification_Version>4.3</Modification_Version>
+					<Modification_ReleaseDate>2020-12-10</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-03-15</Modification_Date>
+					<Modification_Version>4.4</Modification_Version>
+					<Modification_ReleaseDate>2021-03-15</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-07-20</Modification_Date>
+					<Modification_Version>4.5</Modification_Version>
+					<Modification_ReleaseDate>2021-07-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-10-28</Modification_Date>
+					<Modification_Version>4.6</Modification_Version>
+					<Modification_ReleaseDate>2021-10-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-04-28</Modification_Date>
+					<Modification_Version>4.7</Modification_Version>
+					<Modification_ReleaseDate>2022-04-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Research_Gaps</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-06-28</Modification_Date>
+					<Modification_Version>4.8</Modification_Version>
+					<Modification_ReleaseDate>2022-06-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-10-13</Modification_Date>
+					<Modification_Version>4.9</Modification_Version>
+					<Modification_ReleaseDate>2022-10-13</Modification_ReleaseDate>
+					<Modification_Comment>updated References</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-01-31</Modification_Date>
+					<Modification_Version>4.10</Modification_Version>
+					<Modification_ReleaseDate>2023-01-31</Modification_ReleaseDate>
+					<Modification_Comment>updated Alternate_Terms, Description</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated References, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2024-02-29</Modification_Date>
+					<Modification_Version>4.14</Modification_Version>
+					<Modification_ReleaseDate>2024-02-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Observed_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2024-07-16</Modification_Date>
+					<Modification_Version>4.15</Modification_Version>
+					<Modification_ReleaseDate>2024-07-16</Modification_ReleaseDate>
+					<Modification_Comment>updated Common_Consequences, Description, Diagram, Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2024-11-19</Modification_Date>
+					<Modification_Version>4.16</Modification_Version>
+					<Modification_ReleaseDate>2024-11-19</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-09-09</Modification_Date>
+					<Modification_Version>4.18</Modification_Version>
+					<Modification_ReleaseDate>2025-09-09</Modification_ReleaseDate>
+					<Modification_Comment>updated Detection_Factors, References</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2026-04-30</Modification_Date>
+					<Modification_Version>4.20</Modification_Version>
+					<Modification_ReleaseDate>2026-04-30</Modification_ReleaseDate>
+					<Modification_Comment>updated Applicable_Platforms, Relationships</Modification_Comment>
+				</Modification>
+	    <Contribution Type="Content">
+	      <Contribution_Name>Abhi Balakrishnan</Contribution_Name>
+	      <Contribution_Date>2024-02-29</Contribution_Date>
+	      <Contribution_Version>4.15</Contribution_Version>
+	      <Contribution_ReleaseDate>2024-07-16</Contribution_ReleaseDate>
+	      <Contribution_Comment>Provided diagram to improve CWE usability</Contribution_Comment>
+	    </Contribution>
+            <Previous_Entry_Name Date="2010-02-16">Unrestricted File Upload</Previous_Entry_Name>
+         </Content_History>
+      </Weakness>
+      

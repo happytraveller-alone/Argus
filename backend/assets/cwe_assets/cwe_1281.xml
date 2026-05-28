@@ -1,0 +1,211 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="1281" Name="Sequence of Processor Instructions Leads to Unexpected Behavior" Abstraction="Base" Structure="Simple" Status="Incomplete">
+			<Description>Specific combinations of processor instructions lead to undesirable behavior such as locking the processor until a hard reset performed.</Description>
+			<Extended_Description>
+				<xhtml:p>If the instruction set architecture (ISA) and processor logic are not designed carefully and tested thoroughly, certain combinations of instructions may lead to locking the processor or other unexpected and undesirable behavior.  Upon encountering unimplemented instruction opcodes or illegal instruction operands, the processor should throw an exception and carry on without negatively impacting security.  However, specific combinations of legal and illegal instructions may cause unexpected behavior with security implications such as allowing unprivileged programs to completely lock the CPU. 
+                </xhtml:p>
+			</Extended_Description>
+			<Related_Weaknesses>
+			  <Related_Weakness Nature="ChildOf" CWE_ID="691" View_ID="1000" Ordinal="Primary" />
+			</Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+			<Applicable_Platforms>
+				<Language Class="Not Language-Specific" Prevalence="Undetermined" />
+				<Operating_System Class="Not OS-Specific" Prevalence="Undetermined" />
+				<Architecture Class="Not Architecture-Specific" Prevalence="Undetermined" />
+				<Technology Class="Not Technology-Specific" Prevalence="Undetermined" />
+				<Technology Name="Processor Hardware" Prevalence="Undetermined" />
+				</Applicable_Platforms>
+			<Modes_Of_Introduction>
+				<Introduction>
+					<Phase>Architecture and Design</Phase>
+					<Note>Unexpected behavior from certain instruction combinations can arise from bugs in the ISA</Note>
+				</Introduction>
+				<Introduction>
+					<Phase>Implementation</Phase>
+					<Note>Unexpected behavior from certain instruction combinations can arise because of implementation details such as speculative execution, caching etc.</Note>
+				</Introduction>
+			</Modes_Of_Introduction>
+			<Common_Consequences>
+				<Consequence>
+					<Scope>Integrity</Scope>
+					<Scope>Availability</Scope>
+					<Impact>Varies by Context</Impact>
+				</Consequence>
+			</Common_Consequences>
+			<Potential_Mitigations>
+				<Mitigation>
+					<Phase>Testing</Phase>
+					<Description>Implement a rigorous testing strategy that incorporates randomization to explore instruction sequences that are unlikely to appear in normal workloads in order to identify halt and catch fire instruction sequences.</Description>
+				</Mitigation>
+				<Mitigation>
+					<Phase>Patching and Maintenance</Phase>
+					<Description>Patch operating system to avoid running Halt and Catch Fire type sequences or to mitigate the damage caused by unexpected behavior.  See [REF-1108].</Description>
+				</Mitigation>
+			</Potential_Mitigations>
+			<Demonstrative_Examples>
+				<Demonstrative_Example>
+					<Intro_Text>The Pentium F00F bug is a real-world example of how a sequence of instructions can lock a processor. The "cmpxchg8b" instruction compares contents of registers with a memory location.  The operand is expected to be a memory location, but in the bad code snippet it is the eax register. Because the specified operand is illegal, an exception is generated, which is the correct behavior and not a security issue in itself. However, when prefixed with the "lock" instruction, the processor deadlocks because locked memory transactions require a read and write pair of transactions to occur before the lock on the memory bus is released. The exception causes a read to occur but there is no corresponding write, as there would have been if a legal operand had been supplied to the cmpxchg8b instruction. [REF-1331]</Intro_Text>
+					<Example_Code Nature="Bad" Language="x86 Assembly">lock cmpxchg8b eax</Example_Code>
+				</Demonstrative_Example>
+				<Demonstrative_Example>
+				<Intro_Text>The Cyrix Coma bug was capable of trapping a Cyrix 6x86, 6x86L, or 6x86MX processor in an infinite loop. An infinite loop on a processor is not necessarily an issue on its own, as interrupts could stop the loop. However, on select Cyrix processors, the x86 Assembly 'xchg' instruction was designed to prevent interrupts. On these processors, if the loop was such that a new 'xchg' instruction entered the instruction pipeline before the previous one exited, the processor would become deadlocked. [REF-1323]</Intro_Text>
+				</Demonstrative_Example>
+				<Demonstrative_Example>
+				<Intro_Text>The Motorola MC6800 microprocessor contained the first documented instance of a Halt and Catch Fire instruction - an instruction that causes the normal function of a processor to stop. If the MC6800 was given the opcode 0x9D or 0xDD, the processor would begin to read all memory very quickly, in sequence, and without executing any other instructions. This will cause the processor to become unresponsive to anything but a hard reset. [REF-1324]</Intro_Text>
+				</Demonstrative_Example>
+				<Demonstrative_Example>
+					<Intro_Text>The example code is taken from the commit stage inside the processor core of the HACK@DAC'19 buggy CVA6 SoC [REF-1342]. To ensure the correct execution of atomic instructions, the CPU must guarantee atomicity: no other device overwrites the memory location between the atomic read starts and the atomic write finishes. Another device may overwrite the memory location only before the read operation or after the write operation, but never between them, and finally, the content will still be consistent.</Intro_Text>
+					<Body_Text>Atomicity is especially critical when the variable to be modified is a mutex, counting semaphore, or similar piece of data that controls access to shared resources. Failure to ensure atomicity may result in two processors accessing a shared resource simultaneously, permanent lock-up, or similar disastrous behavior.</Body_Text>
+					<Example_Code Nature="Bad" Language="Verilog">
+						<xhtml:div><xhtml:b>if (csr_exception_i.valid &amp;&amp; csr_exception_i.cause[63] &amp;&amp; commit_instr_i[0].fu != CSR) begin</xhtml:b>
+							<xhtml:div style="margin-left:1em;">
+								exception_o = csr_exception_i;<xhtml:br />
+								exception_o.tval = commit_instr_i[0].ex.tval;<xhtml:br />
+							</xhtml:div>
+							end<xhtml:br />
+						</xhtml:div>       
+					</Example_Code>
+					<Body_Text>The above vulnerable code checks for CSR interrupts and gives them precedence over any other exception. However, the interrupts should not occur when the processor runs a series of atomic instructions. In the above vulnerable code, the required check must be included to ensure the processor is not in the middle of a series of atomic instructions.</Body_Text>
+					<Body_Text>Refrain from interrupting if the intention is to commit an atomic instruction that should not be interrupted. This can be done by adding a condition to check whether the current committing instruction is atomic. [REF-1343]</Body_Text>
+					<Example_Code Nature="Good" Language="Verilog">
+						<xhtml:div><xhtml:b>if (csr_exception_i.valid &amp;&amp; csr_exception_i.cause[63] &amp;&amp; !amo_valid_commit_o &amp;&amp; commit_instr_i[0].fu != CSR) begin</xhtml:b>
+							<xhtml:div style="margin-left:1em;">
+								exception_o = csr_exception_i;<xhtml:br />
+								exception_o.tval = commit_instr_i[0].ex.tval;<xhtml:br />
+							</xhtml:div>
+							end<xhtml:br />
+						</xhtml:div>       
+					</Example_Code>
+				</Demonstrative_Example>
+			</Demonstrative_Examples>
+			<Observed_Examples>
+				<Observed_Example>
+					<Reference>CVE-2021-26339</Reference>
+					<Description>A bug in AMD CPU's core logic allows a potential DoS by using a specific x86 instruction sequence to hang the processor</Description>
+					<Link>https://www.cve.org/CVERecord?id=CVE-2021-26339</Link>
+				</Observed_Example>
+				<Observed_Example>
+					<Reference>CVE-1999-1476</Reference>
+					<Description>A bug in some Intel Pentium processors allow DoS (hang) via an invalid "CMPXCHG8B" instruction, causing a deadlock</Description>
+					<Link>https://www.cve.org/CVERecord?id=CVE-1999-1476</Link>
+				</Observed_Example>
+			</Observed_Examples>
+         <Related_Attack_Patterns>
+            <Related_Attack_Pattern CAPEC_ID="212" />
+         </Related_Attack_Patterns>
+         <References>
+				<Reference External_Reference_ID="REF-1094" />
+				<Reference External_Reference_ID="REF-1108" />
+				<Reference External_Reference_ID="REF-1323" />
+				<Reference External_Reference_ID="REF-1324" />
+				<Reference External_Reference_ID="REF-1331" />
+				<Reference External_Reference_ID="REF-1342" />
+				<Reference External_Reference_ID="REF-1343" />
+			</References>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Base level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+			<Content_History>
+				<Submission>
+					<Submission_Name>Nicole Fern</Submission_Name>
+					<Submission_Organization>Cycuity (originally submitted as Tortuga Logic)</Submission_Organization>
+					<Submission_Date>2020-05-15</Submission_Date>
+					<Submission_Version>4.1</Submission_Version>
+					<Submission_ReleaseDate>2020-02-24</Submission_ReleaseDate>
+				</Submission>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-08-20</Modification_Date>
+					<Modification_Version>4.2</Modification_Version>
+					<Modification_ReleaseDate>2020-08-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Related_Attack_Patterns</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-03-15</Modification_Date>
+					<Modification_Version>4.4</Modification_Version>
+					<Modification_ReleaseDate>2021-03-15</Modification_ReleaseDate>
+					<Modification_Comment>updated Potential_Mitigations</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-07-20</Modification_Date>
+					<Modification_Version>4.5</Modification_Version>
+					<Modification_ReleaseDate>2021-07-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Name, Observed_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-10-13</Modification_Date>
+					<Modification_Version>4.9</Modification_Version>
+					<Modification_ReleaseDate>2022-10-13</Modification_ReleaseDate>
+					<Modification_Comment>updated Applicable_Platforms, Demonstrative_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples, Description, References, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples, Mapping_Notes, References</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-10-26</Modification_Date>
+					<Modification_Version>4.13</Modification_Version>
+					<Modification_ReleaseDate>2023-10-26</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples, Observed_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+				<Contribution Type="Content">
+				  <Contribution_Name>Shaza Zeitouni, Mohamadreza Rostami, Pouya Mahmoody, Ahmad-Reza Sadeghi</Contribution_Name>
+				  <Contribution_Organization>Technical University of Darmstadt</Contribution_Organization>
+				  <Contribution_Date>2023-06-21</Contribution_Date>
+				  <Contribution_Comment>suggested demonstrative example</Contribution_Comment>
+				</Contribution>
+				<Contribution Type="Content">
+				  <Contribution_Name>Rahul Kande, Chen Chen, Jeyavijayan Rajendran</Contribution_Name>
+				  <Contribution_Organization>Texas A&amp;M University</Contribution_Organization>
+				  <Contribution_Date>2023-06-21</Contribution_Date>
+				  <Contribution_Comment>suggested demonstrative example</Contribution_Comment>
+				</Contribution>
+				<Contribution Type="Content">
+					<Contribution_Name>Hareesh Khattri</Contribution_Name>
+					<Contribution_Organization>Intel Corporation</Contribution_Organization>
+					<Contribution_Date>2023-06-21</Contribution_Date>
+					<Contribution_Comment>contributed to observed example</Contribution_Comment>
+				</Contribution>
+			<Previous_Entry_Name Date="2021-07-20">Sequence of Processor Instructions Leads to Unexpected Behavior (Halt and Catch Fire)</Previous_Entry_Name>
+			</Content_History>
+		</Weakness>
+      

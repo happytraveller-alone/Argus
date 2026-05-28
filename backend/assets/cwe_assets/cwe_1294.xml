@@ -1,0 +1,144 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="1294" Name="Insecure Security Identifier Mechanism" Abstraction="Class" Structure="Simple" Status="Incomplete">
+			<Description>The System-on-Chip (SoC) implements a Security Identifier mechanism to differentiate what actions are allowed or disallowed when a transaction originates from an entity. However, the Security Identifiers are not correctly implemented.</Description>
+			<Extended_Description>
+                <xhtml:p>Systems-On-Chip (Integrated circuits and hardware
+                    engines) implement Security Identifiers to
+                    differentiate/identify actions originated from various
+                    agents. These actions could be 'read', 'write', 'program',
+                    'reset', 'fetch', 'compute', etc. Security identifiers are
+                    generated and assigned to every agent in the System (SoC)
+                    that is either capable of generating an action or receiving
+                    an action from another agent. Every agent could be assigned
+                    a unique, Security Identifier based on its trust level or
+                    privileges.</xhtml:p>
+                <xhtml:p>A broad class of flaws can exist in the Security
+                    Identifier process, including but not limited to missing
+                    security identifiers, improper conversion of security
+                    identifiers, incorrect generation of security identifiers,
+                    etc.</xhtml:p>
+			</Extended_Description>
+			<Related_Weaknesses>
+			  <Related_Weakness Nature="ChildOf" CWE_ID="284" View_ID="1000" Ordinal="Primary" />
+			</Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+			<Applicable_Platforms>
+				<Language Class="Not Language-Specific" Prevalence="Undetermined" />
+				<Operating_System Class="Not OS-Specific" Prevalence="Undetermined" />
+				<Architecture Class="Not Architecture-Specific" Prevalence="Undetermined" />
+				<Technology Name="Bus/Interface Hardware" Prevalence="Undetermined" />
+				<Technology Class="Not Technology-Specific" Prevalence="Undetermined" />
+            </Applicable_Platforms>
+			<Modes_Of_Introduction>
+				<Introduction>
+					<Phase>Architecture and Design</Phase>
+					<Note>Such issues could be introduced during hardware architecture and design, then identified later during Testing or System Configuration phases.  </Note>
+				</Introduction>
+				<Introduction>
+					<Phase>Implementation</Phase>
+					<Note>Such issues could be introduced during hardware implementation, then identified later during Testing or System Configuration phases.  </Note>
+				</Introduction>
+			</Modes_Of_Introduction>
+			<Common_Consequences>
+				<Consequence>
+					<Scope>Confidentiality</Scope>
+					<Scope>Integrity</Scope>
+					<Scope>Availability</Scope>
+					<Scope>Access Control</Scope>
+					<Impact>Modify Memory</Impact>
+					<Impact>Read Memory</Impact>
+					<Impact>DoS: Resource Consumption (Other)</Impact>
+					<Impact>Execute Unauthorized Code or Commands</Impact>
+					<Impact>Gain Privileges or Assume Identity</Impact>
+					<Impact>Quality Degradation</Impact>
+					<Likelihood>High</Likelihood>
+				</Consequence>
+			</Common_Consequences>
+			<Potential_Mitigations>
+				<Mitigation>
+					<Phase>Architecture and Design</Phase>
+					<Description>Security Identifier Decoders must be reviewed for design inconsistency and common weaknesses.</Description>
+				</Mitigation>
+				<Mitigation>
+					<Phase>Implementation</Phase>
+                    <Description>Access and programming flows must be tested in pre-silicon and post-silicon testing.</Description>
+				</Mitigation>
+			</Potential_Mitigations>
+         <Related_Attack_Patterns>
+            <Related_Attack_Pattern CAPEC_ID="121" />
+            <Related_Attack_Pattern CAPEC_ID="681" />
+         </Related_Attack_Patterns>
+         <Mapping_Notes>
+            <Usage>Allowed-with-Review</Usage>
+            <Rationale>This CWE entry is a Class and might have Base-level children that would be more appropriate</Rationale>
+            <Comments>Examine children of this entry to see if there is a better fit</Comments>
+            <Reasons>
+               <Reason Type="Abstraction" />
+            </Reasons>
+         </Mapping_Notes>
+         <Notes>
+			  <Note Type="Maintenance">This entry is still under development and will continue to see updates and content improvements.</Note>
+			</Notes>
+			<Content_History>
+				<Submission>
+					<Submission_Name>CWE Content Team</Submission_Name>
+					<Submission_Organization>MITRE</Submission_Organization>
+					<Submission_Date>2020-07-17</Submission_Date>
+					<Submission_Version>4.2</Submission_Version>
+					<Submission_ReleaseDate>2020-08-20</Submission_ReleaseDate>
+				</Submission>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-07-20</Modification_Date>
+					<Modification_Version>4.5</Modification_Version>
+					<Modification_ReleaseDate>2021-07-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Related_Attack_Patterns</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-04-28</Modification_Date>
+					<Modification_Version>4.7</Modification_Version>
+					<Modification_ReleaseDate>2022-04-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Applicable_Platforms, Related_Attack_Patterns</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-06-28</Modification_Date>
+					<Modification_Version>4.8</Modification_Version>
+					<Modification_ReleaseDate>2022-06-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Applicable_Platforms</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+			</Content_History>
+		</Weakness>
+      

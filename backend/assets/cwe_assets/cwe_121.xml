@@ -1,0 +1,446 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="121" Name="Stack-based Buffer Overflow" Abstraction="Variant" Structure="Simple" Status="Draft">
+         <Description>A stack-based buffer overflow condition is a condition where the buffer being overwritten is allocated on the stack (i.e., is a local variable or, rarely, a parameter to a function).</Description>
+         <Related_Weaknesses>
+            <Related_Weakness Nature="ChildOf" CWE_ID="788" View_ID="1000" Ordinal="Primary" />
+            <Related_Weakness Nature="ChildOf" CWE_ID="787" View_ID="1000" />
+         </Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+         <Applicable_Platforms>
+	    <Language Class="Memory-Unsafe" Prevalence="Often" />
+            <Language Name="C" Prevalence="Often" />
+            <Language Name="C++" Prevalence="Often" />
+	    <Technology Class="Not Technology-Specific" Prevalence="Undetermined" />
+         </Applicable_Platforms>
+         <Background_Details>
+            <Background_Detail>There are generally several security-critical data on an execution stack that can lead to arbitrary code execution. The most prominent is the stored return address, the memory address at which execution should continue once the current function is finished executing. The attacker can overwrite this value with some memory address to which the attacker also has write access, into which they place arbitrary code to be run with the full privileges of the vulnerable program. Alternately, the attacker can supply the address of an important call, for instance the POSIX system() call, leaving arguments to the call on the stack. This is often called a return into libc exploit, since the attacker generally forces the program to jump at return time into an interesting routine in the C standard library (libc). Other important data commonly on the stack include the stack pointer and frame pointer, two values that indicate offsets for computing memory addresses. Modifying those values can often be leveraged into a "write-what-where" condition.</Background_Detail>
+         </Background_Details>
+         <Alternate_Terms>
+            <Alternate_Term>
+               <Term>Stack Overflow</Term>
+               <Description>"Stack Overflow" is often used to mean the same thing as stack-based buffer overflow, however it is also used on occasion to mean stack exhaustion, usually a result from an excessively recursive function call. Due to the ambiguity of the term, use of stack overflow to describe either circumstance is discouraged.</Description>
+            </Alternate_Term>
+            <Alternate_Term>
+               <Term>Stack Buffer Overflow</Term>
+            </Alternate_Term>
+         </Alternate_Terms>
+         <Modes_Of_Introduction>
+            <Introduction>
+               <Phase>Implementation</Phase>
+            </Introduction>
+         </Modes_Of_Introduction>
+         <Likelihood_Of_Exploit>High</Likelihood_Of_Exploit>
+         <Common_Consequences>
+            <Consequence>
+               <Scope>Availability</Scope>
+               <Impact>Modify Memory</Impact>
+               <Impact>DoS: Crash, Exit, or Restart</Impact>
+               <Impact>DoS: Resource Consumption (CPU)</Impact>
+               <Impact>DoS: Resource Consumption (Memory)</Impact>
+               <Note>Buffer overflows generally lead to crashes. Other attacks leading to lack of availability are possible, including putting the program into an infinite loop.</Note>
+            </Consequence>
+            <Consequence>
+               <Scope>Integrity</Scope>
+               <Scope>Confidentiality</Scope>
+               <Scope>Availability</Scope>
+               <Scope>Access Control</Scope>
+               <Impact>Modify Memory</Impact>
+               <Impact>Execute Unauthorized Code or Commands</Impact>
+               <Impact>Bypass Protection Mechanism</Impact>
+               <Note>Buffer overflows often can be used to execute arbitrary code, which is usually outside the scope of a program's implicit security policy.</Note>
+            </Consequence>
+            <Consequence>
+               <Scope>Integrity</Scope>
+               <Scope>Confidentiality</Scope>
+               <Scope>Availability</Scope>
+               <Scope>Access Control</Scope>
+               <Scope>Other</Scope>
+               <Impact>Modify Memory</Impact>
+               <Impact>Execute Unauthorized Code or Commands</Impact>
+               <Impact>Bypass Protection Mechanism</Impact>
+               <Impact>Other</Impact>
+               <Note>When the consequence is arbitrary code execution, this can often be used to subvert any other security service.</Note>
+            </Consequence>
+         </Common_Consequences>
+         <Detection_Methods>
+           <Detection_Method Detection_Method_ID="DM-13">
+             <Method>Fuzzing</Method>
+             <Description>Fuzz testing (fuzzing) is a powerful technique for generating large numbers of diverse inputs - either randomly or algorithmically - and dynamically invoking the code with those inputs. Even with random inputs, it is often capable of generating unexpected results such as crashes, memory corruption, or resource consumption. Fuzzing effectively produces repeatable test cases that clearly indicate bugs, which helps developers to diagnose the issues.</Description>
+             <Effectiveness>High</Effectiveness>
+           </Detection_Method>
+           <Detection_Method Detection_Method_ID="DM-14">
+             <Method>Automated Static Analysis</Method>
+             <Description>Automated static analysis, commonly referred to as Static Application Security Testing (SAST), can find some instances of this weakness by analyzing source code (or binary/compiled code) without having to execute it. Typically, this is done by building a model of data flow and control flow, then searching for potentially-vulnerable patterns that connect "sources" (origins of input) with "sinks" (destinations where the data interacts with external components, a lower layer such as the OS, etc.)</Description>
+             <Effectiveness>High</Effectiveness>
+	   </Detection_Method>
+	   <Detection_Method Detection_Method_ID="DM-15">
+	     <Method>Automated Dynamic Analysis</Method>
+	     <Description>Use tools that are integrated during
+	     compilation to insert runtime error-checking mechanisms
+	     related to memory safety errors, such as AddressSanitizer
+	     (ASan) for C/C++ [REF-1518].</Description>
+	     <Effectiveness>Moderate</Effectiveness>
+	     <Effectiveness_Notes>Crafted inputs are necessary to
+	     reach the code containing the error, such as generated
+	     by fuzzers.  Also, these tools may reduce performance,
+	     and they only report the error condition - not the
+	     original mistake that led to the
+	     error.</Effectiveness_Notes>
+           </Detection_Method>
+         </Detection_Methods>
+         <Potential_Mitigations>
+            <Mitigation Mitigation_ID="MIT-10">
+              <Phase>Operation</Phase> 
+	      <Phase>Build and Compilation</Phase>
+	      <Strategy>Environment Hardening</Strategy> 
+	      <Description> 
+		<xhtml:p>Use automatic buffer overflow detection mechanisms that are offered by certain compilers or compiler extensions. Examples include: the Microsoft Visual Studio /GS flag, Fedora/Red Hat FORTIFY_SOURCE GCC flag, StackGuard, and ProPolice, which provide various mechanisms including canary-based detection and range/index checking. </xhtml:p> 
+		<xhtml:p> D3-SFCV (Stack Frame Canary Validation) from D3FEND [REF-1334] discusses canary-based detection in detail. </xhtml:p> 
+	      </Description> 
+	      <Effectiveness>Defense in Depth</Effectiveness> 
+	      <Effectiveness_Notes> 
+		<xhtml:p> This is not necessarily a complete solution, since these mechanisms only detect certain types of overflows. In addition, the result is still a denial of service, since the typical response is to exit the application. </xhtml:p> 
+	      </Effectiveness_Notes> 
+            </Mitigation>
+            <Mitigation>
+               <Phase>Architecture and Design</Phase>
+               <Description>Use an abstraction library to abstract away risky APIs. Not a complete solution.</Description>
+            </Mitigation>
+            <Mitigation>
+               <Phase>Implementation</Phase>
+               <Description>Implement and perform bounds checking on input.</Description>
+            </Mitigation>
+            <Mitigation>
+               <Phase>Implementation</Phase>
+               <Description>Do not use dangerous functions such as gets. Use safer, equivalent functions which check for boundary errors.</Description>
+            </Mitigation>
+            <Mitigation Mitigation_ID="MIT-11">
+               <Phase>Operation</Phase>
+	       <Phase>Build and Compilation</Phase> 
+	       <Strategy>Environment Hardening</Strategy> 
+	       <Description>
+		 <xhtml:p>Run or compile the software using features or extensions that randomly arrange the positions of a program's executable and libraries in memory. Because this makes the addresses unpredictable, it can prevent an attacker from reliably jumping to exploitable code. </xhtml:p> 
+		 <xhtml:p> Examples include Address Space Layout Randomization (ASLR) [REF-58] [REF-60] and Position-Independent Executables (PIE) [REF-64]. Imported modules may be similarly realigned if their default memory addresses conflict with other modules, in a process known as "rebasing" (for Windows) and "prelinking" (for Linux) [REF-1332] using randomly generated addresses. ASLR for libraries cannot be used in conjunction with prelink since it would require relocating the libraries at run-time, defeating the whole purpose of prelinking. </xhtml:p> 
+	       <xhtml:p> For more information on these techniques see D3-SAOR (Segment Address Offset Randomization) from D3FEND [REF-1335]. </xhtml:p> </Description> 
+	       <Effectiveness>Defense in Depth</Effectiveness> 
+	       <Effectiveness_Notes>These techniques do not provide a complete solution.  For instance, exploits frequently use a bug that discloses memory addresses in order to maximize reliability of code execution [REF-1337]. It has also been shown that a side-channel attack can bypass ASLR [REF-1333].</Effectiveness_Notes> 
+            </Mitigation>
+         </Potential_Mitigations>
+         <Demonstrative_Examples>
+            <Demonstrative_Example>
+               <Intro_Text>While buffer overflow examples can be rather complex, it is possible to have very simple, yet still exploitable, stack-based buffer overflows:</Intro_Text>
+               <Example_Code Nature="Bad" Language="C">
+                  <xhtml:div>#define BUFSIZE 256<xhtml:br />int main(int argc, char **argv) {<xhtml:div style="margin-left:1em;">char buf[BUFSIZE];<xhtml:br />strcpy(buf, argv[1]);</xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>The buffer size is fixed, but there is no guarantee the string in argv[1] will not exceed this size and cause an overflow.</Body_Text>
+            </Demonstrative_Example>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-1">
+               <Intro_Text>This example takes an IP address from a user, verifies that it is well formed and then looks up the hostname and copies it into a buffer.</Intro_Text>
+               <Example_Code Nature="Bad" Language="C">
+                  <xhtml:div>void host_lookup(char *user_supplied_addr){<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>struct hostent *hp;<xhtml:br />in_addr_t *addr;<xhtml:br />char hostname[64];<xhtml:br />in_addr_t inet_addr(const char *cp);<xhtml:br />
+                           <xhtml:br />
+                           <xhtml:i>/*routine that ensures user_supplied_addr is in the right format for conversion */</xhtml:i>
+                           <xhtml:br />
+                           <xhtml:br />validate_addr_form(user_supplied_addr);<xhtml:br />addr = inet_addr(user_supplied_addr);<xhtml:br />hp = gethostbyaddr( addr, sizeof(struct in_addr), AF_INET);<xhtml:br />strcpy(hostname, hp-&gt;h_name);</xhtml:div>
+                     </xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>This function allocates a buffer of 64 bytes to store the hostname, however there is no guarantee that the hostname will not be larger than 64 bytes. If an attacker specifies an address which resolves to a very large hostname, then the function may overwrite sensitive data or even relinquish control flow to the attacker.</Body_Text>
+               <Body_Text>Note that this example also contains an unchecked return value (CWE-252) that can lead to a NULL pointer dereference (CWE-476).</Body_Text>
+            </Demonstrative_Example>
+         </Demonstrative_Examples>
+         <Observed_Examples>
+            <Observed_Example>
+               <Reference>CVE-2021-35395</Reference>
+               <Description>Stack-based buffer overflows in SFK for wifi chipset used for IoT/embedded devices, as exploited in the wild per CISA KEV.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2021-35395</Link>
+            </Observed_Example>
+         </Observed_Examples>
+         <Functional_Areas>
+            <Functional_Area>Memory Management</Functional_Area>
+         </Functional_Areas>
+         <Affected_Resources>
+            <Affected_Resource>Memory</Affected_Resource>
+         </Affected_Resources>
+         <Taxonomy_Mappings>
+            <Taxonomy_Mapping Taxonomy_Name="CLASP">
+               <Entry_Name>Stack overflow</Entry_Name>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="Software Fault Patterns">
+               <Entry_ID>SFP8</Entry_ID>
+               <Entry_Name>Faulty Buffer Access</Entry_Name>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="CERT C Secure Coding">
+               <Entry_ID>ARR38-C</Entry_ID>
+               <Entry_Name>Guarantee that library functions do not form invalid pointers</Entry_Name>
+               <Mapping_Fit>Imprecise</Mapping_Fit>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="CERT C Secure Coding">
+               <Entry_ID>STR31-C</Entry_ID>
+               <Entry_Name>Guarantee that storage for strings has sufficient space for character data and the null terminator</Entry_Name>
+               <Mapping_Fit>CWE More Specific</Mapping_Fit>
+            </Taxonomy_Mapping>
+         </Taxonomy_Mappings>
+         <References>
+	    <Reference External_Reference_ID="REF-1029" />
+            <Reference External_Reference_ID="REF-7" Section="Chapter 5, &quot;Stack Overruns&quot; Page 129" />
+            <Reference External_Reference_ID="REF-44" Section="&quot;Sin 5: Buffer Overruns.&quot; Page 89" />
+            <Reference External_Reference_ID="REF-62" Section="Chapter 3, &quot;Nonexecutable Stack&quot;, Page 76" />
+            <Reference External_Reference_ID="REF-62" Section="Chapter 5, &quot;Protection Mechanisms&quot;, Page 189" />
+            <Reference External_Reference_ID="REF-18" />
+            <Reference External_Reference_ID="REF-58" />
+            <Reference External_Reference_ID="REF-60" />
+            <Reference External_Reference_ID="REF-64" />
+	    <Reference External_Reference_ID="REF-1332" />
+	    <Reference External_Reference_ID="REF-1333" />
+	    <Reference External_Reference_ID="REF-1334" />
+	    <Reference External_Reference_ID="REF-1335" />
+	    <Reference External_Reference_ID="REF-1337" Section="Memory information leaks" />
+	    <Reference External_Reference_ID="REF-1477" />
+	    <Reference External_Reference_ID="REF-1518" />
+         </References>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Variant level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+         <Notes>
+	   <Note Type="Terminology">There is significant inconsistency
+	   regarding the "buffer overflow" term, which can have
+	   multiple interpretations and uses. Many people mean
+	   "writing past the end of a buffer."  Others mean "writing
+	   past the end of a buffer, or before the beginning of a
+	   buffer."  Still others might include "read" in the term.</Note>
+           <Note Type="Relationship">Stack-based buffer overflows can instantiate in return address overwrites, stack pointer overwrites or frame pointer overwrites. They can also be considered function pointer overwrites, array index overwrites or write-what-where condition, etc.</Note>
+         </Notes>
+         <Content_History>
+            <Submission>
+               <Submission_Name>CLASP</Submission_Name>
+               <Submission_Date>2006-07-19</Submission_Date>
+               <Submission_Version>Draft 3</Submission_Version>
+               <Submission_ReleaseDate>2006-07-19</Submission_ReleaseDate>
+            </Submission>
+            <Modification>
+               <Modification_Name>Eric Dalci</Modification_Name>
+               <Modification_Organization>Cigital</Modification_Organization>
+               <Modification_Date>2008-07-01</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>updated Potential_Mitigations, Time_of_Introduction</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Organization>KDM Analytics</Modification_Organization>
+               <Modification_Date>2008-08-01</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>added/updated white box definitions</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2008-09-08</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>updated Alternate_Terms, Applicable_Platforms, Background_Details, Common_Consequences, Relationships, Other_Notes, Taxonomy_Mappings, Weakness_Ordinalities</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2009-01-12</Modification_Date>
+               <Modification_Version>1.2</Modification_Version>
+               <Modification_ReleaseDate>2009-01-12</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences, Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>KDM Analytics</Modification_Name>
+               <Modification_Date>2009-07-17</Modification_Date>
+               <Modification_Version>1.5</Modification_Version>
+               <Modification_ReleaseDate>2009-07-27</Modification_ReleaseDate>
+               <Modification_Comment>Improved the White_Box_Definition</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2009-07-27</Modification_Date>
+               <Modification_Version>1.5</Modification_Version>
+               <Modification_ReleaseDate>2009-07-27</Modification_ReleaseDate>
+               <Modification_Comment>updated Potential_Mitigations, White_Box_Definitions</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2009-10-29</Modification_Date>
+               <Modification_Version>1.6</Modification_Version>
+               <Modification_ReleaseDate>2009-10-29</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2010-02-16</Modification_Date>
+               <Modification_Version>1.8</Modification_Version>
+               <Modification_ReleaseDate>2010-02-16</Modification_ReleaseDate>
+               <Modification_Comment>updated References</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-06-01</Modification_Date>
+               <Modification_Version>1.13</Modification_Version>
+               <Modification_ReleaseDate>2011-06-01</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2012-05-11</Modification_Date>
+               <Modification_Version>2.2</Modification_Version>
+               <Modification_ReleaseDate>2012-05-15</Modification_ReleaseDate>
+               <Modification_Comment>updated Demonstrative_Examples, References, Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2012-10-30</Modification_Date>
+               <Modification_Version>2.3</Modification_Version>
+               <Modification_ReleaseDate>2012-10-30</Modification_ReleaseDate>
+               <Modification_Comment>updated Demonstrative_Examples, Potential_Mitigations</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2014-07-30</Modification_Date>
+               <Modification_Version>2.8</Modification_Version>
+               <Modification_ReleaseDate>2014-07-31</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2017-11-08</Modification_Date>
+               <Modification_Version>3.0</Modification_Version>
+               <Modification_ReleaseDate>2017-11-08</Modification_ReleaseDate>
+               <Modification_Comment>updated Background_Details, Causal_Nature, Likelihood_of_Exploit, References, Relationships, Taxonomy_Mappings, White_Box_Definitions</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2018-03-27</Modification_Date>
+               <Modification_Version>3.1</Modification_Version>
+               <Modification_ReleaseDate>2018-03-27</Modification_ReleaseDate>
+               <Modification_Comment>updated References</Modification_Comment>
+            </Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2019-01-03</Modification_Date>
+					<Modification_Version>3.2</Modification_Version>
+					<Modification_ReleaseDate>2019-01-03</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2019-09-19</Modification_Date>
+					<Modification_Version>3.4</Modification_Version>
+					<Modification_ReleaseDate>2019-09-19</Modification_ReleaseDate>
+					<Modification_Comment>updated References</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-02-24</Modification_Date>
+					<Modification_Version>4.0</Modification_Version>
+					<Modification_ReleaseDate>2020-02-24</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-06-25</Modification_Date>
+					<Modification_Version>4.1</Modification_Version>
+					<Modification_ReleaseDate>2020-06-25</Modification_ReleaseDate>
+					<Modification_Comment>updated Common_Consequences</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-03-15</Modification_Date>
+					<Modification_Version>4.4</Modification_Version>
+					<Modification_ReleaseDate>2021-03-15</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples, References</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-07-20</Modification_Date>
+					<Modification_Version>4.5</Modification_Version>
+					<Modification_ReleaseDate>2021-07-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-06-28</Modification_Date>
+					<Modification_Version>4.8</Modification_Version>
+					<Modification_ReleaseDate>2022-06-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Observed_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Detection_Factors, Potential_Mitigations, References, Relationships, Time_of_Introduction</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-04-03</Modification_Date>
+					<Modification_Version>4.17</Modification_Version>
+					<Modification_ReleaseDate>2025-04-03</Modification_ReleaseDate>
+					<Modification_Comment>updated Applicable_Platforms</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-09-09</Modification_Date>
+					<Modification_Version>4.18</Modification_Version>
+					<Modification_ReleaseDate>2025-09-09</Modification_ReleaseDate>
+					<Modification_Comment>updated Affected_Resources, Functional_Areas, References</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Alternate_Terms, Applicable_Platforms, Detection_Factors, Other_Notes, References, Relationship_Notes, Terminology_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2026-01-21</Modification_Date>
+					<Modification_Version>4.19.1</Modification_Version>
+					<Modification_ReleaseDate>2026-01-21</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+         </Content_History>
+      </Weakness>
+      

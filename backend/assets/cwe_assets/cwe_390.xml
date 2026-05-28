@@ -1,0 +1,336 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="390" Name="Detection of Error Condition Without Action" Abstraction="Base" Structure="Simple" Status="Draft">
+         <Description>The product detects a specific error, but takes no actions to handle the error.</Description>
+         <Related_Weaknesses>
+            <Related_Weakness Nature="ChildOf" CWE_ID="755" View_ID="1000" Ordinal="Primary" />
+            <Related_Weakness Nature="CanPrecede" CWE_ID="401" View_ID="1000" />
+         </Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+         <Applicable_Platforms>
+            <Language Class="Not Language-Specific" Prevalence="Undetermined" />
+         </Applicable_Platforms>
+         <Modes_Of_Introduction>
+            <Introduction>
+               <Phase>Implementation</Phase>
+               <Note>REALIZATION: This weakness is caused during implementation of an architectural security tactic.</Note>
+            </Introduction>
+         </Modes_Of_Introduction>
+         <Likelihood_Of_Exploit>Medium</Likelihood_Of_Exploit>
+         <Common_Consequences>
+            <Consequence>
+               <Scope>Integrity</Scope>
+               <Scope>Other</Scope>
+               <Impact>Varies by Context</Impact>
+               <Impact>Unexpected State</Impact>
+               <Impact>Alter Execution Logic</Impact>
+               <Note>An attacker could utilize an ignored error condition to place the system in an unexpected state that could lead to the execution of unintended logic and could cause other unintended behavior.</Note>
+            </Consequence>
+         </Common_Consequences>
+         <Detection_Methods>
+           <Detection_Method Detection_Method_ID="DM-14">
+             <Method>Automated Static Analysis</Method>
+             <Description>Automated static analysis, commonly referred to as Static Application Security Testing (SAST), can find some instances of this weakness by analyzing source code (or binary/compiled code) without having to execute it. Typically, this is done by building a model of data flow and control flow, then searching for potentially-vulnerable patterns that connect "sources" (origins of input) with "sinks" (destinations where the data interacts with external components, a lower layer such as the OS, etc.)</Description>
+             <Effectiveness>High</Effectiveness>
+           </Detection_Method>
+         </Detection_Methods>
+         <Potential_Mitigations>
+            <Mitigation>
+               <Phase>Implementation</Phase>
+               <Description>Properly handle each exception. This is the recommended solution. Ensure that all exceptions are handled in such a way that you can be sure of the state of your system at any given moment.</Description>
+            </Mitigation>
+            <Mitigation>
+               <Phase>Implementation</Phase>
+               <Description>If a function returns an error, it is important to either fix the problem and try again, alert the user that an error has happened and let the program continue, or alert the user and close and cleanup the program.</Description>
+            </Mitigation>
+            <Mitigation>
+               <Phase>Testing</Phase>
+               <Description>Subject the product to extensive testing to discover some of the possible instances of where/how errors or return values are not handled. Consider testing techniques such as ad hoc, equivalence partitioning, robustness and fault tolerance, mutation, and fuzzing.</Description>
+            </Mitigation>
+         </Potential_Mitigations>
+         <Demonstrative_Examples>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-201">
+               <Intro_Text>The following example attempts to allocate memory for a character. After the call to malloc, an if statement is used to check whether the malloc function failed.</Intro_Text>
+               <Example_Code Nature="Bad" Language="C">
+                  <xhtml:div>foo=malloc(sizeof(char)); //the next line checks to see if malloc failed<xhtml:br />if (foo==NULL) {<xhtml:div style="margin-left:1em;">//We do nothing so we just ignore the error.</xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>The conditional successfully detects a NULL return value from malloc indicating a failure, however it does not do anything to handle the problem. Unhandled errors may have unexpected results and may cause the program to crash or terminate.</Body_Text>
+               <Body_Text>Instead, the if block should contain statements that either attempt to fix the problem or notify the user that an error has occurred and continue processing or perform some cleanup and gracefully terminate the program. The following example notifies the user that the malloc function did not allocate the required memory resources and returns an error code.</Body_Text>
+               <Example_Code Nature="Good" Language="C">
+                  <xhtml:div>foo=malloc(sizeof(char)); //the next line checks to see if malloc failed<xhtml:br />if (foo==NULL) {<xhtml:div style="margin-left:1em;">printf("Malloc failed to allocate memory resources");<xhtml:br />return -1;</xhtml:div>}</xhtml:div>
+               </Example_Code>
+            </Demonstrative_Example>
+            <Demonstrative_Example>
+               <Intro_Text>In the following C++ example the method readFile() will read the file whose name is provided in the input parameter and will return the contents of the file in char string. The method calls open() and read() may result in errors if the file does not exist or does not contain any data to read. These errors will be thrown when the is_open() method and good() method indicate errors opening or reading the file. However, these errors are not handled within the catch statement. Catch statements that do not perform any processing will have unexpected results. In this case an empty char string will be returned, and the file will not be properly closed.</Intro_Text>
+               <Example_Code Nature="Bad" Language="C++">
+                  <xhtml:div>char* readfile (char *filename) {<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>try {<xhtml:div style="margin-left:1em;">
+                              <xhtml:div>// open input file<xhtml:br />ifstream infile;<xhtml:br />infile.open(filename);<xhtml:br />
+                                 <xhtml:br />if (!infile.is_open()) {<xhtml:div style="margin-left:1em;">throw "Unable to open file " + filename;</xhtml:div>}<xhtml:br />
+                                 <xhtml:br />// get length of file<xhtml:br />infile.seekg (0, ios::end);<xhtml:br />int length = infile.tellg();<xhtml:br />infile.seekg (0, ios::beg);<xhtml:br />
+                                 <xhtml:br />// allocate memory<xhtml:br />char *buffer = new char [length];<xhtml:br />
+                                 <xhtml:br />// read data from file<xhtml:br />infile.read (buffer,length);<xhtml:br />
+                                 <xhtml:br />if (!infile.good()) {<xhtml:div style="margin-left:1em;">throw "Unable to read from file " + filename;</xhtml:div>}<xhtml:br />
+                                 <xhtml:br />infile.close();<xhtml:br />
+                                 <xhtml:br />return buffer;</xhtml:div>
+                           </xhtml:div>}<xhtml:br />catch (...) {<xhtml:div style="margin-left:1em;">/* bug: insert code to handle this later */</xhtml:div>}</xhtml:div>
+                     </xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>The catch statement should contain statements that either attempt to fix the problem or notify the user that an error has occurred and continue processing or perform some cleanup and gracefully terminate the program. The following C++ example contains two catch statements. The first of these will catch a specific error thrown within the try block, and the second catch statement will catch all other errors from within the catch block. Both catch statements will notify the user that an error has occurred, close the file, and rethrow to the block that called the readFile() method for further handling or possible termination of the program.</Body_Text>
+               <Example_Code Nature="Good" Language="C++">
+                  <xhtml:div>char* readFile (char *filename) {<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>try {<xhtml:div style="margin-left:1em;">
+                              <xhtml:div>// open input file<xhtml:br />ifstream infile;<xhtml:br />infile.open(filename);<xhtml:br />
+                                 <xhtml:br />if (!infile.is_open()) {<xhtml:div style="margin-left:1em;">throw "Unable to open file " + filename;</xhtml:div>}<xhtml:br />
+                                 <xhtml:br />// get length of file<xhtml:br />infile.seekg (0, ios::end);<xhtml:br />int length = infile.tellg();<xhtml:br />infile.seekg (0, ios::beg);<xhtml:br />
+                                 <xhtml:br />// allocate memory<xhtml:br />char *buffer = new char [length];<xhtml:br />
+                                 <xhtml:br />// read data from file<xhtml:br />infile.read (buffer,length);<xhtml:br />
+                                 <xhtml:br />if (!infile.good()) {<xhtml:div style="margin-left:1em;">throw "Unable to read from file " + filename;</xhtml:div>}<xhtml:br />infile.close();<xhtml:br />
+                                 <xhtml:br />return buffer;</xhtml:div>
+                           </xhtml:div>}<xhtml:br />catch (char *str) {<xhtml:div style="margin-left:1em;">printf("Error: %s \n", str);<xhtml:br />infile.close();<xhtml:br />throw str;</xhtml:div>}<xhtml:br />catch (...) {<xhtml:div style="margin-left:1em;">printf("Error occurred trying to read from file \n");<xhtml:br />infile.close();<xhtml:br />throw;</xhtml:div>}</xhtml:div>
+                     </xhtml:div>}</xhtml:div>
+               </Example_Code>
+            </Demonstrative_Example>
+            <Demonstrative_Example>
+               <Intro_Text>In the following Java example the method readFile will read the file whose name is provided in the input parameter and will return the contents of the file in a String object. The constructor of the FileReader object and the read method call may throw exceptions and therefore must be within a try/catch block. While the catch statement in this example will catch thrown exceptions in order for the method to compile, no processing is performed to handle the thrown exceptions. Catch statements that do not perform any processing will have unexpected results. In this case, this will result in the return of a null String.</Intro_Text>
+               <Example_Code Nature="Bad" Language="Java">
+                  <xhtml:div>public String readFile(String filename) {<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>String retString = null;<xhtml:br />try {<xhtml:div style="margin-left:1em;">
+                              <xhtml:div>// initialize File and FileReader objects<xhtml:br />File file = new File(filename);<xhtml:br />FileReader fr = new FileReader(file);<xhtml:br />
+                                 <xhtml:br />// initialize character buffer<xhtml:br />long fLen = file.length();<xhtml:br />char[] cBuf = new char[(int) fLen];<xhtml:br />
+                                 <xhtml:br />// read data from file<xhtml:br />int iRead = fr.read(cBuf, 0, (int) fLen);<xhtml:br />
+                                 <xhtml:br />// close file<xhtml:br />fr.close();<xhtml:br />
+                                 <xhtml:br />retString = new String(cBuf);<xhtml:br />
+                              </xhtml:div>
+                           </xhtml:div>} catch (Exception ex) {<xhtml:div style="margin-left:1em;">/* do nothing, but catch so it'll compile... */</xhtml:div>}<xhtml:br />return retString;</xhtml:div>
+                     </xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>The catch statement should contain statements that either attempt to fix the problem, notify the user that an exception has been raised and continue processing, or perform some cleanup and gracefully terminate the program. The following Java example contains three catch statements. The first of these will catch the FileNotFoundException that may be thrown by the FileReader constructor called within the try/catch block. The second catch statement will catch the IOException that may be thrown by the read method called within the try/catch block. The third catch statement will catch all other exceptions thrown within the try block. For all catch statements the user is notified that the exception has been thrown and the exception is rethrown to the block that called the readFile() method for further processing or possible termination of the program. Note that with Java it is usually good practice to use the getMessage() method of the exception class to provide more information to the user about the exception raised.</Body_Text>
+               <Example_Code Nature="Good" Language="Java">
+                  <xhtml:div>public String readFile(String filename) throws FileNotFoundException, IOException, Exception {<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>String retString = null;<xhtml:br />try {<xhtml:div style="margin-left:1em;">
+                              <xhtml:div>// initialize File and FileReader objects<xhtml:br />File file = new File(filename);<xhtml:br />FileReader fr = new FileReader(file);<xhtml:br />
+                                 <xhtml:br />// initialize character buffer<xhtml:br />long fLen = file.length();<xhtml:br />char [] cBuf = new char[(int) fLen];<xhtml:br />
+                                 <xhtml:br />// read data from file<xhtml:br />int iRead = fr.read(cBuf, 0, (int) fLen);<xhtml:br />
+                                 <xhtml:br />// close file<xhtml:br />fr.close();<xhtml:br />
+                                 <xhtml:br />retString = new String(cBuf);<xhtml:br />
+                              </xhtml:div>
+                           </xhtml:div>} catch (FileNotFoundException ex) {<xhtml:div style="margin-left:1em;">System.err.println ("Error: FileNotFoundException opening the input file: " + filename );<xhtml:br />System.err.println ("" + ex.getMessage() );<xhtml:br />throw new FileNotFoundException(ex.getMessage());</xhtml:div>} catch (IOException ex) {<xhtml:div style="margin-left:1em;">System.err.println("Error: IOException reading the input file.\n" + ex.getMessage() );<xhtml:br />throw new IOException(ex);</xhtml:div>} catch (Exception ex) {<xhtml:div style="margin-left:1em;">System.err.println("Error: Exception reading the input file.\n" + ex.getMessage() );<xhtml:br />throw new Exception(ex);</xhtml:div>}<xhtml:br />return retString;</xhtml:div>
+                     </xhtml:div>}</xhtml:div>
+               </Example_Code>
+            </Demonstrative_Example>
+          </Demonstrative_Examples>
+	  <Observed_Examples>
+	   <Observed_Example>
+              <Reference>CVE-2022-21820</Reference>
+               <Description>A GPU data center manager detects an error due to a malformed request but does not act on it, leading to memory corruption.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2022-21820</Link>
+	   </Observed_Example>
+         </Observed_Examples>
+         <Taxonomy_Mappings>
+            <Taxonomy_Mapping Taxonomy_Name="CLASP">
+               <Entry_Name>Improper error handling</Entry_Name>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="The CERT Oracle Secure Coding Standard for Java (2011)">
+               <Entry_ID>ERR00-J</Entry_ID>
+               <Entry_Name>Do not suppress or ignore checked exceptions</Entry_Name>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="Software Fault Patterns">
+               <Entry_ID>SFP4</Entry_ID>
+               <Entry_Name>Unchecked Status Condition</Entry_Name>
+            </Taxonomy_Mapping>
+         </Taxonomy_Mappings>
+         <References>
+            <Reference External_Reference_ID="REF-18" />
+            <Reference External_Reference_ID="REF-44" Section="&quot;Sin 11: Failure to Handle Errors Correctly.&quot; Page 183" />
+         </References>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Base level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+         <Content_History>
+            <Submission>
+               <Submission_Name>CLASP</Submission_Name>
+               <Submission_Date>2006-07-19</Submission_Date>
+               <Submission_Version>Draft 3</Submission_Version>
+               <Submission_ReleaseDate>2006-07-19</Submission_ReleaseDate>
+            </Submission>
+            <Modification>
+               <Modification_Name>Eric Dalci</Modification_Name>
+               <Modification_Organization>Cigital</Modification_Organization>
+               <Modification_Date>2008-07-01</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>updated Time_of_Introduction</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2008-09-08</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships, Other_Notes, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2008-11-24</Modification_Date>
+               <Modification_Version>1.1</Modification_Version>
+               <Modification_ReleaseDate>2008-11-25</Modification_ReleaseDate>
+               <Modification_Comment>updated Demonstrative_Examples, Description, Other_Notes, Potential_Mitigations</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2009-03-10</Modification_Date>
+               <Modification_Version>1.3</Modification_Version>
+               <Modification_ReleaseDate>2009-03-10</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2009-07-27</Modification_Date>
+               <Modification_Version>1.5</Modification_Version>
+               <Modification_ReleaseDate>2009-07-27</Modification_ReleaseDate>
+               <Modification_Comment>updated Demonstrative_Examples</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-06-01</Modification_Date>
+               <Modification_Version>1.13</Modification_Version>
+               <Modification_ReleaseDate>2011-06-01</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences, Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-06-27</Modification_Date>
+               <Modification_Version>2.0</Modification_Version>
+               <Modification_ReleaseDate>2011-06-27</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-09-13</Modification_Date>
+               <Modification_Version>2.1</Modification_Version>
+               <Modification_ReleaseDate>2011-09-13</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2012-05-11</Modification_Date>
+               <Modification_Version>2.2</Modification_Version>
+               <Modification_ReleaseDate>2012-05-15</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences, References, Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2014-02-18</Modification_Date>
+               <Modification_Version>2.6</Modification_Version>
+               <Modification_ReleaseDate>2014-02-19</Modification_ReleaseDate>
+               <Modification_Comment>updated Related_Attack_Patterns</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2014-07-30</Modification_Date>
+               <Modification_Version>2.8</Modification_Version>
+               <Modification_ReleaseDate>2014-07-31</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2017-11-08</Modification_Date>
+               <Modification_Version>3.0</Modification_Version>
+               <Modification_ReleaseDate>2017-11-08</Modification_ReleaseDate>
+               <Modification_Comment>updated Applicable_Platforms, Modes_of_Introduction, Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2019-01-03</Modification_Date>
+					<Modification_Version>3.2</Modification_Version>
+					<Modification_ReleaseDate>2019-01-03</Modification_ReleaseDate>
+					<Modification_Comment>updated Related_Attack_Patterns, Taxonomy_Mappings</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-02-24</Modification_Date>
+					<Modification_Version>4.0</Modification_Version>
+					<Modification_ReleaseDate>2020-02-24</Modification_ReleaseDate>
+					<Modification_Comment>updated References, Type</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-08-20</Modification_Date>
+					<Modification_Version>4.2</Modification_Version>
+					<Modification_ReleaseDate>2020-08-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-01-31</Modification_Date>
+					<Modification_Version>4.10</Modification_Version>
+					<Modification_ReleaseDate>2023-01-31</Modification_ReleaseDate>
+					<Modification_Comment>updated Description, Potential_Mitigations</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Detection_Factors, Relationships, Time_of_Introduction</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-10-26</Modification_Date>
+					<Modification_Version>4.13</Modification_Version>
+					<Modification_ReleaseDate>2023-10-26</Modification_ReleaseDate>
+					<Modification_Comment>updated Observed_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2024-02-29</Modification_Date>
+					<Modification_Version>4.14</Modification_Version>
+					<Modification_ReleaseDate>2024-02-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships, Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+            <Previous_Entry_Name Date="2008-04-11">Improper Error Handling</Previous_Entry_Name>
+         </Content_History>
+      </Weakness>
+      

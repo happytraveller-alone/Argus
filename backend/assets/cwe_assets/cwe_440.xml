@@ -1,0 +1,295 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="440" Name="Expected Behavior Violation" Abstraction="Base" Structure="Simple" Status="Draft">
+         <Description>A feature, API, or function does not perform according to its specification.</Description>
+         <Related_Weaknesses>
+            <Related_Weakness Nature="ChildOf" CWE_ID="684" View_ID="1000" Ordinal="Primary" />
+         </Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+         <Applicable_Platforms>
+            <Language Class="Not Language-Specific" Prevalence="Undetermined" />
+		   <Technology Class="ICS/OT" Prevalence="Undetermined" />
+         </Applicable_Platforms>
+         <Modes_Of_Introduction>
+            <Introduction>
+               <Phase>Architecture and Design</Phase>
+            </Introduction>
+            <Introduction>
+               <Phase>Implementation</Phase>
+            </Introduction>
+            <Introduction>
+               <Phase>Operation</Phase>
+            </Introduction>
+         </Modes_Of_Introduction>
+         <Common_Consequences>
+            <Consequence>
+               <Scope>Other</Scope>
+               <Impact>Quality Degradation</Impact>
+               <Impact>Varies by Context</Impact>
+            </Consequence>
+         </Common_Consequences>
+         <Demonstrative_Examples>
+            <Demonstrative_Example>
+               <Intro_Text>The provided code is extracted from the Control and Status Register (CSR), csr_regfile, module within the Hack@DAC'21 OpenPiton System-on-Chip (SoC). This module is designed to implement CSR registers in accordance with the RISC-V specification. The mie (machine interrupt enable) register is a 64-bit register [REF-1384], where bits correspond to different interrupt sources. As the name suggests, mie is a machine-level register that determines which interrupts are enabled. Note that in the example below the mie_q and mie_d registers represent the conceptual mie reigster in the RISC-V specification. The mie_d register is the value to be stored in the mie register while the mie_q register holds the current value of the mie register [REF-1385].</Intro_Text>
+               <Body_Text>The mideleg (machine interrupt delegation) register, also 64-bit wide, enables the delegation of specific interrupt sources from machine privilege mode to lower privilege levels. By setting specific bits in the mideleg register, the handling of certain interrupts can be delegated to lower privilege levels without engaging the machine-level privilege mode. For example, in supervisor mode, the mie register is limited to a specific register called the sie (supervisor interrupt enable) register. If delegated, an interrupt becomes visible in the sip (supervisor interrupt pending) register and can be enabled or blocked using the sie register. If no delegation occurs, the related bits in sip and sie are set to zero.</Body_Text>
+               <Body_Text>The sie register value is computed based on the current value of mie register, i.e., mie_q, and the mideleg register.</Body_Text>
+               <Example_Code Nature="Bad" Language="Verilog">
+                  module csr_regfile #(...)(...);<xhtml:br />
+                  ...<xhtml:br />
+                  // ---------------------------<xhtml:br />
+                  // CSR Write and update logic<xhtml:br />
+                  // ---------------------------<xhtml:br />
+                  ...<xhtml:br />
+                     <xhtml:div style="margin-left:1em;">
+                     if (csr_we) begin<xhtml:br />
+                        <xhtml:div style="margin-left:1em;">
+                        unique case (csr_addr.address)<xhtml:br />
+                        ...<xhtml:br />
+                           <xhtml:div style="margin-left:1em;">
+                           riscv::CSR_SIE: begin<xhtml:br />
+                                 <xhtml:div style="margin-left:1em;">
+                                 // the mideleg makes sure only delegate-able register<xhtml:br />
+                                 //(and therefore also only implemented registers) are written<xhtml:br />
+                                 <xhtml:b>mie_d = (mie_q &amp; ~mideleg_q) | (csr_wdata &amp; mideleg_q) | utval_q;</xhtml:b><xhtml:br />
+                                 </xhtml:div>
+                           end<xhtml:br />
+                           ...<xhtml:br />
+                           </xhtml:div>
+                        endcase<xhtml:br />
+                        </xhtml:div>
+                     end<xhtml:br />
+                     </xhtml:div>
+                  endmodule
+               </Example_Code>
+               <Body_Text>The above code snippet illustrates an instance of a vulnerable implementation of the sie register update logic, where users can tamper with the mie_d register value through the utval (user trap value) register. This behavior violates the RISC-V specification.</Body_Text>
+               <Body_Text>The code shows that the value of utval, among other signals, is used in updating the mie_d value within the sie update logic. While utval is a register accessible to users, it should not influence or compromise the integrity of sie. Through manipulation of the utval register, it becomes feasible to manipulate the sie register's value. This opens the door for potential attacks, as an adversary can gain control over or corrupt the sie value. Consequently, such manipulation empowers an attacker to enable or disable critical supervisor-level interrupts, resulting in various security risks such as privilege escalation or denial-of-service attacks.</Body_Text>
+               <Body_Text>A fix to this issue is to remove the utval from the right-hand side of the assignment. That is the value of the mie_d should be updated as shown in the good code example [REF-1386].</Body_Text>
+               <Example_Code Nature="Good" Language="Verilog">
+               module csr_regfile #(...)(...);<xhtml:br />
+               ...<xhtml:br />
+               // ---------------------------<xhtml:br />
+               // CSR Write and update logic<xhtml:br />
+               // ---------------------------<xhtml:br />
+               ...<xhtml:br />
+                  <xhtml:div style="margin-left:1em;">
+                  if (csr_we) begin<xhtml:br />
+                     <xhtml:div style="margin-left:1em;">
+                     unique case (csr_addr.address)<xhtml:br />
+                     ...<xhtml:br />
+                        <xhtml:div style="margin-left:1em;">
+                        riscv::CSR_SIE: begin<xhtml:br />
+                              <xhtml:div style="margin-left:1em;">
+                              // the mideleg makes sure only delegate-able register<xhtml:br />
+                              //(and therefore also only implemented registers) are written<xhtml:br />
+                              <xhtml:b>mie_d = (mie_q &amp; ~mideleg_q) | (csr_wdata &amp; mideleg_q);</xhtml:b><xhtml:br />
+                              </xhtml:div>
+                        end<xhtml:br />
+                        ...<xhtml:br />
+                        </xhtml:div>
+                     endcase<xhtml:br />
+                     </xhtml:div>
+                  end<xhtml:br />
+                  </xhtml:div>
+               endmodule
+               </Example_Code>
+            </Demonstrative_Example>
+         </Demonstrative_Examples>
+         <Observed_Examples>
+            <Observed_Example>
+               <Reference>CVE-2003-0187</Reference>
+               <Description>Program uses large timeouts on unconfirmed connections resulting from inconsistency in linked lists implementations.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2003-0187</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2003-0465</Reference>
+               <Description>"strncpy" in Linux kernel acts different than libc on x86, leading to expected behavior difference - sort of a multiple interpretation error?</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2003-0465</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2005-3265</Reference>
+               <Description>Buffer overflow in product stems the use of a third party library function that is expected to have internal protection against overflows, but doesn't.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2005-3265</Link>
+            </Observed_Example>
+         </Observed_Examples>
+         <Taxonomy_Mappings>
+            <Taxonomy_Mapping Taxonomy_Name="PLOVER">
+               <Entry_Name>Expected behavior violation</Entry_Name>
+            </Taxonomy_Mapping>
+         </Taxonomy_Mappings>
+         <References>
+            <Reference External_Reference_ID="REF-1384" />
+            <Reference External_Reference_ID="REF-1385" />
+            <Reference External_Reference_ID="REF-1386" />
+         </References>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Base level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+         <Notes>
+            <Note Type="Theoretical">The behavior of an application that is not consistent with the expectations of the developer may lead to incorrect use of the software.</Note>
+         </Notes>
+         <Content_History>
+            <Submission>
+               <Submission_Name>PLOVER</Submission_Name>
+               <Submission_Date>2006-07-19</Submission_Date>
+               <Submission_Version>Draft 3</Submission_Version>
+               <Submission_ReleaseDate>2006-07-19</Submission_ReleaseDate>
+            </Submission>
+            <Modification>
+               <Modification_Name>Eric Dalci</Modification_Name>
+               <Modification_Organization>Cigital</Modification_Organization>
+               <Modification_Date>2008-07-01</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>updated Time_of_Introduction</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2008-09-08</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships, Other_Notes, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2009-10-29</Modification_Date>
+               <Modification_Version>1.6</Modification_Version>
+               <Modification_ReleaseDate>2009-10-29</Modification_ReleaseDate>
+               <Modification_Comment>updated Other_Notes, Relevant_Properties, Theoretical_Notes</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-06-01</Modification_Date>
+               <Modification_Version>1.13</Modification_Version>
+               <Modification_ReleaseDate>2011-06-01</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-06-27</Modification_Date>
+               <Modification_Version>2.0</Modification_Version>
+               <Modification_ReleaseDate>2011-06-27</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2012-05-11</Modification_Date>
+               <Modification_Version>2.2</Modification_Version>
+               <Modification_ReleaseDate>2012-05-15</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2014-07-30</Modification_Date>
+               <Modification_Version>2.8</Modification_Version>
+               <Modification_ReleaseDate>2014-07-31</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2017-11-08</Modification_Date>
+               <Modification_Version>3.0</Modification_Version>
+               <Modification_ReleaseDate>2017-11-08</Modification_ReleaseDate>
+               <Modification_Comment>updated Applicable_Platforms, Relevant_Properties</Modification_Comment>
+            </Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-02-24</Modification_Date>
+					<Modification_Version>4.0</Modification_Version>
+					<Modification_ReleaseDate>2020-02-24</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-08-20</Modification_Date>
+					<Modification_Version>4.2</Modification_Version>
+					<Modification_ReleaseDate>2020-08-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Description, Observed_Examples, Theoretical_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-01-31</Modification_Date>
+					<Modification_Version>4.10</Modification_Version>
+					<Modification_ReleaseDate>2023-01-31</Modification_ReleaseDate>
+					<Modification_Comment>updated Applicable_Platforms, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-10-26</Modification_Date>
+					<Modification_Version>4.13</Modification_Version>
+					<Modification_ReleaseDate>2023-10-26</Modification_ReleaseDate>
+					<Modification_Comment>updated Observed_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2024-02-29</Modification_Date>
+					<Modification_Version>4.14</Modification_Version>
+					<Modification_ReleaseDate>2024-02-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples, References</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-09-09</Modification_Date>
+					<Modification_Version>4.18</Modification_Version>
+					<Modification_ReleaseDate>2025-09-09</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+            <Contribution Type="Content">
+					<Contribution_Name>Chen Chen, Rahul Kande, Jeyavijayan Rajendran</Contribution_Name>
+					<Contribution_Organization>Texas A&amp;M University</Contribution_Organization>
+					<Contribution_Date>2023-06-21</Contribution_Date>
+					<Contribution_Comment>suggested demonstrative example</Contribution_Comment>
+				</Contribution>
+				<Contribution Type="Content">
+					<Contribution_Name>Shaza Zeitouni, Mohamadreza Rostami, Ahmad-Reza Sadeghi</Contribution_Name>
+					<Contribution_Organization>Technical University of Darmstadt</Contribution_Organization>
+					<Contribution_Date>2023-06-21</Contribution_Date>
+					<Contribution_Comment>suggested demonstrative example</Contribution_Comment>
+				</Contribution>
+         </Content_History>
+      </Weakness>
+      

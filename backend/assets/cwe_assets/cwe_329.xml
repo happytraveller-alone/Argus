@@ -1,0 +1,302 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="329" Name="Generation of Predictable IV with CBC Mode" Abstraction="Variant" Structure="Simple" Status="Draft">
+         <Description>The product generates and uses a predictable initialization Vector (IV) with Cipher Block Chaining (CBC) Mode, which causes algorithms to be susceptible to dictionary attacks when they are encrypted under the same key.</Description>
+	 <Extended_Description>
+	   <xhtml:p>CBC mode eliminates a weakness of Electronic Code
+	   Book (ECB) mode by allowing identical plaintext blocks to
+	   be encrypted to different ciphertext blocks. This is
+	   possible by the XOR-ing of an IV with the initial plaintext
+	   block so that every plaintext block in the chain is XOR'd
+	   with a different value before encryption. If IVs are
+	   reused, then identical plaintexts would be encrypted to
+	   identical ciphertexts. However, even if IVs are not
+	   identical but are predictable, then they still break the
+	   security of CBC mode against Chosen Plaintext Attacks
+	   (CPA).</xhtml:p>
+	 </Extended_Description>
+         <Related_Weaknesses>
+            <Related_Weakness Nature="ChildOf" CWE_ID="1204" View_ID="1000" Ordinal="Primary" />
+            <Related_Weakness Nature="ChildOf" CWE_ID="573" View_ID="1000" />
+         </Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+            <Weakness_Ordinality>
+               <Ordinality>Resultant</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+         <Applicable_Platforms>
+            <Language Class="Not Language-Specific" Prevalence="Undetermined" />
+			<Technology Class="ICS/OT" Prevalence="Undetermined" />
+         </Applicable_Platforms>
+         <Background_Details>
+            <Background_Detail>
+	      <xhtml:p>CBC mode is a commonly used mode of operation for a
+	      block cipher. It works by XOR-ing an IV with the initial
+	      block of a plaintext prior to encryption and then
+	      XOR-ing each successive block of plaintext with the
+	      previous block of ciphertext before encryption.</xhtml:p>
+	      <xhtml:div style="margin-left:1em;">
+		C_0 = IV<xhtml:br />
+		C_i = E_k{M_i XOR C_{i-1}}
+	      </xhtml:div>
+	      <xhtml:p>
+		When used properly, CBC mode provides security against
+		chosen plaintext attacks. Having an unpredictable IV
+		is a crucial underpinning of this. See [REF-1171].</xhtml:p>
+	      </Background_Detail>
+         </Background_Details>
+         <Modes_Of_Introduction>
+            <Introduction>
+               <Phase>Implementation</Phase>
+	       <Note>Developers might dismiss the importance of an unpredictable IV and choose an easier implementation to save effort, weakening the scheme in the process.</Note>
+            </Introduction>
+         </Modes_Of_Introduction>
+         <Likelihood_Of_Exploit>Medium</Likelihood_Of_Exploit>
+         <Common_Consequences>
+            <Consequence>
+               <Scope>Confidentiality</Scope>
+               <Impact>Read Application Data</Impact>
+               <Note>If the IV is not properly initialized, data that is encrypted can be compromised and leak information.</Note>
+            </Consequence>
+         </Common_Consequences>
+         <Detection_Methods>
+           <Detection_Method Detection_Method_ID="DM-14">
+             <Method>Automated Static Analysis</Method>
+             <Description>Automated static analysis, commonly referred to as Static Application Security Testing (SAST), can find some instances of this weakness by analyzing source code (or binary/compiled code) without having to execute it. Typically, this is done by building a model of data flow and control flow, then searching for potentially-vulnerable patterns that connect "sources" (origins of input) with "sinks" (destinations where the data interacts with external components, a lower layer such as the OS, etc.)</Description>
+             <Effectiveness>High</Effectiveness>
+           </Detection_Method>
+         </Detection_Methods>
+         <Potential_Mitigations>
+            <Mitigation>
+               <Phase>Implementation</Phase>
+               <Description>NIST recommends two methods of generating unpredictable IVs for CBC mode [REF-1172]. The first is to generate the IV randomly. The second method is to encrypt a nonce with the same key and cipher to be used to encrypt the plaintext. In this case the nonce must be unique but can be predictable, since the block cipher will act as a pseudo random permutation.</Description>
+            </Mitigation>
+         </Potential_Mitigations>
+         <Demonstrative_Examples>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-143">
+               <Intro_Text>In the following examples, CBC mode is used when encrypting data:</Intro_Text>
+               <Example_Code Nature="Bad" Language="C">
+                  <xhtml:div>EVP_CIPHER_CTX ctx;<xhtml:br />char key[EVP_MAX_KEY_LENGTH];<xhtml:br />char iv[EVP_MAX_IV_LENGTH];<xhtml:br />RAND_bytes(key, b);<xhtml:br />memset(iv,0,EVP_MAX_IV_LENGTH);<xhtml:br />EVP_EncryptInit(&amp;ctx,EVP_bf_cbc(), key,iv);</xhtml:div>
+               </Example_Code>
+               <Example_Code Nature="Bad" Language="Java">
+                  <xhtml:div>public class SymmetricCipherTest {<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>public static void main() {<xhtml:div style="margin-left:1em;">
+                              <xhtml:div>
+                                 <xhtml:br />byte[] text ="Secret".getBytes();<xhtml:br />byte[] iv ={<xhtml:div style="margin-left:1em;">0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00</xhtml:div>};<xhtml:br />KeyGenerator kg = KeyGenerator.getInstance("DES");<xhtml:br />kg.init(56);<xhtml:br />SecretKey key = kg.generateKey();<xhtml:br />Cipher cipher = Cipher.getInstance("DES/CBC/PKCS5Padding");<xhtml:br />IvParameterSpec ips = new IvParameterSpec(iv);<xhtml:br />cipher.init(Cipher.ENCRYPT_MODE, key, ips);<xhtml:br />return cipher.doFinal(inpBytes);</xhtml:div>
+                           </xhtml:div>}</xhtml:div>
+                     </xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>In both of these examples, the initialization vector (IV) is always a block of zeros. This makes the resulting cipher text much more predictable and susceptible to a dictionary attack.</Body_Text>
+            </Demonstrative_Example>
+         </Demonstrative_Examples>
+	 <Observed_Examples>
+	   <Observed_Example>
+	     <Reference>CVE-2020-5408</Reference>
+	     <Description>encryption functionality in an authentication framework uses a fixed null IV with CBC mode, allowing attackers to decrypt traffic in applications that use this functionality</Description>
+			    <Link>https://www.cve.org/CVERecord?id=CVE-2020-5408</Link>
+	   </Observed_Example>
+	   <Observed_Example>
+	     <Reference>CVE-2017-17704</Reference>
+	     <Description>messages for a door-unlocking product use a fixed IV in CBC mode, which is the same after each restart </Description>
+	     <Link>https://www.cve.org/CVERecord?id=CVE-2017-17704</Link>
+	   </Observed_Example>
+	   <Observed_Example>
+	     <Reference>CVE-2017-11133</Reference>
+	     <Description>application uses AES in CBC mode, but the pseudo-random secret and IV are generated using math.random, which is not cryptographically strong.</Description>
+	     <Link>https://www.cve.org/CVERecord?id=CVE-2017-11133</Link>
+	   </Observed_Example>
+	   <Observed_Example>
+	     <Reference>CVE-2007-3528</Reference>
+	     <Description>Blowfish-CBC implementation constructs an IV where each byte is calculated modulo 8 instead of modulo 256, resulting in less than 12 bits for the effective IV length, and less than 4096 possible IV values.</Description>
+	     <Link>https://www.cve.org/CVERecord?id=CVE-2007-3528</Link>
+	   </Observed_Example>
+	   <Observed_Example>
+	     <Reference>CVE-2011-3389</Reference>
+	     <Description>BEAST attack in SSL 3.0 / TLS 1.0. In CBC mode, chained initialization vectors are non-random, allowing decryption of HTTPS traffic using a chosen plaintext attack.</Description>
+	     <Link>https://www.cve.org/CVERecord?id=CVE-2011-3389</Link>
+	   </Observed_Example>
+	 </Observed_Examples>
+         <Functional_Areas>
+            <Functional_Area>Cryptography</Functional_Area>
+         </Functional_Areas>
+         <Taxonomy_Mappings>
+            <Taxonomy_Mapping Taxonomy_Name="CLASP">
+               <Entry_Name>Not using a random IV with CBC mode</Entry_Name>
+            </Taxonomy_Mapping>
+         </Taxonomy_Mappings>
+         <References>
+            <Reference External_Reference_ID="REF-62" Section="Chapter 2, &quot;Initialization Vectors&quot;, Page 42" />
+            <Reference External_Reference_ID="REF-18" />
+            <Reference External_Reference_ID="REF-1171" />
+            <Reference External_Reference_ID="REF-1172" Section="Appendix C" />
+         </References>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Variant level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+	 <Notes>
+	   <Note Type="Maintenance">As of CWE 4.5, terminology related to randomness, entropy, and
+	   predictability can vary widely. Within the developer and other
+	   communities, "randomness" is used heavily. However, within
+	   cryptography, "entropy" is distinct, typically implied as a
+	   measurement. There are no commonly-used definitions, even within
+	   standards documents and cryptography papers. Future versions of
+	   CWE will attempt to define these terms and, if necessary,
+	   distinguish between them in ways that are appropriate for
+	   different communities but do not reduce the usability of CWE for
+	   mapping, understanding, or other scenarios.</Note>
+	 </Notes>
+         <Content_History>
+            <Submission>
+               <Submission_Name>CLASP</Submission_Name>
+               <Submission_Date>2006-07-19</Submission_Date>
+               <Submission_Version>Draft 3</Submission_Version>
+               <Submission_ReleaseDate>2006-07-19</Submission_ReleaseDate>
+            </Submission>
+            <Modification>
+               <Modification_Name>Eric Dalci</Modification_Name>
+               <Modification_Organization>Cigital</Modification_Organization>
+               <Modification_Date>2008-07-01</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>updated Time_of_Introduction</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2008-09-08</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>updated Background_Details, Common_Consequences, Functional_Areas, Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-06-01</Modification_Date>
+               <Modification_Version>1.13</Modification_Version>
+               <Modification_ReleaseDate>2011-06-01</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2012-05-11</Modification_Date>
+               <Modification_Version>2.2</Modification_Version>
+               <Modification_ReleaseDate>2012-05-15</Modification_ReleaseDate>
+               <Modification_Comment>updated References, Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2012-10-30</Modification_Date>
+               <Modification_Version>2.3</Modification_Version>
+               <Modification_ReleaseDate>2012-10-30</Modification_ReleaseDate>
+               <Modification_Comment>updated Demonstrative_Examples, Potential_Mitigations</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2014-07-30</Modification_Date>
+               <Modification_Version>2.8</Modification_Version>
+               <Modification_ReleaseDate>2014-07-31</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2017-11-08</Modification_Date>
+               <Modification_Version>3.0</Modification_Version>
+               <Modification_ReleaseDate>2017-11-08</Modification_ReleaseDate>
+               <Modification_Comment>updated Applicable_Platforms, Demonstrative_Examples</Modification_Comment>
+            </Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2019-06-20</Modification_Date>
+					<Modification_Version>3.3</Modification_Version>
+					<Modification_ReleaseDate>2019-06-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-02-24</Modification_Date>
+					<Modification_Version>4.0</Modification_Version>
+					<Modification_ReleaseDate>2020-02-24</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-03-15</Modification_Date>
+					<Modification_Version>4.4</Modification_Version>
+					<Modification_ReleaseDate>2021-03-15</Modification_ReleaseDate>
+					<Modification_Comment>updated Background_Details, Common_Consequences, Demonstrative_Examples, Description, Modes_of_Introduction, Name, Observed_Examples, Potential_Mitigations, References, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-07-20</Modification_Date>
+					<Modification_Version>4.5</Modification_Version>
+					<Modification_ReleaseDate>2021-07-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Description, Maintenance_Notes, Name, References</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-10-28</Modification_Date>
+					<Modification_Version>4.6</Modification_Version>
+					<Modification_ReleaseDate>2021-10-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-04-28</Modification_Date>
+					<Modification_Version>4.7</Modification_Version>
+					<Modification_ReleaseDate>2022-04-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-01-31</Modification_Date>
+					<Modification_Version>4.10</Modification_Version>
+					<Modification_ReleaseDate>2023-01-31</Modification_ReleaseDate>
+					<Modification_Comment>updated Applicable_Platforms</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Detection_Factors, Modes_of_Introduction, Relationships, Time_of_Introduction</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships, Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+			<Previous_Entry_Name Date="2021-03-15">Not Using a Random IV with CBC Mode</Previous_Entry_Name>
+			<Previous_Entry_Name Date="2021-07-20">Not Using an Unpredictable IV with CBC Mode</Previous_Entry_Name>
+         </Content_History>
+      </Weakness>
+      

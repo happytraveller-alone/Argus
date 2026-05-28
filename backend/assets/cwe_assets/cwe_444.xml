@@ -1,0 +1,463 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="444" Name="Inconsistent Interpretation of HTTP Requests ('HTTP Request/Response Smuggling')" Abstraction="Base" Structure="Simple" Status="Incomplete">
+         <Description>The product acts as an intermediary HTTP agent
+         (such as a proxy or firewall) in the data flow between two
+         entities such as a client and server, but it does not
+         interpret malformed HTTP requests or responses in ways that
+         are consistent with how the messages will be processed by
+         those entities that are at the ultimate destination.</Description>
+         <Extended_Description>
+	   <xhtml:p>HTTP requests or responses ("messages") can be
+	   malformed or unexpected in ways that cause web servers or
+	   clients to interpret the messages in different ways than
+	   intermediary HTTP agents such as load balancers, reverse
+	   proxies, web caching proxies, application firewalls,
+	   etc. For example, an adversary may be able to add duplicate
+	   or different header fields that a client or server might
+	   interpret as one set of messages, whereas the intermediary
+	   might interpret the same sequence of bytes as a different
+	   set of messages. For example, discrepancies can arise in
+	   how to handle duplicate headers like two Transfer-encoding
+	   (TE) or two Content-length (CL), or the malicious HTTP
+	   message will have different headers for TE and
+	   CL.</xhtml:p>
+	   <xhtml:p>The inconsistent parsing and interpretation of messages
+	   can allow the adversary to "smuggle" a message to the
+	   client/server without the intermediary being aware of it.</xhtml:p>
+	   <xhtml:p>This weakness is usually the result of the usage
+	   of outdated or incompatible HTTP protocol versions in the
+	   HTTP agents.</xhtml:p>
+         </Extended_Description>
+         <Related_Weaknesses>
+            <Related_Weakness Nature="ChildOf" CWE_ID="436" View_ID="1000" Ordinal="Primary" />
+            <Related_Weakness Nature="ChildOf" CWE_ID="436" View_ID="1003" Ordinal="Primary" />
+         </Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+            <Weakness_Ordinality>
+               <Ordinality>Resultant</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+         <Applicable_Platforms>
+            <Language Class="Not Language-Specific" Prevalence="Undetermined" />
+            <Technology Class="Web Based" Prevalence="Undetermined" />
+	    <Technology Name="Web Server" Prevalence="Undetermined" />
+         </Applicable_Platforms>
+         <Alternate_Terms>
+            <Alternate_Term>
+               <Term>HTTP Request Smuggling</Term>
+            </Alternate_Term>
+            <Alternate_Term>
+               <Term>HTTP Response Smuggling</Term>
+            </Alternate_Term>
+            <Alternate_Term>
+               <Term>HTTP Smuggling</Term>
+            </Alternate_Term>
+         </Alternate_Terms>
+         <Modes_Of_Introduction>
+            <Introduction>
+               <Phase>Implementation</Phase>
+            </Introduction>
+         </Modes_Of_Introduction>
+         <Common_Consequences>
+            <Consequence>
+               <Scope>Integrity</Scope>
+               <Scope>Non-Repudiation</Scope>
+               <Scope>Access Control</Scope>
+               <Impact>Unexpected State</Impact>
+               <Impact>Hide Activities</Impact>
+               <Impact>Bypass Protection Mechanism</Impact>
+               <Note>An attacker could create HTTP messages to exploit a number of weaknesses including 1) the message can trick the web server to associate a URL with another URL's webpage and caching the contents of the webpage (web cache poisoning attack), 2) the message can be structured to bypass the firewall protection mechanisms and gain unauthorized access to a web application, and 3) the message can invoke a script or a page that returns client credentials (similar to a Cross Site Scripting attack).</Note>
+            </Consequence>
+         </Common_Consequences>
+         <Detection_Methods>
+	   <Detection_Method Detection_Method_ID="DM-14">
+	     <Method>Automated Static Analysis</Method>
+	     <Description>Automated static analysis, commonly referred to as Static Application Security Testing (SAST), can find some instances of this weakness by analyzing source code (or binary/compiled code) without having to execute it. Typically, this is done by building a model of data flow and control flow, then searching for potentially-vulnerable patterns that connect "sources" (origins of input) with "sinks" (destinations where the data interacts with external components, a lower layer such as the OS, etc.)</Description>
+	   </Detection_Method>
+         </Detection_Methods>
+         <Potential_Mitigations>
+            <Mitigation>
+               <Phase>Implementation</Phase>
+               <Description>Use a web server that employs a strict HTTP parsing procedure, such as Apache [REF-433].</Description>
+            </Mitigation>
+            <Mitigation>
+               <Phase>Implementation</Phase>
+               <Description>Use only SSL communication.</Description>
+            </Mitigation>
+            <Mitigation>
+               <Phase>Implementation</Phase>
+               <Description>Terminate the client session after each request.</Description>
+            </Mitigation>
+            <Mitigation>
+               <Phase>System Configuration</Phase>
+               <Description>Turn all pages to non-cacheable.</Description>
+            </Mitigation>
+         </Potential_Mitigations>
+         <Demonstrative_Examples>
+            <Demonstrative_Example>
+               <Intro_Text>In the following example, a malformed HTTP request is sent to a website that includes a proxy server and a web server with the intent of poisoning the cache to associate one webpage with another malicious webpage.</Intro_Text>
+               <Example_Code Nature="Attack">
+                  POST http://www.website.com/foobar.html HTTP/1.1<xhtml:br />
+		 Host: www.website.com<xhtml:br />
+		 Connection: Keep-Alive<xhtml:br />
+		 Content-Type: application/x-www-form-urlencoded<xhtml:br />
+		 Content-Length: 0<xhtml:br />
+		 Content-Length: 54<xhtml:br />
+		 <xhtml:br />
+                 GET /poison.html HTTP/1.1<xhtml:br />
+		 Host: www.website.com<xhtml:br />
+		 Bla: GET http://www.website.com/page_to_poison.html HTTP/1.1<xhtml:br />
+		 Host: www.website.com<xhtml:br />
+		 Connection: Keep-Alive<xhtml:br />
+               </Example_Code>
+               <Body_Text>When this request is sent to the proxy server, the proxy server parses the first four lines of the POST request and encounters the two "Content-Length" headers. The proxy server ignores the first header, so it assumes the request has a body of length 54 bytes. Therefore, it treats the data in the next three lines that contain exactly 54 bytes as the first request's body:</Body_Text>
+	       <Example_Code Nature="Result">
+		GET /poison.html HTTP/1.1<xhtml:br />
+		Host: www.website.com<xhtml:br />
+		Bla:<xhtml:br />
+	       </Example_Code>
+	       <Body_Text>The proxy then parses the remaining bytes, which it treats as the client's second request:</Body_Text>
+	       <Example_Code Nature="Attack">
+		GET http://www.website.com/page_to_poison.html HTTP/1.1<xhtml:br />
+		Host: www.website.com<xhtml:br />
+		Connection: Keep-Alive<xhtml:br />
+	       </Example_Code>
+               <Body_Text>The original request is forwarded by the proxy server to the web server. Unlike the proxy, the web server uses the first "Content-Length" header and considers that the first POST request has no body.</Body_Text>
+	       <Example_Code Nature="Attack">
+		POST http://www.website.com/foobar.html HTTP/1.1<xhtml:br />
+		Host: www.website.com<xhtml:br />
+		Connection: Keep-Alive<xhtml:br />
+		Content-Type: application/x-www-form-urlencoded<xhtml:br />
+		Content-Length: 0<xhtml:br />
+		<xhtml:i>Content-Length: 54 (ignored by server)</xhtml:i><xhtml:br />
+	       </Example_Code>
+	       <Body_Text>Because the web server has assumed the original POST request was length 0, it parses the second request that follows, i.e. for GET /poison.html:</Body_Text>
+	       <Example_Code Nature="Attack">
+		GET /poison.html HTTP/1.1<xhtml:br />
+		Host: www.website.com<xhtml:br />
+		Bla: GET http://www.website.com/page_to_poison.html HTTP/1.1<xhtml:br />
+		Host: www.website.com<xhtml:br />
+		Connection: Keep-Alive<xhtml:br />
+	       </Example_Code>
+	       <Body_Text>Note that the "Bla:" header is treated as a regular header, so it is not parsed as a separate GET request.</Body_Text>
+               <Body_Text>The requests the web server sees are "POST /foobar.html" and "GET /poison.html", so it sends back two responses with the contents of the "foobar.html" page and the "poison.html" page, respectively. The proxy matches these responses to the two requests it thinks were sent by the client - "POST /foobar.html" and "GET /page_to_poison.html". If the response is cacheable, the proxy caches the contents of "poison.html" under the URL "page_to_poison.html", and the cache is poisoned! Any client requesting "page_to_poison.html" from the proxy would receive the "poison.html" page.</Body_Text>
+               <Body_Text>When a website includes both a proxy server and a web server, some protection against this type of attack can be achieved by installing a web application firewall, or using a web server that includes a stricter HTTP parsing procedure or make all webpages non-cacheable.</Body_Text>
+               <Body_Text>Additionally, if a web application includes a Java servlet for processing requests, the servlet can check for multiple "Content-Length" headers and if they are found the servlet can return an error response thereby preventing the poison page to be cached, as shown below.</Body_Text>
+               <Example_Code Nature="Good" Language="Java">
+                  <xhtml:div>protected void processRequest(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
+				  <xhtml:div style="margin-left:1em;">
+                    <xhtml:div>
+                      <xhtml:br />
+                      <xhtml:i>// Set up response writer object</xhtml:i>
+                      <xhtml:br />...<xhtml:br />try {
+					  <xhtml:div style="margin-left:1em;">
+						<xhtml:div>
+                          <xhtml:i>// check for multiple content length headers</xhtml:i>
+                          <xhtml:br />Enumeration contentLengthHeaders = request.getHeaders("Content-Length");
+						  <xhtml:br />int count = 0;
+						  <xhtml:br />while (contentLengthHeaders.hasMoreElements()) {
+						  <xhtml:div style="margin-left:1em;">count++;
+						  </xhtml:div>}
+						  <xhtml:br />if (count &gt; 1) {
+						  <xhtml:div style="margin-left:1em;">
+							<xhtml:i>// output error response</xhtml:i>
+							</xhtml:div>}
+							<xhtml:br />else {
+							<xhtml:div style="margin-left:1em;">
+							  <xhtml:div>
+								<xhtml:i>// process request</xhtml:i>
+							  </xhtml:div>
+							  </xhtml:div>}
+							  <xhtml:br />
+                        </xhtml:div>
+                    </xhtml:div>} catch (Exception ex) {...}</xhtml:div>
+					</xhtml:div>}
+				  </xhtml:div>
+               </Example_Code>
+            </Demonstrative_Example>
+            <Demonstrative_Example>
+               <Intro_Text>In the following example, a malformed HTTP request is sent to a website that includes a web server with a firewall with the intent of bypassing the web server firewall to smuggle malicious code into the system.</Intro_Text>
+               <Example_Code Nature="Attack">
+                  <xhtml:div>POST /page.asp HTTP/1.1<xhtml:br />Host: www.website.com<xhtml:br />Connection: Keep-Alive<xhtml:br />Content-Length: 49223<xhtml:br />
+                     <xhtml:br />zzz...zzz ["z" x 49152]<xhtml:br />POST /page.asp HTTP/1.0<xhtml:br />Connection: Keep-Alive<xhtml:br />Content-Length: 30<xhtml:br />
+                     <xhtml:br />POST /page.asp HTTP/1.0<xhtml:br />Bla: POST /page.asp?cmd.exe HTTP/1.0<xhtml:br />Connection: Keep-Alive</xhtml:div>
+               </Example_Code>
+               <Body_Text>When this request is sent to the web server, the first POST request has a content-length of 49,223 bytes, and the firewall treats the line with 49,152 copies of "z" and the lines with an additional lines with 71 bytes as its body (49,152+71=49,223). The firewall then continues to parse what it thinks is the second request starting with the line with the third POST request.</Body_Text>
+               <Body_Text>Note that there is no CRLF after the "Bla: " header so the POST in the line is parsed as the value of the "Bla:" header. Although the line contains the pattern identified with a worm ("cmd.exe"), it is not blocked, since it is considered part of a header value. Therefore, "cmd.exe" is smuggled through the firewall.</Body_Text>
+               <Body_Text>When the request is passed through the firewall the web server the first request is ignored because the web server does not find an expected "Content-Type: application/x-www-form-urlencoded" header, and starts parsing the second request.</Body_Text>
+               <Body_Text>This second request has a content-length of 30 bytes, which is exactly the length of the next two lines up to the space after the "Bla:" header. And unlike the firewall, the web server processes the final POST as a separate third request and the "cmd.exe" worm is smuggled through the firewall to the web server.</Body_Text>
+               <Body_Text>To avoid this attack a Web server firewall product must be used that is designed to prevent this type of attack.</Body_Text>
+            </Demonstrative_Example>
+            <Demonstrative_Example>
+               <Intro_Text>
+		 The interpretation of HTTP responses can be manipulated if response headers include a space between the header name and colon, or if HTTP 1.1 headers are sent through a proxy configured for HTTP 1.0, allowing for HTTP response smuggling. This can be exploited in web browsers and other applications when used in combination with various proxy servers. For instance, the HTTP response interpreted by the front-end/client HTTP agent/entity - in this case the web browser - can interpret a single response from an adversary-compromised web server as being two responses from two different web sites. In the Example below, notice the extra space after the Content-Length and Set-Cookie headers.</Intro_Text>
+               <Example_Code Nature="Attack">
+		HTTP/1.1 200 OK<xhtml:br />
+		Date: Fri, 08 Aug 2016 08:12:31 GMT<xhtml:br />
+		Server: Apache (Unix)<xhtml:br />
+		Connection: Keep-Alive<xhtml:br />
+		Content-Encoding: gzip<xhtml:br />
+		Content-Type: text/html<xhtml:br />
+		<xhtml:b>Content-Length :</xhtml:b> 2345<xhtml:br />
+		Transfer-Encoding: chunked<xhtml:br />
+		<xhtml:b>Set-Cookie :</xhtml:b> token="Malicious Code"<xhtml:br />
+		<xhtml:br />
+		&lt;HTML&gt; ... "Malicious Code"<xhtml:br />
+               </Example_Code>
+            </Demonstrative_Example>
+         </Demonstrative_Examples>
+         <Observed_Examples>
+	   <Observed_Example>
+	     <Reference>CVE-2022-24766</Reference>
+	     <Description>SSL/TLS-capable proxy allows HTTP smuggling when used in tandem with HTTP/1.0 services, due to inconsistent interpretation and input sanitization of HTTP messages within the body of another message</Description>
+	     <Link>https://www.cve.org/CVERecord?id=CVE-2022-24766</Link>
+	   </Observed_Example>
+	   <Observed_Example>
+	     <Reference>CVE-2021-37147</Reference>
+	     <Description>Chain: caching proxy server has improper input validation (CWE-20) of headers, allowing HTTP response smuggling (CWE-444) using an "LF line ending"</Description>
+	     <Link>https://www.cve.org/CVERecord?id=CVE-2021-37147</Link>
+	   </Observed_Example>
+	   <Observed_Example>
+	     <Reference>CVE-2020-8287</Reference>
+	     <Description>Node.js platform allows request smuggling via two Transfer-Encoding headers</Description>
+	     <Link>https://www.cve.org/CVERecord?id=CVE-2020-8287</Link>
+	   </Observed_Example>
+	   <Observed_Example>
+	     <Reference>CVE-2006-6276</Reference>
+	     <Description>Web servers allow request smuggling via inconsistent HTTP headers.</Description>
+	     <Link>https://www.cve.org/CVERecord?id=CVE-2006-6276</Link>
+	   </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2005-2088</Reference>
+               <Description>HTTP server allows request smuggling with both a "Transfer-Encoding: chunked" header and a Content-Length header</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2005-2088</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2005-2089</Reference>
+               <Description>HTTP server allows request smuggling with both a "Transfer-Encoding: chunked" header and a Content-Length header</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2005-2089</Link>
+            </Observed_Example>
+         </Observed_Examples>
+         <Taxonomy_Mappings>
+            <Taxonomy_Mapping Taxonomy_Name="PLOVER">
+               <Entry_Name>HTTP Request Smuggling</Entry_Name>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="WASC">
+               <Entry_ID>26</Entry_ID>
+               <Entry_Name>HTTP Request Smuggling</Entry_Name>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="WASC">
+               <Entry_ID>27</Entry_ID>
+               <Entry_Name>HTTP Response Smuggling</Entry_Name>
+            </Taxonomy_Mapping>
+         </Taxonomy_Mappings>
+         <Related_Attack_Patterns>
+            <Related_Attack_Pattern CAPEC_ID="273" />
+            <Related_Attack_Pattern CAPEC_ID="33" />
+         </Related_Attack_Patterns>
+         <References>
+            <Reference External_Reference_ID="REF-433" />
+            <Reference External_Reference_ID="REF-1273" />
+            <Reference External_Reference_ID="REF-1274" />
+            <Reference External_Reference_ID="REF-1275" />
+            <Reference External_Reference_ID="REF-1276" />
+            <Reference External_Reference_ID="REF-1277" />
+            <Reference External_Reference_ID="REF-1278" />
+         </References>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Base level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+         <Notes>
+            <Note Type="Theoretical">Request smuggling can be performed due to a multiple interpretation error, where the target is an intermediary or monitor, via a consistency manipulation (Transfer-Encoding and Content-Length headers).</Note>
+         </Notes>
+         <Content_History>
+            <Submission>
+               <Submission_Name>PLOVER</Submission_Name>
+               <Submission_Date>2006-07-19</Submission_Date>
+               <Submission_Version>Draft 3</Submission_Version>
+               <Submission_ReleaseDate>2006-07-19</Submission_ReleaseDate>
+            </Submission>
+            <Modification>
+               <Modification_Name>Eric Dalci</Modification_Name>
+               <Modification_Organization>Cigital</Modification_Organization>
+               <Modification_Date>2008-07-01</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>updated Potential_Mitigations, Time_of_Introduction</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2008-09-08</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>updated Name, Relationships, Other_Notes, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2009-05-27</Modification_Date>
+               <Modification_Version>1.4</Modification_Version>
+               <Modification_ReleaseDate>2009-05-27</Modification_ReleaseDate>
+               <Modification_Comment>updated Name, Related_Attack_Patterns</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2010-02-16</Modification_Date>
+               <Modification_Version>1.8</Modification_Version>
+               <Modification_ReleaseDate>2010-02-16</Modification_ReleaseDate>
+               <Modification_Comment>updated Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-06-01</Modification_Date>
+               <Modification_Version>1.13</Modification_Version>
+               <Modification_ReleaseDate>2011-06-01</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2012-05-11</Modification_Date>
+               <Modification_Version>2.2</Modification_Version>
+               <Modification_ReleaseDate>2012-05-15</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences, Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2012-10-30</Modification_Date>
+               <Modification_Version>2.3</Modification_Version>
+               <Modification_ReleaseDate>2012-10-30</Modification_ReleaseDate>
+               <Modification_Comment>updated Demonstrative_Examples, Potential_Mitigations</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2014-06-23</Modification_Date>
+               <Modification_Version>2.7</Modification_Version>
+               <Modification_ReleaseDate>2014-06-23</Modification_ReleaseDate>
+               <Modification_Comment>updated Other_Notes, Potential_Mitigations, Theoretical_Notes</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2014-07-30</Modification_Date>
+               <Modification_Version>2.8</Modification_Version>
+               <Modification_ReleaseDate>2014-07-31</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2015-12-07</Modification_Date>
+               <Modification_Version>2.9</Modification_Version>
+               <Modification_ReleaseDate>2015-12-07</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2017-11-08</Modification_Date>
+               <Modification_Version>3.0</Modification_Version>
+               <Modification_ReleaseDate>2017-11-08</Modification_ReleaseDate>
+               <Modification_Comment>updated Applicable_Platforms</Modification_Comment>
+            </Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-02-24</Modification_Date>
+					<Modification_Version>4.0</Modification_Version>
+					<Modification_ReleaseDate>2020-02-24</Modification_ReleaseDate>
+					<Modification_Comment>updated Applicable_Platforms, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-10-28</Modification_Date>
+					<Modification_Version>4.6</Modification_Version>
+					<Modification_ReleaseDate>2021-10-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-04-28</Modification_Date>
+					<Modification_Version>4.7</Modification_Version>
+					<Modification_ReleaseDate>2022-04-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Related_Attack_Patterns</Modification_Comment>
+				</Modification>
+				<Modification>
+				  <Modification_Name>CWE Content Team</Modification_Name>
+				  <Modification_Organization>MITRE</Modification_Organization>
+				  <Modification_Date>2022-06-28</Modification_Date>
+				  <Modification_Version>4.8</Modification_Version>
+				  <Modification_ReleaseDate>2022-06-28</Modification_ReleaseDate>
+				  <Modification_Importance>Critical</Modification_Importance>
+				  <Modification_Comment>Extended the abstraction of this entry to include both HTTP request and response smuggling.</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-06-28</Modification_Date>
+					<Modification_Version>4.8</Modification_Version>
+					<Modification_ReleaseDate>2022-06-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Alternate_Terms, Common_Consequences, Demonstrative_Examples, Description, Name, Observed_Examples, References, Taxonomy_Mappings</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-10-13</Modification_Date>
+					<Modification_Version>4.9</Modification_Version>
+					<Modification_ReleaseDate>2022-10-13</Modification_ReleaseDate>
+					<Modification_Comment>updated Related_Attack_Patterns</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated References, Relationships, Time_of_Introduction</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-09-09</Modification_Date>
+					<Modification_Version>4.18</Modification_Version>
+					<Modification_ReleaseDate>2025-09-09</Modification_ReleaseDate>
+					<Modification_Comment>updated References</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Applicable_Platforms, Detection_Factors, Relationships, Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+            <Previous_Entry_Name Date="2008-04-11">HTTP Request Smuggling</Previous_Entry_Name>
+            <Previous_Entry_Name Date="2008-09-09">Interpretation Conflict in Web Traffic (aka 'HTTP Request Smuggling')</Previous_Entry_Name>
+            <Previous_Entry_Name Date="2009-05-27">Inconsistent Interpretation of HTTP Requests (aka 'HTTP Request Smuggling')</Previous_Entry_Name>
+			<Previous_Entry_Name Date="2022-06-28">Inconsistent Interpretation of HTTP Requests ('HTTP Request Smuggling')</Previous_Entry_Name>
+         </Content_History>
+      </Weakness>
+      

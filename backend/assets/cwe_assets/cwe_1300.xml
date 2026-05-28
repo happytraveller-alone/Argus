@@ -1,0 +1,371 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="1300" Name="Improper Protection of Physical Side Channels" Abstraction="Base" Structure="Simple" Status="Stable">
+
+	<Description>The device does not contain sufficient protection
+	mechanisms to prevent physical side channels from exposing
+	sensitive information due to patterns in physically observable
+	phenomena such as variations in power consumption,
+	electromagnetic emissions (EME), or acoustic emissions.</Description>
+			
+	<Extended_Description>
+	  <xhtml:p>An adversary could monitor and measure physical
+	  phenomena to detect patterns and make inferences, even if it
+	  is not possible to extract the information in the digital
+	  domain.</xhtml:p>
+	  <xhtml:p>Physical side channels have been well-studied for
+	  decades in the context of breaking implementations of
+	  cryptographic algorithms or other attacks against security
+	  features. These side channels may be easily observed by an
+	  adversary with physical access to the device, or using a
+	  tool that is in close proximity.  If the adversary can
+	  monitor hardware operation and correlate its data processing
+	  with power, EME, and acoustic measurements, the adversary
+	  might be able to recover of secret keys and data.</xhtml:p>
+			</Extended_Description>
+			<Related_Weaknesses>
+				<Related_Weakness Nature="ChildOf" CWE_ID="203" View_ID="1000" Ordinal="Primary" />
+				<Related_Weakness Nature="ChildOf" CWE_ID="203" View_ID="1194" Ordinal="Primary" />
+			</Related_Weaknesses>
+		 <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+            <Weakness_Ordinality>
+               <Ordinality>Resultant</Ordinality>
+            </Weakness_Ordinality>
+		 </Weakness_Ordinalities>
+			<Applicable_Platforms>
+				<Language Class="Not Language-Specific" Prevalence="Undetermined" />
+				<Operating_System Class="Not OS-Specific" Prevalence="Undetermined" />
+				<Architecture Class="Not Architecture-Specific" Prevalence="Undetermined" />
+				<Technology Class="Not Technology-Specific" Prevalence="Undetermined" />
+				</Applicable_Platforms>
+			<Modes_Of_Introduction>
+				<Introduction>
+					<Phase>Implementation</Phase>
+				</Introduction>
+			</Modes_Of_Introduction>
+			<Common_Consequences>
+				<Consequence>
+					<Scope>Confidentiality</Scope>
+					<Impact>Read Memory</Impact>
+					<Impact>Read Application Data</Impact>
+				</Consequence>
+			</Common_Consequences>
+			<Detection_Methods>
+			  <Detection_Method>
+				<Method>Manual Analysis</Method>
+				<Description>Perform a set of leakage detection tests such as the procedure outlined in the Test Vector Leakage Assessment (TVLA) test requirements for AES [REF-1230].  TVLA is the basis for the ISO standard 17825 [REF-1229]. A separate methodology is provided by [REF-1228]. Note that sole reliance on this method might not yield expected results [REF-1239] [REF-1240].</Description>
+				<Effectiveness>Moderate</Effectiveness>
+			  </Detection_Method>
+			  <Detection_Method>
+				<Method>Manual Analysis</Method>
+				<Description>
+				  <xhtml:p>Post-silicon, perform full side-channel attacks (penetration testing) covering as many known leakage models as possible against test code.</xhtml:p></Description>
+				  <Effectiveness>Moderate</Effectiveness>
+				</Detection_Method>
+			  <Detection_Method>
+				<Method>Manual Analysis</Method>
+				<Description>
+				  <xhtml:p>Pre-silicon - while the aforementioned TVLA methods can be performed post-silicon, models of device power consumption or other physical emanations can be built from information present at various stages of the hardware design process before fabrication. TVLA or known side-channel attacks can be applied to these simulated traces and countermeasures applied before tape-out.  Academic research in this field includes [REF-1231] [REF-1232] [REF-1233].</xhtml:p></Description>
+				  <Effectiveness>Moderate</Effectiveness>
+				</Detection_Method>
+			  </Detection_Methods>
+			<Potential_Mitigations>
+				<Mitigation>
+					<Phase>Architecture and Design</Phase>
+					<Description>Apply blinding or masking techniques to implementations of cryptographic algorithms.</Description>
+				</Mitigation>
+				<Mitigation>
+					<Phase>Implementation</Phase>
+					<Description>Add shielding or tamper-resistant protections to the device to increase the difficulty of obtaining measurements of the side-channel.</Description>
+				</Mitigation>
+			</Potential_Mitigations>
+		<Demonstrative_Examples>
+		  <Demonstrative_Example>
+		    <Intro_Text>Consider a device that checks a
+		    passcode to unlock the screen.</Intro_Text>
+		    <Example_Code Nature="Bad" Language="Other">As each character of
+		    the PIN number is entered, a correct character
+		    exhibits one current pulse shape while an
+		    incorrect character exhibits a different current
+		    pulse shape.</Example_Code>
+		    <Body_Text>PIN numbers used to unlock a cell phone
+		    should not exhibit any characteristics about
+		    themselves. This creates a side channel. An
+		    attacker could monitor the pulses using an
+		    oscilloscope or other method. Once the first
+		    character is correctly guessed (based on the
+		    oscilloscope readings), they can then move to the
+		    next character, which is much more efficient than
+		    the brute force method of guessing every possible
+		    sequence of characters.</Body_Text>
+		    <Example_Code Nature="Good" Language="Other">Rather than comparing
+		    each character to the correct PIN value as it is
+		    entered, the device could accumulate the PIN in a
+		    register, and do the comparison all at once at the
+		    end. Alternatively, the components for the
+		    comparison could be modified so that the current
+		    pulse shape is the same regardless of the
+		    correctness of the entered
+		    character.</Example_Code>
+		  </Demonstrative_Example>
+		  <Demonstrative_Example>
+			<Intro_Text>Consider the device vulnerability CVE-2021-3011, which affects certain microcontrollers [REF-1221]. The Google Titan Security Key is used for two-factor authentication using cryptographic algorithms. The device uses an internal secret key for this purpose and exchanges information based on this key for the authentication. If this internal secret key and the encryption algorithm were known to an adversary, the key function could be duplicated, allowing the adversary to masquerade as the legitimate user.</Intro_Text>
+			<Example_Code Nature="Bad" Language="Other">The local method of extracting the secret key consists of plugging the key into a USB port and using electromagnetic (EM) sniffing tools and computers.</Example_Code>
+			<Example_Code Nature="Good" Language="Other">Several solutions could have been considered by the manufacturer. For example, the manufacturer could shield the circuitry in the key or add randomized delays, indirect calculations with random values involved, or randomly ordered calculations to make extraction much more difficult. The manufacturer could use a combination of these techniques.</Example_Code>
+		  </Demonstrative_Example>
+		  <Demonstrative_Example>
+		  	<Intro_Text>The code snippet provided here is part of the modular exponentiation module found in the HACK@DAC'21 Openpiton System-on-Chip (SoC), specifically within the RSA peripheral [REF-1368]. Modular exponentiation, denoted as "a^b mod n," is a crucial operation in the RSA public/private key encryption. In RSA encryption, where 'c' represents ciphertext, 'm' stands for a message, and 'd' corresponds to the private key, the decryption process is carried out using this modular exponentiation as follows: m = c^d mod n, where 'n' is the result of multiplying two large prime numbers.</Intro_Text>
+		  	<Example_Code Nature="Bad" Language="Verilog">
+				...<xhtml:br />
+				module mod_exp<xhtml:br />
+					<xhtml:div style="margin-left:1em;">
+					...<xhtml:br />
+					`UPDATE: begin<xhtml:br />
+						<xhtml:div style="margin-left:1em;">
+						if (exponent_reg != 'd0) begin<xhtml:br />
+							<xhtml:div style="margin-left:1em;">
+							<xhtml:b>if (exponent_reg[0])</xhtml:b><xhtml:br />
+								<xhtml:div style="margin-left:1em;">
+								<xhtml:b>result_reg &lt;= result_next;</xhtml:b><xhtml:br />
+								</xhtml:div>
+							base_reg &lt;= base_next;<xhtml:br />
+							exponent_reg &lt;= exponent_next;<xhtml:br />
+							state &lt;= `UPDATE;<xhtml:br />
+							</xhtml:div>
+						</xhtml:div>
+					...<xhtml:br />
+					</xhtml:div>
+				endmodule<xhtml:br />
+			</Example_Code>
+		  	<Body_Text>The vulnerable code shows a buggy implementation of binary exponentiation where it updates the result register (result_reg) only when the corresponding exponent bit (exponent_reg[0]) is set to 1. However, when this exponent bit is 0, the output register is not updated. It's important to note that this implementation introduces a physical power side-channel vulnerability within the RSA core. This vulnerability could expose the private exponent to a determined physical attacker. Such exposure of the private exponent could lead to a complete compromise of the private key.</Body_Text>
+			<Body_Text>To address mitigation requirements, the developer can develop the module by minimizing dependency on conditions, particularly those reliant on secret keys. In situations where branching is unavoidable, developers can implement masking mechanisms to obfuscate the power consumption patterns exhibited by the module (see good code example). Additionally, certain algorithms, such as the Karatsuba algorithm, can be implemented as illustrative examples of side-channel resistant algorithms, as they necessitate only a limited number of branch conditions [REF-1369].</Body_Text>
+		  	<Example_Code Nature="Good" Language="Verilog">
+			...<xhtml:br />
+				module mod_exp<xhtml:br />
+					<xhtml:div style="margin-left:1em;">
+					...<xhtml:br />
+					`UPDATE: begin<xhtml:br />
+						<xhtml:div style="margin-left:1em;">
+						if (exponent_reg != 'd0) begin<xhtml:br />
+							<xhtml:div style="margin-left:1em;">
+							<xhtml:b>if (exponent_reg[0]) begin</xhtml:b><xhtml:br />
+								<xhtml:div style="margin-left:1em;">
+								<xhtml:b>result_reg &lt;= result_next;</xhtml:b><xhtml:br />
+								</xhtml:div>
+							<xhtml:b>end else begin</xhtml:b><xhtml:br />
+								<xhtml:div style="margin-left:1em;">
+								<xhtml:b>mask_reg &lt;= result_next;</xhtml:b><xhtml:br />
+								</xhtml:div>
+							<xhtml:b>end</xhtml:b><xhtml:br />
+							base_reg &lt;= base_next;<xhtml:br />
+							exponent_reg &lt;= exponent_next;<xhtml:br />
+							state &lt;= `UPDATE;<xhtml:br />
+							</xhtml:div>
+						</xhtml:div>
+					...<xhtml:br />
+					</xhtml:div>
+				endmodule<xhtml:br />
+			</Example_Code>
+		  </Demonstrative_Example>
+		</Demonstrative_Examples>
+		<Observed_Examples>
+		  <Observed_Example>
+		    <Reference>CVE-2022-35888</Reference>
+		    <Description>Power side-channels leak secret information from processor</Description>
+		    <Link>https://www.cve.org/CVERecord?id=CVE-2022-35888</Link>
+		  </Observed_Example>
+		  <Observed_Example>
+		    <Reference>CVE-2021-3011</Reference>
+		    <Description>electromagnetic-wave side-channel in security-related microcontrollers allows extraction of private key</Description>
+		    <Link>https://www.cve.org/CVERecord?id=CVE-2021-3011</Link>
+		  </Observed_Example>
+		  <Observed_Example>
+			<Reference>CVE-2019-14353</Reference>
+			<Description>Crypto hardware wallet's power consumption relates to total number of pixels illuminated, creating a side channel in the USB connection that allows attackers to determine secrets displayed such as PIN numbers and passwords</Description>
+			<Link>https://www.cve.org/CVERecord?id=CVE-2019-14353</Link>
+		  </Observed_Example>
+		  <Observed_Example>
+		    <Reference>CVE-2020-27211</Reference>
+		    <Description>Chain: microcontroller system-on-chip contains uses a register value stored in flash to set product protection state on the memory bus but does not contain protection against fault injection (CWE-1319), which leads to an incorrect initialization of the memory bus (CWE-1419) leading the product to be in an unprotected state.</Description>
+		    <Link>https://www.cve.org/CVERecord?id=CVE-2020-27211</Link>
+		  </Observed_Example>
+		  <Observed_Example>
+		    <Reference>CVE-2013-4576</Reference>
+		    <Description>message encryption software uses certain instruction sequences that allows RSA key extraction using a chosen-ciphertext attack and acoustic cryptanalysis</Description>
+		    <Link>https://www.cve.org/CVERecord?id=CVE-2013-4576</Link>
+		  </Observed_Example>
+		  <Observed_Example>
+		    <Reference>CVE-2020-28368</Reference>
+		    <Description>virtualization product allows recovery of AES keys from the guest OS using a side channel attack against a power/energy monitoring interface.</Description>
+		    <Link>https://www.cve.org/CVERecord?id=CVE-2020-28368</Link>
+		  </Observed_Example>
+		  <Observed_Example>
+		    <Reference>CVE-2019-18673</Reference>
+		    <Description>power consumption varies based on number of pixels being illuminated in a display, allowing reading of secrets such as the PIN by using the USB interface to measure power consumption</Description>
+		    <Link>https://www.cve.org/CVERecord?id=CVE-2019-18673</Link>
+		  </Observed_Example>
+		</Observed_Examples>
+		<Functional_Areas>
+            	  <Functional_Area>Power</Functional_Area>
+         	</Functional_Areas>
+         <Related_Attack_Patterns>
+            <Related_Attack_Pattern CAPEC_ID="189" />
+            <Related_Attack_Pattern CAPEC_ID="699" />
+         </Related_Attack_Patterns>
+         <References>
+				<Reference External_Reference_ID="REF-1117" />
+				<Reference External_Reference_ID="REF-1118" />
+				<Reference External_Reference_ID="REF-1119" />
+				<Reference External_Reference_ID="REF-1120" />
+				<Reference External_Reference_ID="REF-1055" />
+				<Reference External_Reference_ID="REF-1218" />
+				<Reference External_Reference_ID="REF-1221" />
+				<Reference External_Reference_ID="REF-1228" />
+				<Reference External_Reference_ID="REF-1229" />
+				<Reference External_Reference_ID="REF-1230" />
+				<Reference External_Reference_ID="REF-1231" Section="pp. 305-319" />
+				<Reference External_Reference_ID="REF-1232" Section="pp. 123-130" />
+				<Reference External_Reference_ID="REF-1233" />
+				<Reference External_Reference_ID="REF-1234" />
+				<Reference External_Reference_ID="REF-1235" />
+				<Reference External_Reference_ID="REF-1239" />
+				<Reference External_Reference_ID="REF-1240" />
+				<Reference External_Reference_ID="REF-1285" />
+				<Reference External_Reference_ID="REF-1286" Section="1.2 / 5" />
+				<Reference External_Reference_ID="REF-1368" />
+				<Reference External_Reference_ID="REF-1369" />
+			</References>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Base level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+			<Content_History>
+				<Submission>
+					<Submission_Name>Nicole Fern</Submission_Name>
+					<Submission_Organization>Cycuity (originally submitted as Tortuga Logic)</Submission_Organization>
+					<Submission_Date>2020-05-29</Submission_Date>
+					<Submission_Version>4.2</Submission_Version>
+					<Submission_ReleaseDate>2020-08-20</Submission_ReleaseDate>
+				</Submission>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-03-15</Modification_Date>
+					<Modification_Version>4.4</Modification_Version>
+					<Modification_ReleaseDate>2021-03-15</Modification_ReleaseDate>
+					<Modification_Comment>updated Functional_Areas, Maintenance_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-07-20</Modification_Date>
+					<Modification_Version>4.5</Modification_Version>
+					<Modification_ReleaseDate>2021-07-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Related_Attack_Patterns</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-10-28</Modification_Date>
+					<Modification_Version>4.6</Modification_Version>
+					<Modification_ReleaseDate>2021-10-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples, Description, Detection_Factors, Maintenance_Notes, Name, Observed_Examples, References, Relationships, Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-06-28</Modification_Date>
+					<Modification_Version>4.8</Modification_Version>
+					<Modification_ReleaseDate>2022-06-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-10-13</Modification_Date>
+					<Modification_Version>4.9</Modification_Version>
+					<Modification_ReleaseDate>2022-10-13</Modification_ReleaseDate>
+					<Modification_Comment>updated References, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-01-31</Modification_Date>
+					<Modification_Version>4.10</Modification_Version>
+					<Modification_ReleaseDate>2023-01-31</Modification_ReleaseDate>
+					<Modification_Comment>updated Related_Attack_Patterns</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated References, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-10-26</Modification_Date>
+					<Modification_Version>4.13</Modification_Version>
+					<Modification_ReleaseDate>2023-10-26</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples, Observed_Examples, References</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-04-03</Modification_Date>
+					<Modification_Version>4.17</Modification_Version>
+					<Modification_ReleaseDate>2025-04-03</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-09-09</Modification_Date>
+					<Modification_Version>4.18</Modification_Version>
+					<Modification_ReleaseDate>2025-09-09</Modification_ReleaseDate>
+					<Modification_Comment>updated References, Relationships</Modification_Comment>
+				</Modification>
+				<Contribution Type="Content">
+				  <Contribution_Name>Anders Nordstrom, Alric Althoff</Contribution_Name>
+				  <Contribution_Organization>Cycuity (originally submitted as Tortuga Logic)</Contribution_Organization>
+				  <Contribution_Date>2021-10-11</Contribution_Date>
+				  <Contribution_Comment>Provided detection methods, observed examples, and references</Contribution_Comment>
+				</Contribution>
+				<Contribution Type="Content">
+				  <Contribution_Name>Nicole Fern</Contribution_Name>
+				  <Contribution_Organization>Riscure</Contribution_Organization>
+				  <Contribution_Date>2021-10-13</Contribution_Date>
+				  <Contribution_Comment>Provided detection methods, observed examples, and references</Contribution_Comment>
+				</Contribution>
+				<Contribution Type="Content">
+					<Contribution_Name>Chen Chen, Rahul Kande, Jeyavijayan Rajendran</Contribution_Name>
+					<Contribution_Organization>Texas A&amp;M University</Contribution_Organization>
+					<Contribution_Date>2023-06-21</Contribution_Date>
+					<Contribution_Comment>suggested demonstrative example</Contribution_Comment>
+				</Contribution>
+				<Contribution Type="Content">
+					<Contribution_Name>Shaza Zeitouni, Mohamadreza Rostami, Ahmad-Reza Sadeghi</Contribution_Name>
+					<Contribution_Organization>Technical University of Darmstadt</Contribution_Organization>
+					<Contribution_Date>2023-06-21</Contribution_Date>
+					<Contribution_Comment>suggested demonstrative example</Contribution_Comment>
+				</Contribution>
+			<Previous_Entry_Name Date="2021-10-28">Improper Protection Against Physical Side Channels</Previous_Entry_Name>
+			</Content_History>
+		</Weakness>
+      

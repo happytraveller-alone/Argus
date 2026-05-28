@@ -1,0 +1,288 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="271" Name="Privilege Dropping / Lowering Errors" Abstraction="Class" Structure="Simple" Status="Incomplete">
+         <Description>The product does not drop privileges before passing control of a resource to an actor that does not have those privileges.</Description>
+         <Extended_Description>In some contexts, a system executing with elevated permissions will hand off a process/file/etc. to another process or user. If the privileges of an entity are not reduced, then elevated privileges are spread throughout a system and possibly to an attacker.</Extended_Description>
+         <Related_Weaknesses>
+            <Related_Weakness Nature="ChildOf" CWE_ID="269" View_ID="1000" Ordinal="Primary" />
+         </Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+         <Applicable_Platforms>
+            <Language Class="Not Language-Specific" Prevalence="Undetermined" />
+         </Applicable_Platforms>
+         <Modes_Of_Introduction>
+            <Introduction>
+               <Phase>Architecture and Design</Phase>
+            </Introduction>
+            <Introduction>
+               <Phase>Implementation</Phase>
+               <Note>REALIZATION: This weakness is caused during implementation of an architectural security tactic.</Note>
+            </Introduction>
+            <Introduction>
+               <Phase>Operation</Phase>
+            </Introduction>
+         </Modes_Of_Introduction>
+         <Likelihood_Of_Exploit>High</Likelihood_Of_Exploit>
+         <Common_Consequences>
+            <Consequence>
+               <Scope>Access Control</Scope>
+               <Impact>Gain Privileges or Assume Identity</Impact>
+               <Note>If privileges are not dropped, neither are access rights of the user. Often these rights can be prevented from being dropped.</Note>
+            </Consequence>
+            <Consequence>
+               <Scope>Access Control</Scope>
+               <Scope>Non-Repudiation</Scope>
+               <Impact>Gain Privileges or Assume Identity</Impact>
+               <Impact>Hide Activities</Impact>
+               <Note>If privileges are not dropped, in some cases the system may record actions as the user which is being impersonated rather than the impersonator.</Note>
+            </Consequence>
+         </Common_Consequences>
+         <Potential_Mitigations>
+            <Mitigation Mitigation_ID="MIT-46">
+               <Phase>Architecture and Design</Phase>
+               <Strategy>Separation of Privilege</Strategy>
+               <Description>
+                  <xhtml:p>Compartmentalize the system to have "safe" areas where trust boundaries can be unambiguously drawn. Do not allow sensitive data to go outside of the trust boundary and always be careful when interfacing with a compartment outside of the safe area.</xhtml:p>
+                  <xhtml:p>Ensure that appropriate compartmentalization is built into the system design, and the compartmentalization allows for and reinforces privilege separation functionality. Architects and designers should rely on the principle of least privilege to decide the appropriate time to use privileges and the time to drop privileges.</xhtml:p>
+               </Description>
+            </Mitigation>
+            <Mitigation Mitigation_ID="MIT-1">
+               <Phase>Architecture and Design</Phase>
+               <Phase>Operation</Phase>
+               <Description>Very carefully manage the setting, management, and handling of privileges. Explicitly manage trust zones in the software.</Description>
+            </Mitigation>
+            <Mitigation Mitigation_ID="MIT-49">
+               <Phase>Architecture and Design</Phase>
+               <Strategy>Separation of Privilege</Strategy>
+               <Description>Consider following the principle of separation of privilege. Require multiple conditions to be met before permitting access to a system resource.</Description>
+            </Mitigation>
+         </Potential_Mitigations>
+         <Demonstrative_Examples>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-98">
+               <Intro_Text>The following code calls chroot() to restrict the application to a subset of the filesystem below APP_HOME in order to prevent an attacker from using the program to gain unauthorized access to files located elsewhere. The code then opens a file specified by the user and processes the contents of the file.</Intro_Text>
+               <Example_Code Nature="Bad" Language="C">
+                  <xhtml:div>chroot(APP_HOME);<xhtml:br />chdir("/");<xhtml:br />FILE* data = fopen(argv[1], "r+");<xhtml:br />...</xhtml:div>
+               </Example_Code>
+               <Body_Text>Constraining the process inside the application's home directory before opening any files is a valuable security measure. However, the absence of a call to setuid() with some non-zero value means the application is continuing to operate with unnecessary root privileges. Any successful exploit carried out by an attacker against the application can now result in a privilege escalation attack because any malicious operations will be performed with the privileges of the superuser. If the application drops to the privilege level of a non-root user, the potential for damage is substantially reduced.</Body_Text>
+            </Demonstrative_Example>
+         </Demonstrative_Examples>
+         <Observed_Examples>
+            <Observed_Example>
+               <Reference>CVE-2000-1213</Reference>
+               <Description>Program does not drop privileges after acquiring the raw socket.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2000-1213</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2001-0559</Reference>
+               <Description>Setuid program does not drop privileges after a parsing error occurs, then calls another program to handle the error.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2001-0559</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2001-0787</Reference>
+               <Description>Does not drop privileges in related groups when lowering privileges.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2001-0787</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2002-0080</Reference>
+               <Description>Does not drop privileges in related groups when lowering privileges.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2002-0080</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2001-1029</Reference>
+               <Description>Does not drop privileges before determining access to certain files.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2001-1029</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-1999-0813</Reference>
+               <Description>Finger daemon does not drop privileges when executing programs on behalf of the user being fingered.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-1999-0813</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-1999-1326</Reference>
+               <Description>FTP server does not drop privileges if a connection is aborted during file transfer.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-1999-1326</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2000-0172</Reference>
+               <Description>Program only uses seteuid to drop privileges.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2000-0172</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2004-2504</Reference>
+               <Description>Windows program running as SYSTEM does not drop privileges before executing other programs (many others like this, especially involving the Help facility).</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2004-2504</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2004-0213</Reference>
+               <Description>Utility Manager launches winhlp32.exe while running with raised privileges, which allows local users to gain system privileges.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2004-0213</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2004-0806</Reference>
+               <Description>Setuid program does not drop privileges before executing program specified in an environment variable.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2004-0806</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2004-0828</Reference>
+               <Description>Setuid program does not drop privileges before processing file specified on command line.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2004-0828</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2004-2070</Reference>
+               <Description>Service on Windows does not drop privileges before using "view file" option, allowing code execution.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2004-2070</Link>
+            </Observed_Example>
+         </Observed_Examples>
+         <Taxonomy_Mappings>
+            <Taxonomy_Mapping Taxonomy_Name="PLOVER">
+               <Entry_Name>Privilege Dropping / Lowering Errors</Entry_Name>
+            </Taxonomy_Mapping>
+         </Taxonomy_Mappings>
+         <References>
+            <Reference External_Reference_ID="REF-44" Section="&quot;Sin 16: Executing Code With Too Much Privilege.&quot; Page 243" />
+            <Reference External_Reference_ID="REF-62" Section="Chapter 9, &quot;Dropping Privileges Permanently&quot;, Page 479" />
+         </References>
+         <Mapping_Notes>
+            <Usage>Allowed-with-Review</Usage>
+            <Rationale>This CWE entry is a Class and might have Base-level children that would be more appropriate</Rationale>
+            <Comments>Examine children of this entry to see if there is a better fit</Comments>
+            <Reasons>
+               <Reason Type="Abstraction" />
+            </Reasons>
+         </Mapping_Notes>
+         <Notes>
+            <Note Type="Maintenance">CWE-271, CWE-272, and CWE-250 are all closely related and possibly overlapping. CWE-271 is probably better suited as a category.</Note>
+         </Notes>
+         <Content_History>
+            <Submission>
+               <Submission_Name>PLOVER</Submission_Name>
+               <Submission_Date>2006-07-19</Submission_Date>
+               <Submission_Version>Draft 3</Submission_Version>
+               <Submission_ReleaseDate>2006-07-19</Submission_ReleaseDate>
+            </Submission>
+            <Modification>
+               <Modification_Name>Eric Dalci</Modification_Name>
+               <Modification_Organization>Cigital</Modification_Organization>
+               <Modification_Date>2008-07-01</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>updated Time_of_Introduction</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2008-09-08</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>updated Description, Relationships, Taxonomy_Mappings, Weakness_Ordinalities</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2008-10-14</Modification_Date>
+               <Modification_Version>1.0.1</Modification_Version>
+               <Modification_ReleaseDate>2008-10-14</Modification_ReleaseDate>
+               <Modification_Comment>updated Description, Maintenance_Notes</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2009-12-28</Modification_Date>
+               <Modification_Version>1.7</Modification_Version>
+               <Modification_ReleaseDate>2009-12-28</Modification_ReleaseDate>
+               <Modification_Comment>updated Potential_Mitigations</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2010-06-21</Modification_Date>
+               <Modification_Version>1.9</Modification_Version>
+               <Modification_ReleaseDate>2010-06-21</Modification_ReleaseDate>
+               <Modification_Comment>updated Potential_Mitigations</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-03-29</Modification_Date>
+               <Modification_Version>1.12</Modification_Version>
+               <Modification_ReleaseDate>2011-03-30</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-06-01</Modification_Date>
+               <Modification_Version>1.13</Modification_Version>
+               <Modification_ReleaseDate>2011-06-01</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2012-05-11</Modification_Date>
+               <Modification_Version>2.2</Modification_Version>
+               <Modification_ReleaseDate>2012-05-15</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences, Demonstrative_Examples, Observed_Examples, References, Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2012-10-30</Modification_Date>
+               <Modification_Version>2.3</Modification_Version>
+               <Modification_ReleaseDate>2012-10-30</Modification_ReleaseDate>
+               <Modification_Comment>updated Potential_Mitigations</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2017-11-08</Modification_Date>
+               <Modification_Version>3.0</Modification_Version>
+               <Modification_ReleaseDate>2017-11-08</Modification_ReleaseDate>
+               <Modification_Comment>updated Applicable_Platforms, Causal_Nature, Modes_of_Introduction, Relationships</Modification_Comment>
+            </Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-02-24</Modification_Date>
+					<Modification_Version>4.0</Modification_Version>
+					<Modification_ReleaseDate>2020-02-24</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-12-10</Modification_Date>
+					<Modification_Version>4.3</Modification_Version>
+					<Modification_ReleaseDate>2020-12-10</Modification_ReleaseDate>
+					<Modification_Comment>updated Potential_Mitigations</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-01-31</Modification_Date>
+					<Modification_Version>4.10</Modification_Version>
+					<Modification_ReleaseDate>2023-01-31</Modification_ReleaseDate>
+					<Modification_Comment>updated Description</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+         </Content_History>
+      </Weakness>
+      

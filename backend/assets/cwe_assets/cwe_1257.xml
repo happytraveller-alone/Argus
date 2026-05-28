@@ -1,0 +1,223 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="1257" Name="Improper Access Control Applied to Mirrored or Aliased Memory Regions" Abstraction="Base" Structure="Simple" Status="Incomplete">
+			<Description>Aliased or mirrored memory regions in hardware designs may have inconsistent read/write permissions enforced by the hardware. A possible result is that an untrusted agent is blocked from accessing a memory region but is not blocked from accessing the corresponding aliased memory region.
+			</Description>
+			<Extended_Description>
+				<xhtml:p>Hardware product designs often need to implement memory protection features that enable privileged software to define isolated memory regions and access control (read/write) policies. Isolated memory regions can be defined on different memory spaces in a design (e.g. system physical address, virtual address, memory mapped IO).</xhtml:p>
+				<xhtml:p>Each memory cell should be mapped and assigned a system address that the core software can use to read/write to that memory. It is possible to map the same memory cell to multiple system addresses such that read/write to any of the aliased system addresses would be decoded to the same memory cell.</xhtml:p>
+				<xhtml:p>This is commonly done in hardware designs for redundancy and simplifying address decoding logic. If one of the memory regions is corrupted or faulty, then that hardware can switch to using the data in the mirrored memory region. Memory aliases can also be created in the system address map if the address decoder unit ignores higher order address bits when mapping a smaller address region into the full system address.</xhtml:p>
+				<xhtml:p>A common security weakness that can exist in such memory mapping is that aliased memory regions could have different read/write access protections enforced by the hardware such that an untrusted agent is blocked from accessing a memory address but is not blocked from accessing the corresponding aliased memory address. Such inconsistency can then be used to bypass the access protection of the primary memory block and read or modify the protected memory.</xhtml:p>
+				<xhtml:p>An untrusted agent could also possibly create memory aliases in the system address map for malicious purposes if it is able to change the mapping of an address region or modify memory region sizes.</xhtml:p>
+			</Extended_Description>
+			<Related_Weaknesses>
+				<Related_Weakness Nature="ChildOf" CWE_ID="284" View_ID="1000" Ordinal="Primary" />
+				<Related_Weakness Nature="CanPrecede" CWE_ID="119" View_ID="1000" />
+			</Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+			<Applicable_Platforms>
+				<Language Class="Not Language-Specific" Prevalence="Undetermined" />
+				<Operating_System Class="Not OS-Specific" Prevalence="Undetermined" />
+				<Architecture Class="Not Architecture-Specific" Prevalence="Undetermined" />
+				<Technology Name="Memory Hardware" Prevalence="Undetermined" />
+				<Technology Name="Processor Hardware" Prevalence="Undetermined" />
+				<Technology Name="Microcontroller Hardware" Prevalence="Undetermined" />
+				<Technology Name="Network on Chip Hardware" Prevalence="Undetermined" />
+				<Technology Class="System on Chip" Prevalence="Undetermined" />
+			</Applicable_Platforms>
+			<Modes_Of_Introduction>
+				<Introduction>
+					<Phase>Architecture and Design</Phase>
+				</Introduction>
+				<Introduction>
+					<Phase>Implementation</Phase>
+				</Introduction>
+			</Modes_Of_Introduction>
+			<Common_Consequences>
+				<Consequence>
+					<Scope>Confidentiality</Scope>
+					<Impact>Read Memory</Impact>
+					<Likelihood>High</Likelihood>
+				</Consequence>
+				<Consequence>
+					<Scope>Integrity</Scope>
+					<Impact>Modify Memory</Impact>
+					<Likelihood>High</Likelihood>
+				</Consequence>
+				<Consequence>
+					<Scope>Availability</Scope>
+					<Impact>DoS: Instability</Impact>
+					<Likelihood>High</Likelihood>
+				</Consequence>
+			</Common_Consequences>
+			<Potential_Mitigations>
+				<Mitigation>
+					<Phase>Architecture and Design</Phase>
+					<Phase>Implementation</Phase>
+					<Description>The checks should be applied for consistency access rights between primary memory regions and any mirrored or aliased memory regions. If different memory protection units (MPU) are protecting the aliased regions, their protected range definitions and policies should be synchronized.</Description>
+				</Mitigation>
+				<Mitigation>
+					<Phase>Architecture and Design</Phase>
+					<Phase>Implementation</Phase>
+					<Description>The controls that allow enabling memory aliases or changing the size of mapped memory regions should only be programmable by trusted software components.</Description>
+				</Mitigation>
+			</Potential_Mitigations>
+			<Demonstrative_Examples>
+				<Demonstrative_Example>
+					<Intro_Text>
+						<xhtml:p>In a System-on-a-Chip (SoC) design the system fabric uses 16 bit addresses. An IP unit (Unit_A) has 4 kilobyte of internal memory which is mapped into a 16 kilobyte address range in the system fabric address map.</xhtml:p>
+						<xhtml:table>
+							<xhtml:tr>
+								<xhtml:td>
+									System Address
+								</xhtml:td>
+								<xhtml:td>
+									Mapped to
+								</xhtml:td>
+							</xhtml:tr>
+							<xhtml:tr>
+								<xhtml:td>
+									0x0000 - 0x3FFF
+								</xhtml:td>
+								<xhtml:td>
+									Unit_A  registers : 0x0000 - 0x0FFF
+								</xhtml:td>
+							</xhtml:tr>
+							<xhtml:tr>
+								<xhtml:td>
+									0x4000 - 0xFFFF
+								</xhtml:td>
+								<xhtml:td>
+									Other IPs &amp; Memory
+								</xhtml:td>
+							</xhtml:tr>
+						</xhtml:table>
+						<xhtml:p>
+							To protect the register controls in Unit_A unprivileged software is blocked from accessing addresses between 0x0000 - 0x0FFF.
+						</xhtml:p>
+						<xhtml:p>
+							The address decoder of Unit_A masks off the higher order address bits and decodes only the lower 12 bits for computing the offset into the 4 kilobyte internal memory space.
+						</xhtml:p>
+					</Intro_Text>
+					<Example_Code Nature="Bad" Language="Other">
+						<xhtml:p>In this design  the aliased memory address ranges are these:</xhtml:p>
+						<xhtml:br />
+						<xhtml:p>0x0000 - 0x0FFF</xhtml:p>
+						<xhtml:p>0x1000 - 0x1FFF</xhtml:p>
+						<xhtml:p>0x2000 - 0x2FFF</xhtml:p>
+						<xhtml:p>0x3000 - 0x3FFF</xhtml:p>
+						<xhtml:p>
+							The same register can be accessed using four different addresses: 0x0000, 0x1000, 0x2000, 0x3000.
+						</xhtml:p>
+						<xhtml:p>
+							The system address filter only blocks access to range 0x0000 - 0x0FFF and does not block access to the aliased addresses in 0x1000 - 0x3FFF range. Thus, untrusted software can leverage the aliased memory addresses to bypass the memory protection.
+						</xhtml:p>
+					</Example_Code>
+					<Example_Code Nature="Good" Language="Other">
+						<xhtml:p>
+							In this design the aliased memory addresses (0x1000 - 0x3FFF) could be blocked from all system software access since they are not used by software.
+						</xhtml:p>
+						<xhtml:p>
+							Alternately, the MPU logic can be changed to apply the memory protection policies to the full address range mapped to Unit_A (0x0000 - 0x3FFF).
+						</xhtml:p>
+					</Example_Code>
+				</Demonstrative_Example>
+			</Demonstrative_Examples>
+         <Related_Attack_Patterns>
+            <Related_Attack_Pattern CAPEC_ID="456" />
+            <Related_Attack_Pattern CAPEC_ID="679" />
+         </Related_Attack_Patterns>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Base level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+         <Content_History>
+				<Submission>
+					<Submission_Name>Arun Kanuparthi, Hareesh Khattri, Parbati Kumar Manna, Narasimha Kumar V Mangipudi</Submission_Name>
+					<Submission_Organization>Intel Corporation</Submission_Organization>
+					<Submission_Date>2020-04-29</Submission_Date>
+					<Submission_Version>4.1</Submission_Version>
+					<Submission_ReleaseDate>2020-02-24</Submission_ReleaseDate>
+				</Submission>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-08-20</Modification_Date>
+					<Modification_Version>4.2</Modification_Version>
+					<Modification_ReleaseDate>2020-08-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples, Description, Modes_of_Introduction, Potential_Mitigations, Related_Attack_Patterns</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-10-28</Modification_Date>
+					<Modification_Version>4.6</Modification_Version>
+					<Modification_ReleaseDate>2021-10-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Potential_Mitigations</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-04-28</Modification_Date>
+					<Modification_Version>4.7</Modification_Version>
+					<Modification_ReleaseDate>2022-04-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Applicable_Platforms, Related_Attack_Patterns</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-06-28</Modification_Date>
+					<Modification_Version>4.8</Modification_Version>
+					<Modification_ReleaseDate>2022-06-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Applicable_Platforms</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-10-13</Modification_Date>
+					<Modification_Version>4.9</Modification_Version>
+					<Modification_ReleaseDate>2022-10-13</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-01-31</Modification_Date>
+					<Modification_Version>4.10</Modification_Version>
+					<Modification_ReleaseDate>2023-01-31</Modification_ReleaseDate>
+					<Modification_Comment>updated Related_Attack_Patterns</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+			</Content_History>
+		</Weakness>
+      

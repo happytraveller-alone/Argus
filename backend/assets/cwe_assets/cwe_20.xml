@@ -1,0 +1,1134 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="20" Name="Improper Input Validation" Abstraction="Class" Structure="Simple" Status="Stable" Diagram="/data/images/CWE-20-Diagram.png">
+        <Description>The product receives input or data, but it does
+        not validate or incorrectly validates that the input has the
+        properties that are required to process the data safely and
+        correctly.</Description>
+         <Extended_Description>
+	   <xhtml:p>Input validation is a frequently-used technique
+	   for checking potentially dangerous inputs in order to
+	   ensure that the inputs are safe for processing within the
+	   code, or when communicating with other components.</xhtml:p>
+	   <xhtml:p>Input can consist of:</xhtml:p>
+	   <xhtml:ul>
+	     <xhtml:li>raw data - strings, numbers, parameters, file contents, etc.</xhtml:li>
+	     <xhtml:li>metadata - information about the raw data, such as headers or size</xhtml:li>
+	   </xhtml:ul>
+	   <xhtml:p>Data can be simple or structured.  Structured data
+	   can be composed of many nested layers, composed of
+	   combinations of metadata and raw data, with other simple or
+	   structured data.</xhtml:p>
+	   <xhtml:p>Many properties of raw data or metadata may need
+	   to be validated upon entry into the code, such
+	   as:</xhtml:p>
+	   <xhtml:ul>
+	     <xhtml:li>specified quantities such as size, length, frequency, price, rate, number of operations, time, etc.</xhtml:li>
+	     <xhtml:li>implied or derived quantities, such as the actual size of a file instead of a specified size</xhtml:li>
+	     <xhtml:li>indexes, offsets, or positions into more complex data structures</xhtml:li>
+	     <xhtml:li>symbolic keys or other elements into hash tables, associative arrays, etc.</xhtml:li>
+	     <xhtml:li>well-formedness, i.e. syntactic correctness - compliance with expected syntax </xhtml:li>
+	     <xhtml:li>lexical token correctness - compliance with rules for what is treated as a token</xhtml:li>
+	     <xhtml:li>specified or derived type - the actual type of the input (or what the input appears to be)</xhtml:li>
+	     <xhtml:li>consistency - between individual data elements, between raw data and metadata, between references, etc.</xhtml:li>
+	     <xhtml:li>conformance to domain-specific rules, e.g. business logic </xhtml:li>
+	     <xhtml:li>equivalence - ensuring that equivalent inputs are treated the same</xhtml:li>
+	     <xhtml:li>authenticity, ownership, or other attestations about the input, e.g. a cryptographic signature to prove the source of the data</xhtml:li>
+	   </xhtml:ul>
+	   <xhtml:p>Implied or derived properties of data must often
+	   be calculated or inferred by the code itself.  Errors in
+	   deriving properties may be considered a contributing factor
+	   to improper input validation.
+	   </xhtml:p>
+       </Extended_Description>
+         <Related_Weaknesses>
+            <Related_Weakness Nature="ChildOf" CWE_ID="707" View_ID="1000" Ordinal="Primary" />
+            <Related_Weakness Nature="PeerOf" CWE_ID="345" View_ID="1000" Ordinal="Primary" />
+            <Related_Weakness Nature="CanPrecede" CWE_ID="22" View_ID="1000" />
+            <Related_Weakness Nature="CanPrecede" CWE_ID="41" View_ID="1000" />
+            <Related_Weakness Nature="CanPrecede" CWE_ID="74" View_ID="1000" />
+            <Related_Weakness Nature="CanPrecede" CWE_ID="119" View_ID="1000" />
+            <Related_Weakness Nature="CanPrecede" CWE_ID="770" View_ID="1000" />
+         </Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+         <Applicable_Platforms>
+            <Language Class="Not Language-Specific" Prevalence="Often" />
+	    <Technology Name="AI/ML" Prevalence="Often" />
+         </Applicable_Platforms>
+         <Modes_Of_Introduction>
+            <Introduction>
+               <Phase>Architecture and Design</Phase>
+            </Introduction>
+            <Introduction>
+               <Phase>Implementation</Phase>
+               <Note>
+                  <xhtml:p>REALIZATION: This weakness is caused during implementation of an architectural security tactic.</xhtml:p>
+                  <xhtml:p>If a programmer believes that an attacker cannot modify certain inputs, then the programmer might not perform any input validation at all. For example, in web applications, many programmers believe that cookies and hidden form fields can not be modified from a web browser (CWE-472), although they can be altered using a proxy or a custom program. In a client-server architecture, the programmer might assume that client-side security checks cannot be bypassed, even when a custom client could be written that skips those checks (CWE-602).</xhtml:p>
+               </Note>
+            </Introduction>
+         </Modes_Of_Introduction>
+         <Likelihood_Of_Exploit>High</Likelihood_Of_Exploit>
+         <Common_Consequences>
+            <Consequence>
+               <Scope>Availability</Scope>
+               <Impact>DoS: Crash, Exit, or Restart</Impact>
+               <Impact>DoS: Resource Consumption (CPU)</Impact>
+               <Impact>DoS: Resource Consumption (Memory)</Impact>
+               <Note>An attacker could provide unexpected values and cause a program crash or arbitrary control of resource allocation, leading to excessive consumption of resources such as memory and CPU.</Note>
+            </Consequence>
+            <Consequence>
+               <Scope>Confidentiality</Scope>
+               <Impact>Read Memory</Impact>
+               <Impact>Read Files or Directories</Impact>
+               <Note>An attacker could read confidential data if they are able to control resource references.</Note>
+            </Consequence>
+            <Consequence>
+               <Scope>Integrity</Scope>
+               <Scope>Confidentiality</Scope>
+               <Scope>Availability</Scope>
+               <Impact>Modify Memory</Impact>
+               <Impact>Execute Unauthorized Code or Commands</Impact>
+               <Note>An attacker could use malicious input to modify data or possibly alter control flow in unexpected ways, including arbitrary command execution.</Note>
+            </Consequence>
+         </Common_Consequences>
+         <Detection_Methods>
+            <Detection_Method Detection_Method_ID="DM-3">
+               <Method>Automated Static Analysis</Method>
+               <Description>
+                  <xhtml:p>Some instances of improper input validation can be detected using automated static analysis.</xhtml:p>
+                  <xhtml:p>A static analysis tool might allow the user to specify which application-specific methods or functions perform input validation; the tool might also have built-in knowledge of validation frameworks such as Struts. The tool may then suppress or de-prioritize any associated warnings. This allows the analyst to focus on areas of the software in which input validation does not appear to be present.</xhtml:p>
+                  <xhtml:p>Except in the cases described in the previous paragraph, automated static analysis might not be able to recognize when proper input validation is being performed, leading to false positives - i.e., warnings that do not have any security consequences or require any code changes.</xhtml:p>
+               </Description>
+            </Detection_Method>
+            <Detection_Method Detection_Method_ID="DM-4">
+               <Method>Manual Static Analysis</Method>
+               <Description>When custom input validation is required, such as when enforcing business rules, manual analysis is necessary to ensure that the validation is properly implemented.</Description>
+            </Detection_Method>
+            <Detection_Method Detection_Method_ID="DM-5">
+               <Method>Fuzzing</Method>
+               <Description>Fuzzing techniques can be useful for detecting input validation errors. When unexpected inputs are provided to the software, the software should not crash or otherwise become unstable, and it should generate application-controlled error messages. If exceptions or interpreter-generated error messages occur, this indicates that the input was not detected and handled within the application logic itself.</Description>
+            </Detection_Method>
+            <Detection_Method>
+               <Method>Automated Static Analysis - Binary or Bytecode</Method>
+               <Description>
+                  <xhtml:p>According to SOAR [REF-1479], the following detection techniques may be useful:</xhtml:p>
+                  <xhtml:div style="margin-left:1em;">
+                     <xhtml:div>Cost effective for partial coverage:</xhtml:div>
+                        <xhtml:ul>
+                           <xhtml:li>Bytecode Weakness Analysis - including disassembler + source code weakness analysis</xhtml:li>
+                           <xhtml:li>Binary Weakness Analysis - including disassembler + source code weakness analysis</xhtml:li>
+                        </xhtml:ul>
+                  </xhtml:div>
+               </Description>
+               <Effectiveness>SOAR Partial</Effectiveness>
+            </Detection_Method>
+            <Detection_Method>
+               <Method>Manual Static Analysis - Binary or Bytecode</Method>
+               <Description>
+                  <xhtml:p>According to SOAR [REF-1479], the following detection techniques may be useful:</xhtml:p>
+                  <xhtml:div style="margin-left:1em;">
+                     <xhtml:div>Cost effective for partial coverage:</xhtml:div>
+                        <xhtml:ul>
+                           <xhtml:li>Binary / Bytecode disassembler - then use manual analysis for vulnerabilities &amp; anomalies</xhtml:li>
+                        </xhtml:ul>
+                  </xhtml:div>
+               </Description>
+               <Effectiveness>SOAR Partial</Effectiveness>
+            </Detection_Method>
+            <Detection_Method>
+               <Method>Dynamic Analysis with Automated Results Interpretation</Method>
+               <Description>
+                  <xhtml:p>According to SOAR [REF-1479], the following detection techniques may be useful:</xhtml:p>
+                  <xhtml:div style="margin-left:1em;">
+                     <xhtml:div>Highly cost effective:</xhtml:div>
+                        <xhtml:ul>
+                           <xhtml:li>Web Application Scanner</xhtml:li>
+                           <xhtml:li>Web Services Scanner</xhtml:li>
+                           <xhtml:li>Database Scanners</xhtml:li>
+                        </xhtml:ul>
+                  </xhtml:div>
+               </Description>
+               <Effectiveness>High</Effectiveness>
+            </Detection_Method>
+            <Detection_Method>
+               <Method>Dynamic Analysis with Manual Results Interpretation</Method>
+               <Description>
+                  <xhtml:p>According to SOAR [REF-1479], the following detection techniques may be useful:</xhtml:p>
+                  <xhtml:div style="margin-left:1em;">
+                     <xhtml:div>Highly cost effective:</xhtml:div>
+                        <xhtml:ul>
+                           <xhtml:li>Fuzz Tester</xhtml:li>
+                           <xhtml:li>Framework-based Fuzzer</xhtml:li>
+                        </xhtml:ul>
+                     <xhtml:div>Cost effective for partial coverage:</xhtml:div>
+                        <xhtml:ul>
+                           <xhtml:li>Host Application Interface Scanner</xhtml:li>
+                           <xhtml:li>Monitored Virtual Environment - run potentially malicious code in sandbox / wrapper / virtual machine, see if it does anything suspicious</xhtml:li>
+                        </xhtml:ul>
+                  </xhtml:div>
+               </Description>
+               <Effectiveness>High</Effectiveness>
+            </Detection_Method>
+            <Detection_Method>
+               <Method>Manual Static Analysis - Source Code</Method>
+               <Description>
+                  <xhtml:p>According to SOAR [REF-1479], the following detection techniques may be useful:</xhtml:p>
+                  <xhtml:div style="margin-left:1em;">
+                     <xhtml:div>Highly cost effective:</xhtml:div>
+                        <xhtml:ul>
+                           <xhtml:li>Focused Manual Spotcheck - Focused manual analysis of source</xhtml:li>
+                           <xhtml:li>Manual Source Code Review (not inspections)</xhtml:li>
+                        </xhtml:ul>
+                  </xhtml:div>
+               </Description>
+               <Effectiveness>High</Effectiveness>
+            </Detection_Method>
+            <Detection_Method>
+               <Method>Automated Static Analysis - Source Code</Method>
+               <Description>
+                  <xhtml:p>According to SOAR [REF-1479], the following detection techniques may be useful:</xhtml:p>
+                  <xhtml:div style="margin-left:1em;">
+                     <xhtml:div>Highly cost effective:</xhtml:div>
+                        <xhtml:ul>
+                           <xhtml:li>Source code Weakness Analyzer</xhtml:li>
+                           <xhtml:li>Context-configured Source Code Weakness Analyzer</xhtml:li>
+                        </xhtml:ul>
+                  </xhtml:div>
+               </Description>
+               <Effectiveness>High</Effectiveness>
+            </Detection_Method>
+            <Detection_Method>
+               <Method>Architecture or Design Review</Method>
+               <Description>
+                  <xhtml:p>According to SOAR [REF-1479], the following detection techniques may be useful:</xhtml:p>
+                  <xhtml:div style="margin-left:1em;">
+                     <xhtml:div>Highly cost effective:</xhtml:div>
+                        <xhtml:ul>
+                           <xhtml:li>Inspection (IEEE 1028 standard) (can apply to requirements, design, source code, etc.)</xhtml:li>
+                           <xhtml:li>Formal Methods / Correct-By-Construction</xhtml:li>
+                        </xhtml:ul>
+                     <xhtml:div>Cost effective for partial coverage:</xhtml:div>
+                        <xhtml:ul>
+                           <xhtml:li>Attack Modeling</xhtml:li>
+                        </xhtml:ul>
+                  </xhtml:div>
+               </Description>
+               <Effectiveness>High</Effectiveness>
+            </Detection_Method>
+         </Detection_Methods>
+         <Potential_Mitigations>
+            <Mitigation>
+               <Phase>Architecture and Design</Phase>
+               <Strategy>Attack Surface Reduction</Strategy>
+               <Description>Consider using language-theoretic security (LangSec) techniques that characterize inputs using a formal language and build "recognizers" for that language.  This effectively requires parsing to be a distinct layer that effectively enforces a boundary between raw input and internal data representations, instead of allowing parser code to be scattered throughout the program, where it could be subject to errors or inconsistencies that create weaknesses. [REF-1109] [REF-1110] [REF-1111]</Description>
+            </Mitigation>
+            <Mitigation Mitigation_ID="MIT-7">
+               <Phase>Architecture and Design</Phase>
+               <Strategy>Libraries or Frameworks</Strategy>
+               <Description>Use an input validation framework such as Struts or the OWASP ESAPI Validation API. Note that using a framework does not automatically address all input validation problems; be mindful of weaknesses that could arise from misusing the framework itself (CWE-1173).</Description>
+            </Mitigation>
+            <Mitigation Mitigation_ID="MIT-6">
+               <Phase>Architecture and Design</Phase>
+               <Phase>Implementation</Phase>
+               <Strategy>Attack Surface Reduction</Strategy>
+               <Description>Understand all the potential areas where untrusted inputs can enter the product, including but not limited to: parameters or arguments, cookies, anything read from the network, environment variables, reverse DNS lookups, query results, request headers, URL components, e-mail, files, filenames, databases, and any external systems that provide data to the application. Remember that such inputs may be obtained indirectly through API calls.</Description>
+            </Mitigation>
+            <Mitigation Mitigation_ID="MIT-5">
+               <Phase>Implementation</Phase>
+               <Strategy>Input Validation</Strategy>
+               <Description>
+                  <xhtml:p>Assume all input is malicious. Use an "accept known good" input validation strategy, i.e., use a list of acceptable inputs that strictly conform to specifications. Reject any input that does not strictly conform to specifications, or transform it into something that does.</xhtml:p>
+                  <xhtml:p>When performing input validation, consider all potentially relevant properties, including length, type of input, the full range of acceptable values, missing or extra inputs, syntax, consistency across related fields, and conformance to business rules. As an example of business rule logic, "boat" may be syntactically valid because it only contains alphanumeric characters, but it is not valid if the input is only expected to contain colors such as "red" or "blue."</xhtml:p>
+                  <xhtml:p>Do not rely exclusively on looking for malicious or malformed inputs.  This is likely to miss at least one undesirable input, especially if the code's environment changes. This can give attackers enough room to bypass the intended validation. However, denylists can be useful for detecting potential attacks or determining which inputs are so malformed that they should be rejected outright.</xhtml:p>
+               </Description>
+	       <Effectiveness>High</Effectiveness>
+            </Mitigation>
+            <Mitigation>
+               <Phase>Architecture and Design</Phase>
+               <Description>
+                  <xhtml:p>For any security checks that are performed on the client side, ensure that these checks are duplicated on the server side, in order to avoid CWE-602. Attackers can bypass the client-side checks by modifying values after the checks have been performed, or by changing the client to remove the client-side checks entirely. Then, these modified values would be submitted to the server.</xhtml:p>
+                  <xhtml:p>Even though client-side checks provide minimal benefits with respect to server-side security, they are still useful. First, they can support intrusion detection. If the server receives input that should have been rejected by the client, then it may be an indication of an attack. Second, client-side error-checking can provide helpful feedback to the user about the expectations for valid input. Third, there may be a reduction in server-side processing time for accidental input errors, although this is typically a small savings.</xhtml:p>
+               </Description>
+            </Mitigation>
+            <Mitigation>
+               <Phase>Implementation</Phase>
+               <Description>When your application combines data from multiple sources, perform the validation after the sources have been combined. The individual data elements may pass the validation step but violate the intended restrictions after they have been combined.</Description>
+            </Mitigation>
+            <Mitigation Mitigation_ID="MIT-35">
+               <Phase>Implementation</Phase>
+               <Description>Be especially careful to validate all input when invoking code that crosses language boundaries, such as from an interpreted language to native code. This could create an unexpected interaction between the language boundaries. Ensure that you are not violating any of the expectations of the language with which you are interfacing. For example, even though Java may not be susceptible to buffer overflows, providing a large argument in a call to native code might trigger an overflow.</Description>
+            </Mitigation>
+            <Mitigation>
+               <Phase>Implementation</Phase>
+               <Description>Directly convert your input type into the expected data type, such as using a conversion function that translates a string into a number. After converting to the expected data type, ensure that the input's values fall within the expected range of allowable values and that multi-field consistencies are maintained.</Description>
+            </Mitigation>
+            <Mitigation>
+               <Phase>Implementation</Phase>
+               <Description>
+                  <xhtml:p>Inputs should be decoded and canonicalized to the application's current internal representation before being validated (CWE-180, CWE-181). Make sure that your application does not inadvertently decode the same input twice (CWE-174). Such errors could be used to bypass allowlist schemes by introducing dangerous inputs after they have been checked. Use libraries such as the OWASP ESAPI Canonicalization control.</xhtml:p>
+                  <xhtml:p>Consider performing repeated canonicalization until your input does not change any more. This will avoid double-decoding and similar scenarios, but it might inadvertently modify inputs that are allowed to contain properly-encoded dangerous content.</xhtml:p>
+               </Description>
+            </Mitigation>
+            <Mitigation>
+               <Phase>Implementation</Phase>
+               <Description>When exchanging data between components, ensure that both components are using the same character encoding. Ensure that the proper encoding is applied at each interface. Explicitly set the encoding you are using whenever the protocol allows you to do so.</Description>
+            </Mitigation>
+         </Potential_Mitigations>
+         <Demonstrative_Examples>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-135">
+               <Intro_Text>This example demonstrates a shopping interaction in which the user is free to specify the quantity of items to be purchased and a total is calculated.</Intro_Text>
+               <Example_Code Nature="Bad" Language="Java">
+                  <xhtml:div>...<xhtml:br />public static final double price = 20.00;<xhtml:br />int quantity = currentUser.getAttribute("quantity");<xhtml:br />double total = price * quantity;<xhtml:br />chargeUser(total);<xhtml:br />...</xhtml:div>
+               </Example_Code>
+               <Body_Text>The user has no control over the price variable, however the code does not prevent a negative value from being specified for quantity. If an attacker were to provide a negative value, then the user would have their account credited instead of debited.</Body_Text>
+            </Demonstrative_Example>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-136">
+               <Intro_Text>This example asks the user for a height and width of an m X n game board with a maximum dimension of 100 squares.</Intro_Text>
+               <Example_Code Nature="Bad" Language="C">
+                  <xhtml:div>...<xhtml:br />#define MAX_DIM 100<xhtml:br />...<xhtml:br />
+                     <xhtml:i>/* board dimensions */</xhtml:i>
+                     <xhtml:br />
+                     <xhtml:br />int m,n, error;<xhtml:br />board_square_t *board;<xhtml:br />printf("Please specify the board height: \n");<xhtml:br />error = scanf("%d", &amp;m);<xhtml:br />if ( EOF == error ){<xhtml:div style="margin-left:1em;">die("No integer passed: Die evil hacker!\n");</xhtml:div>}<xhtml:br />printf("Please specify the board width: \n");<xhtml:br />error = scanf("%d", &amp;n);<xhtml:br />if ( EOF == error ){<xhtml:div style="margin-left:1em;">die("No integer passed: Die evil hacker!\n");</xhtml:div>}<xhtml:br />if ( m &gt; MAX_DIM || n &gt; MAX_DIM ) {<xhtml:div style="margin-left:1em;">die("Value too large: Die evil hacker!\n");</xhtml:div>}<xhtml:br />board = (board_square_t*) malloc( m * n * sizeof(board_square_t));<xhtml:br />...</xhtml:div>
+               </Example_Code>
+               <Body_Text>While this code checks to make sure the user cannot specify large, positive integers and consume too much memory, it does not check for negative values supplied by the user. As a result, an attacker can perform a resource consumption (CWE-400) attack against this program by specifying two, large negative values that will not overflow, resulting in a very large memory allocation (CWE-789) and possibly a system crash. Alternatively, an attacker can provide very large negative values which will cause an integer overflow (CWE-190) and unexpected behavior will follow depending on how the values are treated in the remainder of the program.</Body_Text>
+            </Demonstrative_Example>
+            <Demonstrative_Example>
+               <Intro_Text>The following example shows a PHP application in which the programmer attempts to display a user's birthday and homepage.</Intro_Text>
+               <Example_Code Nature="Bad" Language="PHP">
+                  <xhtml:div>$birthday = $_GET['birthday'];<xhtml:br />$homepage = $_GET['homepage'];<xhtml:br />echo "Birthday: $birthday&lt;br&gt;Homepage: &lt;a href=$homepage&gt;click here&lt;/a&gt;"</xhtml:div>
+               </Example_Code>
+               <Body_Text>The programmer intended for $birthday to be in a date format and $homepage to be a valid URL. However, since the values are derived from an HTTP request, if an attacker can trick a victim into clicking a crafted URL with &lt;script&gt; tags providing the values for birthday and / or homepage, then the script will run on the client's browser when the web server echoes the content. Notice that even if the programmer were to defend the $birthday variable by restricting input to integers and dashes, it would still be possible for an attacker to provide a string of the form:</Body_Text>
+               <Example_Code Nature="Attack">
+                  <xhtml:div>2009-01-09--</xhtml:div>
+               </Example_Code>
+               <Body_Text>If this data were used in a SQL statement, it would treat the remainder of the statement as a comment. The comment could disable other security-related logic in the statement. In this case, encoding combined with input validation would be a more useful protection mechanism.</Body_Text>
+               <Body_Text>Furthermore, an XSS (CWE-79) attack or SQL injection (CWE-89) are just a few of the potential consequences when input validation is not used. Depending on the context of the code, CRLF Injection (CWE-93), Argument Injection (CWE-88), or Command Injection (CWE-77) may also be possible.</Body_Text>
+            </Demonstrative_Example>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-34">
+               <Intro_Text>The following example takes a user-supplied value to allocate an array of objects and then operates on the array.</Intro_Text>
+               <Example_Code Nature="Bad" Language="Java">
+                  <xhtml:div>private void buildList ( int untrustedListSize ){<xhtml:div style="margin-left:1em;">if ( 0 &gt; untrustedListSize ){<xhtml:div style="margin-left:1em;">die("Negative value supplied for list size, die evil hacker!");</xhtml:div>}<xhtml:br />Widget[] list = new Widget [ untrustedListSize ];<xhtml:br />list[0] = new Widget();</xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>This example attempts to build a list from a user-specified value, and even checks to ensure a non-negative value is supplied. If, however, a 0 value is provided, the code will build an array of size 0 and then try to store a new Widget in the first location, causing an exception to be thrown.</Body_Text>
+            </Demonstrative_Example>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-110">
+               <Intro_Text>This Android application has registered to handle a URL when sent an intent:</Intro_Text>
+               <Example_Code Nature="Bad" Language="Java">
+                  <xhtml:div>
+                     <xhtml:br />
+                     <xhtml:i>...</xhtml:i>
+                     <xhtml:br />IntentFilter filter = new IntentFilter("com.example.URLHandler.openURL");<xhtml:br />MyReceiver receiver = new MyReceiver();<xhtml:br />registerReceiver(receiver, filter);<xhtml:br />
+                     <xhtml:i>...</xhtml:i>
+                     <xhtml:br />
+                     <xhtml:br />public class UrlHandlerReceiver extends BroadcastReceiver {<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>@Override<xhtml:br />public void onReceive(Context context, Intent intent) {<xhtml:div style="margin-left:1em;">
+                              <xhtml:div>if("com.example.URLHandler.openURL".equals(intent.getAction())) {<xhtml:div style="margin-left:1em;">String URL = intent.getStringExtra("URLToOpen");<xhtml:br />int length = URL.length();</xhtml:div>
+                                 <xhtml:br />
+                                 <xhtml:i>...</xhtml:i>
+                                 <xhtml:br />}</xhtml:div>
+                           </xhtml:div>}</xhtml:div>
+                     </xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>The application assumes the URL will always be included in the intent. When the URL is not present, the call to getStringExtra() will return null, thus causing a null pointer exception when length() is called.</Body_Text>
+            </Demonstrative_Example>
+         </Demonstrative_Examples>
+         <Observed_Examples>
+            <Observed_Example>
+               <Reference>CVE-2024-37032</Reference>
+               <Description>Large language model (LLM) management tool does not
+               validate the format of a digest value (CWE-1287) from a
+               private, untrusted model registry, enabling relative
+               path traversal (CWE-23), a.k.a. Probllama</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2024-37032</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2022-45918</Reference>
+               <Description>Chain: a learning management tool debugger uses external input to locate previous session logs (CWE-73) and does not properly validate the given path (CWE-20), allowing for filesystem path traversal using "../" sequences (CWE-24)</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2022-45918</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2021-30860</Reference>
+               <Description>Chain: improper input validation (CWE-20) leads to integer overflow (CWE-190) in mobile OS, as exploited in the wild per CISA KEV.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2021-30860</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2021-30663</Reference>
+               <Description>Chain: improper input validation (CWE-20) leads to integer overflow (CWE-190) in mobile OS, as exploited in the wild per CISA KEV.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2021-30663</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2021-22205</Reference>
+               <Description>Chain: backslash followed by a newline can bypass a validation step (CWE-20), leading to eval injection (CWE-95), as exploited in the wild per CISA KEV.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2021-22205</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2021-21220</Reference>
+               <Description>Chain: insufficient input validation (CWE-20) in browser allows heap corruption (CWE-787), as exploited in the wild per CISA KEV.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2021-21220</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2020-9054</Reference>
+               <Description>Chain: improper input validation (CWE-20) in username parameter, leading to OS command injection (CWE-78), as exploited in the wild per CISA KEV.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2020-9054</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2020-3452</Reference>
+               <Description>Chain: security product has improper input validation (CWE-20) leading to directory traversal (CWE-22), as exploited in the wild per CISA KEV.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2020-3452</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2020-3161</Reference>
+               <Description>Improper input validation of HTTP requests in IP phone, as exploited in the wild per CISA KEV.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2020-3161</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2020-3580</Reference>
+               <Description>Chain: improper input validation (CWE-20) in firewall product leads to XSS (CWE-79), as exploited in the wild per CISA KEV.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2020-3580</Link>
+            </Observed_Example>
+            <Observed_Example>
+            <Reference>CVE-2021-37147</Reference>
+            <Description>Chain: caching proxy server has improper input validation (CWE-20) of headers, allowing HTTP response smuggling (CWE-444) using an "LF line ending"</Description>
+            <Link>https://www.cve.org/CVERecord?id=CVE-2021-37147</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2008-5305</Reference>
+               <Description>Eval injection in Perl program using an ID that should only contain hyphens and numbers.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2008-5305</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2008-2223</Reference>
+               <Description>SQL injection through an ID that was supposed to be numeric.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2008-2223</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2008-3477</Reference>
+               <Description>lack of input validation in spreadsheet program leads to buffer overflows, integer overflows, array index errors, and memory corruption.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2008-3477</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2008-3843</Reference>
+               <Description>insufficient validation enables XSS</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2008-3843</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2008-3174</Reference>
+               <Description>driver in security product allows code execution due to insufficient validation</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2008-3174</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2007-3409</Reference>
+               <Description>infinite loop from DNS packet with a label that points to itself</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2007-3409</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2006-6870</Reference>
+               <Description>infinite loop from DNS packet with a label that points to itself</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2006-6870</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2008-1303</Reference>
+               <Description>missing parameter leads to crash</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2008-1303</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2007-5893</Reference>
+               <Description>HTTP request with missing protocol version number leads to crash</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2007-5893</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2006-6658</Reference>
+               <Description>request with missing parameters leads to information exposure</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2006-6658</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2008-4114</Reference>
+               <Description>system crash with offset value that is inconsistent with packet size</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2008-4114</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2006-3790</Reference>
+               <Description>size field that is inconsistent with packet size leads to buffer over-read</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2006-3790</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2008-2309</Reference>
+               <Description>product uses a denylist to identify potentially dangerous content, allowing attacker to bypass a warning</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2008-2309</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2008-3494</Reference>
+               <Description>security bypass via an extra header</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2008-3494</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2008-3571</Reference>
+               <Description>empty packet triggers reboot</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2008-3571</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2006-5525</Reference>
+               <Description>incomplete denylist allows SQL injection</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2006-5525</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2008-1284</Reference>
+               <Description>NUL byte in theme name causes directory traversal impact to be worse</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2008-1284</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2008-0600</Reference>
+               <Description>kernel does not validate an incoming pointer before dereferencing it</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2008-0600</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2008-1738</Reference>
+               <Description>anti-virus product has insufficient input validation of hooked SSDT functions, allowing code execution</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2008-1738</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2008-1737</Reference>
+               <Description>anti-virus product allows DoS via zero-length field</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2008-1737</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2008-3464</Reference>
+               <Description>driver does not validate input from userland to the kernel</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2008-3464</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2008-2252</Reference>
+               <Description>kernel does not validate parameters sent in from userland, allowing code execution</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2008-2252</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2008-2374</Reference>
+               <Description>lack of validation of string length fields allows memory consumption or buffer over-read</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2008-2374</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2008-1440</Reference>
+               <Description>lack of validation of length field leads to infinite loop</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2008-1440</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2008-1625</Reference>
+               <Description>lack of validation of input to an IOCTL allows code execution</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2008-1625</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2008-3177</Reference>
+               <Description>zero-length attachment causes crash</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2008-3177</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2007-2442</Reference>
+               <Description>zero-length input causes free of uninitialized pointer</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2007-2442</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2008-5563</Reference>
+               <Description>crash via a malformed frame structure</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2008-5563</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2008-5285</Reference>
+               <Description>infinite loop from a long SMTP request</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2008-5285</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2008-3812</Reference>
+               <Description>router crashes with a malformed packet</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2008-3812</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2008-3680</Reference>
+               <Description>packet with invalid version number leads to NULL pointer dereference</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2008-3680</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2008-3660</Reference>
+               <Description>crash via multiple "." characters in file extension</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2008-3660</Link>
+            </Observed_Example>
+         </Observed_Examples>
+         <Taxonomy_Mappings>
+            <Taxonomy_Mapping Taxonomy_Name="7 Pernicious Kingdoms">
+               <Entry_Name>Input validation and representation</Entry_Name>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="OWASP Top Ten 2004">
+               <Entry_ID>A1</Entry_ID>
+               <Entry_Name>Unvalidated Input</Entry_Name>
+               <Mapping_Fit>CWE More Specific</Mapping_Fit>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="CERT C Secure Coding">
+               <Entry_ID>ERR07-C</Entry_ID>
+               <Entry_Name>Prefer functions that support error checking over equivalent functions that don't</Entry_Name>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="CERT C Secure Coding">
+               <Entry_ID>FIO30-C</Entry_ID>
+               <Entry_Name>Exclude user input from format strings</Entry_Name>
+               <Mapping_Fit>CWE More Abstract</Mapping_Fit>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="CERT C Secure Coding">
+               <Entry_ID>MEM10-C</Entry_ID>
+               <Entry_Name>Define and use a pointer validation function</Entry_Name>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="WASC">
+               <Entry_ID>20</Entry_ID>
+               <Entry_Name>Improper Input Handling</Entry_Name>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="Software Fault Patterns">
+               <Entry_ID>SFP25</Entry_ID>
+               <Entry_Name>Tainted input to variable</Entry_Name>
+            </Taxonomy_Mapping>
+         </Taxonomy_Mappings>
+         <Related_Attack_Patterns>
+            <Related_Attack_Pattern CAPEC_ID="10" />
+            <Related_Attack_Pattern CAPEC_ID="101" />
+            <Related_Attack_Pattern CAPEC_ID="104" />
+            <Related_Attack_Pattern CAPEC_ID="108" />
+            <Related_Attack_Pattern CAPEC_ID="109" />
+            <Related_Attack_Pattern CAPEC_ID="110" />
+            <Related_Attack_Pattern CAPEC_ID="120" />
+            <Related_Attack_Pattern CAPEC_ID="13" />
+            <Related_Attack_Pattern CAPEC_ID="135" />
+            <Related_Attack_Pattern CAPEC_ID="136" />
+            <Related_Attack_Pattern CAPEC_ID="14" />
+            <Related_Attack_Pattern CAPEC_ID="153" />
+            <Related_Attack_Pattern CAPEC_ID="182" />
+            <Related_Attack_Pattern CAPEC_ID="209" />
+            <Related_Attack_Pattern CAPEC_ID="22" />
+            <Related_Attack_Pattern CAPEC_ID="23" />
+            <Related_Attack_Pattern CAPEC_ID="230" />
+            <Related_Attack_Pattern CAPEC_ID="231" />
+            <Related_Attack_Pattern CAPEC_ID="24" />
+            <Related_Attack_Pattern CAPEC_ID="250" />
+            <Related_Attack_Pattern CAPEC_ID="261" />
+            <Related_Attack_Pattern CAPEC_ID="267" />
+            <Related_Attack_Pattern CAPEC_ID="28" />
+            <Related_Attack_Pattern CAPEC_ID="3" />
+            <Related_Attack_Pattern CAPEC_ID="31" />
+            <Related_Attack_Pattern CAPEC_ID="42" />
+            <Related_Attack_Pattern CAPEC_ID="43" />
+            <Related_Attack_Pattern CAPEC_ID="45" />
+            <Related_Attack_Pattern CAPEC_ID="46" />
+            <Related_Attack_Pattern CAPEC_ID="47" />
+            <Related_Attack_Pattern CAPEC_ID="473" />
+            <Related_Attack_Pattern CAPEC_ID="52" />
+            <Related_Attack_Pattern CAPEC_ID="53" />
+            <Related_Attack_Pattern CAPEC_ID="588" />
+            <Related_Attack_Pattern CAPEC_ID="63" />
+            <Related_Attack_Pattern CAPEC_ID="64" />
+            <Related_Attack_Pattern CAPEC_ID="664" />
+            <Related_Attack_Pattern CAPEC_ID="67" />
+            <Related_Attack_Pattern CAPEC_ID="7" />
+            <Related_Attack_Pattern CAPEC_ID="71" />
+            <Related_Attack_Pattern CAPEC_ID="72" />
+            <Related_Attack_Pattern CAPEC_ID="73" />
+            <Related_Attack_Pattern CAPEC_ID="78" />
+            <Related_Attack_Pattern CAPEC_ID="79" />
+            <Related_Attack_Pattern CAPEC_ID="8" />
+            <Related_Attack_Pattern CAPEC_ID="80" />
+            <Related_Attack_Pattern CAPEC_ID="81" />
+            <Related_Attack_Pattern CAPEC_ID="83" />
+            <Related_Attack_Pattern CAPEC_ID="85" />
+            <Related_Attack_Pattern CAPEC_ID="88" />
+            <Related_Attack_Pattern CAPEC_ID="9" />
+         </Related_Attack_Patterns>
+         <References>
+            <Reference External_Reference_ID="REF-6" />
+            <Reference External_Reference_ID="REF-166" />
+            <Reference External_Reference_ID="REF-45" />
+            <Reference External_Reference_ID="REF-168" Section="Input Validation Attacks" />
+            <Reference External_Reference_ID="REF-48" />
+            <Reference External_Reference_ID="REF-170" />
+            <Reference External_Reference_ID="REF-7" Section="Chapter 10, &quot;All Input Is Evil!&quot; Page 341" />
+            <Reference External_Reference_ID="REF-1109" />
+            <Reference External_Reference_ID="REF-1110" />
+            <Reference External_Reference_ID="REF-1111" />
+            <Reference External_Reference_ID="REF-1287" Section="Details of Problematic Mappings" />
+            <Reference External_Reference_ID="REF-1479" />
+         </References>
+         <Mapping_Notes>
+            <Usage>Discouraged</Usage>
+            <Rationale>CWE-20 is commonly misused in low-information vulnerability reports when lower-level CWEs could be used instead, or when more details about the vulnerability are available [REF-1287]. It is not useful for trend analysis. It is also a level-1 Class (i.e., a child of a Pillar). Finally, CWE-20 is often misused when the root cause issue is related to how input is incorrectly transformed, instead of "validated" to be correct as-is.</Rationale>
+            <Comments>
+	      <xhtml:p>Within CWE, the "input validation" term focuses on the act of checking whether an input is already safe, which is different from other techniques that ensure safe processing of input.  Carefully perform root-cause analysis to be sure that the issue is not due to techniques that attempt to transform potentially-dangerous input into something safe, such as filtering (CWE-790) - which attempts to remove dangerous inputs - or encoding/escaping (CWE-116), which attempts to ensure that the input is not misinterpreted when it is included in output to another component.</xhtml:p>
+	      <xhtml:p>If the issue is truly due to imroper input validation, consider using lower-level children.</xhtml:p>
+	    </Comments>
+            <Reasons>
+               <Reason Type="Frequent Misuse" />
+               <Reason Type="Frequent Misinterpretation" />
+               <Reason Type="Abstraction" />
+            </Reasons>
+			<Suggestions>
+			  <Suggestion CWE_ID="1173" Comment="Not Using an Input Validation Framework" />
+			  <Suggestion CWE_ID="116" Comment="Improper Encoding or Escaping of Output" />
+			  <Suggestion CWE_ID="790" Comment="Improper Filtering of Special Elements" />
+			  <Suggestion CWE_ID="1284" Comment="Specified Quantity" />
+			  <Suggestion CWE_ID="1285" Comment="Specified Index, Position, or Offset" />
+			  <Suggestion CWE_ID="1286" Comment="Syntactic Correctness" />
+			  <Suggestion CWE_ID="1287" Comment="Specified Type" />
+			  <Suggestion CWE_ID="1288" Comment="Consistency within Input" />
+			  <Suggestion CWE_ID="1289" Comment="Unsafe Equivalence" />
+			</Suggestions>
+         </Mapping_Notes>
+         <Notes>
+            <Note Type="Relationship">
+               <xhtml:p>CWE-116 and CWE-20 have a close association because, depending on the nature of the structured message, proper input validation can indirectly prevent special characters from changing the meaning of a structured message. For example, by validating that a numeric ID field should only contain the 0-9 characters, the programmer effectively prevents injection attacks.</xhtml:p>
+	       <xhtml:p>Multiple techniques exist to transform potentially dangerous input into something safe, which is different than "validation," which is a technique to check if an input is already safe. CWE users need to be cautious during root cause analysis to ensure that an issue is truly an input-validation problem.</xhtml:p>
+            </Note>
+            <Note Type="Maintenance">As of 2020, this entry is used more often than preferred, and it is a source of frequent confusion. It is being actively modified for CWE 4.1 and subsequent versions.</Note>
+            <Note Type="Maintenance">Concepts such as validation, data transformation, and neutralization are being refined, so relationships between CWE-20 and other entries such as CWE-707 may change in future versions, along with an update to the Vulnerability Theory document.</Note>
+            <Note Type="Maintenance">Input validation - whether missing or incorrect - is such an essential and widespread part of secure development that it is implicit in many different weaknesses. Traditionally, problems such as buffer overflows and XSS have been classified as input validation problems by many security professionals. However, input validation is not necessarily the only protection mechanism available for avoiding such problems, and in some cases it is not even sufficient. The CWE team has begun capturing these subtleties in chains within the Research Concepts view (CWE-1000), but more work is needed.</Note>
+            <Note Type="Terminology">
+               <xhtml:p>The "input validation" term is extremely common, but it is used in many different ways. In some cases its usage can obscure the real underlying weakness or otherwise hide chaining and composite relationships.</xhtml:p>
+               <xhtml:p>Some people use "input validation" as a general term that covers many different neutralization techniques for ensuring that input is appropriate, such as filtering, i.e., attempting to remove dangerous inputs (related to CWE-790); encoding/escaping, i.e., attempting to ensure that the input is not misinterpreted when it is included in output to another component (related to CWE-116); or canonicalization, which often indirectly removes otherwise-dangerous inputs.  Others use the term in a narrower context to simply mean "checking if an input conforms to expectations without changing it."  CWE uses this narrow interpretation.</xhtml:p>
+	       <xhtml:p>Note that "input validation" has very different
+	       meanings to different people, or within different
+	       classification schemes.  Caution must be used when
+	       referencing this CWE entry or mapping to it.  For example,
+	       some weaknesses might involve inadvertently giving control
+	       to an attacker over an input when they should not be able
+	       to provide an input at all, but sometimes this is referred
+	       to as input validation.</xhtml:p>
+	   <xhtml:p>Finally, it is important to emphasize that the
+	   distinctions between input validation and output escaping
+	   are often blurred.  Developers must be careful to
+	   understand the difference, including how input validation
+	   is not always sufficient to prevent vulnerabilities,
+	   especially when less stringent data types must be
+	   supported, such as free-form text. Consider a SQL injection
+	   scenario in which a person's last name is inserted into a
+	   query. The name "O'Reilly" would likely pass the validation
+	   step since it is a common last name in the English
+	   language. However, this valid name cannot be directly
+	   inserted into the database because it contains the "'"
+	   apostrophe character, which would need to be escaped or
+	   otherwise transformed. In this case, removing the
+	   apostrophe might reduce the risk of SQL injection, but it
+	   would produce incorrect behavior because the wrong name
+	   would be recorded.</xhtml:p>
+            </Note>
+         </Notes>
+         <Content_History>
+            <Submission>
+               <Submission_Name>7 Pernicious Kingdoms</Submission_Name>
+               <Submission_Date>2006-07-19</Submission_Date>
+               <Submission_Version>Draft 3</Submission_Version>
+               <Submission_ReleaseDate>2006-07-19</Submission_ReleaseDate>
+            </Submission>
+            <Modification>
+               <Modification_Name>Eric Dalci</Modification_Name>
+               <Modification_Organization>Cigital</Modification_Organization>
+               <Modification_Date>2008-07-01</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>updated Potential_Mitigations, Time_of_Introduction</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Organization>Veracode</Modification_Organization>
+               <Modification_Date>2008-08-15</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>Suggested OWASP Top Ten 2004 mapping</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2008-09-08</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships, Other_Notes, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2008-11-24</Modification_Date>
+               <Modification_Version>1.1</Modification_Version>
+               <Modification_ReleaseDate>2008-11-25</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2009-01-12</Modification_Date>
+               <Modification_Version>1.2</Modification_Version>
+               <Modification_ReleaseDate>2009-01-12</Modification_ReleaseDate>
+               <Modification_Comment>updated Applicable_Platforms, Common_Consequences, Demonstrative_Examples, Description, Likelihood_of_Exploit, Name, Observed_Examples, Other_Notes, Potential_Mitigations, References, Relationship_Notes, Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2009-03-10</Modification_Date>
+               <Modification_Version>1.3</Modification_Version>
+               <Modification_ReleaseDate>2009-03-10</Modification_ReleaseDate>
+               <Modification_Comment>updated Description, Potential_Mitigations</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2009-05-27</Modification_Date>
+               <Modification_Version>1.4</Modification_Version>
+               <Modification_ReleaseDate>2009-05-27</Modification_ReleaseDate>
+               <Modification_Comment>updated Related_Attack_Patterns</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2009-07-27</Modification_Date>
+               <Modification_Version>1.5</Modification_Version>
+               <Modification_ReleaseDate>2009-07-27</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2009-10-29</Modification_Date>
+               <Modification_Version>1.6</Modification_Version>
+               <Modification_ReleaseDate>2009-10-29</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences, Demonstrative_Examples, Maintenance_Notes, Modes_of_Introduction, Observed_Examples, Relationships, Research_Gaps, Terminology_Notes</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2009-12-28</Modification_Date>
+               <Modification_Version>1.7</Modification_Version>
+               <Modification_ReleaseDate>2009-12-28</Modification_ReleaseDate>
+               <Modification_Comment>updated Applicable_Platforms, Demonstrative_Examples, Detection_Factors</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2010-02-16</Modification_Date>
+               <Modification_Version>1.8</Modification_Version>
+               <Modification_ReleaseDate>2010-02-16</Modification_ReleaseDate>
+               <Modification_Comment>updated Detection_Factors, Potential_Mitigations, References, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2010-04-05</Modification_Date>
+               <Modification_Version>1.8.1</Modification_Version>
+               <Modification_ReleaseDate>2010-04-05</Modification_ReleaseDate>
+               <Modification_Comment>updated Related_Attack_Patterns</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2010-06-21</Modification_Date>
+               <Modification_Version>1.9</Modification_Version>
+               <Modification_ReleaseDate>2010-06-21</Modification_ReleaseDate>
+               <Modification_Comment>updated Potential_Mitigations, Research_Gaps, Terminology_Notes</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2010-09-27</Modification_Date>
+               <Modification_Version>1.10</Modification_Version>
+               <Modification_ReleaseDate>2010-09-27</Modification_ReleaseDate>
+               <Modification_Comment>updated Potential_Mitigations, Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2010-12-13</Modification_Date>
+               <Modification_Version>1.11</Modification_Version>
+               <Modification_ReleaseDate>2010-12-13</Modification_ReleaseDate>
+               <Modification_Comment>updated Demonstrative_Examples, Description</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-03-29</Modification_Date>
+               <Modification_Version>1.12</Modification_Version>
+               <Modification_ReleaseDate>2011-03-30</Modification_ReleaseDate>
+               <Modification_Comment>updated Observed_Examples</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-06-01</Modification_Date>
+               <Modification_Version>1.13</Modification_Version>
+               <Modification_ReleaseDate>2011-06-01</Modification_ReleaseDate>
+               <Modification_Comment>updated Applicable_Platforms, Common_Consequences, Relationship_Notes</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-09-13</Modification_Date>
+               <Modification_Version>2.1</Modification_Version>
+               <Modification_ReleaseDate>2011-09-13</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2012-05-11</Modification_Date>
+               <Modification_Version>2.2</Modification_Version>
+               <Modification_ReleaseDate>2012-05-15</Modification_ReleaseDate>
+               <Modification_Comment>updated Demonstrative_Examples, References, Related_Attack_Patterns, Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2012-10-30</Modification_Date>
+               <Modification_Version>2.3</Modification_Version>
+               <Modification_ReleaseDate>2012-10-30</Modification_ReleaseDate>
+               <Modification_Comment>updated Potential_Mitigations</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2013-02-21</Modification_Date>
+               <Modification_Version>2.4</Modification_Version>
+               <Modification_ReleaseDate>2013-02-21</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2013-07-17</Modification_Date>
+               <Modification_Version>2.5</Modification_Version>
+               <Modification_ReleaseDate>2013-07-17</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2014-02-18</Modification_Date>
+               <Modification_Version>2.6</Modification_Version>
+               <Modification_ReleaseDate>2014-02-19</Modification_ReleaseDate>
+               <Modification_Comment>updated Demonstrative_Examples, Related_Attack_Patterns</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2014-07-30</Modification_Date>
+               <Modification_Version>2.8</Modification_Version>
+               <Modification_ReleaseDate>2014-07-31</Modification_ReleaseDate>
+               <Modification_Comment>updated Detection_Factors, Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2015-12-07</Modification_Date>
+               <Modification_Version>2.9</Modification_Version>
+               <Modification_ReleaseDate>2015-12-07</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2017-01-19</Modification_Date>
+               <Modification_Version>2.10</Modification_Version>
+               <Modification_ReleaseDate>2017-01-19</Modification_ReleaseDate>
+               <Modification_Comment>updated Related_Attack_Patterns, Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2017-05-03</Modification_Date>
+               <Modification_Version>2.11</Modification_Version>
+               <Modification_ReleaseDate>2017-05-05</Modification_ReleaseDate>
+               <Modification_Comment>updated Related_Attack_Patterns, Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2017-11-08</Modification_Date>
+               <Modification_Version>3.0</Modification_Version>
+               <Modification_ReleaseDate>2017-11-08</Modification_ReleaseDate>
+               <Modification_Comment>updated Modes_of_Introduction, References, Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2018-03-27</Modification_Date>
+               <Modification_Version>3.1</Modification_Version>
+               <Modification_ReleaseDate>2018-03-27</Modification_ReleaseDate>
+               <Modification_Comment>updated References</Modification_Comment>
+            </Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2019-01-03</Modification_Date>
+					<Modification_Version>3.2</Modification_Version>
+					<Modification_ReleaseDate>2019-01-03</Modification_ReleaseDate>
+					<Modification_Comment>updated Related_Attack_Patterns, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2019-06-20</Modification_Date>
+					<Modification_Version>3.3</Modification_Version>
+					<Modification_ReleaseDate>2019-06-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Related_Attack_Patterns, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2019-09-19</Modification_Date>
+					<Modification_Version>3.4</Modification_Version>
+					<Modification_ReleaseDate>2019-09-19</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-02-24</Modification_Date>
+					<Modification_Version>4.0</Modification_Version>
+					<Modification_ReleaseDate>2020-02-24</Modification_ReleaseDate>
+					<Modification_Comment>updated Potential_Mitigations, References, Related_Attack_Patterns, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-06-25</Modification_Date>
+					<Modification_Version>4.1</Modification_Version>
+					<Modification_ReleaseDate>2020-06-25</Modification_ReleaseDate>
+					<Modification_Comment>updated Applicable_Platforms, Demonstrative_Examples, Description, Maintenance_Notes, Observed_Examples, Potential_Mitigations, References, Relationship_Notes, Relationships, Research_Gaps, Terminology_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-08-20</Modification_Date>
+					<Modification_Version>4.2</Modification_Version>
+					<Modification_ReleaseDate>2020-08-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Potential_Mitigations, Related_Attack_Patterns, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-03-15</Modification_Date>
+					<Modification_Version>4.4</Modification_Version>
+					<Modification_ReleaseDate>2021-03-15</Modification_ReleaseDate>
+					<Modification_Comment>updated Description, Potential_Mitigations</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-07-20</Modification_Date>
+					<Modification_Version>4.5</Modification_Version>
+					<Modification_ReleaseDate>2021-07-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Related_Attack_Patterns, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-10-28</Modification_Date>
+					<Modification_Version>4.6</Modification_Version>
+					<Modification_ReleaseDate>2021-10-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-04-28</Modification_Date>
+					<Modification_Version>4.7</Modification_Version>
+					<Modification_ReleaseDate>2022-04-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-06-28</Modification_Date>
+					<Modification_Version>4.8</Modification_Version>
+					<Modification_ReleaseDate>2022-06-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Observed_Examples, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-10-13</Modification_Date>
+					<Modification_Version>4.9</Modification_Version>
+					<Modification_ReleaseDate>2022-10-13</Modification_ReleaseDate>
+					<Modification_Comment>updated References, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated References, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-10-26</Modification_Date>
+					<Modification_Version>4.13</Modification_Version>
+					<Modification_ReleaseDate>2023-10-26</Modification_ReleaseDate>
+					<Modification_Comment>updated Observed_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2024-07-16</Modification_Date>
+					<Modification_Version>4.15</Modification_Version>
+					<Modification_ReleaseDate>2024-07-16</Modification_ReleaseDate>
+					<Modification_Comment>updated Observed_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2024-11-19</Modification_Date>
+					<Modification_Version>4.16</Modification_Version>
+					<Modification_ReleaseDate>2024-11-19</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-04-03</Modification_Date>
+					<Modification_Version>4.17</Modification_Version>
+					<Modification_ReleaseDate>2025-04-03</Modification_ReleaseDate>
+					<Modification_Comment>updated Common_Consequences, Description, Diagram, Mapping_Notes, Potential_Mitigations, Relationship_Notes, Terminology_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-09-09</Modification_Date>
+					<Modification_Version>4.18</Modification_Version>
+					<Modification_ReleaseDate>2025-09-09</Modification_ReleaseDate>
+					<Modification_Comment>updated Detection_Factors, References</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships, Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2026-04-30</Modification_Date>
+					<Modification_Version>4.20</Modification_Version>
+					<Modification_ReleaseDate>2026-04-30</Modification_ReleaseDate>
+					<Modification_Comment>updated Applicable_Platforms, Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Contribution Type="Content">
+				  <Contribution_Name>Abhi Balakrishnan</Contribution_Name>
+				  <Contribution_Date>2024-02-29</Contribution_Date>
+				  <Contribution_Version>4.17</Contribution_Version>
+				  <Contribution_ReleaseDate>2025-04-03</Contribution_ReleaseDate>
+				  <Contribution_Comment>Contributed usability diagram concepts used by the CWE team.</Contribution_Comment>
+				</Contribution>
+            <Previous_Entry_Name Date="2009-01-12">Insufficient Input Validation</Previous_Entry_Name>
+         </Content_History>
+      </Weakness>
+      

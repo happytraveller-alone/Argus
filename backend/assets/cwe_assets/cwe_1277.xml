@@ -1,0 +1,219 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" ID="1277" Name="Firmware Not Updateable" Abstraction="Base" Structure="Simple" Status="Draft">
+			<Description>The product does not provide its
+			users with the ability to update or patch its
+			firmware to address any vulnerabilities or
+			weaknesses that may be present.</Description>
+			<Extended_Description>Without the ability to
+			patch or update firmware, consumers will be
+			left vulnerable to exploitation of any known
+			vulnerabilities, or any vulnerabilities that
+			are discovered in the future. This can expose
+			consumers to permanent risk throughout the
+			entire lifetime of the device, which could be
+			years or decades. Some external protective
+			measures and mitigations might be employed to
+			aid in preventing or reducing the risk of
+			malicious attack, but the root weakness cannot
+			be corrected.</Extended_Description>
+			<Related_Weaknesses>
+			  <Related_Weakness Nature="ChildOf" CWE_ID="1329" View_ID="1000" Ordinal="Primary" />
+			</Related_Weaknesses>
+		 <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+		 </Weakness_Ordinalities>
+			<Applicable_Platforms>	
+				<Language Class="Not Language-Specific" Prevalence="Undetermined" />
+				<Operating_System Class="Not OS-Specific" Prevalence="Undetermined" />
+				<Architecture Class="Not Architecture-Specific" Prevalence="Undetermined" />
+				<Technology Class="Not Technology-Specific" Prevalence="Undetermined" />
+				</Applicable_Platforms>
+			<Modes_Of_Introduction>
+				<Introduction>
+					<Phase>Requirements</Phase>
+					<Note>Requirements development might not consider the importance of updates over the lifetime of the product, or might not choose the ability due to concerns such as expense or speed to market.</Note>
+				</Introduction>
+				<Introduction>
+					<Phase>Architecture and Design</Phase>
+					<Note>Lack of planning during architecture development and design, or external pressures such as speed to market, could ignore the capability to update.</Note>
+				</Introduction>
+				<Introduction>
+					<Phase>Implementation</Phase>
+					<Note>The weakness can appear through oversight during implementation.</Note>
+				</Introduction>
+			</Modes_Of_Introduction>
+			<Common_Consequences>
+				<Consequence>
+					<Scope>Confidentiality</Scope>
+					<Scope>Integrity</Scope>
+					<Scope>Access Control</Scope>
+					<Scope>Authentication</Scope>
+					<Scope>Authorization</Scope>
+					<Impact>Gain Privileges or Assume Identity</Impact>
+					<Impact>Bypass Protection Mechanism</Impact>
+					<Impact>Execute Unauthorized Code or Commands</Impact>
+					<Impact>DoS: Crash, Exit, or Restart</Impact>
+					<Likelihood>Medium</Likelihood>
+					<Note>If an attacker can identify an exploitable vulnerability in one device that has no means of patching, the attack may be used against an entire class of devices.</Note>
+				</Consequence>
+			</Common_Consequences>
+			<Detection_Methods>
+			  <Detection_Method>
+			    <Method>Manual Analysis</Method>
+			    <Description>Create a new installable boot image of the current build with a minor version number change. Use the standard installation method to update the boot image. Verify that the minor version number has changed. Create a fake image. Verify that the boot updater will not install the fake image and generates an "invalid image" error message or equivalent.</Description>
+			    <Effectiveness>High</Effectiveness>
+			  </Detection_Method>
+			  <Detection_Method>
+			    <Method>Architecture or Design Review</Method>
+			    <Description>Check the consumer or maintainer documentation, the architecture/design documentation, or the original requirements to ensure that the documentation includes details for how to update the firmware.</Description>
+			    <Effectiveness>Moderate</Effectiveness>
+			  </Detection_Method>
+			  <Detection_Method>
+			    <Method>Manual Dynamic Analysis</Method>
+			    <Description>Determine if there is a lack of a capability to update read-only memory (ROM) structure. This could manifest as a difference between the latest firmware version and the current version within the device.</Description>
+			    <Effectiveness>High</Effectiveness>
+			  </Detection_Method>
+			</Detection_Methods>
+			<Potential_Mitigations>
+				<Mitigation>
+					<Phase>Requirements</Phase>
+					<Description>Specify requirements to include the ability to update the firmware. Include integrity checks and authentication to ensure that untrusted firmware cannot be installed.</Description>
+				</Mitigation>
+				<Mitigation>
+					<Phase>Architecture and Design</Phase>
+					<Description>Design the device to allow for updating the firmware. Ensure that the design specifies how to distribute the updates and ensure their integrity and authentication.</Description>
+				</Mitigation>
+				<Mitigation>
+					<Phase>Implementation</Phase>
+					<Description>Implement the necessary functionality to allow the firmware to be updated.</Description>
+				</Mitigation>
+			</Potential_Mitigations>
+			<Demonstrative_Examples>
+				<Demonstrative_Example Demonstrative_Example_ID="DX-145">
+					<Intro_Text>A refrigerator has an Internet interface for the official purpose of alerting the manufacturer when that refrigerator detects a fault. Because the device is attached to the Internet, the refrigerator is a target for hackers who may wish to use the device other potentially more nefarious purposes.</Intro_Text>
+					<Example_Code Nature="Bad" Language="Other">The refrigerator has no means of patching and is hacked, becoming a spewer of email spam.</Example_Code>
+					<Example_Code Nature="Good" Language="Other">The device automatically patches itself and provides considerable more protection against being hacked.</Example_Code>
+				</Demonstrative_Example>
+			</Demonstrative_Examples>
+			<Observed_Examples>
+      			  <Observed_Example>
+        		    <Reference>CVE-2020-9054</Reference>
+        		    <Description>Chain: network-attached storage (NAS) device has a critical OS command injection (CWE-78) vulnerability that is actively exploited to place IoT devices into a botnet, but some products are "end-of-support" and cannot be patched (CWE-1277). [REF-1097]</Description>
+        		    <Link>https://www.cve.org/CVERecord?id=CVE-2020-9054</Link>
+      			  </Observed_Example>
+			  <Observed_Example>
+			    <Reference>[REF-1095]</Reference>
+			    <Description>A hardware "smart lock" has weak key generation that allows attackers to steal the key by BLE sniffing, but the device's firmware cannot be upgraded and hence remains vulnerable [REF-1095].</Description>
+			    <Link>https://www.theregister.com/2019/12/11/f_secure_keywe/</Link>
+      			  </Observed_Example>
+      			</Observed_Examples>
+         <Related_Attack_Patterns>
+            <Related_Attack_Pattern CAPEC_ID="682" />
+         </Related_Attack_Patterns>
+         <References>
+				<Reference External_Reference_ID="REF-1095" />
+				<Reference External_Reference_ID="REF-1096" />
+				<Reference External_Reference_ID="REF-1097" />
+			</References>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Base level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+			<Notes>
+                <Note Type="Terminology">The "firmware" term does not have a single commonly-shared definition, so there may be variations in how this CWE entry is interpreted during mapping.</Note>
+            </Notes>
+			<Content_History>
+				<Submission>
+					<Submission_Name>Paul A. Wortman</Submission_Name>
+					<Submission_Organization>Wells Fargo</Submission_Organization>
+					<Submission_Date>2020-05-13</Submission_Date>
+					<Submission_Version>4.1</Submission_Version>
+					<Submission_ReleaseDate>2020-02-24</Submission_ReleaseDate>
+				</Submission>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-08-20</Modification_Date>
+					<Modification_Version>4.2</Modification_Version>
+					<Modification_ReleaseDate>2020-08-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Common_Consequences, Demonstrative_Examples, Description, Potential_Mitigations</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-12-10</Modification_Date>
+					<Modification_Version>4.3</Modification_Version>
+					<Modification_ReleaseDate>2020-12-10</Modification_ReleaseDate>
+					<Modification_Comment>updated Description, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-03-15</Modification_Date>
+					<Modification_Version>4.4</Modification_Version>
+					<Modification_ReleaseDate>2021-03-15</Modification_ReleaseDate>
+					<Modification_Comment>updated Maintenance_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-07-20</Modification_Date>
+					<Modification_Version>4.5</Modification_Version>
+					<Modification_ReleaseDate>2021-07-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples, Maintenance_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-10-28</Modification_Date>
+					<Modification_Version>4.6</Modification_Version>
+					<Modification_ReleaseDate>2021-10-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Common_Consequences, Description, Detection_Factors, Maintenance_Notes, Modes_of_Introduction, Observed_Examples, References, Relationships, Terminology_Notes, Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-04-28</Modification_Date>
+					<Modification_Version>4.7</Modification_Version>
+					<Modification_ReleaseDate>2022-04-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Detection_Factors, Observed_Examples, Potential_Mitigations, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-10-13</Modification_Date>
+					<Modification_Version>4.9</Modification_Version>
+					<Modification_ReleaseDate>2022-10-13</Modification_ReleaseDate>
+					<Modification_Comment>updated Related_Attack_Patterns</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+            <Contribution Type="Content">
+	      <Contribution_Name>Paul A. Wortman</Contribution_Name>
+               <Contribution_Organization>Wells Fargo</Contribution_Organization>
+               <Contribution_Date>2021-10-12</Contribution_Date>
+               <Contribution_Comment>provided detection methods and observed examples</Contribution_Comment>
+            </Contribution>
+			</Content_History>
+		</Weakness>
+      

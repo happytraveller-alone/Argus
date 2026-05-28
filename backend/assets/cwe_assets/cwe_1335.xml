@@ -1,0 +1,218 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="1335" Name="Incorrect Bitwise Shift of Integer" Abstraction="Base" Structure="Simple" Status="Draft">
+			<Description>An integer value is specified to be shifted by a negative amount or an amount greater than or equal to the number of bits contained in the value causing an unexpected or indeterminate result.</Description>
+			<Extended_Description>
+				<xhtml:p>Specifying a value to be shifted by a negative amount is undefined in various languages. Various computer architectures implement this action in different ways. The compilers and interpreters when generating code to accomplish a shift generally do not do a check for this issue.</xhtml:p>
+				<xhtml:p>Specifying an over-shift, a shift greater than or equal to the number of bits contained in a value to be shifted, produces a result which varies by architecture and compiler. In some languages, this action is specifically listed as producing an undefined result.</xhtml:p>
+			</Extended_Description>
+			<Related_Weaknesses>
+				<Related_Weakness Nature="ChildOf" CWE_ID="682" View_ID="1000" Ordinal="Primary" />
+			</Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+			<Applicable_Platforms>
+				<Language Name="C" Prevalence="Undetermined" />
+				<Language Name="C++" Prevalence="Undetermined" />
+				<Language Name="C#" Prevalence="Undetermined" />
+				<Language Name="Java" Prevalence="Undetermined" />
+				<Language Name="JavaScript" Prevalence="Undetermined" />
+				<Operating_System Class="Not OS-Specific" Prevalence="Undetermined" />
+				<Technology Class="Not Technology-Specific" Prevalence="Undetermined" />
+			</Applicable_Platforms>
+			<Modes_Of_Introduction>
+				<Introduction>
+					<Phase>Implementation</Phase>
+					<Note>Adding shifts without properly verifying the size and sign of the shift amount.</Note>
+				</Introduction>
+			</Modes_Of_Introduction>
+			<Common_Consequences>
+				<Consequence>
+					<Scope>Integrity</Scope>
+					<Impact>DoS: Crash, Exit, or Restart</Impact>
+				</Consequence>
+			</Common_Consequences>
+			<Detection_Methods>
+			  <Detection_Method Detection_Method_ID="DM-14">
+			    <Method>Automated Static Analysis</Method>
+			    <Description>Automated static analysis, commonly referred to as Static Application Security Testing (SAST), can find some instances of this weakness by analyzing source code (or binary/compiled code) without having to execute it. Typically, this is done by building a model of data flow and control flow, then searching for potentially-vulnerable patterns that connect "sources" (origins of input) with "sinks" (destinations where the data interacts with external components, a lower layer such as the OS, etc.)</Description>
+			    <Effectiveness>High</Effectiveness>
+			  </Detection_Method>
+			</Detection_Methods>
+			<Potential_Mitigations>
+				<Mitigation>
+					<Phase>Implementation</Phase>
+					<Description>Implicitly or explicitly add checks and mitigation for negative or over-shift values.</Description>
+				</Mitigation>
+			</Potential_Mitigations>
+			<Demonstrative_Examples>
+				<Demonstrative_Example>
+					<Intro_Text>
+						A negative shift amount for an x86 or x86_64 shift instruction will produce the number of bits to be shifted by taking a 2's-complement of the shift amount and effectively masking that amount to the lowest 6 bits for a 64 bit shift instruction.
+					</Intro_Text>
+					<Example_Code Nature="Bad" Language="C">
+					unsigned int r = 1 &lt;&lt; -5;
+					</Example_Code>
+					<Body_Text>The example above ends up with a shift amount of -5. The hexadecimal value is FFFFFFFFFFFFFFFD which, when bits above the  6th bit are masked off, the shift amount becomes a binary shift value of 111101 which is 61 decimal. A shift of 61 produces a very different result than -5. The previous example is a very simple version of the following code which is probably more realistic of what happens in a real system.</Body_Text>
+					<Example_Code Nature="Bad" Language="C">
+					  int choose_bit(int reg_bit, int bit_number_from_elsewhere) <xhtml:br />
+					  {<xhtml:br />
+					  <xhtml:div style="margin-left:1em;">
+					    if (NEED_TO_SHIFT)<xhtml:br />
+					    {<xhtml:br />
+					    <xhtml:div style="margin-left:1em;">
+					      reg_bit -= bit_number_from_elsewhere;<xhtml:br />
+					    </xhtml:div>
+					    }<xhtml:br />
+					    return reg_bit;<xhtml:br />
+					  </xhtml:div>
+					  }<xhtml:br />
+					  unsigned int handle_io_register(unsigned int *r)<xhtml:br />
+					  {<xhtml:br />
+					  <xhtml:div style="margin-left:1em;">
+					    unsigned int the_bit = 1 &lt;&lt; choose_bit(5, 10);<xhtml:br />
+					    *r |= the_bit;<xhtml:br />
+					    return the_bit;<xhtml:br />
+					  </xhtml:div>
+					  }
+					</Example_Code>
+					<Example_Code Nature="Good" Language="C">
+					  int choose_bit(int reg_bit, int bit_number_from_elsewhere) <xhtml:br />
+					  {<xhtml:br />
+					  <xhtml:div style="margin-left:1em;">
+					    if (NEED_TO_SHIFT)<xhtml:br />
+					    {<xhtml:br />
+					    <xhtml:div style="margin-left:1em;">
+					      reg_bit -= bit_number_from_elsewhere;<xhtml:br />
+					    </xhtml:div>
+					    }<xhtml:br />
+					    return reg_bit;<xhtml:br />
+					  </xhtml:div>
+					  }<xhtml:br />
+					  <xhtml:br />
+					  unsigned int handle_io_register(unsigned int *r)<xhtml:br />
+					  {<xhtml:br />
+					  <xhtml:div style="margin-left:1em;">
+					    int the_bit_number = choose_bit(5, 10);<xhtml:br />
+					    if ((the_bit_number &gt; 0) &amp;&amp; (the_bit_number &lt; 63))<xhtml:br />
+					    {<xhtml:br />
+					    <xhtml:div style="margin-left:1em;">
+					      unsigned int the_bit = 1 &lt;&lt; the_bit_number;<xhtml:br />
+					      *r |= the_bit;<xhtml:br />
+					    </xhtml:div>
+					    }<xhtml:br />
+					    return the_bit;<xhtml:br />
+					  </xhtml:div>
+					  }
+					</Example_Code>
+					<Body_Text>Note that the good example not only checks for negative shifts and disallows them, but it also checks for over-shifts. No bit operation is done if the shift is out of bounds. Depending on the program, perhaps an error message should be logged.</Body_Text>
+				</Demonstrative_Example>
+			</Demonstrative_Examples>
+			<Observed_Examples>
+				<Observed_Example>
+					<Reference>CVE-2023-4720</Reference>
+					<Description>multimedia product performs a left shift with a negative value, leading to a crash</Description>
+					<Link>https://www.cve.org/CVERecord?id=CVE-2023-4720</Link>
+				</Observed_Example>
+				<Observed_Example>
+					<Reference>CVE-2009-4307</Reference>
+					<Description>An unexpected large value in the ext4 filesystem causes an overshift condition resulting in a divide by zero.</Description>
+					<Link>https://www.cve.org/CVERecord?id=CVE-2009-4307</Link>
+				</Observed_Example>
+				<Observed_Example>
+					<Reference>CVE-2012-2100</Reference>
+					<Description>An unexpected large value in the ext4 filesystem causes an overshift condition resulting in a divide by zero - fix of CVE-2009-4307.</Description>
+					<Link>https://www.cve.org/CVERecord?id=CVE-2012-2100</Link>
+				</Observed_Example>
+				<Observed_Example>
+					<Reference>CVE-2020-8835</Reference>
+					<Description>An overshift in a kernel allowed out of bounds reads and writes resulting in a root takeover.</Description>
+					<Link>https://www.cve.org/CVERecord?id=CVE-2020-8835</Link>
+				</Observed_Example>
+				<Observed_Example>
+					<Reference>CVE-2015-1607</Reference>
+					<Description>Program is not properly handling signed bitwise left-shifts causing an overlapping memcpy memory range error.</Description>
+					<Link>https://www.cve.org/CVERecord?id=CVE-2015-1607</Link>
+				</Observed_Example>
+				<Observed_Example>
+					<Reference>CVE-2016-9842</Reference>
+					<Description>Compression function improperly executes a signed left shift of a negative integer.</Description>
+					<Link>https://www.cve.org/CVERecord?id=CVE-2016-9842</Link>
+				</Observed_Example>
+				<Observed_Example>
+					<Reference>CVE-2018-18445</Reference>
+					<Description>Some kernels improperly handle right shifts of 32 bit numbers in a 64 bit register.</Description>
+					<Link>https://www.cve.org/CVERecord?id=CVE-2018-18445</Link>
+				</Observed_Example>
+				<Observed_Example>
+					<Reference>CVE-2013-4206</Reference>
+					<Description>Putty  has an incorrectly sized shift value resulting in an overshift.</Description>
+					<Link>https://www.cve.org/CVERecord?id=CVE-2013-4206</Link>
+				</Observed_Example>
+				<Observed_Example>
+					<Reference>CVE-2018-20788</Reference>
+					<Description>LED driver overshifts under certain conditions resulting in a DoS.</Description>
+					<Link>https://www.cve.org/CVERecord?id=CVE-2018-20788</Link>
+				</Observed_Example>
+			</Observed_Examples>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Base level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+			<Content_History>
+				<Submission>
+					<Submission_Name>CWE Content Team</Submission_Name>
+					<Submission_Organization>MITRE</Submission_Organization>
+					<Submission_Date>2021-03-29</Submission_Date>
+					<Submission_Version>4.5</Submission_Version>
+					<Submission_ReleaseDate>2021-07-20</Submission_ReleaseDate>
+				</Submission>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-10-13</Modification_Date>
+					<Modification_Version>4.9</Modification_Version>
+					<Modification_ReleaseDate>2022-10-13</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples, Observed_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Detection_Factors, Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2026-04-30</Modification_Date>
+					<Modification_Version>4.20</Modification_Version>
+					<Modification_ReleaseDate>2026-04-30</Modification_ReleaseDate>
+					<Modification_Comment>updated Observed_Examples</Modification_Comment>
+				</Modification>
+			</Content_History>
+		</Weakness>
+      

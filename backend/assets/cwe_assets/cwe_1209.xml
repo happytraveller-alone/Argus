@@ -1,0 +1,174 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="1209" Name="Failure to Disable Reserved Bits" Abstraction="Base" Structure="Simple" Status="Incomplete">
+            <Description>The reserved bits in a hardware design are not disabled prior to production. Typically, reserved bits are used for future capabilities and should not support any functional logic in the design.   However, designers might covertly use these bits to debug or further develop new capabilities in production hardware. Adversaries with access to these bits will write to them in hopes of compromising hardware state.</Description>
+            <Extended_Description>
+                <xhtml:p>Reserved bits are labeled as such so they can be allocated for a later purpose. They are not to do anything in the current design.  However, designers might want to use these bits to debug or control/configure a future capability to help minimize time to market (TTM). If the logic being controlled by these bits is still enabled in production, an adversary could use the logic to induce unwanted/unsupported behavior in the hardware.</xhtml:p>
+            </Extended_Description>
+         <Related_Weaknesses>
+            <Related_Weakness Nature="ChildOf" CWE_ID="710" View_ID="1000" Ordinal="Primary" />
+         </Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+            <Applicable_Platforms>
+                <Language Class="Not Language-Specific" Prevalence="Undetermined" />
+                <Operating_System Class="Not OS-Specific" Prevalence="Undetermined" />
+                <Architecture Class="Not Architecture-Specific" Prevalence="Undetermined" />
+                <Technology Class="System on Chip" Prevalence="Undetermined" />
+            </Applicable_Platforms>
+            <Modes_Of_Introduction>
+                <Introduction>
+                    <Phase>Architecture and Design</Phase>
+                    <Note>The Designer and Implementer have to make a conscious choice to do this.</Note>
+                </Introduction>
+                <Introduction>
+                    <Phase>Implementation</Phase>
+                    <Note>The Designer and Implementer have to make a conscious choice to do this.</Note>
+                </Introduction>
+                <Introduction>
+                    <Phase>Documentation</Phase>
+                    <Note>If documentation labels anything "for future use", "reserved", or the like, such labeling could indicate to an attacker a potential attack point.</Note>
+                </Introduction>
+            </Modes_Of_Introduction>
+            <Common_Consequences>
+                <Consequence>
+                    <Scope>Confidentiality</Scope>
+                    <Scope>Integrity</Scope>
+                    <Scope>Availability</Scope>
+                    <Scope>Access Control</Scope>
+                    <Scope>Accountability</Scope>
+                    <Scope>Authentication</Scope>
+                    <Scope>Authorization</Scope>
+                    <Scope>Non-Repudiation</Scope>
+                    <Impact>Varies by Context</Impact>
+                    <Note>This type of weakness all depends on the capabilities of the logic being controlled or configured by the reserved bits.</Note>
+                </Consequence>
+            </Common_Consequences>
+            <Potential_Mitigations>
+                <Mitigation>
+                    <Phase>Architecture and Design</Phase>
+                    <Phase>Implementation</Phase>
+                    <Description>
+                        <xhtml:p>Include a feature to disable reserved bits.</xhtml:p>
+                    </Description>
+                </Mitigation>
+                <Mitigation>
+                    <Phase>Integration</Phase>
+                    <Description>
+                    	<xhtml:p>Any writes to these reserve bits are blocked (e.g., ignored, access-protected, etc.), or an exception can be asserted.</xhtml:p>
+                    </Description>
+                </Mitigation>
+            </Potential_Mitigations>
+            <Demonstrative_Examples>
+                <Demonstrative_Example>
+                    <Intro_Text>Assume a hardware Intellectual Property (IP) has address space 0x0-0x0F for its configuration registers, with the last one labeled reserved (i.e. 0x0F).  Therefore inside the Finite State Machine (FSM), the code is as follows:</Intro_Text>
+                    <Example_Code Nature="Bad" Language="Verilog">
+		      reg gpio_out = 0;  //gpio should remain low for normal operation<xhtml:br />
+                      <xhtml:br />
+                      case (register_address)<xhtml:br />
+		      <xhtml:div style="margin-left:1em;">
+                        4'b1111 : //0x0F<xhtml:br />
+			<xhtml:div style="margin-left:1em;">
+			  begin<xhtml:br />
+			  <xhtml:div style="margin-left:1em;">
+                            gpio_out = 1;<xhtml:br />
+			  </xhtml:div>
+			  end<xhtml:br />
+			</xhtml:div>
+		      </xhtml:div>
+                    </Example_Code>
+                    <Body_Text>
+                        <xhtml:p>An adversary may perform writes to reserved address space in hopes of changing the behavior of the hardware. In the code above, the GPIO pin should remain low for normal operation.  However, it can be asserted by accessing the reserved address space (0x0F).  This may be a concern if the GPIO state is being used as an indicator of health (e.g. if asserted the hardware may respond by shutting down or resetting the system, which may not be the correct action the system should perform).</xhtml:p>
+                        <xhtml:p>In the code below, the condition "register_address = 0X0F" is commented out, and a default is provided that will catch any values of register_address not explicitly accounted for and take no action with regards to gpio_out. This means that an attacker who is able to write 0X0F to register_address will not enable any undocumented "features" in the process.</xhtml:p>
+                    </Body_Text>
+                	<Example_Code Nature="Good" Language="Verilog">
+                  	  reg gpio_out = 0;  //gpio should remain low for normal operation<xhtml:br />
+			  <xhtml:br />
+                  	  case (register_address)<xhtml:br />
+			  <xhtml:div style="margin-left:1em;">
+                  	    //4'b1111 : //0x0F<xhtml:br />
+                  	    default: gpio_out = gpio_out;<xhtml:br />
+			  </xhtml:div>
+               		</Example_Code>
+            	</Demonstrative_Example>
+            </Demonstrative_Examples>
+         <Related_Attack_Patterns>
+            <Related_Attack_Pattern CAPEC_ID="121" />
+         </Related_Attack_Patterns>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Base level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+         <Content_History>
+                <Submission>
+                    <Submission_Name>Brent Sherman</Submission_Name>
+                    <Submission_Organization>Intel Corporation</Submission_Organization>
+                    <Submission_Date>2020-02-06</Submission_Date>
+                    <Submission_Version>4.0</Submission_Version>
+                    <Submission_ReleaseDate>2020-02-24</Submission_ReleaseDate>
+                </Submission>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-08-20</Modification_Date>
+					<Modification_Version>4.2</Modification_Version>
+					<Modification_ReleaseDate>2020-08-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Related_Attack_Patterns</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-10-28</Modification_Date>
+					<Modification_Version>4.6</Modification_Version>
+					<Modification_ReleaseDate>2021-10-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Potential_Mitigations</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-10-13</Modification_Date>
+					<Modification_Version>4.9</Modification_Version>
+					<Modification_ReleaseDate>2022-10-13</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-01-31</Modification_Date>
+					<Modification_Version>4.10</Modification_Version>
+					<Modification_ReleaseDate>2023-01-31</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+            </Content_History>
+        </Weakness>
+      

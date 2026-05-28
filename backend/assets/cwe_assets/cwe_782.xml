@@ -1,0 +1,188 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="782" Name="Exposed IOCTL with Insufficient Access Control" Abstraction="Variant" Structure="Simple" Status="Draft">
+         <Description>The product implements an IOCTL with functionality that should be restricted, but it does not properly enforce access control for the IOCTL.</Description>
+         <Extended_Description>
+            <xhtml:p>When an IOCTL contains privileged functionality and is exposed unnecessarily, attackers may be able to access this functionality by invoking the IOCTL. Even if the functionality is benign, if the programmer has assumed that the IOCTL would only be accessed by a trusted process, there may be little or no validation of the incoming data, exposing weaknesses that would never be reachable if the attacker cannot call the IOCTL directly.</xhtml:p>
+            <xhtml:p>The implementations of IOCTLs will differ between operating system types and versions, so the methods of attack and prevention may vary widely.</xhtml:p>
+         </Extended_Description>
+         <Related_Weaknesses>
+            <Related_Weakness Nature="ChildOf" CWE_ID="749" View_ID="1000" Ordinal="Primary" />
+            <Related_Weakness Nature="CanPrecede" CWE_ID="781" View_ID="1000" />
+         </Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+         <Applicable_Platforms>
+            <Language Name="C" Prevalence="Often" />
+            <Language Name="C++" Prevalence="Often" />
+            <Operating_System Class="Unix" Prevalence="Undetermined" />
+            <Operating_System Class="Windows" Prevalence="Undetermined" />
+         </Applicable_Platforms>
+         <Modes_Of_Introduction>
+            <Introduction>
+               <Phase>Architecture and Design</Phase>
+            </Introduction>
+            <Introduction>
+               <Phase>Implementation</Phase>
+               <Note>REALIZATION: This weakness is caused during implementation of an architectural security tactic.</Note>
+            </Introduction>
+         </Modes_Of_Introduction>
+         <Common_Consequences>
+            <Consequence>
+               <Scope>Integrity</Scope>
+               <Scope>Availability</Scope>
+               <Scope>Confidentiality</Scope>
+			   <Impact>Varies by Context</Impact>
+               <Note>Attackers can invoke any functionality that the IOCTL offers. Depending on the functionality, the consequences may include code execution, denial-of-service, and theft of data.</Note>
+            </Consequence>
+         </Common_Consequences>
+         <Potential_Mitigations>
+            <Mitigation>
+               <Phase>Architecture and Design</Phase>
+               <Description>In Windows environments, use proper access control for the associated device or device namespace. See References.</Description>
+            </Mitigation>
+         </Potential_Mitigations>
+         <Observed_Examples>
+            <Observed_Example>
+               <Reference>CVE-2009-2208</Reference>
+               <Description>Operating system does not enforce permissions on an IOCTL that can be used to modify network settings.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2009-2208</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2008-3831</Reference>
+               <Description>Device driver does not restrict ioctl calls to its direct rendering manager.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2008-3831</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2008-3525</Reference>
+               <Description>ioctl does not check for a required capability before processing certain requests.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2008-3525</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2008-0322</Reference>
+               <Description>Chain: insecure device permissions allows access to an IOCTL, allowing arbitrary memory to be overwritten.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2008-0322</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2007-4277</Reference>
+               <Description>Chain: anti-virus product uses weak permissions for a device, leading to resultant buffer overflow in an exposed IOCTL.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2007-4277</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2007-1400</Reference>
+               <Description>Chain: sandbox allows opening of a TTY device, enabling shell commands through an exposed ioctl.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2007-1400</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2006-4926</Reference>
+               <Description>Anti-virus product uses insecure security descriptor for a device driver, allowing access to a privileged IOCTL.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2006-4926</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-1999-0728</Reference>
+               <Description>Unauthorized user can disable keyboard or mouse by directly invoking a privileged IOCTL.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-1999-0728</Link>
+            </Observed_Example>
+         </Observed_Examples>
+         <References>
+            <Reference External_Reference_ID="REF-701" />
+         </References>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Variant level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+         <Notes>
+            <Note Type="Relationship">This can be primary to many other weaknesses when the programmer assumes that the IOCTL can only be accessed by trusted parties. For example, a program or driver might not validate incoming addresses in METHOD_NEITHER IOCTLs in Windows environments (CWE-781), which could allow buffer overflow and similar attacks to take place, even when the attacker never should have been able to access the IOCTL at all.</Note>
+            <Note Type="Applicable Platform">
+               <xhtml:p>Because IOCTL functionality is typically performing low-level actions and closely interacts with the operating system, this weakness may only appear in code that is written in low-level languages.</xhtml:p>
+            </Note>
+         </Notes>
+         <Content_History>
+            <Submission>
+               <Submission_Name>CWE Content Team</Submission_Name>
+               <Submission_Organization>MITRE</Submission_Organization>
+               <Submission_Date>2009-07-15</Submission_Date>
+               <Submission_Version>1.5</Submission_Version>
+               <Submission_ReleaseDate>2009-07-27</Submission_ReleaseDate>
+            </Submission>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2009-12-28</Modification_Date>
+               <Modification_Version>1.7</Modification_Version>
+               <Modification_ReleaseDate>2009-12-28</Modification_ReleaseDate>
+               <Modification_Comment>updated Time_of_Introduction</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2017-11-08</Modification_Date>
+               <Modification_Version>3.0</Modification_Version>
+               <Modification_ReleaseDate>2017-11-08</Modification_ReleaseDate>
+               <Modification_Comment>updated Likelihood_of_Exploit, Modes_of_Introduction, Relationships</Modification_Comment>
+            </Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-02-24</Modification_Date>
+					<Modification_Version>4.0</Modification_Version>
+					<Modification_ReleaseDate>2020-02-24</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-03-15</Modification_Date>
+					<Modification_Version>4.4</Modification_Version>
+					<Modification_ReleaseDate>2021-03-15</Modification_ReleaseDate>
+					<Modification_Comment>updated Observed_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-01-31</Modification_Date>
+					<Modification_Version>4.10</Modification_Version>
+					<Modification_ReleaseDate>2023-01-31</Modification_ReleaseDate>
+					<Modification_Comment>updated Description</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated References, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-10-26</Modification_Date>
+					<Modification_Version>4.13</Modification_Version>
+					<Modification_ReleaseDate>2023-10-26</Modification_ReleaseDate>
+					<Modification_Comment>updated Common_Consequences</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+         </Content_History>
+      </Weakness>
+      

@@ -1,0 +1,158 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="1351" Name="Improper Handling of Hardware Behavior in Exceptionally Cold Environments" Abstraction="Base" Structure="Simple" Status="Incomplete">
+            <Description>A hardware device, or the firmware running on it, is
+                missing or has incorrect protection features to maintain
+                goals of security primitives when the device is cooled below
+                standard operating temperatures.</Description>
+			<Extended_Description>
+                <xhtml:p>The hardware designer may improperly anticipate
+                    hardware behavior when exposed to exceptionally cold
+                    conditions. As a result they may introduce a weakness by not
+                    accounting for the modified behavior of critical components
+                    when in extreme environments.</xhtml:p>
+                <xhtml:p>An example of a change in behavior is that power loss
+                    won't clear/reset any volatile state when cooled below
+                    standard operating temperatures. This may result in
+                    a weakness when the starting state of the volatile memory is
+                    being relied upon for a security decision. For example, a
+                    Physical Unclonable Function (PUF) may be supplied as a
+                    security primitive to improve confidentiality,
+                    authenticity, and integrity guarantees. However, when the
+                    PUF is paired with DRAM, SRAM, or another temperature
+                    sensitive entropy source, the system designer may introduce
+                    weakness by failing to account for the chosen entropy
+                    source's behavior at exceptionally low temperatures. In the
+                    case of DRAM and SRAM, when power is cycled at low
+                    temperatures, the device will not contain the bitwise
+                    biasing caused by inconsistencies in manufacturing and will
+                    instead contain the data from previous boot. Should the PUF
+                    primitive be used in a cryptographic construction which
+                    does not account for full adversary control of PUF seed
+                    data, weakness would arise.</xhtml:p>
+                <xhtml:p>This weakness does not cover "Cold Boot Attacks"
+                    wherein RAM or other external storage is super cooled and
+                    read externally by an attacker.</xhtml:p>
+			</Extended_Description>
+			<Related_Weaknesses>
+              <Related_Weakness Nature="ChildOf" CWE_ID="1384" View_ID="1000" Ordinal="Primary" />
+			</Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+			<Applicable_Platforms>
+				<Language Class="Not Language-Specific" Prevalence="Undetermined" />
+				<Operating_System Class="Not OS-Specific" Prevalence="Undetermined" />
+				<Architecture Class="Embedded" Prevalence="Undetermined" />
+				<Architecture Class="Microcomputer" Prevalence="Undetermined" />
+				<Technology Class="System on Chip" Prevalence="Undetermined" />
+            </Applicable_Platforms>
+			<Modes_Of_Introduction>
+				<Introduction>
+					<Phase>Architecture and Design</Phase>
+				</Introduction>
+				<Introduction>
+					<Phase>Implementation</Phase>
+				</Introduction>
+			</Modes_Of_Introduction>
+			<Common_Consequences>
+				<Consequence>
+					<Scope>Integrity</Scope>
+					<Scope>Authentication</Scope>
+					<Impact>Varies by Context</Impact>
+					<Impact>Unexpected State</Impact>
+					<Likelihood>Low</Likelihood>
+					<Note>Consequences of this weakness are highly contextual.</Note>
+				</Consequence>
+			</Common_Consequences>
+			<Potential_Mitigations>
+				<Mitigation>
+					<Phase>Architecture and Design</Phase>
+					<Description>The system should account for security primitive behavior when cooled outside standard temperatures.</Description>
+				</Mitigation>
+			</Potential_Mitigations>
+         <Related_Attack_Patterns>
+            <Related_Attack_Pattern CAPEC_ID="624" />
+            <Related_Attack_Pattern CAPEC_ID="625" />
+         </Related_Attack_Patterns>
+         <References>
+				<Reference External_Reference_ID="REF-1181" />
+				<Reference External_Reference_ID="REF-1182" />
+				<Reference External_Reference_ID="REF-1183" />
+			</References>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Base level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+			<Content_History>
+				<Submission>
+					<Submission_Name>Paul A. Wortman</Submission_Name>
+					<Submission_Organization>Wells Fargo</Submission_Organization>
+					<Submission_Date>2020-10-23</Submission_Date>
+					<Submission_Version>4.5</Submission_Version>
+					<Submission_ReleaseDate>2021-07-20</Submission_ReleaseDate>
+				</Submission>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-04-28</Modification_Date>
+					<Modification_Version>4.7</Modification_Version>
+					<Modification_ReleaseDate>2022-04-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-06-28</Modification_Date>
+					<Modification_Version>4.8</Modification_Version>
+					<Modification_ReleaseDate>2022-06-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-10-13</Modification_Date>
+					<Modification_Version>4.9</Modification_Version>
+					<Modification_ReleaseDate>2022-10-13</Modification_ReleaseDate>
+					<Modification_Comment>updated References, Related_Attack_Patterns</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-01-31</Modification_Date>
+					<Modification_Version>4.10</Modification_Version>
+					<Modification_ReleaseDate>2023-01-31</Modification_ReleaseDate>
+					<Modification_Comment>updated Related_Attack_Patterns</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+			</Content_History>
+		</Weakness>
+      

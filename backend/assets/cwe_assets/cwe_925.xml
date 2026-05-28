@@ -1,0 +1,192 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="925" Name="Improper Verification of Intent by Broadcast Receiver" Abstraction="Variant" Structure="Simple" Status="Incomplete">
+         <Description>The Android application uses a Broadcast Receiver that receives an Intent but does not properly verify that the Intent came from an authorized source.</Description>
+         <Extended_Description>Certain types of Intents, identified by action string, can only be broadcast by the operating system itself, not by third-party applications. However, when an application registers to receive these implicit system intents, it is also registered to receive any explicit intents. While a malicious application cannot send an implicit system intent, it can send an explicit intent to the target application, which may assume that any received intent is a valid implicit system intent and not an explicit intent from another application. This may lead to unintended behavior.</Extended_Description>
+         <Related_Weaknesses>
+            <Related_Weakness Nature="ChildOf" CWE_ID="940" View_ID="1000" Ordinal="Primary" />
+         </Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+         <Applicable_Platforms>
+            <Language Class="Not Language-Specific" Prevalence="Undetermined" />
+            <Technology Class="Mobile" Prevalence="Undetermined" />
+         </Applicable_Platforms>
+         <Alternate_Terms>
+            <Alternate_Term>
+               <Term>Intent Spoofing</Term>
+            </Alternate_Term>
+         </Alternate_Terms>
+         <Modes_Of_Introduction>
+            <Introduction>
+               <Phase>Architecture and Design</Phase>
+            </Introduction>
+         </Modes_Of_Introduction>
+         <Common_Consequences>
+            <Consequence>
+               <Scope>Integrity</Scope>
+               <Impact>Gain Privileges or Assume Identity</Impact>
+               <Note>Another application can impersonate the operating system and cause the software to perform an unintended action.</Note>
+            </Consequence>
+         </Common_Consequences>
+         <Detection_Methods>
+           <Detection_Method Detection_Method_ID="DM-14">
+             <Method>Automated Static Analysis</Method>
+             <Description>Automated static analysis, commonly referred to as Static Application Security Testing (SAST), can find some instances of this weakness by analyzing source code (or binary/compiled code) without having to execute it. Typically, this is done by building a model of data flow and control flow, then searching for potentially-vulnerable patterns that connect "sources" (origins of input) with "sinks" (destinations where the data interacts with external components, a lower layer such as the OS, etc.)</Description>
+             <Effectiveness>High</Effectiveness>
+           </Detection_Method>
+         </Detection_Methods>
+         <Potential_Mitigations>
+            <Mitigation>
+               <Phase>Architecture and Design</Phase>
+               <Description>Before acting on the Intent, check the Intent Action to make sure it matches the expected System action.</Description>
+            </Mitigation>
+         </Potential_Mitigations>
+         <Demonstrative_Examples>
+            <Demonstrative_Example>
+               <Intro_Text>The following example demonstrates the weakness.</Intro_Text>
+               <Example_Code Nature="Bad" Language="XML">
+                  <xhtml:div>&lt;manifest package="com.example.vulnerableApplication"&gt;<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>&lt;application&gt;<xhtml:br />
+                           <xhtml:i>...</xhtml:i>
+                           <xhtml:br />
+                           <xhtml:div style="margin-left:1em;">
+                              <xhtml:div>&lt;receiver android:name=".ShutdownReceiver"&gt;<xhtml:div style="margin-left:1em;">&lt;intent-filter&gt;<xhtml:div style="margin-left:1em;">&lt;action android:name="android.intent.action.ACTION_SHUTDOWN" /&gt;</xhtml:div>&lt;/intent-filter&gt;</xhtml:div>&lt;/receiver&gt;</xhtml:div>
+                           </xhtml:div>
+                           <xhtml:br />
+                           <xhtml:i>...</xhtml:i>
+                           <xhtml:br />
+                           <xhtml:br />&lt;/application&gt;</xhtml:div>
+                     </xhtml:div>&lt;/manifest&gt;</xhtml:div>
+               </Example_Code>
+               <Body_Text>The ShutdownReceiver class will handle the intent:</Body_Text>
+               <Example_Code Nature="Bad" Language="Java">
+                  <xhtml:div>
+                     <xhtml:br />
+                     <xhtml:i>...</xhtml:i>
+                     <xhtml:br />IntentFilter filter = new IntentFilter(Intent.ACTION_SHUTDOWN);<xhtml:br />BroadcastReceiver sReceiver = new ShutDownReceiver();<xhtml:br />registerReceiver(sReceiver, filter);<xhtml:br />
+                     <xhtml:i>...</xhtml:i>
+                     <xhtml:br />
+                     <xhtml:br />public class ShutdownReceiver extends BroadcastReceiver {<xhtml:div style="margin-left:1em;">@Override<xhtml:br />public void onReceive(final Context context, final Intent intent) {<xhtml:div style="margin-left:1em;">mainActivity.saveLocalData();<xhtml:br />mainActivity.stopActivity();</xhtml:div>}</xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>Because the method does not confirm that the intent action is the expected system intent, any received intent will trigger the shutdown procedure, as shown here:</Body_Text>
+               <Example_Code Nature="Attack" Language="Java">
+                  <xhtml:div>window.location = examplescheme://method?parameter=value</xhtml:div>
+               </Example_Code>
+               <Body_Text>An attacker can use this behavior to cause a denial of service.</Body_Text>
+            </Demonstrative_Example>
+         </Demonstrative_Examples>
+         <Observed_Examples>
+            <Observed_Example>
+               <Reference>CVE-2025-20972</Reference>
+               <Description>Mobile app store does not properly verify the intent by the broadcast receiver, allowing local attackers to write arbitrary files</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2025-20972</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2024-10576</Reference>
+               <Description>Mobile device has an application that exposes a broadcast received that allows local attackers to force a factory reset</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2024-10576</Link>
+            </Observed_Example>
+         </Observed_Examples>
+         <Related_Attack_Patterns>
+            <Related_Attack_Pattern CAPEC_ID="499" />
+         </Related_Attack_Patterns>
+         <References>
+            <Reference External_Reference_ID="REF-922" Section="3.2.1" />
+         </References>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Variant level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+         <Notes>
+            <Note Type="Maintenance">This entry will be made more comprehensive in later CWE versions.</Note>
+         </Notes>
+         <Content_History>
+            <Submission>
+               <Submission_Name>CWE Content Team</Submission_Name>
+               <Submission_Organization>MITRE</Submission_Organization>
+               <Submission_Date>2013-06-24</Submission_Date>
+               <Submission_Version>2.5</Submission_Version>
+               <Submission_ReleaseDate>2013-07-17</Submission_ReleaseDate>
+            </Submission>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2014-02-18</Modification_Date>
+               <Modification_Version>2.6</Modification_Version>
+               <Modification_ReleaseDate>2014-02-19</Modification_ReleaseDate>
+               <Modification_Comment>updated Alternate_Terms, Demonstrative_Examples, Description, References</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2017-11-08</Modification_Date>
+               <Modification_Version>3.0</Modification_Version>
+               <Modification_ReleaseDate>2017-11-08</Modification_ReleaseDate>
+               <Modification_Comment>updated Demonstrative_Examples</Modification_Comment>
+            </Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2019-01-03</Modification_Date>
+					<Modification_Version>3.2</Modification_Version>
+					<Modification_ReleaseDate>2019-01-03</Modification_ReleaseDate>
+					<Modification_Comment>updated Related_Attack_Patterns</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-02-24</Modification_Date>
+					<Modification_Version>4.0</Modification_Version>
+					<Modification_ReleaseDate>2020-02-24</Modification_ReleaseDate>
+					<Modification_Comment>updated Applicable_Platforms, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-10-13</Modification_Date>
+					<Modification_Version>4.9</Modification_Version>
+					<Modification_ReleaseDate>2022-10-13</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Detection_Factors, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2026-04-30</Modification_Date>
+					<Modification_Version>4.20</Modification_Version>
+					<Modification_ReleaseDate>2026-04-30</Modification_ReleaseDate>
+					<Modification_Comment>updated Observed_Examples</Modification_Comment>
+				</Modification>
+         </Content_History>
+      </Weakness>
+      

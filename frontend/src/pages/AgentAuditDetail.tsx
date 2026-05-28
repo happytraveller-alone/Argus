@@ -407,30 +407,6 @@ function buildFindingColumns(
 				1,
 		},
 		{
-			id: "name",
-			accessorFn: (row) => row.summary,
-			header: "名称",
-			enableSorting: false,
-			enableColumnFilter: false,
-			meta: { label: "名称", minWidth: 180, plainHeader: true },
-			cell: ({ row }) => {
-				const canonical = buildCanonicalDisplay({
-					rawFinding: row.original,
-					projectName: record?.projectName,
-					auditType: "智能审计",
-					engineLabel: record?.llmModel ?? "未知模型",
-					scopeType: row.original.scopeType,
-					module: row.original.module,
-					projectRoot: record?.projectRoot,
-				});
-				return (
-					<span className="font-mono text-[11px]">
-						{canonical.name}
-					</span>
-				);
-			},
-		},
-		{
 			id: "typeLabel",
 			accessorFn: (row) => row.vulnClass,
 			header: "漏洞类型",

@@ -1,0 +1,458 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="203" Name="Observable Discrepancy" Abstraction="Base" Structure="Simple" Status="Incomplete" Diagram="/data/images/CWE-203-Diagram.png">
+         <Description>The product behaves differently or sends different responses under different circumstances in a way that is observable to an unauthorized actor.</Description>
+         <Related_Weaknesses>
+            <Related_Weakness Nature="ChildOf" CWE_ID="200" View_ID="1000" Ordinal="Primary" />
+            <Related_Weakness Nature="ChildOf" CWE_ID="200" View_ID="1003" Ordinal="Primary" />
+         </Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+            <Weakness_Ordinality>
+               <Ordinality>Resultant</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+         <Applicable_Platforms>
+            <Language Class="Not Language-Specific" Prevalence="Undetermined" />
+            <Technology Class="Not Technology-Specific" Prevalence="Undetermined" />
+         </Applicable_Platforms>
+         <Background_Details>
+            <Background_Detail>Discrepancies may be observable based on timing, control flow, communications (such as replies or requests), or general behavior.</Background_Detail>
+         </Background_Details>
+         <Alternate_Terms>
+            <Alternate_Term>
+               <Term>Side Channel Attack</Term>
+               <Description>Observable Discrepancies are at the root of side channel attacks.</Description>
+            </Alternate_Term>
+         </Alternate_Terms>
+         <Modes_Of_Introduction>
+            <Introduction>
+               <Phase>Architecture and Design</Phase>
+            </Introduction>
+            <Introduction>
+               <Phase>Implementation</Phase>
+            </Introduction>
+         </Modes_Of_Introduction>
+         <Common_Consequences>
+            <Consequence>
+               <Scope>Confidentiality</Scope>
+               <Scope>Access Control</Scope>
+               <Impact>Read Application Data</Impact>
+               <Impact>Bypass Protection Mechanism</Impact>
+               <Note>An attacker can gain access to sensitive information about the system, including authentication information that may allow an attacker to gain access to the system. Other security-relevant information about the operation or internal state of the product may be revealed to an unauthorized actor, such as whether a particular operation was successful or not.</Note>
+            </Consequence>
+            <Consequence>
+               <Scope>Confidentiality</Scope>
+               <Impact>Read Application Data</Impact>
+               <Note>In some cases, discrepancies can be used by attackers to form a side channel. When cryptographic primitives are vulnerable to side-channel attacks, this could be used to reveal unencrypted plaintext in the worst case.</Note>
+            </Consequence>
+         </Common_Consequences>
+         <Potential_Mitigations>
+            <Mitigation Mitigation_ID="MIT-46">
+               <Phase>Architecture and Design</Phase>
+               <Strategy>Separation of Privilege</Strategy>
+               <Description>
+                  <xhtml:p>Compartmentalize the system to have "safe" areas where trust boundaries can be unambiguously drawn. Do not allow sensitive data to go outside of the trust boundary and always be careful when interfacing with a compartment outside of the safe area.</xhtml:p>
+                  <xhtml:p>Ensure that appropriate compartmentalization is built into the system design, and the compartmentalization allows for and reinforces privilege separation functionality. Architects and designers should rely on the principle of least privilege to decide the appropriate time to use privileges and the time to drop privileges.</xhtml:p>
+               </Description>
+            </Mitigation>
+            <Mitigation Mitigation_ID="MIT-39">
+               <Phase>Implementation</Phase>
+               <Description>
+                  <xhtml:p>Ensure that error messages only contain minimal details that are useful to the intended audience and no one else. The messages need to strike the balance between being too cryptic (which can confuse users) or being too detailed (which may reveal more than intended). The messages should not reveal the methods that were used to determine the error. Attackers can use detailed information to refine or optimize their original attack, thereby increasing their chances of success.</xhtml:p>
+                  <xhtml:p>If errors must be captured in some detail, record them in log messages, but consider what could occur if the log messages can be viewed by attackers. Highly sensitive information such as passwords should never be saved to log files.</xhtml:p>
+		  <xhtml:p>Avoid inconsistent messaging that might accidentally tip off an attacker about internal state, such as whether a user account exists or not.</xhtml:p>
+               </Description>
+            </Mitigation>
+         </Potential_Mitigations>
+         <Demonstrative_Examples>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-38">
+               <Intro_Text>The following code checks validity of the supplied username and password and notifies the user of a successful or failed login.</Intro_Text>
+               <Example_Code Nature="Bad" Language="Perl">
+                  <xhtml:div>my $username=param('username');
+                  <xhtml:br />my $password=param('password');
+                  <xhtml:br />
+                  <xhtml:br />if (IsValidUsername($username) == 1)
+                  <xhtml:br />{
+                  <xhtml:div style="margin-left:1em;">if (IsValidPassword($username, $password) == 1)
+                  <xhtml:br />{
+                  <xhtml:div style="margin-left:1em;">print "Login Successful";
+                  </xhtml:div>}
+                  <xhtml:br />else
+                  <xhtml:br />{
+                  <xhtml:div style="margin-left:1em;">print "Login Failed - incorrect password";
+                  </xhtml:div>}
+                  </xhtml:div>}
+                  <xhtml:br />else
+                  <xhtml:br />{
+                  <xhtml:div style="margin-left:1em;">print "Login Failed - unknown username";
+                  </xhtml:div>}
+                  </xhtml:div>
+               </Example_Code>
+               <Body_Text>In the above code, there are different messages for when an incorrect username is supplied, versus when the username is correct but the password is wrong. This difference enables a potential attacker to understand the state of the login function, and could allow an attacker to discover a valid username by trying different values until the incorrect password message is returned. In essence, this makes it easier for an attacker to obtain half of the necessary authentication credentials.</Body_Text>
+               <Body_Text>While this type of information may be helpful to a user, it is also useful to a potential attacker. In the above example, the message for both failed cases should be the same, such as:</Body_Text>
+               <Example_Code Nature="Result">
+                  <xhtml:div>"Login Failed - incorrect username or password"</xhtml:div>
+               </Example_Code>
+            </Demonstrative_Example>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-193">
+               <Intro_Text>In this example, the attacker observes how long an authentication takes when the user types in the correct password.</Intro_Text>
+               <Body_Text>When the attacker tries their own values, they can first try strings of various length. When they find a string of the right length, the computation will take a bit longer, because the for loop will run at least once. Additionally, with this code, the attacker can possibly learn one character of the password at a time, because when they guess the first character right, the computation will take longer than a wrong guesses. Such an attack can break even the most sophisticated password with a few hundred guesses.</Body_Text>
+               <Example_Code Nature="Bad" Language="Python">
+                 <xhtml:div>def validate_password(actual_pw, typed_pw):
+		 <xhtml:div style="margin-left:1em;">
+                   <xhtml:div>if len(actual_pw) &lt;&gt; len(typed_pw):
+		   <xhtml:div style="margin-left:1em;">return 0</xhtml:div>
+                   <xhtml:br />for i in len(actual_pw):
+		   <xhtml:div style="margin-left:1em;">if actual_pw[i] &lt;&gt; typed_pw[i]:
+		   <xhtml:div style="margin-left:1em;">return 0</xhtml:div>
+                   </xhtml:div>
+                   <xhtml:br />return 1</xhtml:div>
+                 </xhtml:div>
+                 </xhtml:div>
+               </Example_Code>
+               <Body_Text>Note that in this example, the actual password must be handled in constant time as far as the attacker is concerned, even if the actual password is of an unusual length. This is one reason why it is good to use an algorithm that, among other things, stores a seeded cryptographic one-way hash of the password, then compare the hashes, which will always be of the same length.</Body_Text>
+            </Demonstrative_Example>
+            <Demonstrative_Example>
+               <Intro_Text>Non-uniform processing time causes timing channel.</Intro_Text>
+               <Example_Code Nature="Bad" Language="Other">Suppose an algorithm for implementing an encryption routine works fine per se, but the time taken to output the result of the encryption routine depends on a relationship between the input plaintext and the key (e.g., suppose, if the plaintext is similar to the key, it would run very fast).</Example_Code>
+               <Body_Text>In the example above, an attacker may vary the inputs, then observe differences between processing times (since different plaintexts take different time). This could be used to infer information about the key.</Body_Text>
+               <Example_Code Nature="Good" Language="Other">Artificial delays may be added to ensure that all calculations take equal time to execute.</Example_Code>
+            </Demonstrative_Example>
+            <Demonstrative_Example>
+               <Intro_Text>Suppose memory access patterns for an encryption routine are dependent on the secret key.</Intro_Text>
+               <Body_Text>An attacker can recover the key by knowing if specific memory locations have been accessed or not.  The value stored at those memory locations is irrelevant.  The encryption routine's memory accesses will affect the state of the processor cache.  If cache resources are shared across contexts, after the encryption routine completes, an attacker in different execution context can discover which memory locations the routine accessed by measuring the time it takes for their own memory accesses to complete.</Body_Text>
+            </Demonstrative_Example>
+         </Demonstrative_Examples>
+         <Observed_Examples>
+               <Observed_Example>
+                     <Reference>CVE-2020-8695</Reference>
+                     <Description>Observable discrepancy in the RAPL interface for some Intel processors allows information disclosure.</Description>
+                     <Link>https://www.cve.org/CVERecord?id=CVE-2020-8695</Link>
+                     </Observed_Example>
+				<Observed_Example>
+					<Reference>CVE-2019-14353</Reference>
+					<Description>Crypto hardware wallet's power consumption relates to total number of pixels illuminated, creating a side channel in the USB connection that allows attackers to determine secrets displayed such as PIN numbers and passwords</Description>
+					<Link>https://www.cve.org/CVERecord?id=CVE-2019-14353</Link>
+				</Observed_Example>
+		   <Observed_Example>
+			 <Reference>CVE-2019-10071</Reference>
+			 <Description>Java-oriented framework compares HMAC signatures  using  String.equals() instead of a constant-time algorithm, causing timing discrepancies</Description>
+			 <Link>https://www.cve.org/CVERecord?id=CVE-2019-10071</Link>
+		   </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2002-2094</Reference>
+               <Description>This, and others, use ".." attacks and monitor error responses, so there is overlap with directory traversal.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2002-2094</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2001-1483</Reference>
+               <Description>Enumeration of valid usernames based on inconsistent responses</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2001-1483</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2001-1528</Reference>
+               <Description>Account number enumeration via inconsistent responses.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2001-1528</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2004-2150</Reference>
+               <Description>User enumeration via discrepancies in error messages.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2004-2150</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2005-1650</Reference>
+               <Description>User enumeration via discrepancies in error messages.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2005-1650</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2004-0294</Reference>
+               <Description>Bulletin Board displays different error messages when a user exists or not, which makes it easier for remote attackers to identify valid users and conduct a brute force password guessing attack.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2004-0294</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2004-0243</Reference>
+               <Description>Operating System, when direct remote login is disabled, displays a different message if the password is correct, which allows remote attackers to guess the password via brute force methods.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2004-0243</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2002-0514</Reference>
+               <Description>Product allows remote attackers to determine if a port is being filtered because the response packet TTL is different than the default TTL.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2002-0514</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2002-0515</Reference>
+               <Description>Product sets a different TTL when a port is being filtered than when it is not being filtered, which allows remote attackers to identify filtered ports by comparing TTLs.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2002-0515</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2002-0208</Reference>
+               <Description>Product modifies TCP/IP stack and ICMP error messages in unusual ways that show the product is in use.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2002-0208</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2004-2252</Reference>
+               <Description>Behavioral infoleak by responding to SYN-FIN packets.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2004-2252</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2001-1387</Reference>
+               <Description>Product may generate different responses than specified by the administrator, possibly leading to an information leak.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2001-1387</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2004-0778</Reference>
+               <Description>Version control system allows remote attackers to determine the existence of arbitrary files and directories via the -X command for an alternate history file, which causes different error messages to be returned.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2004-0778</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2004-1428</Reference>
+               <Description>FTP server generates an error message if the user name does not exist instead of prompting for a password, which allows remote attackers to determine valid usernames.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2004-1428</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2003-0078</Reference>
+               <Description>SSL implementation does not perform a MAC computation if an incorrect block cipher padding is used, which causes an information leak (timing discrepancy) that may make it easier to launch cryptographic attacks that rely on distinguishing between padding and MAC verification errors, possibly leading to extraction of the original plaintext, aka the "Vaudenay timing attack."</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2003-0078</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2000-1117</Reference>
+               <Description>Virtual machine allows malicious web site operators to determine the existence of files on the client by measuring delays in the execution of the getSystemResource method.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2000-1117</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2003-0637</Reference>
+               <Description>Product uses a shorter timeout for a non-existent user than a valid user, which makes it easier for remote attackers to guess usernames and conduct brute force password guessing.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2003-0637</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2003-0190</Reference>
+               <Description>Product immediately sends an error message when a user does not exist, which allows remote attackers to determine valid usernames via a timing attack.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2003-0190</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2004-1602</Reference>
+               <Description>FTP server responds in a different amount of time when a given username exists, which allows remote attackers to identify valid usernames by timing the server response.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2004-1602</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2005-0918</Reference>
+               <Description>Browser allows remote attackers to determine the existence of arbitrary files by setting the src property to the target filename and using Javascript to determine if the web page immediately stops loading, which indicates whether the file exists or not.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2005-0918</Link>
+            </Observed_Example>
+         </Observed_Examples>
+         <Taxonomy_Mappings>
+            <Taxonomy_Mapping Taxonomy_Name="PLOVER">
+               <Entry_Name>Discrepancy Information Leaks</Entry_Name>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="OWASP Top Ten 2007">
+               <Entry_ID>A6</Entry_ID>
+               <Entry_Name>Information Leakage and Improper Error Handling</Entry_Name>
+               <Mapping_Fit>CWE More Specific</Mapping_Fit>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="OWASP Top Ten 2004">
+               <Entry_ID>A7</Entry_ID>
+               <Entry_Name>Improper Error Handling</Entry_Name>
+               <Mapping_Fit>CWE More Specific</Mapping_Fit>
+            </Taxonomy_Mapping>
+         </Taxonomy_Mappings>
+         <Related_Attack_Patterns>
+            <Related_Attack_Pattern CAPEC_ID="189" />
+         </Related_Attack_Patterns>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Base level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+         <Content_History>
+            <Submission>
+               <Submission_Name>PLOVER</Submission_Name>
+               <Submission_Date>2006-07-19</Submission_Date>
+               <Submission_Version>Draft 3</Submission_Version>
+               <Submission_ReleaseDate>2006-07-19</Submission_ReleaseDate>
+            </Submission>
+            <Modification>
+               <Modification_Name>Eric Dalci</Modification_Name>
+               <Modification_Organization>Cigital</Modification_Organization>
+               <Modification_Date>2008-07-01</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>updated Potential_Mitigations, Time_of_Introduction</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2008-09-08</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2009-12-28</Modification_Date>
+               <Modification_Version>1.7</Modification_Version>
+               <Modification_ReleaseDate>2009-12-28</Modification_ReleaseDate>
+               <Modification_Comment>updated Description, Name</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-06-01</Modification_Date>
+               <Modification_Version>1.13</Modification_Version>
+               <Modification_ReleaseDate>2011-06-01</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2012-05-11</Modification_Date>
+               <Modification_Version>2.2</Modification_Version>
+               <Modification_ReleaseDate>2012-05-15</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences, Demonstrative_Examples, Observed_Examples, Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2012-10-30</Modification_Date>
+               <Modification_Version>2.3</Modification_Version>
+               <Modification_ReleaseDate>2012-10-30</Modification_ReleaseDate>
+               <Modification_Comment>updated Potential_Mitigations</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2014-07-30</Modification_Date>
+               <Modification_Version>2.8</Modification_Version>
+               <Modification_ReleaseDate>2014-07-31</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2017-11-08</Modification_Date>
+               <Modification_Version>3.0</Modification_Version>
+               <Modification_ReleaseDate>2017-11-08</Modification_ReleaseDate>
+               <Modification_Comment>updated Applicable_Platforms</Modification_Comment>
+            </Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2019-06-20</Modification_Date>
+					<Modification_Version>3.3</Modification_Version>
+					<Modification_ReleaseDate>2019-06-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships, Type</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-02-24</Modification_Date>
+					<Modification_Version>4.0</Modification_Version>
+					<Modification_ReleaseDate>2020-02-24</Modification_ReleaseDate>
+					<Modification_Comment>updated Alternate_Terms, Applicable_Platforms, Common_Consequences, Demonstrative_Examples, Description, Name, Observed_Examples, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-08-20</Modification_Date>
+					<Modification_Version>4.2</Modification_Version>
+					<Modification_ReleaseDate>2020-08-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Alternate_Terms, Common_Consequences, Demonstrative_Examples, Description, Name, Potential_Mitigations, Related_Attack_Patterns, Relationships, Research_Gaps</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-12-10</Modification_Date>
+					<Modification_Version>4.3</Modification_Version>
+					<Modification_ReleaseDate>2020-12-10</Modification_ReleaseDate>
+					<Modification_Comment>updated Common_Consequences, Demonstrative_Examples, Description, Name, Potential_Mitigations, Research_Gaps</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-07-20</Modification_Date>
+					<Modification_Version>4.5</Modification_Version>
+					<Modification_ReleaseDate>2021-07-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-10-28</Modification_Date>
+					<Modification_Version>4.6</Modification_Version>
+					<Modification_ReleaseDate>2021-10-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Observed_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-10-26</Modification_Date>
+					<Modification_Version>4.13</Modification_Version>
+					<Modification_ReleaseDate>2023-10-26</Modification_ReleaseDate>
+					<Modification_Comment>updated Observed_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2024-02-29</Modification_Date>
+					<Modification_Version>4.14</Modification_Version>
+					<Modification_ReleaseDate>2024-02-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-04-03</Modification_Date>
+					<Modification_Version>4.17</Modification_Version>
+					<Modification_ReleaseDate>2025-04-03</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2026-04-30</Modification_Date>
+					<Modification_Version>4.20</Modification_Version>
+					<Modification_ReleaseDate>2026-04-30</Modification_ReleaseDate>
+					<Modification_Comment>updated Background_Details, Common_Consequences, Description, Diagram</Modification_Comment>
+				</Modification>
+            <Contribution Type="Content">
+			  <Contribution_Name>Nicole Fern</Contribution_Name>
+               <Contribution_Organization>Cycuity (originally submitted as Tortuga Logic)</Contribution_Organization>
+               <Contribution_Date>2020-06-03</Contribution_Date>
+               <Contribution_Comment>Provided Demonstrative Example for cache timing attack</Contribution_Comment>
+            </Contribution>
+            <Previous_Entry_Name Date="2009-12-28">Discrepancy Information Leaks</Previous_Entry_Name>
+			<Previous_Entry_Name Date="2020-02-24">Information Exposure Through Discrepancy</Previous_Entry_Name>
+			<Previous_Entry_Name Date="2020-08-20">Observable Discrepancy</Previous_Entry_Name>
+			<Previous_Entry_Name Date="2020-12-10">Observable Differences in Behavior to Error Inputs</Previous_Entry_Name>
+         </Content_History>
+      </Weakness>
+      

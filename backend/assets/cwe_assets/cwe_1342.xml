@@ -1,0 +1,165 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="1342" Name="Information Exposure through Microarchitectural State after Transient Execution" Abstraction="Base" Structure="Simple" Status="Incomplete">
+			<Description>The processor does not properly clear microarchitectural state after incorrect microcode assists or speculative execution, resulting in transient execution.</Description>
+			<Extended_Description>
+				<xhtml:p>In many processor architectures an exception, mis-speculation, or microcode assist results in a flush operation to clear results that are no longer required. This action prevents these results from influencing architectural state that is intended to be visible from software. However, traces of this transient execution may remain in microarchitectural buffers, resulting in a change in microarchitectural state that can expose sensitive information to an attacker using side-channel analysis. For example, Load Value Injection (LVI) [REF-1202] can exploit direct injection of erroneous values into intermediate load and store buffers.</xhtml:p>
+				<xhtml:p>Several conditions may need to be fulfilled for a successful attack:</xhtml:p>
+			    <xhtml:ol>
+				<xhtml:li>incorrect transient execution that results in remanence of sensitive information;</xhtml:li>
+				<xhtml:li>attacker has the ability to provoke microarchitectural exceptions;</xhtml:li>
+				<xhtml:li>operations and structures in victim code that can be exploited must be identified.</xhtml:li>
+			    </xhtml:ol>
+			</Extended_Description>
+			<Related_Weaknesses>
+			  <Related_Weakness Nature="ChildOf" CWE_ID="226" View_ID="1000" Ordinal="Primary" />
+			  <Related_Weakness Nature="ChildOf" CWE_ID="226" View_ID="1194" Ordinal="Primary" />
+			</Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+			<Applicable_Platforms>
+				<Language Class="Not Language-Specific" Prevalence="Undetermined" />
+				<Operating_System Class="Not OS-Specific" Prevalence="Undetermined" />
+				<Architecture Class="Workstation" Prevalence="Undetermined" />
+				<Architecture Name="x86" Prevalence="Undetermined" />
+				<Architecture Name="ARM" Prevalence="Undetermined" />
+				<Architecture Name="Other" Prevalence="Undetermined" />
+				<Technology Class="Not Technology-Specific" Prevalence="Undetermined" />
+				<Technology Class="System on Chip" Prevalence="Undetermined" />
+				</Applicable_Platforms>
+			<Modes_Of_Introduction>
+				<Introduction>
+					<Phase>Architecture and Design</Phase>
+				</Introduction>
+				<Introduction>
+					<Phase>Requirements</Phase>
+				</Introduction>
+			</Modes_Of_Introduction>
+			<Common_Consequences>
+				<Consequence>
+					<Scope>Confidentiality</Scope>
+					<Scope>Integrity</Scope>
+					<Impact>Modify Memory</Impact>
+					<Impact>Read Memory</Impact>
+					<Impact>Execute Unauthorized Code or Commands</Impact>
+					<Likelihood>Medium</Likelihood>
+				</Consequence>
+			</Common_Consequences>
+			<Potential_Mitigations>
+				<Mitigation>
+					<Phase>Architecture and Design</Phase>
+					<Phase>Requirements</Phase>
+					<Description>Hardware ensures that no illegal data flows from faulting micro-ops exists at the microarchitectural level.</Description>
+					<Effectiveness>High</Effectiveness>
+					<Effectiveness_Notes>Being implemented in silicon it is expected to fully address the known weaknesses with limited performance impact.</Effectiveness_Notes>
+				</Mitigation>
+				<Mitigation>
+					<Phase>Build and Compilation</Phase>
+					<Description>Include instructions that explicitly remove traces of unneeded computations from software interactions with microarchitectural elements e.g. lfence, sfence, mfence, clflush.</Description>
+					<Effectiveness>High</Effectiveness>
+					<Effectiveness_Notes>This effectively forces the processor to complete each memory access before moving on to the next operation. This may have a large performance impact.</Effectiveness_Notes>
+				</Mitigation>
+			</Potential_Mitigations>
+			<Demonstrative_Examples>
+				<Demonstrative_Example>
+					<Intro_Text>Faulting loads in a victim domain may trigger incorrect transient forwarding, which leaves secret-dependent traces in the microarchitectural state. Consider this example from [REF-1203].</Intro_Text>
+					<Body_Text>Consider the code gadget:</Body_Text>
+					<Example_Code Nature="Bad" Language="C">
+					  <xhtml:div>
+					    void call_victim(size_t untrusted_arg) {<xhtml:br />
+					    <xhtml:div style="margin-left:1em;">
+					      *arg_copy = untrusted_arg;<xhtml:br />
+					      array[**trusted_ptr * 4096];<xhtml:br />
+					    </xhtml:div>
+					    }
+					</xhtml:div>
+					</Example_Code>
+					<Body_Text><xhtml:p>A processor with this weakness will store the value of untrusted_arg (which may be provided by an attacker) to the stack, which is trusted memory. Additionally, this store operation will save this value in some microarchitectural buffer, e.g. the store queue.</xhtml:p>
+					<xhtml:p>In this code gadget, 
+					trusted_ptr is dereferenced while the attacker forces a page fault. The faulting load causes the processor to mis-speculate by forwarding untrusted_arg as the (speculative) load result. The processor then uses untrusted_arg for the pointer dereference. After the fault has been handled and the load has been re-issued with the correct argument, secret-dependent information stored at the address of trusted_ptr remains in microarchitectural state and can be extracted by an attacker using a code gadget.</xhtml:p></Body_Text>
+				</Demonstrative_Example>
+			</Demonstrative_Examples>
+			<Observed_Examples>
+				<Observed_Example>
+					<Reference>CVE-2020-0551</Reference>
+					<Description>Load value injection in some processors utilizing speculative execution may allow an authenticated user to enable information disclosure via a side-channel with local access.</Description>
+					<Link>https://www.cve.org/CVERecord?id=CVE-2020-0551</Link>
+				</Observed_Example>
+			</Observed_Examples>
+         <Related_Attack_Patterns>
+            <Related_Attack_Pattern CAPEC_ID="696" />
+         </Related_Attack_Patterns>
+         <References>
+				<Reference External_Reference_ID="REF-1202" />
+				<Reference External_Reference_ID="REF-1203" />
+				<Reference External_Reference_ID="REF-1204" />
+				<Reference External_Reference_ID="REF-1205" />
+			</References>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Base level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+			<Notes>
+			  <Note Type="Relationship">
+			    CWE-1342 differs from CWE-1303, which is related to misprediction and biasing microarchitectural components, while CWE-1342 addresses illegal data flows and retention. For example, Spectre is an instance of CWE-1303 biasing branch prediction to steer the transient execution indirectly.
+			  </Note>
+           <Note Type="Maintenance">As of CWE 4.9, members of the CWE Hardware SIG are closely analyzing this entry and others to improve CWE's coverage of transient execution weaknesses, which include issues related to Spectre, Meltdown, and other attacks. Additional investigation may include other weaknesses related to microarchitectural state. As a result, this entry might change significantly in CWE 4.10.</Note>
+			</Notes>
+			  
+			<Content_History>
+				<Submission>
+					<Submission_Name>Anders Nordstrom, Alric Althoff</Submission_Name>
+					<Submission_Organization>Cycuity (originally submitted as Tortuga Logic)</Submission_Organization>
+					<Submission_Date>2021-09-22</Submission_Date>
+					<Submission_Version>4.6</Submission_Version>
+					<Submission_ReleaseDate>2021-10-28</Submission_ReleaseDate>
+				</Submission>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-10-13</Modification_Date>
+					<Modification_Version>4.9</Modification_Version>
+					<Modification_ReleaseDate>2022-10-13</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples, Maintenance_Notes, Related_Attack_Patterns</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2024-02-29</Modification_Date>
+					<Modification_Version>4.14</Modification_Version>
+					<Modification_ReleaseDate>2024-02-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Description</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+			</Content_History>
+		</Weakness>
+      

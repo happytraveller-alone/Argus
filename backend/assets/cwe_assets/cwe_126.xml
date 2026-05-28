@@ -1,0 +1,343 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="126" Name="Buffer Over-read" Abstraction="Variant" Structure="Simple" Status="Draft" Diagram="/data/images/CWE-126-Diagram.png">
+         <Description>The product reads from a buffer using buffer access mechanisms such as indexes or pointers that reference memory locations after the targeted buffer.</Description>
+         <Related_Weaknesses>
+            <Related_Weakness Nature="ChildOf" CWE_ID="125" View_ID="1000" />
+            <Related_Weakness Nature="ChildOf" CWE_ID="788" View_ID="1000" Ordinal="Primary" />
+         </Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+         <Applicable_Platforms>
+	   <Language Class="Memory-Unsafe" Prevalence="Undetermined" />
+            <Language Name="C" Prevalence="Undetermined" />
+            <Language Name="C++" Prevalence="Undetermined" />
+         </Applicable_Platforms>
+         <Modes_Of_Introduction>
+            <Introduction>
+               <Phase>Implementation</Phase>
+            </Introduction>
+         </Modes_Of_Introduction>
+         <Common_Consequences>
+            <Consequence>
+               <Scope>Confidentiality</Scope>
+               <Impact>Read Memory</Impact>
+            </Consequence>
+            <Consequence>
+               <Scope>Confidentiality</Scope>
+               <Impact>Bypass Protection Mechanism</Impact>
+	       <Note>By reading out-of-bounds memory, an attacker might be able to get secret values, such as memory addresses, which can bypass protection mechanisms such as ASLR in order to improve the reliability and likelihood of exploiting a separate weakness to achieve code execution instead of just denial of service.</Note>
+            </Consequence>
+			<Consequence>
+               <Scope>Availability</Scope>
+			   <Scope>Integrity</Scope>
+               <Impact>DoS: Crash, Exit, or Restart</Impact>
+	       <Note>An attacker might be able to cause a crash or other denial of service by causing the product to read a memory location that is not allowed (such as a segmentation fault), or to cause other conditions in which the read operation returns more data than is expected.</Note>
+           </Consequence>
+         </Common_Consequences>
+         <Detection_Methods>
+           <Detection_Method Detection_Method_ID="DM-14">
+             <Method>Automated Static Analysis</Method>
+             <Description>Automated static analysis, commonly referred to as Static Application Security Testing (SAST), can find some instances of this weakness by analyzing source code (or binary/compiled code) without having to execute it. Typically, this is done by building a model of data flow and control flow, then searching for potentially-vulnerable patterns that connect "sources" (origins of input) with "sinks" (destinations where the data interacts with external components, a lower layer such as the OS, etc.)</Description>
+             <Effectiveness>High</Effectiveness>
+           </Detection_Method>
+	   <Detection_Method Detection_Method_ID="DM-15">
+	     <Method>Automated Dynamic Analysis</Method>
+	     <Description>Use tools that are integrated during
+	     compilation to insert runtime error-checking mechanisms
+	     related to memory safety errors, such as AddressSanitizer
+	     (ASan) for C/C++ [REF-1518].</Description>
+	     <Effectiveness>Moderate</Effectiveness>
+	     <Effectiveness_Notes>Crafted inputs are necessary to
+	     reach the code containing the error, such as generated
+	     by fuzzers.  Also, these tools may reduce performance,
+	     and they only report the error condition - not the
+	     original mistake that led to the
+	     error.</Effectiveness_Notes>
+	   </Detection_Method>
+         </Detection_Methods>
+         <Demonstrative_Examples>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-91">
+               <Intro_Text>In the following C/C++ example the method processMessageFromSocket() will get a message from a socket, placed into a buffer, and will parse the contents of the buffer into a structure that contains the message length and the message body. A for loop is used to copy the message body into a local character string which will be passed to another method for processing.</Intro_Text>
+               <Example_Code Nature="Bad" Language="C">
+                  <xhtml:div>int processMessageFromSocket(int socket) {<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>int success;<xhtml:br />
+                           <xhtml:br />char buffer[BUFFER_SIZE];<xhtml:br />char message[MESSAGE_SIZE];<xhtml:br />
+                           <xhtml:br />
+                           <xhtml:i>// get message from socket and store into buffer</xhtml:i>
+                           <xhtml:br />
+                           <xhtml:br />
+                           <xhtml:i>//Ignoring possibliity that buffer &gt; BUFFER_SIZE</xhtml:i>
+                           <xhtml:br />if (getMessage(socket, buffer, BUFFER_SIZE) &gt; 0) {<xhtml:div style="margin-left:1em;">
+                              <xhtml:div>
+                                 <xhtml:br />
+                                 <xhtml:i>// place contents of the buffer into message structure</xhtml:i>
+                                 <xhtml:br />ExMessage *msg = recastBuffer(buffer);<xhtml:br />
+                                 <xhtml:br />
+                                 <xhtml:i>// copy message body into string for processing</xhtml:i>
+                                 <xhtml:br />int index;<xhtml:br />for (index = 0; index &lt; msg-&gt;msgLength; index++) {<xhtml:div style="margin-left:1em;">message[index] = msg-&gt;msgBody[index];</xhtml:div>}<xhtml:br />message[index] = '\0';<xhtml:br />
+                                 <xhtml:br />
+                                 <xhtml:i>// process message</xhtml:i>
+                                 <xhtml:br />success = processMessage(message);</xhtml:div>
+                           </xhtml:div>}<xhtml:br />return success;</xhtml:div>
+                     </xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>However, the message length variable (msgLength) from the structure is used as the condition for ending the for loop without validating that msgLength accurately reflects the actual length of the message body (CWE-606). If msgLength indicates a length that is longer than the size of a message body (CWE-130), then this can result in a buffer over-read by reading past the end of the buffer (CWE-126).</Body_Text>
+            </Demonstrative_Example>
+            <Demonstrative_Example>
+               <Intro_Text>The following C/C++ example demonstrates a buffer over-read due to a missing NULL terminator. The main method of a pattern matching utility that looks for a specific pattern within a specific file uses the string strncopy() method to copy the command line user input file name and pattern to the Filename and Pattern character arrays respectively.</Intro_Text>
+               <Example_Code Nature="Bad" Language="C">
+                  <xhtml:div>int main(int argc, char **argv)<xhtml:br />{<xhtml:br />
+                     <xhtml:div style="margin-left:1em;">char Filename[256];<xhtml:br />char Pattern[32];<xhtml:br />
+                        <xhtml:br />
+                        <xhtml:i>/* Validate number of parameters and ensure valid content */</xhtml:i>
+                        <xhtml:br />...<xhtml:br />
+                        <xhtml:br />
+                        <xhtml:i>/* copy filename parameter to variable, may cause off-by-one overflow */</xhtml:i>
+                        <xhtml:br />strncpy(Filename, argv[1], sizeof(Filename));<xhtml:br />
+                        <xhtml:br />
+                        <xhtml:i>/* copy pattern parameter to variable, may cause off-by-one overflow */</xhtml:i>
+                        <xhtml:br />strncpy(Pattern, argv[2], sizeof(Pattern));<xhtml:br />
+                        <xhtml:br />printf("Searching file: %s for the pattern: %s\n", Filename, Pattern);<xhtml:br />Scan_File(Filename, Pattern);</xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>However, the code do not take into account that strncpy() will not add a NULL terminator when the source buffer is equal in length of longer than that provide size attribute. Therefore if a user enters a filename or pattern that are the same size as (or larger than) their respective character arrays, a NULL terminator will not be added (CWE-170) which leads to the printf() read beyond the expected end of the Filename and Pattern buffers.</Body_Text>
+               <Body_Text>To fix this problem, be sure to subtract 1 from the sizeof() call to allow room for the null byte to be added.</Body_Text>
+               <Example_Code Nature="Good" Language="C">
+                  <xhtml:div>
+                     <xhtml:i>/* copy filename parameter to variable, no off-by-one overflow */</xhtml:i>
+                     <xhtml:br />strncpy(Filename, argv[2], sizeof(Filename)-1);<xhtml:br />Filename[255]='\0';<xhtml:br />
+                     <xhtml:br />
+                     <xhtml:i>/* copy pattern parameter to variable, no off-by-one overflow */</xhtml:i>
+                     <xhtml:br />strncpy(Pattern, argv[3], sizeof(Pattern)-1);</xhtml:div>Pattern[31]='\0';<xhtml:br />
+               </Example_Code>
+            </Demonstrative_Example>
+         </Demonstrative_Examples>
+         <Observed_Examples>
+		   <Observed_Example>
+			 <Reference>CVE-2022-1733</Reference>
+			 <Description>Text editor has out-of-bounds read past end of line while indenting C code</Description>
+			 <Link>https://www.cve.org/CVERecord?id=CVE-2022-1733</Link>
+		   </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2014-0160</Reference>
+               <Description>Chain: "Heartbleed" bug receives an inconsistent length parameter (CWE-130) enabling an out-of-bounds read (CWE-126), returning memory that could include private cryptographic keys and other sensitive data.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2014-0160</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2009-2523</Reference>
+               <Description>Chain: product does not handle when an input string is not NULL terminated, leading to buffer over-read or heap-based buffer overflow.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2009-2523</Link>
+            </Observed_Example>
+         </Observed_Examples>
+         <Functional_Areas>
+            <Functional_Area>Memory Management</Functional_Area>
+         </Functional_Areas>
+         <Affected_Resources>
+            <Affected_Resource>Memory</Affected_Resource>
+         </Affected_Resources>
+         <Taxonomy_Mappings>
+            <Taxonomy_Mapping Taxonomy_Name="PLOVER">
+               <Entry_Name>Buffer over-read</Entry_Name>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="Software Fault Patterns">
+               <Entry_ID>SFP8</Entry_ID>
+               <Entry_Name>Faulty Buffer Access</Entry_Name>
+            </Taxonomy_Mapping>
+         </Taxonomy_Mappings>
+         <References>
+            <Reference External_Reference_ID="REF-1034" />
+            <Reference External_Reference_ID="REF-1035" />
+            <Reference External_Reference_ID="REF-44" Section="&quot;Sin 5: Buffer Overruns.&quot; Page 89" />
+	    <Reference External_Reference_ID="REF-1518" />
+         </References>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Variant level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+         <Notes>
+            <Note Type="Relationship">These problems may be resultant from missing sentinel values (CWE-463) or trusting a user-influenced input length variable.</Note>
+			<Note Type="Other">A buffer over-read typically occurs when the pointer or its index is incremented to a position past the end of the buffer or when pointer arithmetic results in a position after the valid memory location.</Note>
+         </Notes>
+         <Content_History>
+            <Submission>
+               <Submission_Name>PLOVER</Submission_Name>
+               <Submission_Date>2006-07-19</Submission_Date>
+               <Submission_Version>Draft 3</Submission_Version>
+               <Submission_ReleaseDate>2006-07-19</Submission_ReleaseDate>
+            </Submission>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2008-09-08</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>updated Applicable_Platforms, Relationships, Taxonomy_Mappings, Weakness_Ordinalities</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2009-10-29</Modification_Date>
+               <Modification_Version>1.6</Modification_Version>
+               <Modification_ReleaseDate>2009-10-29</Modification_ReleaseDate>
+               <Modification_Comment>updated Description, Relationship_Notes, Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-03-29</Modification_Date>
+               <Modification_Version>1.12</Modification_Version>
+               <Modification_ReleaseDate>2011-03-30</Modification_ReleaseDate>
+               <Modification_Comment>updated Demonstrative_Examples</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-06-01</Modification_Date>
+               <Modification_Version>1.13</Modification_Version>
+               <Modification_ReleaseDate>2011-06-01</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2012-05-11</Modification_Date>
+               <Modification_Version>2.2</Modification_Version>
+               <Modification_ReleaseDate>2012-05-15</Modification_ReleaseDate>
+               <Modification_Comment>updated Demonstrative_Examples, Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2014-06-23</Modification_Date>
+               <Modification_Version>2.7</Modification_Version>
+               <Modification_ReleaseDate>2014-06-23</Modification_ReleaseDate>
+               <Modification_Comment>updated Observed_Examples</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2014-07-30</Modification_Date>
+               <Modification_Version>2.8</Modification_Version>
+               <Modification_ReleaseDate>2014-07-31</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2017-11-08</Modification_Date>
+               <Modification_Version>3.0</Modification_Version>
+               <Modification_ReleaseDate>2017-11-08</Modification_ReleaseDate>
+               <Modification_Comment>updated Causal_Nature, Demonstrative_Examples</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2018-03-27</Modification_Date>
+               <Modification_Version>3.1</Modification_Version>
+               <Modification_ReleaseDate>2018-03-27</Modification_ReleaseDate>
+               <Modification_Comment>updated Demonstrative_Examples</Modification_Comment>
+            </Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2019-09-19</Modification_Date>
+					<Modification_Version>3.4</Modification_Version>
+					<Modification_ReleaseDate>2019-09-19</Modification_ReleaseDate>
+					<Modification_Comment>updated Common_Consequences, References</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-02-24</Modification_Date>
+					<Modification_Version>4.0</Modification_Version>
+					<Modification_ReleaseDate>2020-02-24</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-06-25</Modification_Date>
+					<Modification_Version>4.1</Modification_Version>
+					<Modification_ReleaseDate>2020-06-25</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-01-31</Modification_Date>
+					<Modification_Version>4.10</Modification_Version>
+					<Modification_ReleaseDate>2023-01-31</Modification_ReleaseDate>
+					<Modification_Comment>updated Description</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Detection_Factors, References, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-10-26</Modification_Date>
+					<Modification_Version>4.13</Modification_Version>
+					<Modification_ReleaseDate>2023-10-26</Modification_ReleaseDate>
+					<Modification_Comment>updated Observed_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-04-03</Modification_Date>
+					<Modification_Version>4.17</Modification_Version>
+					<Modification_ReleaseDate>2025-04-03</Modification_ReleaseDate>
+					<Modification_Comment>updated Common_Consequences, Description, Diagram, Other_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-09-09</Modification_Date>
+					<Modification_Version>4.18</Modification_Version>
+					<Modification_ReleaseDate>2025-09-09</Modification_ReleaseDate>
+					<Modification_Comment>updated Affected_Resources, Common_Consequences, Demonstrative_Examples, Functional_Areas</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Applicable_Platforms, Detection_Factors, References</Modification_Comment>
+				</Modification>
+				<Contribution Type="Content">
+				  <Contribution_Name>Abhi Balakrishnan</Contribution_Name>
+				  <Contribution_Date>2025-03-18</Contribution_Date>
+				  <Contribution_Version>4.17</Contribution_Version>
+				  <Contribution_ReleaseDate>2025-04-03</Contribution_ReleaseDate>
+				  <Contribution_Comment>Provided diagram to improve CWE usability.</Contribution_Comment>
+				</Contribution>
+				<Contribution Type="Feedback">
+				  <Contribution_Name>Chris Harding</Contribution_Name>
+				  <Contribution_Organization>Security Journey</Contribution_Organization>
+				  <Contribution_Date>2025-07-10</Contribution_Date>
+				  <Contribution_Version>4.18</Contribution_Version>
+				  <Contribution_ReleaseDate>2025-08-28</Contribution_ReleaseDate>
+				  <Contribution_Comment>Suggested CWE mapping change for the description for an observed example</Contribution_Comment>
+				</Contribution>
+         </Content_History>
+      </Weakness>
+      

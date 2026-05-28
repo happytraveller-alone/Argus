@@ -1,0 +1,245 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="1304" Name="Improperly Preserved Integrity of Hardware Configuration State During a Power Save/Restore Operation" Abstraction="Base" Structure="Simple" Status="Draft">
+            <Description>The product performs a power save/restore
+            operation, but it does not ensure that the integrity of
+            the configuration state is maintained and/or verified between
+	    the beginning and ending of the operation.</Description>
+			<Extended_Description>
+                <xhtml:p>Before powering down, the Intellectual
+                Property (IP) saves current state (S) to persistent
+                storage such as flash or always-on memory in order to
+                optimize the restore operation.  During this process,
+                an attacker with access to the persistent storage may
+                alter (S) to a configuration that could potentially
+                modify privileges, disable protections, and/or cause
+                damage to the hardware. If the IP does not validate
+                the configuration state stored in persistent memory,
+                upon regaining power or becoming operational again,
+                the IP could be compromised through the activation of
+                an unwanted/harmful configuration.
+                </xhtml:p>
+			</Extended_Description>
+			<Related_Weaknesses>
+				<Related_Weakness Nature="ChildOf" CWE_ID="284" View_ID="1000" Ordinal="Primary" />
+				<Related_Weakness Nature="PeerOf" CWE_ID="345" View_ID="1000" />
+				<Related_Weakness Nature="PeerOf" CWE_ID="1271" View_ID="1194" />
+			</Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+            <Weakness_Ordinality>
+               <Ordinality>Resultant</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+			<Applicable_Platforms>
+				<Language Class="Not Language-Specific" Prevalence="Undetermined" />
+				<Operating_System Class="Not OS-Specific" Prevalence="Undetermined" />
+				<Architecture Class="Not Architecture-Specific" Prevalence="Undetermined" />
+				<Technology Class="Not Technology-Specific" Prevalence="Undetermined" />
+            </Applicable_Platforms>
+			<Modes_Of_Introduction>
+				<Introduction>
+					<Phase>Architecture and Design</Phase>
+                    <Note>Weakness introduced via missing internal integrity guarantees during power save/restore</Note>
+				</Introduction>
+				<Introduction>
+					<Phase>Integration</Phase>
+					<Note>Weakness introduced via missing external integrity verification during power save/restore</Note>
+				</Introduction>
+			</Modes_Of_Introduction>
+			<Common_Consequences>
+				<Consequence>
+					<Scope>Confidentiality</Scope>
+					<Scope>Integrity</Scope>
+                    <Impact>DoS: Instability</Impact>
+                    <Impact>DoS: Crash, Exit, or Restart</Impact>
+                    <Impact>DoS: Resource Consumption (Other)</Impact>
+                    <Impact>Gain Privileges or Assume Identity</Impact>
+                    <Impact>Bypass Protection Mechanism</Impact>
+                    <Impact>Alter Execution Logic</Impact>
+                    <Impact>Quality Degradation</Impact>
+                    <Impact>Unexpected State</Impact>
+                    <Impact>Reduce Maintainability</Impact>
+                    <Impact>Reduce Performance</Impact>
+                    <Impact>Reduce Reliability</Impact>
+					<Likelihood>High</Likelihood>
+				</Consequence>
+			</Common_Consequences>
+			<Potential_Mitigations>
+				<Mitigation>
+					<Phase>Architecture and Design</Phase>
+                    <Description>Inside the IP, incorporate integrity checking
+                        on the configuration state via a cryptographic
+                        hash. The hash can be protected inside the IP such as
+                        by storing it in internal registers which never lose
+                        power. Before powering down, the IP performs a hash of
+                        the configuration and saves it in these persistent
+                        registers. Upon restore, the IP performs a hash of the
+                        saved configuration and compares it with the
+                        saved hash. If they do not match, then the IP should
+                        not trust the configuration.</Description>
+				</Mitigation>
+				<Mitigation>
+					<Phase>Integration</Phase>
+                    <Description>Outside the IP, incorporate integrity checking
+                        of the configuration state via a trusted agent. Before
+                        powering down, the trusted agent performs a hash of the
+                        configuration and saves the hash in persistent storage.
+                        Upon restore, the IP requests the trusted agent
+                        validate its current configuration. If the
+                        configuration hash is invalid, then the IP should not
+                        trust the configuration.
+                    </Description>
+				</Mitigation>
+				<Mitigation>
+					<Phase>Integration</Phase>
+                    <Description>Outside the IP, incorporate a protected
+                        environment that prevents undetected modification of
+                        the configuration state by untrusted agents. Before
+                        powering down, a trusted agent saves the IP's
+                        configuration state in this protected location that
+                        only it is privileged to. Upon restore, the trusted
+                        agent loads the saved state into the IP.
+                    </Description>
+				</Mitigation>
+			</Potential_Mitigations>
+			<Demonstrative_Examples>
+				<Demonstrative_Example>
+                    <Intro_Text>The following pseudo code demonstrates the
+                        power save/restore workflow which may lead to weakness
+                        through a lack of validation of the config state after
+                        restore.
+                    </Intro_Text>
+					<Example_Code Nature="Bad" Language="C">
+						void save_config_state()<xhtml:br />
+						{<xhtml:br />
+						<xhtml:div style="margin-left:1em;">
+							void* cfg;<xhtml:br />
+							<xhtml:br />
+							cfg = get_config_state();<xhtml:br />
+							save_config_state(cfg);<xhtml:br />
+							<xhtml:br />
+							go_to_sleep();<xhtml:br />
+						</xhtml:div>
+						}<xhtml:br />
+						<xhtml:br />
+						void restore_config_state()<xhtml:br />
+						{<xhtml:br />
+						<xhtml:div style="margin-left:1em;">
+							void* cfg;<xhtml:br />
+							cfg = get_config_file();<xhtml:br />
+							load_config_file(cfg);<xhtml:br />
+						</xhtml:div>
+						}<xhtml:br />
+					</Example_Code>
+					<Body_Text>The following pseudo-code is the proper workflow for the integrity checking mitigation:</Body_Text>
+                    <Example_Code Nature="Good" Language="C">
+						void save_config_state()<xhtml:br />
+						{<xhtml:br />
+						<xhtml:div style="margin-left:1em;">
+							void* cfg;<xhtml:br />
+							void* sha;<xhtml:br />
+							<xhtml:br />
+							cfg = get_config_state();<xhtml:br />
+							save_config_state(cfg);<xhtml:br />
+							<xhtml:br />
+							// save hash(cfg) to trusted location<xhtml:br />
+							sha = get_hash_of_config_state(cfg);<xhtml:br />
+							save_hash(sha); <xhtml:br />
+							<xhtml:br />
+							go_to_sleep();<xhtml:br />
+						</xhtml:div>
+						}<xhtml:br />
+						<xhtml:br />
+						void restore_config_state()<xhtml:br />
+						{<xhtml:br />
+						<xhtml:div style="margin-left:1em;">
+							void* cfg;<xhtml:br />
+							void* sha_1, sha_2;<xhtml:br />
+							<xhtml:br />
+							cfg = get_config_file();<xhtml:br />
+							// restore hash of config from trusted memory<xhtml:br />
+							sha_1 = get_persisted_sha_value();<xhtml:br />
+							<xhtml:br />
+							sha_2 = get_hash_of_config_state(cfg);<xhtml:br />
+							if (sha_1 != sha_2)<xhtml:br />
+							<xhtml:div style="margin-left:1em;">
+								assert_error_and_halt();<xhtml:br />
+							</xhtml:div>
+							<xhtml:br />
+							load_config_file(cfg);<xhtml:br />
+						</xhtml:div>
+						}<xhtml:br />
+                    </Example_Code>
+                    <Body_Text>It must be noted that in the previous example of
+                        good pseudo code, the memory (where the hash of the
+                        config state is stored) must be trustworthy while the
+                        hardware is between the power save and restore states.
+                    </Body_Text>
+				</Demonstrative_Example>
+			</Demonstrative_Examples>
+			<Functional_Areas>
+            	<Functional_Area>Power</Functional_Area>
+         	</Functional_Areas>
+         <Related_Attack_Patterns>
+            <Related_Attack_Pattern CAPEC_ID="176" />
+         </Related_Attack_Patterns>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Base level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+         <Content_History>
+				<Submission>
+					<Submission_Organization>Accellera Systems Initiative</Submission_Organization>
+					<Submission_Date>2020-07-16</Submission_Date>
+					<Submission_Version>4.2</Submission_Version>
+					<Submission_ReleaseDate>2020-08-20</Submission_ReleaseDate>
+				</Submission>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-03-15</Modification_Date>
+					<Modification_Version>4.4</Modification_Version>
+					<Modification_ReleaseDate>2021-03-15</Modification_ReleaseDate>
+					<Modification_Comment>updated Functional_Areas</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-07-20</Modification_Date>
+					<Modification_Version>4.5</Modification_Version>
+					<Modification_ReleaseDate>2021-07-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Related_Attack_Patterns</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+			</Content_History>
+		</Weakness>
+      

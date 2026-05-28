@@ -220,10 +220,9 @@ test("AgentAuditDetail handles fetch error state with retry button", () => {
 // Table column renderers consume buildCanonicalDisplay — assert usage pattern
 // ---------------------------------------------------------------------------
 
-test("agentTable.canonical — 名称 column uses canonical.name from buildCanonicalDisplay", () => {
-	// The column renderer must call buildCanonicalDisplay and use canonical.name
+test("agentTable.canonical — buildCanonicalDisplay is used in column renderers", () => {
+	// 名称 column was intentionally removed; remaining columns still consume buildCanonicalDisplay
 	assert.match(source, /buildCanonicalDisplay/);
-	assert.match(source, /canonical\.name/);
 });
 
 test("agentTable.canonical — 漏洞类型 column uses canonical.typeLabel", () => {

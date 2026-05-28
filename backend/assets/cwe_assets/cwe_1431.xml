@@ -1,0 +1,357 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="1431" Name="Driving Intermediate Cryptographic State/Results to Hardware Module Outputs" Abstraction="Base" Structure="Simple" Status="Incomplete">
+		  <Description>The product uses a hardware module implementing a cryptographic
+		  algorithm that writes sensitive information about the intermediate
+		  state or results of its cryptographic operations via one of its output
+		  wires (typically the output port containing the final result).</Description>
+		  <Related_Weaknesses>
+		    <Related_Weakness Nature="ChildOf" CWE_ID="200" View_ID="1000" Ordinal="Primary" />
+		    <Related_Weakness Nature="PeerOf" CWE_ID="497" View_ID="1000" />
+		  </Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+		  <Applicable_Platforms>
+		    <Language Class="Not Language-Specific" Prevalence="Undetermined" />
+		    <Architecture Class="Not Architecture-Specific" Prevalence="Undetermined" />
+		    <Technology Class="System on Chip" Prevalence="Undetermined" />
+		  </Applicable_Platforms>
+		  <Modes_Of_Introduction>
+		    <Introduction>
+		      <Phase>Implementation</Phase>
+		      <Note><xhtml:p>This can occur when intermediate cryptographic states are
+		      directly assigned to output wires or ports.</xhtml:p></Note>
+		    </Introduction>
+		  </Modes_Of_Introduction>
+			<Common_Consequences>
+			  <Consequence>
+			    <Scope>Confidentiality</Scope>
+			    <Impact>Read Memory</Impact>
+			    <Impact>Read Application Data</Impact>
+			    <Likelihood>Unknown</Likelihood>
+			    <Note><xhtml:p>Mathematically sound cryptographic algorithms rely on their
+			    correct implementation for security. These assumptions might break when a
+			    hardware crypto module leaks intermediate encryption states or results
+			    such that they can be observed by an adversary. If intermediate state
+			    is observed, it might be possible for an attacker to identify the
+			    secrets used in the cryptographic operation.</xhtml:p></Note>
+			  </Consequence>
+			</Common_Consequences>
+			<Detection_Methods>
+			  <Detection_Method>
+			    <Method>Automated Static Analysis - Source Code</Method>
+			    <Description><xhtml:p>Automated static analysis can find some instances of this
+			    weakness by analyzing source register-transfer level (RTL) code
+			    without having to simulate it or analyze it with a formal verification
+			    engine. Typically, this is done by building a model of data flow and
+			    control flow, then searching for potentially-vulnerable patterns that
+			    connect "sources" (signals with intermediate cryptographic
+			    state/results) with "sinks" (hardware module outputs and other signals
+			    outside of trusted cryptographic zone) without any control flow.</xhtml:p></Description>
+			    <Effectiveness>High</Effectiveness>
+			    <Effectiveness_Notes><xhtml:p>Static code analysis can sometimes lead to false positives.</xhtml:p>
+			    </Effectiveness_Notes>
+			  </Detection_Method>
+			  <Detection_Method>
+			    <Method>Simulation / Emulation</Method>
+			    <Description><xhtml:p>Simulation/emulation based analysis can find some instances of
+			    this weakness by simulating source register-transfer level (RTL) code
+			    along with a set of assertions that incorporate the simulated values
+			    of relevant design signals. Typically, these assertions will capture
+			    desired or undesired behavior. Analysis can be improved by using
+			    simulation-based information flow tracking (IFT) to more precisely
+			    detect unexpected results.</xhtml:p></Description>
+			    <Effectiveness>High</Effectiveness>
+			    <Effectiveness_Notes><xhtml:p>Simulation/emulation based analysis can sometimes lead to false
+			    negatives if the testbench does not drive the design to a design state
+			    in which the assertion would fail.</xhtml:p></Effectiveness_Notes>
+			  </Detection_Method>
+			  <Detection_Method>
+			    <Method>Formal Verification</Method>
+			    <Description><xhtml:p>Formal verification can find some instances of this weakness by
+			    exhaustively analyzing whether a given assertion holds true for a
+			    given hardware design specified in register-transfer level (RTL)
+			    code. Typically, these assertions will capture desired or undesired
+			    behavior. For this weakness, an assertion should check for undesired
+			    behavior in which one output is a signal that captures when a
+			    cryptographic algorithm has completely finished; another output is a
+			    signal with intermediate cryptographic state/results; and there is an
+			    assignment to a hardware module output or other signal outside of a
+			    trusted cryptographic zone.</xhtml:p>
+			    <xhtml:p>Alternatively, when using a formal IFT verification, the same
+			    undesired behavior can be detected by checking if computation results
+			    can ever leak to an output when the cryptographic result is not
+			    copmlete.</xhtml:p>
+			    </Description>
+			    <Effectiveness>High</Effectiveness>
+			    <Effectiveness_Notes><xhtml:p>Formal verification may not scale for RTL designs with a large state space.</xhtml:p></Effectiveness_Notes>
+			  </Detection_Method>
+			  <Detection_Method>
+			    <Method>Manual Analysis</Method>
+			    <Description><xhtml:p>Manual analysis can find some instances of this weakness by
+			    manually reviewing relevant lines of source register-transfer level
+			    (RTL) code to detect potentially-vulnerable patterns. Typically, the
+			    reviewer will trace the sequence of assignments that connect "sources"
+			    (signals with intermediate cryptographic state/results) with "sinks"
+			    (hardware module outputs and other signals outside of trusted
+			    cryptographic zone). If this sequence of assignments is missing
+			    adequate control flow, then the weakness is likely to exist.</xhtml:p></Description>
+			    <Effectiveness>Opportunistic</Effectiveness>
+			    <Effectiveness_Notes><xhtml:p>Manual analysis of source code is prone to errors (false
+			    positives and false negatives) and highly opportunistic.</xhtml:p></Effectiveness_Notes>
+			  </Detection_Method>
+			</Detection_Methods>
+			<Potential_Mitigations>
+			  <Mitigation>
+			    <Phase>Architecture and Design</Phase>
+			    <Description><xhtml:p>Designers/developers
+			    should add or modify existing control flow
+			    logic along any data flow paths that
+			    connect "sources" (signals with
+			    intermediate cryptographic state/results)
+			    with "sinks" (hardware module outputs and
+			    other signals outside of trusted
+			    cryptographic zone). The control flow
+			    logic should only allow cryptographic
+			    results to be driven to "sinks" when
+			    appropriate conditions are satisfied
+			    (typically when the final result for a
+			    cryptographic operation has been
+			    generated). When the appropriate
+			    conditions are not satisfied (i.e., before
+			    or during a cryptographic operation), the
+			    control flow logic should drive a safe
+			    default value to
+			    "sinks".</xhtml:p></Description>
+			    <Effectiveness>High</Effectiveness>
+			  </Mitigation>
+			  <Mitigation>
+			    <Phase>Implementation</Phase>
+			    <Description><xhtml:p>Designers/developers
+			    should add or modify existing control flow
+			    logic along any data flow paths that
+			    connect "sources" (signals with
+			    intermediate cryptographic state/results)
+			    with "sinks" (hardware module outputs and
+			    other signals outside of trusted
+			    cryptographic zone). The control flow
+			    logic should only allow cryptographic
+			    results to be driven to "sinks" when
+			    appropriate conditions are satisfied
+			    (typically when the final result for a
+			    cryptographic operation has been
+			    generated). When the appropriate
+			    conditions are not satisfied (i.e., before
+			    or during a cryptographic operation), the
+			    control flow logic should drive a safe
+			    default value to
+			    "sinks".</xhtml:p></Description>
+			    <Effectiveness>High</Effectiveness>
+			  </Mitigation>
+			</Potential_Mitigations>
+			<Demonstrative_Examples>
+			  <Demonstrative_Example>
+			    <Intro_Text><xhtml:p>The following SystemVerilog code is a crypto module that takes input
+			    data and encrypts it by processing the data through multiple
+			    encryption rounds. Note: this example is derived from [REF-1469].</xhtml:p></Intro_Text>
+			    <Example_Code Nature="Bad" Language="Verilog">
+			      01 | module crypto_core_with_leakage<xhtml:br />
+			      02 | (<xhtml:br />
+			      <xhtml:div style="margin-left:1em;">
+				03 |     input  clk,<xhtml:br />
+				04 |     input  rst,<xhtml:br />
+				05 |     input  [127:0] data_i,<xhtml:br />
+				06 |     output [127:0] data_o,<xhtml:br />
+				07 |     output valid<xhtml:br />
+			      </xhtml:div>
+			      08 | );<xhtml:br />
+			      09 |<xhtml:br />
+			      10 | localparam int total_rounds = 10;<xhtml:br />
+			      11 | logic [3:0]   round_id_q;<xhtml:br />
+			      12 | logic [127:0] data_state_q, data_state_d;<xhtml:br />
+			      13 | logic [127:0] key_state_q, key_state_d;<xhtml:br />
+			      14 |<xhtml:br />
+			      15 | crypto_algo_round u_algo_round (<xhtml:br />
+			      <xhtml:div style="margin-left:1em;">
+				16 |     .clk     (clk),<xhtml:br />
+				17 |     .rst     (rst),<xhtml:br />
+				18 |     .round_i (round_id_q  ),<xhtml:br />
+				19 |     .key_i   (key_state_q ),<xhtml:br />
+				20 |     .data_i  (data_state_q),<xhtml:br />
+				21 |     .key_o   (key_state_d ),<xhtml:br />
+				22 |     .data_o  (data_state_d)<xhtml:br />
+			      </xhtml:div>
+			      23 | );<xhtml:br />
+			      24 |<xhtml:br />
+			      25 | always @(posedge clk) begin<xhtml:br />
+			      <xhtml:div style="margin-left:1em;">
+				26 |     if (rst) begin<xhtml:br />
+				<xhtml:div style="margin-left:1em;">
+				  27 |         data_state_q &lt;= 0;<xhtml:br />
+				  28 |         key_state_q  &lt;= 0;<xhtml:br />
+				  29 |         round_id_q   &lt;= 0;<xhtml:br />
+				</xhtml:div>
+				30 |     end<xhtml:br />
+				31 |     else begin<xhtml:br />
+				<xhtml:div style="margin-left:1em;">
+				  32 |         case (round_id_q)<xhtml:br />
+				  <xhtml:div style="margin-left:1em;">
+				    33 |             total_rounds: begin<xhtml:br />
+				    <xhtml:div style="margin-left:1em;">
+				      34 |                 data_state_q &lt;= 0;<xhtml:br />
+				      35 |                 key_state_q  &lt;= 0;<xhtml:br />
+				      36 |                 round_id_q   &lt;= 0;<xhtml:br />
+				    </xhtml:div>
+				    37 |             end<xhtml:br />
+				    38 |<xhtml:br />
+				    39 |             default: begin<xhtml:br />
+				    <xhtml:div style="margin-left:1em;">
+				      40 |                 data_state_q &lt;= data_state_d;<xhtml:br />
+				      41 |                 key_state_q  &lt;= key_state_d;<xhtml:br />
+				      42 |                 round_id_q   &lt;= round_id_q + 1;<xhtml:br />
+				    </xhtml:div>
+				    43 |             end<xhtml:br />
+				  </xhtml:div>
+				  44 |         endcase<xhtml:br />
+				</xhtml:div>
+				45 |     end<xhtml:br />
+			      </xhtml:div>
+			      46 | end<xhtml:br />
+			      47 |<xhtml:br />
+			      48 | assign valid  = (round_id_q == total_rounds) ? 1'b1 : 1'b0;<xhtml:br />
+			      49 |<xhtml:br />
+			      50 | assign data_o = data_state_q;<xhtml:br />
+			      51 |<xhtml:br />
+			      52 | endmodule<xhtml:br />
+			    </Example_Code>
+			    <Body_Text><xhtml:p>In line 50 above, data_state_q is assigned to data_o. Since data_state_q
+			    contains intermediate state/results, this allows an attacker to obtain
+			    these results through data_o.</xhtml:p></Body_Text>
+			    <Body_Text>
+			      <xhtml:p>In line 50 of the fixed logic below,
+			      while "data_state_q" does not contain the final result, 
+			      a "sanitizing" mechanism drives a safe default value (i.e., 0) to
+			      "data_o" instead of the value of "data_state_q".
+			      In doing so, the mechanism prevents
+			      the exposure of intermediate state/results which could be used to
+			      break soundness of the cryptographic operation being performed. A
+			      real-world example of this weakness and mitigation can be seen in a
+			      pull request that was submitted to the OpenTitan Github repository
+			      [REF-1469].</xhtml:p>
+			    </Body_Text>
+			    <Example_Code Nature="Good" Language="Verilog">
+			      01 | module crypto_core_without_leakage<xhtml:br />
+			      02 | (<xhtml:br />
+			      <xhtml:div style="margin-left:1em;">
+				03 |     input  clk,<xhtml:br />
+				04 |     input  rst,<xhtml:br />
+				05 |     input  [127:0] data_i,<xhtml:br />
+				06 |     output [127:0] data_o,<xhtml:br />
+				07 |     output valid<xhtml:br />
+				08 | );<xhtml:br />
+			      </xhtml:div>
+			      09 |<xhtml:br />
+			      10 | localparam int total_rounds = 10;<xhtml:br />
+			      11 | logic [3:0]   round_id_q;<xhtml:br />
+			      12 | logic [127:0] data_state_q, data_state_d;<xhtml:br />
+			      13 | logic [127:0] key_state_q, key_state_d;<xhtml:br />
+			      14 |<xhtml:br />
+			      15 | crypto_algo_round u_algo_round (<xhtml:br />
+			      <xhtml:div style="margin-left:1em;">
+				16 |     .clk     (clk),<xhtml:br />
+				17 |     .rst     (rst),<xhtml:br />
+				18 |     .round_i (round_id_q  ),<xhtml:br />
+				19 |     .key_i   (key_state_q ),<xhtml:br />
+				20 |     .data_i  (data_state_q),<xhtml:br />
+				21 |     .key_o   (key_state_d ),<xhtml:br />
+				22 |     .data_o  (data_state_d)<xhtml:br />
+			      </xhtml:div>
+			      23 | );<xhtml:br />
+			      24 |<xhtml:br />
+			      25 | always @(posedge clk) begin<xhtml:br />
+			      <xhtml:div style="margin-left:1em;">
+				26 |     if (rst) begin<xhtml:br />
+				<xhtml:div style="margin-left:1em;">
+				  27 |         data_state_q &lt;= 0;<xhtml:br />
+				  28 |         key_state_q  &lt;= 0;<xhtml:br />
+				  29 |         round_id_q   &lt;= 0;<xhtml:br />
+				</xhtml:div>
+				30 |     end<xhtml:br />
+				31 |     else begin<xhtml:br />
+				<xhtml:div style="margin-left:1em;">
+				  32 |         case (round_id_q)<xhtml:br />
+				  <xhtml:div style="margin-left:1em;">
+				    33 |             total_rounds: begin<xhtml:br />
+				    <xhtml:div style="margin-left:1em;">
+				      34 |                 data_state_q &lt;= 0;<xhtml:br />
+				      35 |                 key_state_q  &lt;= 0;<xhtml:br />
+				      36 |                 round_id_q   &lt;= 0;<xhtml:br />
+				    </xhtml:div>
+				    37 |             end<xhtml:br />
+				    38 |<xhtml:br />
+				    39 |             default: begin<xhtml:br />
+				    <xhtml:div style="margin-left:1em;">
+				      40 |                 data_state_q &lt;= data_state_d;<xhtml:br />
+				      41 |                 key_state_q  &lt;= key_state_d;<xhtml:br />
+				      42 |                 round_id_q   &lt;= round_id_q + 1;<xhtml:br />
+				    </xhtml:div>
+				    43 |             end<xhtml:br />
+				  </xhtml:div>
+				  44 |         endcase<xhtml:br />
+				</xhtml:div>
+				45 |     end<xhtml:br />
+			      </xhtml:div>
+			      46 | end<xhtml:br />
+			      47 |<xhtml:br />
+			      48 | assign valid  = (round_id_q == total_rounds) ? 1'b1 : 1'b0;<xhtml:br />
+			      49 |<xhtml:br />
+			      50 | assign data_o = (valid) ? data_state_q : 0;<xhtml:br />
+			      51 |<xhtml:br />
+			      52 | endmodule<xhtml:br />
+			    </Example_Code>
+			  </Demonstrative_Example>
+			</Demonstrative_Examples>
+			<References>
+				<Reference External_Reference_ID="REF-1469" />
+				<Reference External_Reference_ID="REF-1470" />
+				<Reference External_Reference_ID="REF-1471" />
+				<Reference External_Reference_ID="REF-1472" />
+				<Reference External_Reference_ID="REF-1473" />
+			</References>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Base level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+			<Content_History>
+			  <Submission>
+			    <Submission_Name>Andres Meza</Submission_Name>
+			    <Submission_Organization>University of California, San Diego</Submission_Organization>
+			    <Submission_Date>2022-08-15</Submission_Date>
+			    <Submission_Version>4.17</Submission_Version>
+			    <Submission_ReleaseDate>2025-04-03</Submission_ReleaseDate>
+			  </Submission>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-09-09</Modification_Date>
+					<Modification_Version>4.18</Modification_Version>
+					<Modification_ReleaseDate>2025-09-09</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+			</Content_History>
+		</Weakness>
+      

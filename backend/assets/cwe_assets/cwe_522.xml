@@ -1,0 +1,416 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="522" Name="Insufficiently Protected Credentials" Abstraction="Class" Structure="Simple" Status="Incomplete">
+         <Description>The product transmits or stores authentication credentials, but it uses an insecure method that is susceptible to unauthorized interception and/or retrieval.</Description>
+         <Related_Weaknesses>
+            <Related_Weakness Nature="ChildOf" CWE_ID="1390" View_ID="1000" Ordinal="Primary" />
+            <Related_Weakness Nature="ChildOf" CWE_ID="287" View_ID="1003" Ordinal="Primary" />
+            <Related_Weakness Nature="ChildOf" CWE_ID="668" View_ID="1000" />
+         </Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+         <Applicable_Platforms>
+            <Language Class="Not Language-Specific" Prevalence="Undetermined" />
+	    <Technology Class="Not Technology-Specific" Prevalence="Undetermined" />
+            <Technology Class="Web Based" Prevalence="Undetermined" />
+	    <Technology Class="ICS/OT" Prevalence="Undetermined" />
+         </Applicable_Platforms>
+         <Modes_Of_Introduction>
+            <Introduction>
+               <Phase>Architecture and Design</Phase>
+               <Note>COMMISSION: This weakness refers to an incorrect design related to an architectural security tactic.</Note>
+            </Introduction>
+            <Introduction>
+               <Phase>Implementation</Phase>
+            </Introduction>
+         </Modes_Of_Introduction>
+         <Common_Consequences>
+            <Consequence>
+               <Scope>Access Control</Scope>
+               <Impact>Gain Privileges or Assume Identity</Impact>
+               <Note>An attacker could gain access to user accounts and access sensitive data used by the user accounts.</Note>
+            </Consequence>
+         </Common_Consequences>
+         <Detection_Methods>
+           <Detection_Method Detection_Method_ID="DM-14">
+             <Method>Automated Static Analysis</Method>
+             <Description>Automated static analysis, commonly referred to as Static Application Security Testing (SAST), can find some instances of this weakness by analyzing source code (or binary/compiled code) without having to execute it. Typically, this is done by building a model of data flow and control flow, then searching for potentially-vulnerable patterns that connect "sources" (origins of input) with "sinks" (destinations where the data interacts with external components, a lower layer such as the OS, etc.)</Description>
+             <Effectiveness>High</Effectiveness>
+           </Detection_Method>
+         </Detection_Methods>
+         <Potential_Mitigations>
+            <Mitigation>
+               <Phase>Architecture and Design</Phase>
+               <Description>Use an appropriate security mechanism to protect the credentials.</Description>
+            </Mitigation>
+            <Mitigation>
+               <Phase>Architecture and Design</Phase>
+               <Description>Make appropriate use of cryptography to protect the credentials.</Description>
+            </Mitigation>
+            <Mitigation>
+               <Phase>Implementation</Phase>
+               <Description>Use industry standards to protect the credentials (e.g. LDAP, keystore, etc.).</Description>
+            </Mitigation>
+         </Potential_Mitigations>
+         <Demonstrative_Examples>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-56">
+               <Intro_Text>This code changes a user's password.</Intro_Text>
+               <Example_Code Nature="Bad" Language="PHP">
+                  <xhtml:div>$user = $_GET['user'];<xhtml:br />$pass = $_GET['pass'];<xhtml:br />$checkpass = $_GET['checkpass'];<xhtml:br />if ($pass == $checkpass) {<xhtml:div style="margin-left:1em;">SetUserPassword($user, $pass);</xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>While the code confirms that the requesting user typed the same new password twice, it does not confirm that the user requesting the password change is the same user whose password will be changed. An attacker can request a change of another user's password and gain control of the victim's account.</Body_Text>
+            </Demonstrative_Example>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-57">
+               <Intro_Text>The following code reads a password from a properties file and uses the password to connect to a database.</Intro_Text>
+               <Example_Code Nature="Bad" Language="Java">
+                  <xhtml:div>...<xhtml:br />Properties prop = new Properties();<xhtml:br />prop.load(new FileInputStream("config.properties"));<xhtml:br />String password = prop.getProperty("password");<xhtml:br />DriverManager.getConnection(url, usr, password);<xhtml:br />...</xhtml:div>
+               </Example_Code>
+               <Body_Text>This code will run successfully, but anyone who has access to config.properties can read the value of password. If a devious employee has access to this information, they can use it to break into the system.</Body_Text>
+            </Demonstrative_Example>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-58">
+               <Intro_Text>The following code reads a password from the registry and uses the password to create a new network credential.</Intro_Text>
+               <Example_Code Nature="Bad" Language="Java">
+                  <xhtml:div>...<xhtml:br />String password = regKey.GetValue(passKey).toString();<xhtml:br />NetworkCredential netCred = new NetworkCredential(username,password,domain);<xhtml:br />...</xhtml:div>
+               </Example_Code>
+               <Body_Text>This code will run successfully, but anyone who has access to the registry key used to store the password can read the value of password. If a devious employee has access to this information, they can use it to break into the system</Body_Text>
+            </Demonstrative_Example>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-59">
+               <Intro_Text>Both of these examples verify a password by comparing it to a stored compressed version.</Intro_Text>
+               <Example_Code Nature="Bad" Language="C">
+                  <xhtml:div>int VerifyAdmin(char *password) {<xhtml:div style="margin-left:1em;">if (strcmp(compress(password), compressed_password)) {<xhtml:div style="margin-left:1em;">printf("Incorrect Password!\n");<xhtml:br />return(0);</xhtml:div>}<xhtml:br />printf("Entering Diagnostic Mode...\n");<xhtml:br />return(1);</xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Example_Code Nature="Bad" Language="Java">
+                  <xhtml:div>int VerifyAdmin(String password) {<xhtml:div style="margin-left:1em;">if (passwd.Equals(compress(password), compressed_password)) {<xhtml:div style="margin-left:1em;">return(0);</xhtml:div>}<xhtml:br />
+                        <xhtml:i>//Diagnostic Mode</xhtml:i>
+                        <xhtml:br />return(1);</xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>Because a compression algorithm is used instead of a one way hashing algorithm, an attacker can recover compressed passwords stored in the database.</Body_Text>
+            </Demonstrative_Example>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-43">
+               <Intro_Text>The following examples show a portion of properties and configuration files for Java and ASP.NET applications. The files include username and password information but they are stored in cleartext.</Intro_Text>
+               <Body_Text>This Java example shows a properties file with a cleartext username / password pair.</Body_Text>
+               <Example_Code Nature="Bad" Language="Java">
+                  <xhtml:div>
+                     <xhtml:br />
+                     <xhtml:i># Java Web App ResourceBundle properties file</xhtml:i>
+                     <xhtml:br />...<xhtml:br />webapp.ldap.username=secretUsername<xhtml:br />webapp.ldap.password=secretPassword<xhtml:br />...</xhtml:div>
+               </Example_Code>
+               <Body_Text>The following example shows a portion of a configuration file for an ASP.Net application. This configuration file includes username and password information for a connection to a database but the pair is stored in cleartext.</Body_Text>
+               <Example_Code Nature="Bad" Language="ASP.NET">
+                  <xhtml:div>...<xhtml:br />&lt;connectionStrings&gt;<xhtml:div style="margin-left:1em;">&lt;add name="ud_DEV" connectionString="connectDB=uDB; uid=db2admin; pwd=password; dbalias=uDB;" providerName="System.Data.Odbc" /&gt;</xhtml:div>&lt;/connectionStrings&gt;<xhtml:br />...</xhtml:div>
+               </Example_Code>
+               <Body_Text>Username and password information should not be included in a configuration file or a properties file in cleartext as this will allow anyone who can read the file access to the resource. If possible, encrypt this information.</Body_Text>
+            </Demonstrative_Example>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-153">
+               <Intro_Text>In 2022, the OT:ICEFALL study examined products by 10 different Operational Technology (OT) vendors. The researchers reported 56 vulnerabilities and said that the products were "insecure by design" [REF-1283]. If exploited, these vulnerabilities often allowed adversaries to change how the products operated, ranging from denial of service to changing the code that the products executed. Since these products were often used in industries such as power, electrical, water, and others, there could even be safety implications.</Intro_Text>
+               <Body_Text>Multiple vendors used cleartext transmission or storage of passwords in their OT products.</Body_Text>
+            </Demonstrative_Example>
+         </Demonstrative_Examples>
+         <Observed_Examples>
+            <Observed_Example>
+               <Reference>CVE-2022-30018</Reference>
+               <Description>A messaging platform serializes all elements of User/Group objects, making private information available to adversaries</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2022-30018</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2022-29959</Reference>
+               <Description>Initialization file contains  credentials that can be decoded using a "simple string transformation"</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2022-29959</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2022-35411</Reference>
+               <Description>Python-based RPC framework enables pickle functionality by default, allowing clients to unpickle untrusted data.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2022-35411</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2022-29519</Reference>
+               <Description>Programmable Logic Controller (PLC) sends sensitive information in plaintext, including passwords and session tokens.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2022-29519</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2022-30312</Reference>
+               <Description>Building Controller uses a protocol that transmits authentication credentials in plaintext.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2022-30312</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2022-31204</Reference>
+               <Description>Programmable Logic Controller (PLC) sends password in plaintext.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2022-31204</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2022-30275</Reference>
+               <Description>Remote Terminal Unit (RTU) uses a driver that relies on a password stored in plaintext.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2022-30275</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2007-0681</Reference>
+               <Description>Web app allows remote attackers to change the passwords of arbitrary users without providing the original password, and possibly perform other unauthorized actions.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2007-0681</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2000-0944</Reference>
+               <Description>Web application password change utility doesn't check the original password.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2000-0944</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2005-3435</Reference>
+               <Description>product authentication succeeds if user-provided MD5 hash matches the hash in its database; this can be subjected to replay attacks.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2005-3435</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2005-0408</Reference>
+               <Description>chain: product generates predictable MD5 hashes using a constant value combined with username, allowing authentication bypass.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2005-0408</Link>
+            </Observed_Example>
+         </Observed_Examples>
+         <Taxonomy_Mappings>
+            <Taxonomy_Mapping Taxonomy_Name="OWASP Top Ten 2007">
+               <Entry_ID>A7</Entry_ID>
+               <Entry_Name>Broken Authentication and Session Management</Entry_Name>
+               <Mapping_Fit>CWE More Specific</Mapping_Fit>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="OWASP Top Ten 2004">
+               <Entry_ID>A3</Entry_ID>
+               <Entry_Name>Broken Authentication and Session Management</Entry_Name>
+               <Mapping_Fit>CWE More Specific</Mapping_Fit>
+            </Taxonomy_Mapping>
+         </Taxonomy_Mappings>
+         <Related_Attack_Patterns>
+            <Related_Attack_Pattern CAPEC_ID="102" />
+            <Related_Attack_Pattern CAPEC_ID="474" />
+            <Related_Attack_Pattern CAPEC_ID="50" />
+            <Related_Attack_Pattern CAPEC_ID="509" />
+            <Related_Attack_Pattern CAPEC_ID="551" />
+            <Related_Attack_Pattern CAPEC_ID="555" />
+            <Related_Attack_Pattern CAPEC_ID="560" />
+            <Related_Attack_Pattern CAPEC_ID="561" />
+            <Related_Attack_Pattern CAPEC_ID="600" />
+            <Related_Attack_Pattern CAPEC_ID="644" />
+            <Related_Attack_Pattern CAPEC_ID="645" />
+            <Related_Attack_Pattern CAPEC_ID="652" />
+            <Related_Attack_Pattern CAPEC_ID="653" />
+         </Related_Attack_Patterns>
+         <References>
+            <Reference External_Reference_ID="REF-44" Section="&quot;Sin 19: Use of Weak Password-Based Systems.&quot; Page 279" />
+            <Reference External_Reference_ID="REF-1283" />
+         </References>
+         <Mapping_Notes>
+            <Usage>Allowed-with-Review</Usage>
+            <Rationale>This CWE entry is a Class and might have Base-level children that would be more appropriate</Rationale>
+            <Comments>Examine children of this entry to see if there is a better fit</Comments>
+            <Reasons>
+               <Reason Type="Abstraction" />
+            </Reasons>
+         </Mapping_Notes>
+         <Content_History>
+            <Submission>
+               <Submission_Name>Anonymous Tool Vendor (under NDA)</Submission_Name>
+               <Submission_Date>2006-07-19</Submission_Date>
+               <Submission_Version>Draft 3</Submission_Version>
+               <Submission_ReleaseDate>2006-07-19</Submission_ReleaseDate>
+            </Submission>
+            <Modification>
+               <Modification_Name>Eric Dalci</Modification_Name>
+               <Modification_Organization>Cigital</Modification_Organization>
+               <Modification_Date>2008-07-01</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>updated Potential_Mitigations, Time_of_Introduction</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2008-09-08</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships, Other_Notes, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2009-05-27</Modification_Date>
+               <Modification_Version>1.4</Modification_Version>
+               <Modification_ReleaseDate>2009-05-27</Modification_ReleaseDate>
+               <Modification_Comment>updated Related_Attack_Patterns</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-03-29</Modification_Date>
+               <Modification_Version>1.12</Modification_Version>
+               <Modification_ReleaseDate>2011-03-30</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-06-01</Modification_Date>
+               <Modification_Version>1.13</Modification_Version>
+               <Modification_ReleaseDate>2011-06-01</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2012-05-11</Modification_Date>
+               <Modification_Version>2.2</Modification_Version>
+               <Modification_ReleaseDate>2012-05-15</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences, Demonstrative_Examples, Observed_Examples, References, Related_Attack_Patterns, Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2012-10-30</Modification_Date>
+               <Modification_Version>2.3</Modification_Version>
+               <Modification_ReleaseDate>2012-10-30</Modification_ReleaseDate>
+               <Modification_Comment>updated Demonstrative_Examples, Potential_Mitigations</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2014-06-23</Modification_Date>
+               <Modification_Version>2.7</Modification_Version>
+               <Modification_ReleaseDate>2014-06-23</Modification_ReleaseDate>
+               <Modification_Comment>updated Other_Notes, Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2014-07-30</Modification_Date>
+               <Modification_Version>2.8</Modification_Version>
+               <Modification_ReleaseDate>2014-07-31</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2017-05-03</Modification_Date>
+               <Modification_Version>2.11</Modification_Version>
+               <Modification_ReleaseDate>2017-05-05</Modification_ReleaseDate>
+               <Modification_Comment>updated Related_Attack_Patterns</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2017-11-08</Modification_Date>
+               <Modification_Version>3.0</Modification_Version>
+               <Modification_ReleaseDate>2017-11-08</Modification_ReleaseDate>
+               <Modification_Comment>updated Demonstrative_Examples, Modes_of_Introduction, Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2018-03-27</Modification_Date>
+               <Modification_Version>3.1</Modification_Version>
+               <Modification_ReleaseDate>2018-03-27</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships</Modification_Comment>
+            </Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2019-01-03</Modification_Date>
+					<Modification_Version>3.2</Modification_Version>
+					<Modification_ReleaseDate>2019-01-03</Modification_ReleaseDate>
+					<Modification_Comment>updated Related_Attack_Patterns</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2019-06-20</Modification_Date>
+					<Modification_Version>3.3</Modification_Version>
+					<Modification_ReleaseDate>2019-06-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Related_Attack_Patterns, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-02-24</Modification_Date>
+					<Modification_Version>4.0</Modification_Version>
+					<Modification_ReleaseDate>2020-02-24</Modification_ReleaseDate>
+					<Modification_Comment>updated Description, Relationships, Type</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-08-20</Modification_Date>
+					<Modification_Version>4.2</Modification_Version>
+					<Modification_ReleaseDate>2020-08-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Related_Attack_Patterns, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-03-15</Modification_Date>
+					<Modification_Version>4.4</Modification_Version>
+					<Modification_ReleaseDate>2021-03-15</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-07-20</Modification_Date>
+					<Modification_Version>4.5</Modification_Version>
+					<Modification_ReleaseDate>2021-07-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-10-28</Modification_Date>
+					<Modification_Version>4.6</Modification_Version>
+					<Modification_ReleaseDate>2021-10-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-10-13</Modification_Date>
+					<Modification_Version>4.9</Modification_Version>
+					<Modification_ReleaseDate>2022-10-13</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples, Observed_Examples, References, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-01-31</Modification_Date>
+					<Modification_Version>4.10</Modification_Version>
+					<Modification_ReleaseDate>2023-01-31</Modification_ReleaseDate>
+					<Modification_Comment>updated Applicable_Platforms, Observed_Examples, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Detection_Factors, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-10-26</Modification_Date>
+					<Modification_Version>4.13</Modification_Version>
+					<Modification_ReleaseDate>2023-10-26</Modification_ReleaseDate>
+					<Modification_Comment>updated Observed_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Applicable_Platforms, Relationships, Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+         </Content_History>
+      </Weakness>
+      

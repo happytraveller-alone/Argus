@@ -1,0 +1,183 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="1319" Name="Improper Protection against Electromagnetic Fault Injection (EM-FI)" Abstraction="Base" Structure="Simple" Status="Incomplete">
+			<Description>The device is susceptible to electromagnetic fault injection attacks, causing device internal information to be compromised or security mechanisms to be bypassed.</Description>
+			<Extended_Description>
+				<xhtml:p>Electromagnetic fault injection may allow an attacker to locally and dynamically modify the signals (both internal and external) of an integrated circuit. EM-FI attacks consist of producing a local, transient magnetic field near the device, inducing current in the device wires. A typical EMFI setup is made up of a pulse injection circuit that generates a high current transient in an EMI coil, producing an abrupt magnetic pulse which couples to the target producing faults in the device, which can lead to:</xhtml:p>
+				<xhtml:ul>
+				<xhtml:li>Bypassing security mechanisms such as secure JTAG or Secure Boot</xhtml:li>
+				<xhtml:li>Leaking device information</xhtml:li>
+				<xhtml:li>Modifying program flow</xhtml:li>
+				<xhtml:li>Perturbing secure hardware modules (e.g. random number generators)</xhtml:li>
+				</xhtml:ul>
+			</Extended_Description>
+			<Related_Weaknesses>
+				<Related_Weakness Nature="ChildOf" CWE_ID="693" View_ID="1000" Ordinal="Primary" />
+			</Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+			<Applicable_Platforms>
+				<Language Class="Not Language-Specific" Prevalence="Undetermined" />
+				<Operating_System Class="Not OS-Specific" Prevalence="Undetermined" />
+				<Architecture Class="Not Architecture-Specific" Prevalence="Undetermined" />
+				<Technology Class="System on Chip" Prevalence="Undetermined" />
+				<Technology Name="Microcontroller Hardware" Prevalence="Undetermined" />
+				<Technology Name="Memory Hardware" Prevalence="Undetermined" />
+				<Technology Name="Power Management Hardware" Prevalence="Undetermined" />
+				<Technology Name="Processor Hardware" Prevalence="Undetermined" />
+				<Technology Name="Test/Debug Hardware" Prevalence="Undetermined" />
+				<Technology Name="Sensor Hardware" Prevalence="Undetermined" />
+			</Applicable_Platforms>
+			<Modes_Of_Introduction>
+				<Introduction>
+					<Phase>Architecture and Design</Phase>
+				</Introduction>
+				<Introduction>
+					<Phase>Implementation</Phase>
+				</Introduction>
+			</Modes_Of_Introduction>
+			<Common_Consequences>
+				<Consequence>
+					<Scope>Confidentiality</Scope>
+					<Scope>Integrity</Scope>
+					<Scope>Access Control</Scope>
+					<Scope>Availability</Scope>
+					<Impact>Modify Memory</Impact>
+					<Impact>Read Memory</Impact>
+					<Impact>Gain Privileges or Assume Identity</Impact>
+					<Impact>Bypass Protection Mechanism</Impact>
+					<Impact>Execute Unauthorized Code or Commands</Impact>
+				</Consequence>
+			</Common_Consequences>
+			<Potential_Mitigations>
+				<Mitigation>
+					<Phase>Architecture and Design</Phase>
+					<Phase>Implementation</Phase>
+					<Description>
+					  <xhtml:ul>
+						<xhtml:li>1. Redundancy - By replicating critical operations and comparing the two outputs can help indicate whether a fault has been injected.</xhtml:li>
+						<xhtml:li>2. Error detection and correction codes - Gay, Mael, et al. proposed a new scheme that not only detects faults injected by a malicious adversary but also automatically corrects single nibble/byte errors introduced by low-multiplicity faults.</xhtml:li>
+						<xhtml:li>3. Fail by default coding - When checking conditions (switch or if) check all possible cases and fail by default because the default case in a switch (or the else part of a cascaded if-else-if construct) is used for dealing with the last possible (and valid) value without checking. This is prone to fault injection because this alternative is easily selected as a result of potential data manipulation [REF-1141].</xhtml:li>
+						<xhtml:li>4. Random Behavior - adding random delays before critical operations, so that timing is not predictable.</xhtml:li>
+						<xhtml:li>5. Program Flow Integrity Protection - The program flow can be secured by integrating run-time checking aiming at detecting control flow inconsistencies. One such example is tagging the source code to indicate the points not to be bypassed [REF-1147].</xhtml:li>
+						<xhtml:li>6. Sensors - Usage of sensors can detect variations in voltage and current.</xhtml:li>
+						<xhtml:li>7. Shields - physical barriers to protect the chips from malicious manipulation.</xhtml:li>
+					  </xhtml:ul>
+					</Description>
+				</Mitigation>
+			</Potential_Mitigations>
+			<Demonstrative_Examples>
+				<Demonstrative_Example>
+					<Intro_Text>In many devices, security related information is stored in fuses. These fuses are loaded into shadow registers at boot time. Disturbing this transfer phase with EM-FI can lead to the shadow registers storing erroneous values potentially resulting in reduced security.</Intro_Text>
+					<Body_Text>Colin O'Flynn has demonstrated an attack scenario [REF-1144] that uses electro-magnetic glitching during booting to bypass security and gain read access to flash, read and erase access to shadow memory area (where the private password is stored). Most devices in the MPC55xx and MPC56xx series that include the Boot Assist Module (BAM) (a serial or CAN bootloader mode) are susceptible to this attack. In this paper, a GM ECU was used as a real life target. While the success rate appears low (less than 2 percent), in practice a success can be found within 1-5 minutes once the EMFI tool is setup. In a practical scenario, the author showed that success can be achieved within 30-60 minutes from a cold start.</Body_Text>
+				</Demonstrative_Example>
+			</Demonstrative_Examples>
+			<Observed_Examples>
+			  <Observed_Example>
+				<Reference>CVE-2020-27211</Reference>
+				<Description>Chain: microcontroller system-on-chip uses a register value stored in flash to set product protection state on the memory bus and does not contain protection against fault injection (CWE-1319) which leads to an incorrect initialization of the memory bus (CWE-1419) leading the product to be in an unprotected state.</Description>
+				<Link>https://www.cve.org/CVERecord?id=CVE-2020-27211</Link>
+			  </Observed_Example>
+			</Observed_Examples>
+         <Related_Attack_Patterns>
+            <Related_Attack_Pattern CAPEC_ID="624" />
+            <Related_Attack_Pattern CAPEC_ID="625" />
+         </Related_Attack_Patterns>
+         <References>
+				<Reference External_Reference_ID="REF-1141" />
+				<Reference External_Reference_ID="REF-1142" />
+				<Reference External_Reference_ID="REF-1143" />
+				<Reference External_Reference_ID="REF-1144" />
+				<Reference External_Reference_ID="REF-1145" />
+				<Reference External_Reference_ID="REF-1146" />
+				<Reference External_Reference_ID="REF-1147" />
+				<Reference External_Reference_ID="REF-1285" />
+			</References>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Base level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+			<Notes>
+			<Note Type="Maintenance">This entry is attack-oriented and may require significant modification in future versions, or even deprecation. It is not clear whether there is really a design "mistake" that enables such attacks, so this is not necessarily a weakness and may be more appropriate for CAPEC.</Note>
+			</Notes>
+			<Content_History>
+				<Submission>
+					<Submission_Name>Sebastien Leger, Rohini Narasipur</Submission_Name>
+					<Submission_Organization>Bosch</Submission_Organization>
+					<Submission_Date>2020-08-27</Submission_Date>
+					<Submission_Version>4.3</Submission_Version>
+					<Submission_ReleaseDate>2020-12-10</Submission_ReleaseDate>
+				</Submission>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-04-28</Modification_Date>
+					<Modification_Version>4.7</Modification_Version>
+					<Modification_ReleaseDate>2022-04-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Applicable_Platforms</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-06-28</Modification_Date>
+					<Modification_Version>4.8</Modification_Version>
+					<Modification_ReleaseDate>2022-06-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Applicable_Platforms, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-10-13</Modification_Date>
+					<Modification_Version>4.9</Modification_Version>
+					<Modification_ReleaseDate>2022-10-13</Modification_ReleaseDate>
+					<Modification_Comment>updated Potential_Mitigations, References, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-01-31</Modification_Date>
+					<Modification_Version>4.10</Modification_Version>
+					<Modification_ReleaseDate>2023-01-31</Modification_ReleaseDate>
+					<Modification_Comment>updated Related_Attack_Patterns</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated References, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-10-26</Modification_Date>
+					<Modification_Version>4.13</Modification_Version>
+					<Modification_ReleaseDate>2023-10-26</Modification_ReleaseDate>
+					<Modification_Comment>updated Observed_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples, Observed_Examples, Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+			</Content_History>
+		</Weakness>
+      

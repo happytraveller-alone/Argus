@@ -1,0 +1,909 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="190" Name="Integer Overflow or Wraparound" Abstraction="Base" Structure="Simple" Status="Stable" Diagram="/data/images/CWE-190-Diagram.png">
+         <Description>The product performs a calculation that can
+         produce an integer overflow or wraparound when the logic
+         assumes that the resulting value will always be larger than
+         the original value. This occurs when an integer value is
+         incremented to a value that is too large to store in the
+         associated representation. When this occurs, the value may
+         become a very small or negative number.</Description>
+         <Related_Weaknesses>
+            <Related_Weakness Nature="ChildOf" CWE_ID="682" View_ID="1000" Ordinal="Primary" />
+            <Related_Weakness Nature="ChildOf" CWE_ID="682" View_ID="1003" Ordinal="Primary" />
+            <Related_Weakness Nature="ChildOf" CWE_ID="20" View_ID="700" Ordinal="Primary" />
+            <Related_Weakness Nature="CanPrecede" CWE_ID="119" View_ID="1000" Chain_ID="680" />
+         </Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+            <Weakness_Ordinality>
+               <Ordinality>Resultant</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+         <Applicable_Platforms>
+            <Language Class="Not Language-Specific" Prevalence="Undetermined" />
+            <Language Name="C" Prevalence="Often" />
+	    <Technology Class="Not Technology-Specific" Prevalence="Undetermined" />
+         </Applicable_Platforms>
+         <Alternate_Terms>
+            <Alternate_Term>
+               <Term>Overflow</Term>
+               <Description>The terms "overflow" and "wraparound" are
+               used interchangeably by some people, but they can have
+               more precise distinctions by others. See Terminology
+               Notes.</Description>
+            </Alternate_Term>
+            <Alternate_Term>
+               <Term>Wraparound</Term>
+               <Description>The terms "overflow" and "wraparound" are
+               used interchangeably by some people, but they can have
+               more precise distinctions by others. See Terminology
+               Notes.</Description>
+            </Alternate_Term>
+            <Alternate_Term>
+               <Term>wrap, wrap-around, wrap around</Term>
+               <Description>Alternate spellings of "wraparound"</Description>
+            </Alternate_Term>
+         </Alternate_Terms>
+         <Modes_Of_Introduction>
+            <Introduction>
+               <Phase>Implementation</Phase>
+			   <Note>This weakness may become security critical when determining the offset or size in behaviors such as memory allocation, copying, and concatenation.</Note>
+            </Introduction>
+         </Modes_Of_Introduction>
+         <Likelihood_Of_Exploit>Medium</Likelihood_Of_Exploit>
+         <Common_Consequences>
+            <Consequence>
+               <Scope>Availability</Scope>
+               <Impact>DoS: Crash, Exit, or Restart</Impact>
+               <Impact>DoS: Resource Consumption (Memory)</Impact>
+               <Impact>DoS: Instability</Impact>
+               <Note>This weakness can generally lead to undefined behavior and therefore crashes. When the calculated result is used for resource allocation, this weakness can cause too many (or too few) resources to be allocated, possibly enabling crashes if the product requests more resources than can be provided.</Note>
+            </Consequence>
+            <Consequence>
+               <Scope>Integrity</Scope>
+               <Impact>Modify Memory</Impact>
+               <Note>If the value in question is important to data (as opposed to flow), simple data corruption has occurred. Also, if the overflow/wraparound results in other conditions such as buffer overflows, further memory corruption may occur. </Note>
+            </Consequence>
+            <Consequence>
+               <Scope>Confidentiality</Scope>
+               <Scope>Availability</Scope>
+               <Scope>Access Control</Scope>
+               <Impact>Execute Unauthorized Code or Commands</Impact>
+               <Impact>Bypass Protection Mechanism</Impact>
+               <Note>This weakness can sometimes trigger buffer overflows, which can be used to execute arbitrary code. This is usually outside the scope of the product's implicit security policy.</Note>
+            </Consequence>
+            <Consequence>
+               <Scope>Availability</Scope>
+               <Scope>Other</Scope>
+               <Impact>Alter Execution Logic</Impact>
+               <Impact>DoS: Crash, Exit, or Restart</Impact>
+               <Impact>DoS: Resource Consumption (CPU)</Impact>
+               <Note>If the overflow/wraparound occurs in a loop index variable, this could cause the loop to terminate at the wrong time - too early, too late, or not at all (i.e., infinite loops). With too many iterations, some loops could consume too many resources such as memory, file handles, etc., possibly leading to a crash or other DoS.</Note>
+            </Consequence>
+            <Consequence>
+               <Scope>Access Control</Scope>
+               <Impact>Bypass Protection Mechanism</Impact>
+               <Note>If integer values are used in security-critical decisions, such as calculating quotas or allocation limits, integer overflows can be used to cause an incorrect security decision.</Note>
+            </Consequence>
+         </Common_Consequences>
+         <Detection_Methods>
+            <Detection_Method Detection_Method_ID="DM-1">
+               <Method>Automated Static Analysis</Method>
+               <Description>This weakness can often be detected using automated static analysis tools. Many modern tools use data flow analysis or constraint-based techniques to minimize the number of false positives.</Description>
+               <Effectiveness>High</Effectiveness>
+            </Detection_Method>
+            <Detection_Method Detection_Method_ID="DM-2">
+               <Method>Black Box</Method>
+               <Description>Sometimes, evidence of this weakness can be detected using dynamic tools and techniques that interact with the product using large test suites with many diverse inputs, such as fuzz testing (fuzzing), robustness testing, and fault injection. The product's operation may slow down, but it should not become unstable, crash, or generate incorrect results.</Description>
+               <Effectiveness>Moderate</Effectiveness>
+               <Effectiveness_Notes>Without visibility into the code, black box methods may not be able to sufficiently distinguish this weakness from others, requiring follow-up manual methods to diagnose the underlying problem.</Effectiveness_Notes>
+            </Detection_Method>
+            <Detection_Method Detection_Method_ID="DM-7">
+               <Method>Manual Analysis</Method>
+               <Description>
+                  <xhtml:p>This weakness can be detected using tools and techniques that require manual (human) analysis, such as penetration testing, threat modeling, and interactive tools that allow the tester to record and modify an active session.</xhtml:p>
+                  <xhtml:p>Specifically, manual static analysis is useful for evaluating the correctness of allocation calculations. This can be useful for detecting overflow conditions (CWE-190) or similar weaknesses that might have serious security impacts on the program.</xhtml:p>
+               </Description>
+               <Effectiveness>High</Effectiveness>
+               <Effectiveness_Notes>These may be more effective than strictly automated techniques. This is especially the case with weaknesses that are related to design and business rules.</Effectiveness_Notes>
+            </Detection_Method>
+            <Detection_Method>
+               <Method>Automated Static Analysis - Binary or Bytecode</Method>
+               <Description>
+                  <xhtml:p>According to SOAR [REF-1479], the following detection techniques may be useful:</xhtml:p>
+                  <xhtml:div style="margin-left:1em;">
+                     <xhtml:div>Highly cost effective:</xhtml:div>
+                        <xhtml:ul>
+                           <xhtml:li>Bytecode Weakness Analysis - including disassembler + source code weakness analysis</xhtml:li>
+                           <xhtml:li>Binary Weakness Analysis - including disassembler + source code weakness analysis</xhtml:li>
+                        </xhtml:ul>
+                  </xhtml:div>
+               </Description>
+               <Effectiveness>High</Effectiveness>
+            </Detection_Method>
+            <Detection_Method>
+               <Method>Dynamic Analysis with Manual Results Interpretation</Method>
+               <Description>
+                  <xhtml:p>According to SOAR [REF-1479], the following detection techniques may be useful:</xhtml:p>
+                  <xhtml:div style="margin-left:1em;">
+                     <xhtml:div>Cost effective for partial coverage:</xhtml:div>
+                        <xhtml:ul>
+                           <xhtml:li>Fuzz Tester</xhtml:li>
+                           <xhtml:li>Framework-based Fuzzer</xhtml:li>
+                        </xhtml:ul>
+                  </xhtml:div>
+               </Description>
+               <Effectiveness>SOAR Partial</Effectiveness>
+            </Detection_Method>
+            <Detection_Method>
+               <Method>Manual Static Analysis - Source Code</Method>
+               <Description>
+                  <xhtml:p>According to SOAR [REF-1479], the following detection techniques may be useful:</xhtml:p>
+                  <xhtml:div style="margin-left:1em;">
+                     <xhtml:div>Cost effective for partial coverage:</xhtml:div>
+                        <xhtml:ul>
+                           <xhtml:li>Manual Source Code Review (not inspections)</xhtml:li>
+                        </xhtml:ul>
+                  </xhtml:div>
+               </Description>
+               <Effectiveness>SOAR Partial</Effectiveness>
+            </Detection_Method>
+            <Detection_Method>
+               <Method>Automated Static Analysis - Source Code</Method>
+               <Description>
+                  <xhtml:p>According to SOAR [REF-1479], the following detection techniques may be useful:</xhtml:p>
+                  <xhtml:div style="margin-left:1em;">
+                     <xhtml:div>Highly cost effective:</xhtml:div>
+                        <xhtml:ul>
+                           <xhtml:li>Source code Weakness Analyzer</xhtml:li>
+                           <xhtml:li>Context-configured Source Code Weakness Analyzer</xhtml:li>
+                        </xhtml:ul>
+                  </xhtml:div>
+               </Description>
+               <Effectiveness>High</Effectiveness>
+            </Detection_Method>
+            <Detection_Method>
+               <Method>Architecture or Design Review</Method>
+               <Description>
+                  <xhtml:p>According to SOAR [REF-1479], the following detection techniques may be useful:</xhtml:p>
+                  <xhtml:div style="margin-left:1em;">
+                     <xhtml:div>Highly cost effective:</xhtml:div>
+                        <xhtml:ul>
+                           <xhtml:li>Formal Methods / Correct-By-Construction</xhtml:li>
+                        </xhtml:ul>
+                     <xhtml:div>Cost effective for partial coverage:</xhtml:div>
+                        <xhtml:ul>
+                           <xhtml:li>Inspection (IEEE 1028 standard) (can apply to requirements, design, source code, etc.)</xhtml:li>
+                        </xhtml:ul>
+                  </xhtml:div>
+               </Description>
+               <Effectiveness>High</Effectiveness>
+            </Detection_Method>
+         </Detection_Methods>
+         <Potential_Mitigations>
+            <Mitigation>
+               <Phase>Requirements</Phase>
+               <Description>Ensure that all protocols are strictly defined, such that all out-of-bounds behavior can be identified simply, and require strict conformance to the protocol.</Description>
+            </Mitigation>
+            <Mitigation Mitigation_ID="MIT-3">
+               <Phase>Requirements</Phase>
+               <Strategy>Language Selection</Strategy>
+               <Description>
+                  <xhtml:p>Use a language that does not allow this weakness to occur or provides constructs that make this weakness easier to avoid.</xhtml:p>
+                  <xhtml:p>If possible, choose a language or compiler that performs automatic bounds checking.</xhtml:p>
+               </Description>
+            </Mitigation>
+            <Mitigation Mitigation_ID="MIT-4">
+               <Phase>Architecture and Design</Phase>
+               <Strategy>Libraries or Frameworks</Strategy>
+               <Description>
+                  <xhtml:p>Use a vetted library or framework that does not allow this weakness to occur or provides constructs that make this weakness easier to avoid [REF-1482].</xhtml:p>
+                  <xhtml:p>Use libraries or frameworks that make it easier to handle numbers without unexpected consequences.</xhtml:p>
+                  <xhtml:p>Examples include safe integer handling packages such as SafeInt (C++) or IntegerLib (C or C++). [REF-106]</xhtml:p>
+               </Description>
+            </Mitigation>
+            <Mitigation Mitigation_ID="MIT-8">
+               <Phase>Implementation</Phase>
+               <Strategy>Input Validation</Strategy>
+               <Description>
+                  <xhtml:p>Perform input validation on any numeric input by ensuring that it is within the expected range. Enforce that the input meets both the minimum and maximum requirements for the expected range.</xhtml:p>
+                  <xhtml:p>Use unsigned integers where possible. This makes it easier to perform validation for integer overflows. When signed integers are required, ensure that the range check includes minimum values as well as maximum values.</xhtml:p>
+               </Description>
+            </Mitigation>
+            <Mitigation Mitigation_ID="MIT-36">
+               <Phase>Implementation</Phase>
+               <Description>
+                  <xhtml:p>Understand the programming language's underlying representation and how it interacts with numeric calculation (CWE-681). Pay close attention to byte size discrepancies, precision, signed/unsigned distinctions, truncation, conversion and casting between types, "not-a-number" calculations, and how the language handles numbers that are too large or too small for its underlying representation. [REF-7]</xhtml:p>
+                  <xhtml:p>Also be careful to account for 32-bit, 64-bit, and other potential differences that may affect the numeric representation.</xhtml:p>
+               </Description>
+            </Mitigation>
+            <Mitigation Mitigation_ID="MIT-15">
+               <Phase>Architecture and Design</Phase>
+               <Description>For any security checks that are performed on the client side, ensure that these checks are duplicated on the server side, in order to avoid CWE-602. Attackers can bypass the client-side checks by modifying values after the checks have been performed, or by changing the client to remove the client-side checks entirely. Then, these modified values would be submitted to the server.</Description>
+            </Mitigation>
+            <Mitigation Mitigation_ID="MIT-26">
+               <Phase>Implementation</Phase>
+               <Strategy>Compilation or Build Hardening</Strategy>
+               <Description>Examine compiler warnings closely and eliminate problems with potential security implications, such as signed / unsigned mismatch in memory operations, or use of uninitialized variables. Even if the weakness is rarely exploitable, a single failure may lead to the compromise of the entire system.</Description>
+            </Mitigation>
+         </Potential_Mitigations>
+         <Demonstrative_Examples>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-33">
+               <Intro_Text>The following image processing code allocates a table for images.</Intro_Text>
+               <Example_Code Nature="Bad" Language="C">
+                  <xhtml:div>img_t table_ptr; /*struct containing img data, 10kB each*/<xhtml:br />int num_imgs;<xhtml:br />...<xhtml:br />num_imgs = get_num_imgs();<xhtml:br />table_ptr = (img_t*)malloc(sizeof(img_t)*num_imgs);<xhtml:br />...</xhtml:div>
+               </Example_Code>
+               <Body_Text>This code intends to allocate a table of size num_imgs, however as num_imgs grows large, the calculation determining the size of the list will eventually overflow (CWE-190). This will result in a very small list to be allocated instead. If the subsequent code operates on the list as if it were num_imgs long, it may result in many types of out-of-bounds problems (CWE-119).</Body_Text>
+            </Demonstrative_Example>
+            <Demonstrative_Example>
+               <Intro_Text>The following code excerpt from OpenSSH 3.3 demonstrates a classic case of integer overflow:</Intro_Text>
+               <Example_Code Nature="Bad" Language="C">
+                  <xhtml:div>nresp = packet_get_int();<xhtml:br />if (nresp &gt; 0) {<xhtml:div style="margin-left:1em;">response = xmalloc(nresp*sizeof(char*));<xhtml:br />for (i = 0; i &lt; nresp; i++) response[i] = packet_get_string(NULL);</xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>If nresp has the value 1073741824 and sizeof(char*) has its typical value of 4, then the result of the operation nresp*sizeof(char*) overflows, and the argument to xmalloc() will be 0. Most malloc() implementations will happily allocate a 0-byte buffer, causing the subsequent loop iterations to overflow the heap buffer response.</Body_Text>
+            </Demonstrative_Example>
+            <Demonstrative_Example>
+               <Intro_Text>Integer overflows can be complicated and difficult to detect. The following example is an attempt to show how an integer overflow may lead to undefined looping behavior:</Intro_Text>
+               <Example_Code Nature="Bad" Language="C">
+                  <xhtml:div>short int bytesRec = 0;<xhtml:br />char buf[SOMEBIGNUM];<xhtml:br />
+                     <xhtml:br />while(bytesRec &lt; MAXGET) {<xhtml:div style="margin-left:1em;">bytesRec += getFromInput(buf+bytesRec);</xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>In the above case, it is entirely possible that bytesRec may overflow, continuously creating a lower number than MAXGET and also overwriting the first MAXGET-1 bytes of buf.</Body_Text>
+            </Demonstrative_Example>
+            <Demonstrative_Example>
+               <Intro_Text>In this example the method determineFirstQuarterRevenue is used to determine the first quarter revenue for an accounting/business application. The method retrieves the monthly sales totals for the first three months of the year, calculates the first quarter sales totals from the monthly sales totals, calculates the first quarter revenue based on the first quarter sales, and finally saves the first quarter revenue results to the database.</Intro_Text>
+               <Example_Code Nature="Bad" Language="C">
+                  <xhtml:div>#define JAN 1<xhtml:br />#define FEB 2<xhtml:br />#define MAR 3<xhtml:br />
+                     <xhtml:br />short getMonthlySales(int month) {...}<xhtml:br />
+                     <xhtml:br />float calculateRevenueForQuarter(short quarterSold) {...}<xhtml:br />
+                     <xhtml:br />int determineFirstQuarterRevenue() {<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>
+                           <xhtml:br />
+                           <xhtml:i>// Variable for sales revenue for the quarter</xhtml:i>
+                           <xhtml:br />float quarterRevenue = 0.0f;<xhtml:br />
+                           <xhtml:br />short JanSold = getMonthlySales(JAN); /* Get sales in January */<xhtml:br />short FebSold = getMonthlySales(FEB); /* Get sales in February */<xhtml:br />short MarSold = getMonthlySales(MAR); /* Get sales in March */<xhtml:br />
+                           <xhtml:br />
+                           <xhtml:i>// Calculate quarterly total</xhtml:i>
+                           <xhtml:br />short quarterSold = JanSold + FebSold + MarSold;<xhtml:br />
+                           <xhtml:br />
+                           <xhtml:i>// Calculate the total revenue for the quarter</xhtml:i>
+                           <xhtml:br />quarterRevenue = calculateRevenueForQuarter(quarterSold);<xhtml:br />
+                           <xhtml:br />saveFirstQuarterRevenue(quarterRevenue);<xhtml:br />
+                           <xhtml:br />return 0;</xhtml:div>
+                     </xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>However, in this example the primitive type short int is used for both the monthly and the quarterly sales variables. In C the short int primitive type has a maximum value of 32768. This creates a potential integer overflow if the value for the three monthly sales adds up to more than the maximum value for the short int primitive type. An integer overflow can lead to data corruption, unexpected behavior, infinite loops and system crashes. To correct the situation the appropriate primitive type should be used, as in the example below, and/or provide some validation mechanism to ensure that the maximum value for the primitive type is not exceeded.</Body_Text>
+               <Example_Code Nature="Good" Language="C">
+                  <xhtml:div>...<xhtml:br />float calculateRevenueForQuarter(long quarterSold) {...}<xhtml:br />
+                     <xhtml:br />int determineFirstQuarterRevenue() {<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>...<xhtml:br />
+                           <xhtml:i>// Calculate quarterly total</xhtml:i>
+                           <xhtml:br />long quarterSold = JanSold + FebSold + MarSold;<xhtml:br />
+                           <xhtml:br />
+                           <xhtml:i>// Calculate the total revenue for the quarter</xhtml:i>
+                           <xhtml:br />quarterRevenue = calculateRevenueForQuarter(quarterSold);<xhtml:br />
+                           <xhtml:br />...</xhtml:div>
+                     </xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>Note that an integer overflow could also occur if the quarterSold variable has a primitive type long but the method calculateRevenueForQuarter has a parameter of type short.</Body_Text>
+            </Demonstrative_Example>
+         </Demonstrative_Examples>
+         <Observed_Examples>
+            <Observed_Example>
+               <Reference>CVE-2025-46687</Reference>
+               <Description>Chain: Javascript engine code does not perform a length check (CWE-1284) leading to integer overflow (CWE-190) causing allocation of smaller buffer than expected (CWE-131) resulting in a heap-based buffer overflow (CWE-122)</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2025-46687</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2025-27363</Reference>
+               <Description>Font rendering library does not properly
+               handle assigning a signed short value to an unsigned
+               long (CWE-195), leading to an integer wraparound
+               (CWE-190), causing too small of a buffer (CWE-131),
+               leading to an out-of-bounds write
+               (CWE-787).</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2025-27363</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2021-43537</Reference>
+               <Description>Chain: in a web browser, an unsigned 64-bit integer is forcibly cast to a 32-bit integer (CWE-681) and potentially leading to an integer overflow (CWE-190). If an integer overflow occurs, this can cause heap memory corruption (CWE-122)</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2021-43537</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2019-19911</Reference>
+               <Description>Chain: Python library does not limit the resources used to process images that specify a very large number of bands (CWE-1284), leading to excessive memory consumption (CWE-789) or an integer overflow (CWE-190).</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2019-19911</Link>
+            </Observed_Example>
+            <Observed_Example>
+              <Reference>CVE-2022-0545</Reference>
+               <Description>Chain: 3D renderer has an integer overflow (CWE-190) leading to write-what-where condition (CWE-123) using a crafted image.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2022-0545</Link>
+            </Observed_Example> 
+            <Observed_Example>
+               <Reference>CVE-2021-30860</Reference>
+               <Description>Chain: improper input validation (CWE-20) leads to integer overflow (CWE-190) in mobile OS, as exploited in the wild per CISA KEV.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2021-30860</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2021-30663</Reference>
+               <Description>Chain: improper input validation (CWE-20) leads to integer overflow (CWE-190) in mobile OS, as exploited in the wild per CISA KEV.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2021-30663</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2018-10887</Reference>
+               <Description>Chain: unexpected sign extension (CWE-194) leads to integer overflow (CWE-190), causing an out-of-bounds read (CWE-125)</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2018-10887</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2019-1010006</Reference>
+               <Description>Chain: compiler optimization (CWE-733) removes or modifies code used to detect integer overflow (CWE-190), allowing out-of-bounds write (CWE-787).</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2019-1010006</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2010-1866</Reference>
+               <Description>Chain: integer overflow (CWE-190) causes a negative signed value, which later bypasses a maximum-only check (CWE-839), leading to heap-based buffer overflow (CWE-122).</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2010-1866</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2010-2753</Reference>
+               <Description>Chain: integer overflow leads to use-after-free</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2010-2753</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2005-1513</Reference>
+               <Description>Chain: integer overflow in securely-coded mail program leads to buffer overflow. In 2005, this was regarded as unrealistic to exploit, but in 2020, it was rediscovered to be easier to exploit due to evolutions of the technology.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2005-1513</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2002-0391</Reference>
+               <Description>Integer overflow via a large number of arguments.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2002-0391</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2002-0639</Reference>
+               <Description>Integer overflow in OpenSSH as listed in the demonstrative examples.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2002-0639</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2005-1141</Reference>
+               <Description>Image with large width and height leads to integer overflow.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2005-1141</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2005-0102</Reference>
+               <Description>Length value of -1 leads to allocation of 0 bytes and resultant heap overflow.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2005-0102</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2004-2013</Reference>
+               <Description>Length value of -1 leads to allocation of 0 bytes and resultant heap overflow.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2004-2013</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2017-1000121</Reference>
+               <Description>chain: unchecked message size metadata allows integer overflow (CWE-190) leading to buffer overflow (CWE-119).</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2017-1000121</Link>
+            </Observed_Example>
+	    <Observed_Example>
+	      <Reference>CVE-2013-1591</Reference>
+	      <Description>Chain: an integer overflow (CWE-190) in the image size calculation causes an infinite loop (CWE-835) which sequentially allocates buffers without limits (CWE-1325) until the stack is full.</Description>
+	      <Link>https://www.cve.org/CVERecord?id=CVE-2013-1591</Link>
+	    </Observed_Example>
+         </Observed_Examples>
+         <Functional_Areas>
+            <Functional_Area>Number Processing</Functional_Area>
+            <Functional_Area>Memory Management</Functional_Area>
+            <Functional_Area>Counters</Functional_Area>
+         </Functional_Areas>
+         <Taxonomy_Mappings>
+            <Taxonomy_Mapping Taxonomy_Name="PLOVER">
+               <Entry_Name>Integer overflow (wrap or wraparound)</Entry_Name>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="7 Pernicious Kingdoms">
+               <Entry_Name>Integer Overflow</Entry_Name>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="CLASP">
+               <Entry_Name>Integer overflow</Entry_Name>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="CERT C Secure Coding">
+               <Entry_ID>INT18-C</Entry_ID>
+               <Entry_Name>Evaluate integer expressions in a larger size before comparing or assigning to that size</Entry_Name>
+               <Mapping_Fit>CWE More Abstract</Mapping_Fit>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="CERT C Secure Coding">
+               <Entry_ID>INT30-C</Entry_ID>
+               <Entry_Name>Ensure that unsigned integer operations do not wrap</Entry_Name>
+               <Mapping_Fit>CWE More Abstract</Mapping_Fit>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="CERT C Secure Coding">
+               <Entry_ID>INT32-C</Entry_ID>
+               <Entry_Name>Ensure that operations on signed integers do not result in overflow</Entry_Name>
+               <Mapping_Fit>Imprecise</Mapping_Fit>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="CERT C Secure Coding">
+               <Entry_ID>INT35-C</Entry_ID>
+               <Entry_Name>Evaluate integer expressions in a larger size before comparing or assigning to that size</Entry_Name>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="CERT C Secure Coding">
+               <Entry_ID>MEM07-C</Entry_ID>
+               <Entry_Name>Ensure that the arguments to calloc(), when multiplied, do not wrap</Entry_Name>
+               <Mapping_Fit>CWE More Abstract</Mapping_Fit>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="CERT C Secure Coding">
+               <Entry_ID>MEM35-C</Entry_ID>
+               <Entry_Name>Allocate sufficient memory for an object</Entry_Name>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="WASC">
+               <Entry_ID>3</Entry_ID>
+               <Entry_Name>Integer Overflows</Entry_Name>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="Software Fault Patterns">
+              <Entry_ID>SFP1</Entry_ID>
+              <Entry_Name>Glitch in computation</Entry_Name>
+            </Taxonomy_Mapping>
+	    <Taxonomy_Mapping Taxonomy_Name="ISA/IEC 62443">
+	      <Entry_ID>Part 3-3</Entry_ID>
+	      <Entry_Name>Req SR 3.5</Entry_Name>
+	    </Taxonomy_Mapping>
+	    <Taxonomy_Mapping Taxonomy_Name="ISA/IEC 62443">
+	      <Entry_ID>Part 3-3</Entry_ID>
+	      <Entry_Name>Req SR 7.2</Entry_Name>
+	    </Taxonomy_Mapping>
+	    <Taxonomy_Mapping Taxonomy_Name="ISA/IEC 62443">
+	      <Entry_ID>Part 4-1</Entry_ID>
+	      <Entry_Name>Req SR-2</Entry_Name>
+	    </Taxonomy_Mapping>
+	    <Taxonomy_Mapping Taxonomy_Name="ISA/IEC 62443">
+	      <Entry_ID>Part 4-1</Entry_ID>
+	      <Entry_Name>Req SI-2</Entry_Name>
+	    </Taxonomy_Mapping>
+	    <Taxonomy_Mapping Taxonomy_Name="ISA/IEC 62443">
+	      <Entry_ID>Part 4-1</Entry_ID>
+	      <Entry_Name>Req SVV-1</Entry_Name>
+	    </Taxonomy_Mapping>
+	    <Taxonomy_Mapping Taxonomy_Name="ISA/IEC 62443">
+	      <Entry_ID>Part 4-1</Entry_ID>
+	      <Entry_Name>Req SVV-3</Entry_Name>
+	    </Taxonomy_Mapping>
+	    <Taxonomy_Mapping Taxonomy_Name="ISA/IEC 62443">
+	      <Entry_ID>Part 4-2</Entry_ID>
+	      <Entry_Name>Req CR 3.5</Entry_Name>
+	    </Taxonomy_Mapping>
+	    <Taxonomy_Mapping Taxonomy_Name="ISA/IEC 62443">
+	      <Entry_ID>Part 4-2</Entry_ID>
+	      <Entry_Name>Req CR 7.2</Entry_Name>
+	    </Taxonomy_Mapping>
+         </Taxonomy_Mappings>
+         <Related_Attack_Patterns>
+            <Related_Attack_Pattern CAPEC_ID="92" />
+         </Related_Attack_Patterns>
+         <References>
+            <Reference External_Reference_ID="REF-145" />
+            <Reference External_Reference_ID="REF-146" />
+            <Reference External_Reference_ID="REF-7" Section="Chapter 20, &quot;Integer Overflows&quot; Page 620" />
+            <Reference External_Reference_ID="REF-44" Section="&quot;Sin 7: Integer Overflows.&quot; Page 119" />
+            <Reference External_Reference_ID="REF-106" />
+            <Reference External_Reference_ID="REF-150" />
+            <Reference External_Reference_ID="REF-62" Section="Chapter 6, &quot;Signed Integer Boundaries&quot;, Page 220" />
+            <Reference External_Reference_ID="REF-1440" Section="Definition variations and ambiguity" />
+            <Reference External_Reference_ID="REF-1479" />
+            <Reference External_Reference_ID="REF-1482" />
+         </References>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Base level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Be careful of terminology problems with "overflow," "underflow," and "wraparound" - see Terminology Notes. Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+			<Suggestions>
+			  <Suggestion CWE_ID="191" Comment="Integer Underflow (Wrap or Wraparound). Consider CWE-191 when the result is less than the minimum value that can be represented (sometimes called &quot;underflows&quot;)." />
+			</Suggestions>
+         </Mapping_Notes>
+         <Notes>
+            <Note Type="Relationship">Integer overflows can be primary to buffer overflows when they cause less memory to be allocated than expected.</Note>
+            <Note Type="Terminology">
+
+			  <xhtml:p>"Integer overflow" is
+            sometimes used to cover several types of errors, including
+            signedness errors, or buffer overflows that involve
+            manipulation of integer data types instead of
+            characters. Part of the confusion results from the fact
+            that 0xffffffff is -1 in a signed context. Other confusion
+            also arises because of the role that integer overflows
+            have in chains.</xhtml:p>
+
+			<xhtml:p>A "wraparound" is a well-defined, standard
+			behavior that follows specific rules for how to handle
+			situations when the intended numeric value is too large or
+			too small to be represented, as specified in standards
+			such as C11.</xhtml:p>
+			
+            <xhtml:p>"Overflow" is sometimes conflated with
+            "wraparound" but typically indicates a non-standard or
+            undefined behavior.</xhtml:p>
+
+			<xhtml:p>The "overflow" term is sometimes used to indicate
+			cases where either the maximum or the minimum is exceeded,
+			but others might only use "overflow" to indicate exceeding
+			the maximum while using "underflow" for exceeding the
+			minimum.</xhtml:p>
+
+			<xhtml:p>Some people use "overflow" to mean any value
+			outside the representable range - whether greater than the
+			maximum, or less than the minimum - but CWE uses
+			"underflow" for cases in which the intended result is less
+			than the minimum.</xhtml:p>
+			
+			<xhtml:p>See [REF-1440] for additional explanation of the
+			ambiguity of terminology.</xhtml:p>
+		  </Note>
+            <Note Type="Other">While there may be circumstances in
+            which the logic intentionally relies on wrapping - such as
+            with modular arithmetic in timers or counters - it can
+            have security consequences if the wrap is unexpected.
+            This is especially the case if the integer overflow can be
+            triggered using user-supplied inputs.</Note>
+         </Notes>
+         <Content_History>
+            <Submission>
+               <Submission_Name>PLOVER</Submission_Name>
+               <Submission_Date>2006-07-19</Submission_Date>
+               <Submission_Version>Draft 3</Submission_Version>
+               <Submission_ReleaseDate>2006-07-19</Submission_ReleaseDate>
+            </Submission>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2008-09-08</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences, Relationships, Relationship_Notes, Taxonomy_Mappings, Terminology_Notes</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2008-10-14</Modification_Date>
+               <Modification_Version>1.0.1</Modification_Version>
+               <Modification_ReleaseDate>2008-10-14</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences, Description, Potential_Mitigations, Terminology_Notes</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2008-11-24</Modification_Date>
+               <Modification_Version>1.1</Modification_Version>
+               <Modification_ReleaseDate>2008-11-25</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2009-01-12</Modification_Date>
+               <Modification_Version>1.2</Modification_Version>
+               <Modification_ReleaseDate>2009-01-12</Modification_ReleaseDate>
+               <Modification_Comment>updated Description, Name</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2009-05-27</Modification_Date>
+               <Modification_Version>1.4</Modification_Version>
+               <Modification_ReleaseDate>2009-05-27</Modification_ReleaseDate>
+               <Modification_Comment>updated Demonstrative_Examples</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2009-10-29</Modification_Date>
+               <Modification_Version>1.6</Modification_Version>
+               <Modification_ReleaseDate>2009-10-29</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2010-02-16</Modification_Date>
+               <Modification_Version>1.8</Modification_Version>
+               <Modification_ReleaseDate>2010-02-16</Modification_ReleaseDate>
+               <Modification_Comment>updated Applicable_Platforms, Detection_Factors, Functional_Areas, Observed_Examples, Potential_Mitigations, References, Related_Attack_Patterns, Relationships, Taxonomy_Mappings, Terminology_Notes</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2010-04-05</Modification_Date>
+               <Modification_Version>1.8.1</Modification_Version>
+               <Modification_ReleaseDate>2010-04-05</Modification_ReleaseDate>
+               <Modification_Comment>updated Demonstrative_Examples, Detection_Factors, Potential_Mitigations, References, Related_Attack_Patterns</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2010-06-21</Modification_Date>
+               <Modification_Version>1.9</Modification_Version>
+               <Modification_ReleaseDate>2010-06-21</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences, Potential_Mitigations, References</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2010-09-27</Modification_Date>
+               <Modification_Version>1.10</Modification_Version>
+               <Modification_ReleaseDate>2010-09-27</Modification_ReleaseDate>
+               <Modification_Comment>updated Observed_Examples, Potential_Mitigations</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-06-01</Modification_Date>
+               <Modification_Version>1.13</Modification_Version>
+               <Modification_ReleaseDate>2011-06-01</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-06-27</Modification_Date>
+               <Modification_Version>2.0</Modification_Version>
+               <Modification_ReleaseDate>2011-06-27</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-09-13</Modification_Date>
+               <Modification_Version>2.1</Modification_Version>
+               <Modification_ReleaseDate>2011-09-13</Modification_ReleaseDate>
+               <Modification_Comment>updated Potential_Mitigations, References, Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2012-05-11</Modification_Date>
+               <Modification_Version>2.2</Modification_Version>
+               <Modification_ReleaseDate>2012-05-15</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences, Demonstrative_Examples, References, Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2012-10-30</Modification_Date>
+               <Modification_Version>2.3</Modification_Version>
+               <Modification_ReleaseDate>2012-10-30</Modification_ReleaseDate>
+               <Modification_Comment>updated Potential_Mitigations</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2013-07-17</Modification_Date>
+               <Modification_Version>2.5</Modification_Version>
+               <Modification_ReleaseDate>2013-07-17</Modification_ReleaseDate>
+               <Modification_Comment>updated References</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2014-07-30</Modification_Date>
+               <Modification_Version>2.8</Modification_Version>
+               <Modification_ReleaseDate>2014-07-31</Modification_ReleaseDate>
+               <Modification_Comment>updated Detection_Factors, Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2015-12-07</Modification_Date>
+               <Modification_Version>2.9</Modification_Version>
+               <Modification_ReleaseDate>2015-12-07</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2017-01-19</Modification_Date>
+               <Modification_Version>2.10</Modification_Version>
+               <Modification_ReleaseDate>2017-01-19</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2017-11-08</Modification_Date>
+               <Modification_Version>3.0</Modification_Version>
+               <Modification_ReleaseDate>2017-11-08</Modification_ReleaseDate>
+               <Modification_Comment>updated Functional_Areas, Observed_Examples, References, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2018-03-27</Modification_Date>
+               <Modification_Version>3.1</Modification_Version>
+               <Modification_ReleaseDate>2018-03-27</Modification_ReleaseDate>
+               <Modification_Comment>updated References</Modification_Comment>
+            </Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2019-01-03</Modification_Date>
+					<Modification_Version>3.2</Modification_Version>
+					<Modification_ReleaseDate>2019-01-03</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2019-09-19</Modification_Date>
+					<Modification_Version>3.4</Modification_Version>
+					<Modification_ReleaseDate>2019-09-19</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-02-24</Modification_Date>
+					<Modification_Version>4.0</Modification_Version>
+					<Modification_ReleaseDate>2020-02-24</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-06-25</Modification_Date>
+					<Modification_Version>4.1</Modification_Version>
+					<Modification_ReleaseDate>2020-06-25</Modification_ReleaseDate>
+					<Modification_Comment>updated Observed_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-08-20</Modification_Date>
+					<Modification_Version>4.2</Modification_Version>
+					<Modification_ReleaseDate>2020-08-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-12-10</Modification_Date>
+					<Modification_Version>4.3</Modification_Version>
+					<Modification_ReleaseDate>2020-12-10</Modification_ReleaseDate>
+					<Modification_Comment>updated Observed_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-03-15</Modification_Date>
+					<Modification_Version>4.4</Modification_Version>
+					<Modification_ReleaseDate>2021-03-15</Modification_ReleaseDate>
+					<Modification_Comment>updated Potential_Mitigations</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-07-20</Modification_Date>
+					<Modification_Version>4.5</Modification_Version>
+					<Modification_ReleaseDate>2021-07-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-06-28</Modification_Date>
+					<Modification_Version>4.8</Modification_Version>
+					<Modification_ReleaseDate>2022-06-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Observed_Examples, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-10-13</Modification_Date>
+					<Modification_Version>4.9</Modification_Version>
+					<Modification_ReleaseDate>2022-10-13</Modification_ReleaseDate>
+					<Modification_Comment>updated Observed_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-01-31</Modification_Date>
+					<Modification_Version>4.10</Modification_Version>
+					<Modification_ReleaseDate>2023-01-31</Modification_ReleaseDate>
+					<Modification_Comment>updated Description, Detection_Factors</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships, Taxonomy_Mappings</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-10-26</Modification_Date>
+					<Modification_Version>4.13</Modification_Version>
+					<Modification_ReleaseDate>2023-10-26</Modification_ReleaseDate>
+					<Modification_Comment>updated Observed_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2024-02-29</Modification_Date>
+					<Modification_Version>4.14</Modification_Version>
+					<Modification_ReleaseDate>2024-02-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Observed_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2024-07-16</Modification_Date>
+					<Modification_Version>4.15</Modification_Version>
+					<Modification_ReleaseDate>2024-07-16</Modification_ReleaseDate>
+					<Modification_Comment>updated Alternate_Terms, Common_Consequences, Description, Diagram, Mapping_Notes, Modes_of_Introduction, Other_Notes, References, Relationship_Notes, Terminology_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2024-11-19</Modification_Date>
+					<Modification_Version>4.16</Modification_Version>
+					<Modification_ReleaseDate>2024-11-19</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-04-03</Modification_Date>
+					<Modification_Version>4.17</Modification_Version>
+					<Modification_ReleaseDate>2025-04-03</Modification_ReleaseDate>
+					<Modification_Comment>updated Applicable_Platforms, Observed_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-09-09</Modification_Date>
+					<Modification_Version>4.18</Modification_Version>
+					<Modification_ReleaseDate>2025-09-09</Modification_ReleaseDate>
+					<Modification_Comment>updated Detection_Factors, Observed_Examples, Potential_Mitigations, References</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Applicable_Platforms, Observed_Examples, Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+            <Contribution Type="Content">
+               <Contribution_Name>"Mapping CWE to 62443" Sub-Working Group</Contribution_Name>
+               <Contribution_Organization>CWE-CAPEC ICS/OT SIG</Contribution_Organization>
+               <Contribution_Date>2023-04-25</Contribution_Date>
+               <Contribution_Comment>Suggested mappings to ISA/IEC 62443.</Contribution_Comment>
+            </Contribution>
+	    <Contribution Type="Content">
+	      <Contribution_Name>Abhi Balakrishnan</Contribution_Name>
+	      <Contribution_Date>2024-02-29</Contribution_Date>
+	      <Contribution_Version>4.15</Contribution_Version>
+	      <Contribution_ReleaseDate>2024-07-16</Contribution_ReleaseDate>
+	      <Contribution_Comment>Provided diagram to improve CWE usability</Contribution_Comment>
+	    </Contribution>
+		<Contribution Type="Feedback">
+		  <Contribution_Name>Zheng Zhang</Contribution_Name>
+		  <Contribution_Organization>Purdue University</Contribution_Organization>
+		  <Contribution_Date>2025-06-16</Contribution_Date>
+		  <Contribution_Version>4.18</Contribution_Version>
+		  <Contribution_ReleaseDate>2025-09-09</Contribution_ReleaseDate>
+		  <Contribution_Comment>reported CVE-2022-21668 as an incorrect observed example for this entry, when CVE-2019-19911 was intended</Contribution_Comment>
+		</Contribution>
+            <Previous_Entry_Name Date="2009-01-12">Integer Overflow (Wrap or Wraparound)</Previous_Entry_Name>
+         </Content_History>
+      </Weakness>
+      

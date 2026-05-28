@@ -1,0 +1,113 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="1190" Name="DMA Device Enabled Too Early in Boot Phase" Abstraction="Base" Structure="Simple" Status="Draft">
+         <Description>The product enables a Direct Memory Access (DMA) capable device before the security configuration settings are established, which allows an attacker to extract data from or gain privileges on the product.</Description>
+         <Extended_Description>
+            <xhtml:p>DMA is included in a number of devices because it allows
+              data transfer between the computer and the connected device, using
+              direct hardware access to read or write directly to main memory
+              without any OS interaction. An attacker could exploit this to
+              access secrets. Several virtualization-based mitigations have been introduced to thwart DMA attacks. These are usually
+              configured/setup during boot time. However, certain IPs that are
+              powered up before boot is complete (known as early boot IPs) may
+              be DMA capable. Such IPs, if not trusted, could launch DMA
+              attacks and gain access to assets that should otherwise be
+              protected.</xhtml:p>
+         </Extended_Description>
+         <Related_Weaknesses>
+            <Related_Weakness Nature="ChildOf" CWE_ID="696" View_ID="1000" Ordinal="Primary" />
+         </Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+         <Applicable_Platforms>
+            <Language Class="Not Language-Specific" Prevalence="Undetermined" />
+            <Technology Class="System on Chip" Prevalence="Undetermined" />
+         </Applicable_Platforms>
+         <Modes_Of_Introduction>
+            <Introduction>
+               <Phase>Architecture and Design</Phase>
+            </Introduction>
+         </Modes_Of_Introduction>
+		 <Common_Consequences>
+            <Consequence>
+               <Scope>Access Control</Scope>
+               <Impact>Bypass Protection Mechanism</Impact>
+			   <Impact>Modify Memory</Impact>
+			   <Likelihood>High</Likelihood>
+               <Note>DMA devices have direct write access to main memory and
+                 due to time of attack will be able to bypass OS or Bootloader
+                 access control.</Note>
+            </Consequence>
+         </Common_Consequences>
+         <Potential_Mitigations>
+            <Mitigation>
+               <Phase>Architecture and Design</Phase>
+               <Description>Utilize an IOMMU to orchestrate IO access from
+                 the start of the boot process.</Description>
+            </Mitigation>
+          </Potential_Mitigations>
+         <Related_Attack_Patterns>
+            <Related_Attack_Pattern CAPEC_ID="180" />
+         </Related_Attack_Patterns>
+         <References>
+            <Reference External_Reference_ID="REF-1038" />
+            <Reference External_Reference_ID="REF-1039" />
+            <Reference External_Reference_ID="REF-1040" />
+            <Reference External_Reference_ID="REF-1041" />
+            <Reference External_Reference_ID="REF-1042" />
+            <Reference External_Reference_ID="REF-1044" />
+            <Reference External_Reference_ID="REF-1046" />
+         </References>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Base level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+         <Content_History>
+            <Submission>
+			   <Submission_Name>Arun Kanuparthi, Hareesh Khattri, Parbati Kumar Manna, Narasimha Kumar V Mangipudi</Submission_Name>
+               <Submission_Organization>Intel Corporation</Submission_Organization>
+               <Submission_Date>2019-10-15</Submission_Date>
+               <Submission_Version>4.0</Submission_Version>
+               <Submission_ReleaseDate>2020-02-24</Submission_ReleaseDate>
+            </Submission>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-08-20</Modification_Date>
+					<Modification_Version>4.2</Modification_Version>
+					<Modification_ReleaseDate>2020-08-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Related_Attack_Patterns</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated References, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+         </Content_History>
+      </Weakness>
+      

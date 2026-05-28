@@ -1,0 +1,174 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="1272" Name="Sensitive Information Uncleared Before Debug/Power State Transition" Abstraction="Base" Structure="Simple" Status="Stable">
+			<Description>The product performs a power or debug state transition, but it does not clear sensitive information that should no longer be accessible due to changes to information access restrictions.</Description>
+			<Extended_Description>
+				<xhtml:p>A device or system frequently employs many power and sleep states during its normal operation (e.g., normal power, additional power, low power, hibernate, deep sleep, etc.). A device also may be operating within a debug condition. State transitions can happen from one power or debug state to another. If there is information available in the previous state which should not be available in the next state and is not properly removed before the transition into the next state, sensitive information may leak from the system.</xhtml:p>
+			</Extended_Description>
+     <Related_Weaknesses>
+      <Related_Weakness Nature="ChildOf" CWE_ID="226" View_ID="1000" Ordinal="Primary" />
+      <Related_Weakness Nature="CanPrecede" CWE_ID="200" View_ID="1000" Ordinal="Primary" />
+     </Related_Weaknesses>
+		 <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+		 </Weakness_Ordinalities>
+			<Applicable_Platforms>
+				<Language Name="VHDL" Prevalence="Undetermined" />
+				<Language Name="Verilog" Prevalence="Undetermined" />
+				<Language Class="Hardware Description Language" Prevalence="Undetermined" />
+				<Operating_System Class="Not OS-Specific" Prevalence="Undetermined" />
+				<Architecture Class="Not Architecture-Specific" Prevalence="Undetermined" />
+				<Technology Class="Not Technology-Specific" Prevalence="Undetermined" />
+				</Applicable_Platforms>
+			<Modes_Of_Introduction>
+				<Introduction>
+					<Phase>Architecture and Design</Phase>
+				</Introduction>
+			</Modes_Of_Introduction>
+			<Common_Consequences>
+				<Consequence>
+					<Scope>Confidentiality</Scope>
+					<Scope>Integrity</Scope>
+					<Scope>Availability</Scope>
+					<Scope>Access Control</Scope>
+					<Scope>Accountability</Scope>
+					<Scope>Authentication</Scope>
+					<Scope>Authorization</Scope>
+					<Scope>Non-Repudiation</Scope>
+					<Impact>Read Memory</Impact>
+					<Impact>Read Application Data</Impact>
+					<Likelihood>High</Likelihood>
+					<Note>Sensitive information may be used to unlock additional capabilities of the device and take advantage of hidden functionalities which could be used to compromise device security.</Note>
+				</Consequence>
+			</Common_Consequences>
+			<Detection_Methods>
+			  <Detection_Method>
+			    <Method>Manual Analysis</Method>
+			    <Description>Write a known pattern into each sensitive location. Enter the power/debug state in question. Read data back from the sensitive locations. If the reads are successful, and the data is the same as the pattern that was originally written, the test fails and the device needs to be fixed. Note that this test can likely be automated.</Description>
+			    <Effectiveness>High</Effectiveness>
+			  </Detection_Method>
+			</Detection_Methods>
+			<Potential_Mitigations>
+				<Mitigation>
+					<Phase>Architecture and Design</Phase>
+					<Phase>Implementation</Phase>
+					<Description>During state transitions, information not needed in the next state should be removed before the transition to the next state.</Description>
+				</Mitigation>
+			</Potential_Mitigations>
+			<Demonstrative_Examples>
+       <Demonstrative_Example Demonstrative_Example_ID="DX-147">
+	 <Intro_Text>This example shows how an attacker can take advantage of an incorrect state transition.</Intro_Text>
+	 <Body_Text>
+	   <xhtml:p>Suppose a device is transitioning from state A to state B. During state A, it can read certain private keys from the hidden fuses that are only accessible in state A but not in state B. The device reads the keys, performs operations using those keys, then transitions to state B, where those private keys should no longer be accessible.</xhtml:p>
+	 </Body_Text>
+	 <Example_Code Nature="Bad" Language="Other">
+	   <xhtml:p>During the transition from A to B, the device does not scrub the memory.</xhtml:p>
+	 </Example_Code>
+	 <Body_Text><xhtml:p>After the transition to state B, even though the private keys are no longer accessible directly from the fuses in state B, they can be accessed indirectly by reading the memory that contains the private keys.</xhtml:p></Body_Text>
+	 <Example_Code Nature="Good" Language="Other">For transition from state A to state B, remove information which should not be available once the transition is complete.</Example_Code>
+       </Demonstrative_Example>
+     </Demonstrative_Examples>
+			<Observed_Examples>
+			  <Observed_Example>
+				<Reference>CVE-2020-12926</Reference>
+				<Description>Product software does not set a flag as per TPM specifications, thereby preventing a failed authorization attempt from being recorded after a loss of power.</Description>
+				<Link>https://www.cve.org/CVERecord?id=CVE-2020-12926</Link>
+			  </Observed_Example>
+			</Observed_Examples>
+		<Functional_Areas>
+            <Functional_Area>Power</Functional_Area>
+        </Functional_Areas>
+         <Related_Attack_Patterns>
+            <Related_Attack_Pattern CAPEC_ID="150" />
+            <Related_Attack_Pattern CAPEC_ID="37" />
+            <Related_Attack_Pattern CAPEC_ID="545" />
+            <Related_Attack_Pattern CAPEC_ID="546" />
+         </Related_Attack_Patterns>
+         <References>
+		   <Reference External_Reference_ID="REF-1220" />
+		 </References>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Base level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+         <Content_History>
+				<Submission>
+					<Submission_Name>Parbati Kumar Manna, Hareesh Khattri, Arun Kanuparthi</Submission_Name>
+					<Submission_Organization>Intel Corporation</Submission_Organization>
+					<Submission_Date>2020-05-31</Submission_Date>
+					<Submission_Version>4.1</Submission_Version>
+					<Submission_ReleaseDate>2020-02-24</Submission_ReleaseDate>
+				</Submission>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-08-20</Modification_Date>
+					<Modification_Version>4.2</Modification_Version>
+					<Modification_ReleaseDate>2020-08-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Applicable_Platforms, Common_Consequences, Demonstrative_Examples, Description, Name, Potential_Mitigations, Related_Attack_Patterns, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-03-15</Modification_Date>
+					<Modification_Version>4.4</Modification_Version>
+					<Modification_ReleaseDate>2021-03-15</Modification_ReleaseDate>
+					<Modification_Comment>updated Functional_Areas</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-10-28</Modification_Date>
+					<Modification_Version>4.6</Modification_Version>
+					<Modification_ReleaseDate>2021-10-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Common_Consequences, Demonstrative_Examples, Description, Detection_Factors, Observed_Examples, Potential_Mitigations, References, Relationships, Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-10-13</Modification_Date>
+					<Modification_Version>4.9</Modification_Version>
+					<Modification_ReleaseDate>2022-10-13</Modification_ReleaseDate>
+					<Modification_Comment>updated Applicable_Platforms</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-04-03</Modification_Date>
+					<Modification_Version>4.17</Modification_Version>
+					<Modification_ReleaseDate>2025-04-03</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-09-09</Modification_Date>
+					<Modification_Version>4.18</Modification_Version>
+					<Modification_ReleaseDate>2025-09-09</Modification_ReleaseDate>
+					<Modification_Comment>updated References, Relationships</Modification_Comment>
+				</Modification>
+			<Previous_Entry_Name Date="2020-08-20">Debug/Power State Transitions Leak Information</Previous_Entry_Name>
+			</Content_History>
+		</Weakness>
+      

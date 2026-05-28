@@ -1,0 +1,725 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="129" Name="Improper Validation of Array Index" Abstraction="Variant" Structure="Simple" Status="Draft">
+         <Description>The product uses untrusted input when calculating or using an array index, but the product does not validate or incorrectly validates the index to ensure the index references a valid position within the array.</Description>
+         <Related_Weaknesses>
+            <Related_Weakness Nature="ChildOf" CWE_ID="1285" View_ID="1000" Ordinal="Primary" />
+            <Related_Weakness Nature="ChildOf" CWE_ID="20" View_ID="1003" Ordinal="Primary" />
+            <Related_Weakness Nature="CanPrecede" CWE_ID="119" View_ID="1000" />
+            <Related_Weakness Nature="CanPrecede" CWE_ID="823" View_ID="1000" />
+            <Related_Weakness Nature="CanPrecede" CWE_ID="789" View_ID="1000" />
+         </Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Resultant</Ordinality>
+               <Description>The most common condition situation leading to an out-of-bounds array index is the use of loop index variables as buffer indexes. If the end condition for the loop is subject to a flaw, the index can grow or shrink unbounded, therefore causing a buffer overflow or underflow. Another common situation leading to this condition is the use of a function's return value, or the resulting value of a calculation directly as an index in to a buffer.</Description>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+         <Applicable_Platforms>
+            <Language Name="C" Prevalence="Often" />
+            <Language Name="C++" Prevalence="Often" />
+            <Language Class="Not Language-Specific" Prevalence="Undetermined" />
+         </Applicable_Platforms>
+         <Alternate_Terms>
+            <Alternate_Term>
+               <Term>out-of-bounds array index</Term>
+            </Alternate_Term>
+            <Alternate_Term>
+               <Term>index-out-of-range</Term>
+            </Alternate_Term>
+            <Alternate_Term>
+               <Term>array index underflow</Term>
+            </Alternate_Term>
+         </Alternate_Terms>
+         <Modes_Of_Introduction>
+            <Introduction>
+               <Phase>Implementation</Phase>
+            </Introduction>
+         </Modes_Of_Introduction>
+         <Likelihood_Of_Exploit>High</Likelihood_Of_Exploit>
+         <Common_Consequences>
+            <Consequence>
+               <Scope>Integrity</Scope>
+               <Scope>Availability</Scope>
+               <Impact>DoS: Crash, Exit, or Restart</Impact>
+               <Note>Use of an index that is outside the bounds of an array will very likely result in the corruption of relevant memory and perhaps instructions, leading to a crash, if the values are outside of the valid memory area.</Note>
+            </Consequence>
+            <Consequence>
+               <Scope>Integrity</Scope>
+               <Impact>Modify Memory</Impact>
+               <Note>If the memory corrupted is data, rather than instructions, the system will continue to function with improper values.</Note>
+            </Consequence>
+            <Consequence>
+               <Scope>Confidentiality</Scope>
+               <Scope>Integrity</Scope>
+               <Impact>Modify Memory</Impact>
+               <Impact>Read Memory</Impact>
+               <Note>Use of an index that is outside the bounds of an array can also trigger out-of-bounds read or write operations, or operations on the wrong objects; i.e., "buffer overflows" are not always the result. This may result in the exposure or modification of sensitive data.</Note>
+            </Consequence>
+            <Consequence>
+               <Scope>Integrity</Scope>
+               <Scope>Confidentiality</Scope>
+               <Scope>Availability</Scope>
+               <Impact>Execute Unauthorized Code or Commands</Impact>
+               <Note>If the memory accessible by the attacker can be effectively controlled, it may be possible to execute arbitrary code, as with a standard buffer overflow and possibly without the use of large inputs if a precise index can be controlled.</Note>
+            </Consequence>
+            <Consequence>
+               <Scope>Integrity</Scope>
+               <Scope>Availability</Scope>
+               <Scope>Confidentiality</Scope>
+               <Impact>DoS: Crash, Exit, or Restart</Impact>
+               <Impact>Execute Unauthorized Code or Commands</Impact>
+               <Impact>Read Memory</Impact>
+               <Impact>Modify Memory</Impact>
+               <Note>A single fault could allow either an overflow (CWE-788) or underflow (CWE-786) of the array index. What happens next will depend on the type of operation being performed out of bounds, but can expose sensitive information, cause a system crash, or possibly lead to arbitrary code execution.</Note>
+            </Consequence>
+         </Common_Consequences>
+         <Detection_Methods>
+            <Detection_Method Detection_Method_ID="DM-1">
+               <Method>Automated Static Analysis</Method>
+               <Description>
+                  <xhtml:p>This weakness can often be detected using automated static analysis tools. Many modern tools use data flow analysis or constraint-based techniques to minimize the number of false positives.</xhtml:p>
+                  <xhtml:p>Automated static analysis generally does not account for environmental considerations when reporting out-of-bounds memory operations. This can make it difficult for users to determine which warnings should be investigated first. For example, an analysis tool might report array index errors that originate from command line arguments in a program that is not expected to run with setuid or other special privileges.</xhtml:p>
+               </Description>
+               <Effectiveness>High</Effectiveness>
+               <Effectiveness_Notes>This is not a perfect solution, since 100% accuracy and coverage are not feasible.</Effectiveness_Notes>
+            </Detection_Method>
+            <Detection_Method Detection_Method_ID="DM-2">
+               <Method>Automated Dynamic Analysis</Method>
+               <Description>This weakness can be detected using dynamic tools and techniques that interact with the software using large test suites with many diverse inputs, such as fuzz testing (fuzzing), robustness testing, and fault injection. The software's operation may slow down, but it should not become unstable, crash, or generate incorrect results.</Description>
+            </Detection_Method>
+	    <Detection_Method Detection_Method_ID="DM-15">
+	      <Method>Automated Dynamic Analysis</Method>
+	      <Description>Use tools that are integrated during
+	      compilation to insert runtime error-checking mechanisms
+	      related to memory safety errors, such as AddressSanitizer
+	      (ASan) for C/C++ [REF-1518].</Description>
+	      <Effectiveness>Moderate</Effectiveness>
+	      <Effectiveness_Notes>Crafted inputs are necessary to
+	      reach the code containing the error, such as generated
+	      by fuzzers.  Also, these tools may reduce performance,
+	      and they only report the error condition - not the
+	      original mistake that led to the
+	      error.</Effectiveness_Notes>
+	    </Detection_Method>
+            <Detection_Method>
+               <Method>Black Box</Method>
+               <Description>Black box methods might not get the needed code coverage within limited time constraints, and a dynamic test might not produce any noticeable side effects even if it is successful.</Description>
+            </Detection_Method>
+         </Detection_Methods>
+         <Potential_Mitigations>
+            <Mitigation Mitigation_ID="MIT-7">
+               <Phase>Architecture and Design</Phase>
+               <Strategy>Input Validation</Strategy>
+               <Description>Use an input validation framework such as Struts or the OWASP ESAPI Validation API. Note that using a framework does not automatically address all input validation problems; be mindful of weaknesses that could arise from misusing the framework itself (CWE-1173).</Description>
+            </Mitigation>
+            <Mitigation Mitigation_ID="MIT-15">
+               <Phase>Architecture and Design</Phase>
+               <Description>
+                  <xhtml:p>For any security checks that are performed on the client side, ensure that these checks are duplicated on the server side, in order to avoid CWE-602. Attackers can bypass the client-side checks by modifying values after the checks have been performed, or by changing the client to remove the client-side checks entirely. Then, these modified values would be submitted to the server.</xhtml:p>
+                  <xhtml:p>Even though client-side checks provide minimal benefits with respect to server-side security, they are still useful. First, they can support intrusion detection. If the server receives input that should have been rejected by the client, then it may be an indication of an attack. Second, client-side error-checking can provide helpful feedback to the user about the expectations for valid input. Third, there may be a reduction in server-side processing time for accidental input errors, although this is typically a small savings.</xhtml:p>
+               </Description>
+            </Mitigation>
+            <Mitigation Mitigation_ID="MIT-3">
+               <Phase>Requirements</Phase>
+               <Strategy>Language Selection</Strategy>
+               <Description>
+                  <xhtml:p>Use a language that does not allow this weakness to occur or provides constructs that make this weakness easier to avoid.</xhtml:p>
+                  <xhtml:p>For example, Ada allows the programmer to constrain the values of a variable and languages such as Java and Ruby will allow the programmer to handle exceptions when an out-of-bounds index is accessed.</xhtml:p>
+               </Description>
+            </Mitigation>
+            <Mitigation Mitigation_ID="MIT-11">
+	       <Phase>Operation</Phase> 
+	       <Phase>Build and Compilation</Phase> 
+	       <Strategy>Environment Hardening</Strategy> 
+	       <Description>
+		 <xhtml:p>Run or compile the software using features or extensions that randomly arrange the positions of a program's executable and libraries in memory. Because this makes the addresses unpredictable, it can prevent an attacker from reliably jumping to exploitable code. </xhtml:p> 
+		 <xhtml:p> Examples include Address Space Layout Randomization (ASLR) [REF-58] [REF-60] and Position-Independent Executables (PIE) [REF-64]. Imported modules may be similarly realigned if their default memory addresses conflict with other modules, in a process known as "rebasing" (for Windows) and "prelinking" (for Linux) [REF-1332] using randomly generated addresses. ASLR for libraries cannot be used in conjunction with prelink since it would require relocating the libraries at run-time, defeating the whole purpose of prelinking. </xhtml:p> 
+	       <xhtml:p> For more information on these techniques see D3-SAOR (Segment Address Offset Randomization) from D3FEND [REF-1335]. </xhtml:p> </Description> 
+	       <Effectiveness>Defense in Depth</Effectiveness> 
+	       <Effectiveness_Notes>These techniques do not provide a complete solution.  For instance, exploits frequently use a bug that discloses memory addresses in order to maximize reliability of code execution [REF-1337]. It has also been shown that a side-channel attack can bypass ASLR [REF-1333].</Effectiveness_Notes> 
+            </Mitigation>
+            <Mitigation Mitigation_ID="MIT-12">
+               <Phase>Operation</Phase> 
+	       <Strategy>Environment Hardening</Strategy> 
+	       <Description> 
+		 <xhtml:p> Use a CPU and operating system that offers Data Execution Protection (using hardware NX or XD bits) or the equivalent techniques that simulate this feature in software, such as PaX [REF-60] [REF-61]. These techniques ensure that any instruction executed is exclusively at a memory address that is part of the code segment.  </xhtml:p> 
+	         <xhtml:p> For more information on these techniques see D3-PSEP (Process Segment Execution Prevention) from D3FEND [REF-1336]. </xhtml:p>
+	       </Description> 
+	       <Effectiveness>Defense in Depth</Effectiveness> 
+	       <Effectiveness_Notes>This is not a complete solution, since buffer overflows could be used to overwrite nearby variables to modify the software's state in dangerous ways. In addition, it cannot be used in cases in which self-modifying code is required. Finally, an attack could still cause a denial of service, since the typical response is to exit the application. </Effectiveness_Notes> 
+            </Mitigation>
+            <Mitigation Mitigation_ID="MIT-5">
+               <Phase>Implementation</Phase>
+               <Strategy>Input Validation</Strategy>
+               <Description>
+                  <xhtml:p>Assume all input is malicious. Use an "accept known good" input validation strategy, i.e., use a list of acceptable inputs that strictly conform to specifications. Reject any input that does not strictly conform to specifications, or transform it into something that does.</xhtml:p>
+                  <xhtml:p>When performing input validation, consider all potentially relevant properties, including length, type of input, the full range of acceptable values, missing or extra inputs, syntax, consistency across related fields, and conformance to business rules. As an example of business rule logic, "boat" may be syntactically valid because it only contains alphanumeric characters, but it is not valid if the input is only expected to contain colors such as "red" or "blue."</xhtml:p>
+                  <xhtml:p>Do not rely exclusively on looking for malicious or malformed inputs.  This is likely to miss at least one undesirable input, especially if the code's environment changes. This can give attackers enough room to bypass the intended validation. However, denylists can be useful for detecting potential attacks or determining which inputs are so malformed that they should be rejected outright.</xhtml:p>
+                  <xhtml:p>When accessing a user-controlled array index, use a stringent range of values that are within the target array. Make sure that you do not allow negative values to be used. That is, verify the minimum as well as the maximum of the range of acceptable values.</xhtml:p>
+               </Description>
+            </Mitigation>
+            <Mitigation Mitigation_ID="MIT-35">
+               <Phase>Implementation</Phase>
+               <Description>Be especially careful to validate all input when invoking code that crosses language boundaries, such as from an interpreted language to native code. This could create an unexpected interaction between the language boundaries. Ensure that you are not violating any of the expectations of the language with which you are interfacing. For example, even though Java may not be susceptible to buffer overflows, providing a large argument in a call to native code might trigger an overflow.</Description>
+            </Mitigation>
+            <Mitigation Mitigation_ID="MIT-17">
+               <Phase>Architecture and Design</Phase>
+               <Phase>Operation</Phase>
+               <Strategy>Environment Hardening</Strategy>
+               <Description>Run your code using the lowest privileges that are required to accomplish the necessary tasks [REF-76]. If possible, create isolated accounts with limited privileges that are only used for a single task. That way, a successful attack will not immediately give the attacker access to the rest of the software or its environment. For example, database applications rarely need to run as the database administrator, especially in day-to-day operations.</Description>
+            </Mitigation>
+            <Mitigation Mitigation_ID="MIT-22">
+               <Phase>Architecture and Design</Phase>
+               <Phase>Operation</Phase>
+               <Strategy>Sandbox or Jail</Strategy>
+               <Description>
+                  <xhtml:p>Run the code in a "jail" or similar sandbox environment that enforces strict boundaries between the process and the operating system. This may effectively restrict which files can be accessed in a particular directory or which commands can be executed by the software.</xhtml:p>
+                  <xhtml:p>OS-level examples include the Unix chroot jail, AppArmor, and SELinux. In general, managed code may provide some protection. For example, java.io.FilePermission in the Java SecurityManager allows the software to specify restrictions on file operations.</xhtml:p>
+                  <xhtml:p>This may not be a feasible solution, and it only limits the impact to the operating system; the rest of the application may still be subject to compromise.</xhtml:p>
+                  <xhtml:p>Be careful to avoid CWE-243 and other weaknesses related to jails.</xhtml:p>
+               </Description>
+               <Effectiveness>Limited</Effectiveness>
+               <Effectiveness_Notes>The effectiveness of this mitigation depends on the prevention capabilities of the specific sandbox or jail being used and might only help to reduce the scope of an attack, such as restricting the attacker to certain system calls or limiting the portion of the file system that can be accessed.</Effectiveness_Notes>
+            </Mitigation>
+         </Potential_Mitigations>
+         <Demonstrative_Examples>
+            <Demonstrative_Example>
+               <Intro_Text>In the code snippet below, an untrusted integer value is used to reference an object in an array.</Intro_Text>
+               <Example_Code Nature="Bad" Language="Java">
+                  <xhtml:div>public String getValue(int index) {<xhtml:div style="margin-left:1em;">return array[index];</xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>If index is outside of the range of the array, this may result in an ArrayIndexOutOfBounds Exception being raised.</Body_Text>
+            </Demonstrative_Example>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-34">
+               <Intro_Text>The following example takes a user-supplied value to allocate an array of objects and then operates on the array.</Intro_Text>
+               <Example_Code Nature="Bad" Language="Java">
+                  <xhtml:div>private void buildList ( int untrustedListSize ){<xhtml:div style="margin-left:1em;">if ( 0 &gt; untrustedListSize ){<xhtml:div style="margin-left:1em;">die("Negative value supplied for list size, die evil hacker!");</xhtml:div>}<xhtml:br />Widget[] list = new Widget [ untrustedListSize ];<xhtml:br />list[0] = new Widget();</xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>This example attempts to build a list from a user-specified value, and even checks to ensure a non-negative value is supplied. If, however, a 0 value is provided, the code will build an array of size 0 and then try to store a new Widget in the first location, causing an exception to be thrown.</Body_Text>
+            </Demonstrative_Example>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-100">
+               <Intro_Text>In the following code, the method retrieves a value from an array at a specific array index location that is given as an input parameter to the method</Intro_Text>
+               <Example_Code Nature="Bad" Language="C">
+                  <xhtml:div>int getValueFromArray(int *array, int len, int index) {<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>
+                           <xhtml:br />int value;<xhtml:br />
+                           <xhtml:br />
+                           <xhtml:i>// check that the array index is less than the maximum</xhtml:i>
+                           <xhtml:br />
+                           <xhtml:br />
+                           <xhtml:i>// length of the array</xhtml:i>
+                           <xhtml:br />if (index &lt; len) {<xhtml:div style="margin-left:1em;">
+                              <xhtml:div>
+                                 <xhtml:i>// get the value at the specified index of the array</xhtml:i>
+                                 <xhtml:br />value = array[index];</xhtml:div>
+                           </xhtml:div>}<xhtml:br />
+                           <xhtml:i>// if array index is invalid then output error message</xhtml:i>
+                           <xhtml:br />
+                           <xhtml:br />
+                           <xhtml:i>// and return value indicating error</xhtml:i>
+                           <xhtml:br />else {<xhtml:div style="margin-left:1em;">printf("Value is: %d\n", array[index]);<xhtml:br />value = -1;</xhtml:div>}<xhtml:br />
+                           <xhtml:br />return value;</xhtml:div>
+                     </xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>However, this method only verifies that the given array index is less than the maximum length of the array but does not check for the minimum value (CWE-839). This will allow a negative value to be accepted as the input array index, which will result in reading data before the beginning of the buffer (CWE-127) and may allow access to sensitive memory. The input array index should be checked to verify that is within the maximum and minimum range required for the array (CWE-129). In this example the if statement should be modified to include a minimum range check, as shown below.</Body_Text>
+               <Example_Code Nature="Good" Language="C">
+                  <xhtml:div>
+                     <xhtml:br />...<xhtml:br />
+                     <xhtml:br />
+                     <xhtml:i>// check that the array index is within the correct</xhtml:i>
+                     <xhtml:br />
+                     <xhtml:br />
+                     <xhtml:i>// range of values for the array</xhtml:i>
+                     <xhtml:br />if (index &gt;= 0 &amp;&amp; index &lt; len) {<xhtml:br />
+                     <xhtml:br />...</xhtml:div>
+               </Example_Code>
+            </Demonstrative_Example>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-134">
+               <Intro_Text>The following example retrieves the sizes of messages for a pop3 mail server. The message sizes are retrieved from a socket that returns in a buffer the message number and the message size, the message number (num) and size (size) are extracted from the buffer and the message size is placed into an array using the message number for the array index.</Intro_Text>
+               <Example_Code Nature="Bad" Language="C">
+                  <xhtml:div>
+                     <xhtml:br />
+                     <xhtml:i>/* capture the sizes of all messages */</xhtml:i>
+                     <xhtml:br />int getsizes(int sock, int count, int *sizes) {<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>...<xhtml:br />char buf[BUFFER_SIZE];<xhtml:br />int ok;<xhtml:br />int num, size;<xhtml:br />
+                           <xhtml:br />
+                           <xhtml:i>// read values from socket and added to sizes array</xhtml:i>
+                           <xhtml:br />while ((ok = gen_recv(sock, buf, sizeof(buf))) == 0)<xhtml:br />{<xhtml:div style="margin-left:1em;">
+                              <xhtml:div>
+                                 <xhtml:i>// continue read from socket until buf only contains '.'</xhtml:i>
+                                 <xhtml:br />if (DOTLINE(buf))<xhtml:div style="margin-left:1em;">break;</xhtml:div>
+                                 else if (sscanf(buf, "%d %d", &amp;num, &amp;size) == 2)<xhtml:div style="margin-left:1em;">sizes[num - 1] = size;</xhtml:div>
+                              </xhtml:div>
+                           </xhtml:div>}<xhtml:div style="margin-left:1em;">...</xhtml:div>
+                        </xhtml:div>
+                     </xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>In this example the message number retrieved from the buffer could be a value that is outside the allowable range of indices for the array and could possibly be a negative number. Without proper validation of the value to be used for the array index an array overflow could occur and could potentially lead to unauthorized access to memory addresses and system crashes. The value of the array index should be validated to ensure that it is within the allowable range of indices for the array as in the following code.</Body_Text>
+               <Example_Code Nature="Good" Language="C">
+                  <xhtml:div>
+                     <xhtml:br />
+                     <xhtml:i>/* capture the sizes of all messages */</xhtml:i>
+                     <xhtml:br />int getsizes(int sock, int count, int *sizes) {<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>...<xhtml:br />char buf[BUFFER_SIZE];<xhtml:br />int ok;<xhtml:br />int num, size;<xhtml:br />
+                           <xhtml:br />
+                           <xhtml:i>// read values from socket and added to sizes array</xhtml:i>
+                           <xhtml:br />while ((ok = gen_recv(sock, buf, sizeof(buf))) == 0)<xhtml:br />{<xhtml:div style="margin-left:1em;">
+                              <xhtml:div>
+                                 <xhtml:br />
+                                 <xhtml:i>// continue read from socket until buf only contains '.'</xhtml:i>
+                                 <xhtml:br />if (DOTLINE(buf))<xhtml:div style="margin-left:1em;">break;</xhtml:div>
+                                 <xhtml:br />else if (sscanf(buf, "%d %d", &amp;num, &amp;size) == 2) {<xhtml:div style="margin-left:1em;">
+                                    <xhtml:div>if (num &gt; 0 &amp;&amp; num &lt;= (unsigned)count)<xhtml:div style="margin-left:1em;">sizes[num - 1] = size;</xhtml:div>
+                                       <xhtml:br />else<xhtml:div style="margin-left:1em;">
+                                          <xhtml:div>
+                                             <xhtml:br />
+                                             <xhtml:i>/* warn about possible attempt to induce buffer overflow */</xhtml:i>
+                                             <xhtml:br />report(stderr, "Warning: ignoring bogus data for message sizes returned by server.\n");</xhtml:div>
+                                       </xhtml:div>
+                                    </xhtml:div>
+                                 </xhtml:div>}</xhtml:div>
+                           </xhtml:div>}<xhtml:div style="margin-left:1em;">...</xhtml:div>
+                        </xhtml:div>
+                     </xhtml:div>}</xhtml:div>
+               </Example_Code>
+            </Demonstrative_Example>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-133">
+               <Intro_Text>In the following example the method displayProductSummary is called from a Web service servlet to retrieve product summary information for display to the user. The servlet obtains the integer value of the product number from the user and passes it to the displayProductSummary method. The displayProductSummary method passes the integer value of the product number to the getProductSummary method which obtains the product summary from the array object containing the project summaries using the integer value of the product number as the array index.</Intro_Text>
+               <Example_Code Nature="Bad" Language="Java">
+                  <xhtml:div>
+                     <xhtml:br />
+                     <xhtml:i>// Method called from servlet to obtain product information</xhtml:i>
+                     <xhtml:br />public String displayProductSummary(int index) {<xhtml:br />
+                     <xhtml:div style="margin-left:1em;">
+                        <xhtml:div>String productSummary = new String("");<xhtml:br />
+                           <xhtml:br />try {<xhtml:div style="margin-left:1em;">String productSummary = getProductSummary(index);</xhtml:div>
+                           <xhtml:br />
+                           <xhtml:br />} catch (Exception ex) {...}<xhtml:br />
+                           <xhtml:br />return productSummary;</xhtml:div>
+                     </xhtml:div>}<xhtml:br />
+                     <xhtml:br />public String getProductSummary(int index) {<xhtml:div style="margin-left:1em;">return products[index];</xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>In this example the integer value used as the array index that is provided by the user may be outside the allowable range of indices for the array which may provide unexpected results or cause the application to fail. The integer value used for the array index should be validated to ensure that it is within the allowable range of indices for the array as in the following code.</Body_Text>
+               <Example_Code Nature="Good" Language="Java">
+                  <xhtml:div>
+                     <xhtml:br />
+                     <xhtml:i>// Method called from servlet to obtain product information</xhtml:i>
+                     <xhtml:br />public String displayProductSummary(int index) {<xhtml:br />
+                     <xhtml:div style="margin-left:1em;">
+                        <xhtml:div>String productSummary = new String("");<xhtml:br />
+                           <xhtml:br />try {<xhtml:div style="margin-left:1em;">String productSummary = getProductSummary(index);</xhtml:div>
+                           <xhtml:br />
+                           <xhtml:br />} catch (Exception ex) {...}<xhtml:br />
+                           <xhtml:br />return productSummary;</xhtml:div>
+                     </xhtml:div>}<xhtml:br />
+                     <xhtml:br />public String getProductSummary(int index) {<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>String productSummary = "";<xhtml:br />
+                           <xhtml:br />if ((index &gt;= 0) &amp;&amp; (index &lt; MAX_PRODUCTS)) {<xhtml:div style="margin-left:1em;">productSummary = products[index];</xhtml:div>}<xhtml:br />else {<xhtml:div style="margin-left:1em;">System.err.println("index is out of bounds");<xhtml:br />throw new IndexOutOfBoundsException();</xhtml:div>}<xhtml:br />
+                           <xhtml:br />return productSummary;</xhtml:div>
+                     </xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>An alternative in Java would be to use one of the collection objects such as ArrayList that will automatically generate an exception if an attempt is made to access an array index that is out of bounds.</Body_Text>
+               <Example_Code Nature="Good" Language="Java">
+                  <xhtml:div>ArrayList productArray = new ArrayList(MAX_PRODUCTS);<xhtml:br />...<xhtml:br />try {<xhtml:div style="margin-left:1em;">productSummary = (String) productArray.get(index);</xhtml:div>} catch (IndexOutOfBoundsException ex) {...}</xhtml:div>
+               </Example_Code>
+            </Demonstrative_Example>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-90">
+               <Intro_Text>The following example asks a user for an offset into an array to select an item.</Intro_Text>
+               <Example_Code Nature="Bad" Language="C">
+                  <xhtml:div>
+                     <xhtml:br />int main (int argc, char **argv) {<xhtml:div style="margin-left:1em;">char *items[] = {"boat", "car", "truck", "train"};<xhtml:br />int index = GetUntrustedOffset();<xhtml:br />printf("You selected %s\n", items[index-1]);</xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>The programmer allows the user to specify which element in the list to select, however an attacker can provide an out-of-bounds offset, resulting in a buffer over-read (CWE-126).</Body_Text>
+            </Demonstrative_Example>
+         </Demonstrative_Examples>
+         <Observed_Examples>
+            <Observed_Example>
+               <Reference>CVE-2005-0369</Reference>
+               <Description>large ID in packet used as array index</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2005-0369</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2001-1009</Reference>
+               <Description>negative array index as argument to POP LIST command</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2001-1009</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2003-0721</Reference>
+               <Description>Integer signedness error leads to negative array index</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2003-0721</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2004-1189</Reference>
+               <Description>product does not properly track a count and a maximum number, which can lead to resultant array index overflow.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2004-1189</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2007-5756</Reference>
+               <Description>Chain: device driver for packet-capturing software allows access to an unintended IOCTL with resultant array index error.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2007-5756</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2005-2456</Reference>
+               <Description>Chain: array index error (CWE-129) leads to deadlock (CWE-833)</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2005-2456</Link>
+            </Observed_Example>
+         </Observed_Examples>
+         <Functional_Areas>
+            <Functional_Area>Memory Management</Functional_Area>
+         </Functional_Areas>
+         <Affected_Resources>
+            <Affected_Resource>Memory</Affected_Resource>
+         </Affected_Resources>
+         <Taxonomy_Mappings>
+            <Taxonomy_Mapping Taxonomy_Name="CLASP">
+               <Entry_Name>Unchecked array indexing</Entry_Name>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="PLOVER">
+               <Entry_Name>INDEX - Array index overflow</Entry_Name>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="CERT C Secure Coding">
+               <Entry_ID>ARR00-C</Entry_ID>
+               <Entry_Name>Understand how arrays work</Entry_Name>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="CERT C Secure Coding">
+               <Entry_ID>ARR30-C</Entry_ID>
+               <Entry_Name>Do not form or use out-of-bounds pointers or array subscripts</Entry_Name>
+               <Mapping_Fit>CWE More Specific</Mapping_Fit>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="CERT C Secure Coding">
+               <Entry_ID>ARR38-C</Entry_ID>
+               <Entry_Name>Do not add or subtract an integer to a pointer if the resulting value does not refer to a valid array element</Entry_Name>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="CERT C Secure Coding">
+               <Entry_ID>INT32-C</Entry_ID>
+               <Entry_Name>Ensure that operations on signed integers do not result in overflow</Entry_Name>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="SEI CERT Perl Coding Standard">
+               <Entry_ID>IDS32-PL</Entry_ID>
+               <Entry_Name>Validate any integer that is used as an array index</Entry_Name>
+               <Mapping_Fit>Imprecise</Mapping_Fit>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="OMG ASCSM">
+                <Entry_ID>ASCSM-CWE-129</Entry_ID>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="Software Fault Patterns">
+               <Entry_ID>SFP8</Entry_ID>
+               <Entry_Name>Faulty Buffer Access</Entry_Name>
+            </Taxonomy_Mapping>
+         </Taxonomy_Mappings>
+         <Related_Attack_Patterns>
+            <Related_Attack_Pattern CAPEC_ID="100" />
+         </Related_Attack_Patterns>
+         <References>
+            <Reference External_Reference_ID="REF-7" Section="Chapter 5, &quot;Array Indexing Errors&quot; Page 144" />
+            <Reference External_Reference_ID="REF-96" />
+            <Reference External_Reference_ID="REF-58" />
+            <Reference External_Reference_ID="REF-60" />
+            <Reference External_Reference_ID="REF-61" />
+            <Reference External_Reference_ID="REF-76" />
+            <Reference External_Reference_ID="REF-44" Section="&quot;Sin 5: Buffer Overruns.&quot; Page 89" />
+            <Reference External_Reference_ID="REF-64" />
+            <Reference External_Reference_ID="REF-962" Section="ASCSM-CWE-129" />
+            <Reference External_Reference_ID="REF-18" />
+	    <Reference External_Reference_ID="REF-1332" />
+	    <Reference External_Reference_ID="REF-1333" />
+	    <Reference External_Reference_ID="REF-1335" />
+	    <Reference External_Reference_ID="REF-1336" />
+	    <Reference External_Reference_ID="REF-1337" Section="Memory information leaks" />
+	    <Reference External_Reference_ID="REF-1518" />
+         </References>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Variant level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+         <Notes>
+            <Note Type="Relationship">This weakness can precede uncontrolled memory allocation (CWE-789) in languages that automatically expand an array when an index is used that is larger than the size of the array, such as JavaScript.</Note>
+            <Note Type="Theoretical">An improperly validated array index might lead directly to the always-incorrect behavior of "access of array using out-of-bounds index."</Note>
+         </Notes>
+         <Content_History>
+            <Submission>
+               <Submission_Name>CLASP</Submission_Name>
+               <Submission_Date>2006-07-19</Submission_Date>
+               <Submission_Version>Draft 3</Submission_Version>
+               <Submission_ReleaseDate>2006-07-19</Submission_ReleaseDate>
+            </Submission>
+            <Modification>
+               <Modification_Name>Sean Eidemiller</Modification_Name>
+               <Modification_Organization>Cigital</Modification_Organization>
+               <Modification_Date>2008-07-01</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>added/updated demonstrative examples</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2008-09-08</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>updated Alternate_Terms, Applicable_Platforms, Common_Consequences, Relationships, Other_Notes, Taxonomy_Mappings, Weakness_Ordinalities</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2008-11-24</Modification_Date>
+               <Modification_Version>1.1</Modification_Version>
+               <Modification_ReleaseDate>2008-11-25</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2009-01-12</Modification_Date>
+               <Modification_Version>1.2</Modification_Version>
+               <Modification_ReleaseDate>2009-01-12</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2009-10-29</Modification_Date>
+               <Modification_Version>1.6</Modification_Version>
+               <Modification_ReleaseDate>2009-10-29</Modification_ReleaseDate>
+               <Modification_Comment>updated Description, Name, Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2009-12-28</Modification_Date>
+               <Modification_Version>1.7</Modification_Version>
+               <Modification_ReleaseDate>2009-12-28</Modification_ReleaseDate>
+               <Modification_Comment>updated Applicable_Platforms, Common_Consequences, Observed_Examples, Other_Notes, Potential_Mitigations, Theoretical_Notes, Weakness_Ordinalities</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2010-02-16</Modification_Date>
+               <Modification_Version>1.8</Modification_Version>
+               <Modification_ReleaseDate>2010-02-16</Modification_ReleaseDate>
+               <Modification_Comment>updated Applicable_Platforms, Demonstrative_Examples, Detection_Factors, Likelihood_of_Exploit, Potential_Mitigations, References, Related_Attack_Patterns, Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2010-04-05</Modification_Date>
+               <Modification_Version>1.8.1</Modification_Version>
+               <Modification_ReleaseDate>2010-04-05</Modification_ReleaseDate>
+               <Modification_Comment>updated Related_Attack_Patterns</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2010-06-21</Modification_Date>
+               <Modification_Version>1.9</Modification_Version>
+               <Modification_ReleaseDate>2010-06-21</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences, Potential_Mitigations, References</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2010-09-27</Modification_Date>
+               <Modification_Version>1.10</Modification_Version>
+               <Modification_ReleaseDate>2010-09-27</Modification_ReleaseDate>
+               <Modification_Comment>updated Potential_Mitigations, Relationship_Notes, Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2010-12-13</Modification_Date>
+               <Modification_Version>1.11</Modification_Version>
+               <Modification_ReleaseDate>2010-12-13</Modification_ReleaseDate>
+               <Modification_Comment>updated Demonstrative_Examples, Observed_Examples, Potential_Mitigations</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-03-29</Modification_Date>
+               <Modification_Version>1.12</Modification_Version>
+               <Modification_ReleaseDate>2011-03-30</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences, Demonstrative_Examples, Weakness_Ordinalities</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-06-01</Modification_Date>
+               <Modification_Version>1.13</Modification_Version>
+               <Modification_ReleaseDate>2011-06-01</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-06-27</Modification_Date>
+               <Modification_Version>2.0</Modification_Version>
+               <Modification_ReleaseDate>2011-06-27</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-09-13</Modification_Date>
+               <Modification_Version>2.1</Modification_Version>
+               <Modification_ReleaseDate>2011-09-13</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2012-05-11</Modification_Date>
+               <Modification_Version>2.2</Modification_Version>
+               <Modification_ReleaseDate>2012-05-15</Modification_ReleaseDate>
+               <Modification_Comment>updated Demonstrative_Examples, Potential_Mitigations, References, Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2012-10-30</Modification_Date>
+               <Modification_Version>2.3</Modification_Version>
+               <Modification_ReleaseDate>2012-10-30</Modification_ReleaseDate>
+               <Modification_Comment>updated Potential_Mitigations</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2014-02-18</Modification_Date>
+               <Modification_Version>2.6</Modification_Version>
+               <Modification_ReleaseDate>2014-02-19</Modification_ReleaseDate>
+               <Modification_Comment>updated Potential_Mitigations, References</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2014-07-30</Modification_Date>
+               <Modification_Version>2.8</Modification_Version>
+               <Modification_ReleaseDate>2014-07-31</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2015-12-07</Modification_Date>
+               <Modification_Version>2.9</Modification_Version>
+               <Modification_ReleaseDate>2015-12-07</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2017-11-08</Modification_Date>
+               <Modification_Version>3.0</Modification_Version>
+               <Modification_ReleaseDate>2017-11-08</Modification_ReleaseDate>
+               <Modification_Comment>updated Causal_Nature, References, Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2018-03-27</Modification_Date>
+               <Modification_Version>3.1</Modification_Version>
+               <Modification_ReleaseDate>2018-03-27</Modification_ReleaseDate>
+               <Modification_Comment>updated References</Modification_Comment>
+            </Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2019-01-03</Modification_Date>
+					<Modification_Version>3.2</Modification_Version>
+					<Modification_ReleaseDate>2019-01-03</Modification_ReleaseDate>
+					<Modification_Comment>updated References, Relationships, Taxonomy_Mappings</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2019-09-19</Modification_Date>
+					<Modification_Version>3.4</Modification_Version>
+					<Modification_ReleaseDate>2019-09-19</Modification_ReleaseDate>
+					<Modification_Comment>updated Potential_Mitigations</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-02-24</Modification_Date>
+					<Modification_Version>4.0</Modification_Version>
+					<Modification_ReleaseDate>2020-02-24</Modification_ReleaseDate>
+					<Modification_Comment>updated Potential_Mitigations, Relationships, Taxonomy_Mappings</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-06-25</Modification_Date>
+					<Modification_Version>4.1</Modification_Version>
+					<Modification_ReleaseDate>2020-06-25</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples, Potential_Mitigations, Relationships, Type</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-08-20</Modification_Date>
+					<Modification_Version>4.2</Modification_Version>
+					<Modification_ReleaseDate>2020-08-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Potential_Mitigations, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-12-10</Modification_Date>
+					<Modification_Version>4.3</Modification_Version>
+					<Modification_ReleaseDate>2020-12-10</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-03-15</Modification_Date>
+					<Modification_Version>4.4</Modification_Version>
+					<Modification_ReleaseDate>2021-03-15</Modification_ReleaseDate>
+					<Modification_Comment>updated References, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-10-13</Modification_Date>
+					<Modification_Version>4.9</Modification_Version>
+					<Modification_ReleaseDate>2022-10-13</Modification_ReleaseDate>
+					<Modification_Comment>updated References, Relationships, Taxonomy_Mappings</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Potential_Mitigations, References, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-09-09</Modification_Date>
+					<Modification_Version>4.18</Modification_Version>
+					<Modification_ReleaseDate>2025-09-09</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples, Functional_Areas</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Detection_Factors, References, Relationships</Modification_Comment>
+				</Modification>
+            <Previous_Entry_Name Date="2009-10-29">Unchecked Array Indexing</Previous_Entry_Name>
+         </Content_History>
+      </Weakness>
+      

@@ -1,0 +1,305 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="420" Name="Unprotected Alternate Channel" Abstraction="Base" Structure="Simple" Status="Draft">
+         <Description>The product protects a primary channel, but it does not use the same level of protection for an alternate channel.</Description>
+         <Related_Weaknesses>
+            <Related_Weakness Nature="ChildOf" CWE_ID="923" View_ID="1000" Ordinal="Primary" />
+         </Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+            <Weakness_Ordinality>
+               <Ordinality>Resultant</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+         <Applicable_Platforms>
+            <Language Class="Not Language-Specific" Prevalence="Undetermined" />
+         </Applicable_Platforms>
+         <Modes_Of_Introduction>
+            <Introduction>
+               <Phase>Architecture and Design</Phase>
+               <Note>OMISSION: This weakness is caused by missing a security tactic during the architecture and design phase.</Note>
+            </Introduction>
+            <Introduction>
+               <Phase>Implementation</Phase>
+            </Introduction>
+            <Introduction>
+               <Phase>Operation</Phase>
+            </Introduction>
+         </Modes_Of_Introduction>
+         <Common_Consequences>
+            <Consequence>
+               <Scope>Access Control</Scope>
+               <Impact>Gain Privileges or Assume Identity</Impact>
+               <Impact>Bypass Protection Mechanism</Impact>
+            </Consequence>
+         </Common_Consequences>
+         <Potential_Mitigations>
+            <Mitigation>
+               <Phase>Architecture and Design</Phase>
+               <Description>Identify all alternate channels and use the same protection mechanisms that are used for the primary channels.</Description>
+            </Mitigation>
+         </Potential_Mitigations>
+		 <Demonstrative_Examples>
+		   <Demonstrative_Example Demonstrative_Example_ID="DX-176">
+             <Intro_Text>
+               <xhtml:p>
+                 Register SECURE_ME is located at address 0xF00. A
+                 mirror of this register called COPY_OF_SECURE_ME is
+                 at location 0x800F00. The register SECURE_ME is
+                 protected from malicious agents and only allows
+                 access to select, while COPY_OF_SECURE_ME is not. 
+               </xhtml:p>
+               <xhtml:p>
+                 Access control is implemented using an allowlist (as
+                 indicated by acl_oh_allowlist). The identity of the
+                 initiator of the transaction is indicated by the
+                 one hot input, incoming_id. This is checked against
+                 the acl_oh_allowlist (which contains a list of
+                 initiators that are allowed to access the asset). 
+               </xhtml:p>
+               <xhtml:p>
+                 Though this example is shown in Verilog, it will
+                 apply to VHDL as well. 
+               </xhtml:p>
+             </Intro_Text>
+             <Example_Code Nature="Informative" Language="Verilog">
+               module foo_bar(data_out, data_in, incoming_id, address, clk, rst_n);<xhtml:br />
+               output [31:0] data_out;<xhtml:br />
+               input [31:0] data_in, incoming_id, address;<xhtml:br />
+               input clk, rst_n;<xhtml:br />
+               wire write_auth, addr_auth;<xhtml:br />
+               reg [31:0] data_out, acl_oh_allowlist, q;<xhtml:br />
+               assign write_auth = | (incoming_id &amp; acl_oh_allowlist) ? 1 : 0; <xhtml:br />
+               always @*<xhtml:br />
+               <xhtml:div style="margin-left:1em;">
+                 acl_oh_allowlist &lt;= 32'h8312; <xhtml:br />
+               </xhtml:div>
+               assign addr_auth = (address == 32'hF00) ? 1: 0;<xhtml:br />
+               always @ (posedge clk or negedge rst_n)<xhtml:br />
+               <xhtml:div style="margin-left:1em;">
+                 if (!rst_n)<xhtml:br />
+                 <xhtml:div style="margin-left:1em;">
+                   begin<xhtml:br />
+                   <xhtml:div style="margin-left:1em;">
+                     q &lt;= 32'h0;<xhtml:br />
+                     data_out &lt;= 32'h0;<xhtml:br />
+                   </xhtml:div>
+                   end<xhtml:br />
+                 </xhtml:div>
+                 else<xhtml:br />
+                 <xhtml:div style="margin-left:1em;">
+                   begin<xhtml:br />
+                   <xhtml:div style="margin-left:1em;">
+                     q &lt;= (addr_auth &amp; write_auth) ? data_in: q;<xhtml:br />
+                     data_out &lt;= q;<xhtml:br />
+                   </xhtml:div>
+                   end<xhtml:br />
+                 </xhtml:div>
+                 end<xhtml:br />
+               </xhtml:div>
+               endmodule<xhtml:br />
+             </Example_Code>
+			 <Example_Code Nature="Bad" Language="Verilog">assign addr_auth = (address == 32'hF00) ? 1: 0;</Example_Code>
+             <Body_Text>The bugged line of code is repeated in the Bad
+             example above. The weakness arises from the fact that the
+             SECURE_ME register can be modified by writing to the
+             shadow register COPY_OF_SECURE_ME. The address of
+             COPY_OF_SECURE_ME should also be included in the check.
+             That buggy line of code should instead be replaced as
+             shown in the Good Code Snippet below. 
+             </Body_Text>
+			 <Example_Code Nature="Good" Language="Verilog">assign addr_auth = (address == 32'hF00 || address == 32'h800F00) ? 1: 0;</Example_Code>
+		   </Demonstrative_Example>
+		 </Demonstrative_Examples>
+         <Observed_Examples>
+            <Observed_Example>
+               <Reference>CVE-2020-8004</Reference>
+               <Description>When the internal flash is protected by blocking access on the Data Bus (DBUS), it can still be indirectly accessed through the Instruction Bus (IBUS).</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2020-8004</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2002-0567</Reference>
+               <Description>DB server assumes that local clients have performed authentication, allowing attacker to directly connect to a process to load libraries and execute commands; a socket interface also exists (another alternate channel), so attack can be remote.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2002-0567</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2002-1578</Reference>
+               <Description>Product does not restrict access to underlying database, so attacker can bypass restrictions by directly querying the database.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2002-1578</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2003-1035</Reference>
+               <Description>User can avoid lockouts by using an API instead of the GUI to conduct brute force password guessing.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2003-1035</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2002-1863</Reference>
+               <Description>FTP service can not be disabled even when other access controls would require it.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2002-1863</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2002-0066</Reference>
+               <Description>Windows named pipe created without authentication/access control, allowing configuration modification.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2002-0066</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2004-1461</Reference>
+               <Description>Router management interface spawns a separate TCP connection after authentication, allowing hijacking by attacker coming from the same IP address.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2004-1461</Link>
+            </Observed_Example>
+         </Observed_Examples>
+         <Taxonomy_Mappings>
+            <Taxonomy_Mapping Taxonomy_Name="PLOVER">
+               <Entry_Name>Unprotected Alternate Channel</Entry_Name>
+            </Taxonomy_Mapping>
+         </Taxonomy_Mappings>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Base level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+         <Notes>
+            <Note Type="Relationship">This can be primary to authentication errors, and resultant from unhandled error conditions.</Note>
+         </Notes>
+         <Content_History>
+            <Submission>
+               <Submission_Name>PLOVER</Submission_Name>
+               <Submission_Date>2006-07-19</Submission_Date>
+               <Submission_Version>Draft 3</Submission_Version>
+               <Submission_ReleaseDate>2006-07-19</Submission_ReleaseDate>
+            </Submission>
+            <Modification>
+               <Modification_Name>Eric Dalci</Modification_Name>
+               <Modification_Organization>Cigital</Modification_Organization>
+               <Modification_Date>2008-07-01</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>updated Potential_Mitigations, Time_of_Introduction</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2008-09-08</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships, Relationship_Notes, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-06-01</Modification_Date>
+               <Modification_Version>1.13</Modification_Version>
+               <Modification_ReleaseDate>2011-06-01</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2012-05-11</Modification_Date>
+               <Modification_Version>2.2</Modification_Version>
+               <Modification_ReleaseDate>2012-05-15</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2012-10-30</Modification_Date>
+               <Modification_Version>2.3</Modification_Version>
+               <Modification_ReleaseDate>2012-10-30</Modification_ReleaseDate>
+               <Modification_Comment>updated Potential_Mitigations</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2013-07-17</Modification_Date>
+               <Modification_Version>2.5</Modification_Version>
+               <Modification_ReleaseDate>2013-07-17</Modification_ReleaseDate>
+               <Modification_Comment>updated Applicable_Platforms, Potential_Mitigations, Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2014-07-30</Modification_Date>
+               <Modification_Version>2.8</Modification_Version>
+               <Modification_ReleaseDate>2014-07-31</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2017-11-08</Modification_Date>
+               <Modification_Version>3.0</Modification_Version>
+               <Modification_ReleaseDate>2017-11-08</Modification_ReleaseDate>
+               <Modification_Comment>updated Modes_of_Introduction, Relationships</Modification_Comment>
+            </Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-02-24</Modification_Date>
+					<Modification_Version>4.0</Modification_Version>
+					<Modification_ReleaseDate>2020-02-24</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-08-20</Modification_Date>
+					<Modification_Version>4.2</Modification_Version>
+					<Modification_ReleaseDate>2020-08-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-01-31</Modification_Date>
+					<Modification_Version>4.10</Modification_Version>
+					<Modification_ReleaseDate>2023-01-31</Modification_ReleaseDate>
+					<Modification_Comment>updated Description</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-10-26</Modification_Date>
+					<Modification_Version>4.13</Modification_Version>
+					<Modification_ReleaseDate>2023-10-26</Modification_ReleaseDate>
+					<Modification_Comment>updated Observed_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2024-02-29</Modification_Date>
+					<Modification_Version>4.14</Modification_Version>
+					<Modification_ReleaseDate>2024-02-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+         </Content_History>
+      </Weakness>
+      

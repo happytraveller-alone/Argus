@@ -1,0 +1,169 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="1222" Name="Insufficient Granularity of Address Regions Protected by Register Locks" Abstraction="Variant" Structure="Simple" Status="Incomplete">
+            <Description>The product defines a large address region protected from modification by the same register lock control bit. This results in a conflict between the functional requirement that some addresses need to be writable by software during operation and the security requirement that the system configuration lock bit must be set during the boot process.</Description>
+            <Extended_Description>
+                <xhtml:p>Integrated circuits and hardware IPs can expose the device configuration controls that need to be programmed after device power reset by a trusted firmware or software module (commonly set by BIOS/bootloader) and then locked from any further modification. In hardware design, this is commonly implemented using a programmable lock bit which enables/disables writing to a protected set of registers or address regions. When the programmable lock bit is set, the relevant address region can be implemented as a hardcoded value in hardware logic that cannot be changed later.</xhtml:p>
+                <xhtml:p>A problem can arise wherein the protected region definition is not granular enough. After the programmable lock bit has been set, then this new functionality cannot be implemented without change to the hardware design.</xhtml:p>
+            </Extended_Description>
+			<Related_Weaknesses>
+				<Related_Weakness Nature="ChildOf" CWE_ID="1220" View_ID="1000" Ordinal="Primary" />
+			</Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+            <Applicable_Platforms>
+                <Language Class="Not Language-Specific" Prevalence="Undetermined" />
+                <Operating_System Class="Not OS-Specific" Prevalence="Undetermined" />
+                <Architecture Class="Not Architecture-Specific" Prevalence="Undetermined" />
+                <Technology Class="System on Chip" Prevalence="Undetermined" />
+            </Applicable_Platforms>
+            <Modes_Of_Introduction>
+                <Introduction>
+                    <Phase>Architecture and Design</Phase>
+                    <Note>Such issues are introduced during hardware architecture and design since software controls and configuration are defined during these phases and identified later during Testing or System Configuration phases.</Note>
+                </Introduction>
+            </Modes_Of_Introduction>
+            <Common_Consequences>
+                <Consequence>
+                    <Scope>Access Control</Scope>
+                    <Impact>Other</Impact>
+                    <Note>System security configuration cannot be defined in a way that does not conflict with functional requirements of device.</Note>
+                </Consequence>
+            </Common_Consequences>
+            <Potential_Mitigations>
+                <Mitigation>
+                    <Phase>Architecture and Design</Phase>
+                    <Description>
+                        <xhtml:p>The defining of protected locked registers should be reviewed or tested early in the design phase with software teams to ensure software flows are not blocked by the security locks.</xhtml:p>
+                        <xhtml:p>As an alternative to using register lock control bits and fixed access control regions, the hardware design could use programmable security access control configuration so that device trusted firmware can configure and change the protected regions based on software usage and security models.</xhtml:p>
+                    </Description>
+                </Mitigation>
+            </Potential_Mitigations>
+            <Demonstrative_Examples>
+                <Demonstrative_Example>
+                    <Intro_Text>For example, consider a hardware unit with a 32 kilobyte configuration address space where the first 8 kilobyte address contains security sensitive controls that must only be writable by device bootloader. One way to protect the security configuration could be to define a 32 bit system configuration locking register (SYS_LOCK) where each bit lock locks the corresponding 1 kilobyte region. </Intro_Text>
+                    <Example_Code Nature="Bad" Language="Other">
+                        <xhtml:table>
+                            <xhtml:tbody>
+                                <xhtml:tr>
+                                    <xhtml:th>Address</xhtml:th>
+                                    <xhtml:th>Register</xhtml:th>
+                                </xhtml:tr>
+                                <xhtml:tr>
+                                    <xhtml:td>0x0000</xhtml:td>
+                                    <xhtml:td>SYS_LOCK: 32 bit system configuration lock register, each bit is write-1-once</xhtml:td>
+                                </xhtml:tr>
+                                <xhtml:tr>
+                                    <xhtml:td>0x0004</xhtml:td>
+                                    <xhtml:td>SECURITY_FEATURE_ENABLE: 32 bit register controlling enabling of security features</xhtml:td>
+                                </xhtml:tr>
+                                <xhtml:tr>
+                                    <xhtml:td>...</xhtml:td>
+                                    <xhtml:td />
+                                </xhtml:tr>
+                                <xhtml:tr>
+                                    <xhtml:td>0x0310</xhtml:td>
+                                    <xhtml:td>SW_MODE: 32 bit Software Mode indication register </xhtml:td>
+                                </xhtml:tr>
+                            </xhtml:tbody>
+                        </xhtml:table>
+                        <xhtml:table>
+                            <xhtml:tbody>
+                                <xhtml:tr>
+                                    <xhtml:th>Address region</xhtml:th>
+                                    <xhtml:th>Lock bit</xhtml:th>
+                                </xhtml:tr>
+                                <xhtml:tr>
+                                    <xhtml:td>0x0000 - 0x03FF</xhtml:td>
+                                    <xhtml:td>SYS_LOCK[0]</xhtml:td>
+                                </xhtml:tr>
+                                <xhtml:tr>
+                                    <xhtml:td>0x0400 - 0x07FF</xhtml:td>
+                                    <xhtml:td>SYS_LOCK[1]</xhtml:td>
+                                </xhtml:tr>
+                                <xhtml:tr>
+                                    <xhtml:td>...</xhtml:td>
+                                    <xhtml:td />
+                                </xhtml:tr>
+                                <xhtml:tr>
+                                    <xhtml:td>0x7C00 - 0x7FFF</xhtml:td>
+                                    <xhtml:td>SYS_LOCK[31]</xhtml:td>
+                                </xhtml:tr>
+                            </xhtml:tbody>
+                        </xhtml:table>
+                    </Example_Code>
+                    <Body_Text>If a register exists within the first kilobyte address range (e.g. SW_MODE, address 0x310) and needs to be software writable at runtime, then this register cannot be written in a securely configured system since SYS_LOCK register lock bit 0 must be set to protect other security settings (e.g. SECURITY_FEATURE_ENABLE, address 0x0004). The only fix would be to change the hardware logic or not set the security lock bit.</Body_Text>
+                </Demonstrative_Example>
+            </Demonstrative_Examples>
+         <Related_Attack_Patterns>
+            <Related_Attack_Pattern CAPEC_ID="679" />
+         </Related_Attack_Patterns>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Variant level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+         <Content_History>
+                <Submission>
+                    <Submission_Name>Arun Kanuparthi, Hareesh Khattri, Parbati Kumar Manna, Narasimha Kumar V Mangipudi</Submission_Name>
+                    <Submission_Organization>Intel Corporation</Submission_Organization>
+					<Submission_Date>2019-12-12</Submission_Date>
+					<Submission_Version>4.0</Submission_Version>
+					<Submission_ReleaseDate>2020-02-24</Submission_ReleaseDate>
+                </Submission>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-08-20</Modification_Date>
+					<Modification_Version>4.2</Modification_Version>
+					<Modification_ReleaseDate>2020-08-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Related_Attack_Patterns</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-04-28</Modification_Date>
+					<Modification_Version>4.7</Modification_Version>
+					<Modification_ReleaseDate>2022-04-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Related_Attack_Patterns</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-01-31</Modification_Date>
+					<Modification_Version>4.10</Modification_Version>
+					<Modification_ReleaseDate>2023-01-31</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+            </Content_History>
+        </Weakness>
+      

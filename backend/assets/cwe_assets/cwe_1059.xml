@@ -1,0 +1,204 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="1059" Name="Insufficient Technical Documentation" Abstraction="Class" Structure="Simple" Status="Incomplete">
+         <Description>The product does not contain sufficient
+         technical or engineering documentation (whether on paper or
+         in electronic form) that contains descriptions of all the
+         relevant software/hardware elements of the product, such as
+         its usage, structure, architectural components, interfaces, design, implementation,
+         configuration, operation, etc.</Description>
+         <Extended_Description>
+	   <xhtml:p>When technical documentation is limited or lacking, products are more difficult to maintain.  This indirectly affects security by making it more difficult or time-consuming to find and/or fix vulnerabilities.</xhtml:p>
+	 <xhtml:p>When using time-limited or labor-limited third-party/in-house security consulting services (such as threat modeling, vulnerability discovery, or pentesting), insufficient documentation can force those consultants to invest unnecessary time in learning how the product is organized, instead of focusing their expertise on finding the flaws or suggesting effective mitigations.</xhtml:p>
+	 <xhtml:p>With respect to hardware design, the lack of a formal, final manufacturer reference can make it difficult or impossible to evaluate the final product, including post-manufacture verification. One cannot ensure that design functionality or operation is within acceptable tolerances, conforms to specifications, and is free from unexpected behavior. Hardware-related documentation may include engineering artifacts such as hardware description language (HDLs), netlists, Gerber files, Bills of Materials, EDA (Electronic Design Automation) tool files, etc.</xhtml:p>
+	 </Extended_Description>
+         <Related_Weaknesses>
+            <Related_Weakness Nature="ChildOf" CWE_ID="710" View_ID="1000" Ordinal="Primary" />
+         </Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Indirect</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+	 <Applicable_Platforms>
+            <Language Class="Not Language-Specific" Prevalence="Undetermined" />
+            <Operating_System Class="Not OS-Specific" Prevalence="Undetermined" />
+            <Architecture Class="Not Architecture-Specific" Prevalence="Undetermined" />
+            <Technology Class="Not Technology-Specific" Prevalence="Undetermined" />
+			<Technology Class="ICS/OT" Prevalence="Undetermined" />
+	 </Applicable_Platforms>
+	 <Modes_Of_Introduction>
+	   <Introduction>
+	     <Phase>Architecture and Design</Phase>
+	   </Introduction>
+	   <Introduction>
+	     <Phase>Documentation</Phase>
+	   </Introduction>
+	 </Modes_Of_Introduction>
+         <Common_Consequences>
+            <Consequence>
+               <Scope>Other</Scope>
+               <Impact>Varies by Context</Impact>
+               <Impact>Hide Activities</Impact>
+               <Impact>Reduce Reliability</Impact>
+               <Impact>Quality Degradation</Impact>
+               <Impact>Reduce Maintainability</Impact>
+	       <Note>Without a method of verification, one cannot be sure that everything only functions as expected.</Note>
+            </Consequence>
+         </Common_Consequences>
+         <Potential_Mitigations>
+            <Mitigation>
+               <Phase>Documentation</Phase>
+               <Phase>Architecture and Design</Phase>
+               <Description>Ensure that design documentation is detailed enough to allow for post-manufacturing verification.</Description>
+            </Mitigation>
+	 </Potential_Mitigations>
+	 <Observed_Examples>
+	 	<Observed_Example>
+			<Reference>CVE-2022-3203</Reference>
+            <Description>A wireless access point manual specifies that the only method of configuration is via web interface (CWE-1059), but there is an undisclosed telnet server that was activated by default (CWE-912).</Description>
+            <Link>https://www.cve.org/CVERecord?id=CVE-2022-3203</Link>
+		</Observed_Example>
+	 </Observed_Examples>
+	 <Taxonomy_Mappings>
+	   <Taxonomy_Mapping Taxonomy_Name="ISA/IEC 62443">
+	     <Entry_ID>Part 2-4</Entry_ID>
+	     <Entry_Name>Req SP.02.03 BR</Entry_Name>
+	   </Taxonomy_Mapping>
+	   <Taxonomy_Mapping Taxonomy_Name="ISA/IEC 62443">
+	     <Entry_ID>Part 2-4</Entry_ID>
+	     <Entry_Name>Req SP.02.03 RE(1)</Entry_Name>
+	   </Taxonomy_Mapping>
+	   <Taxonomy_Mapping Taxonomy_Name="ISA/IEC 62443">
+	     <Entry_ID>Part 2-4</Entry_ID>
+	     <Entry_Name>Req SP.03.03 RE(1)</Entry_Name>
+	   </Taxonomy_Mapping>
+	   <Taxonomy_Mapping Taxonomy_Name="ISA/IEC 62443">
+	     <Entry_ID>Part 4-1</Entry_ID>
+	     <Entry_Name>Req SG-1</Entry_Name>
+	   </Taxonomy_Mapping>
+	   <Taxonomy_Mapping Taxonomy_Name="ISA/IEC 62443">
+	     <Entry_ID>Part 4-1</Entry_ID>
+	     <Entry_Name>Req SG-2</Entry_Name>
+	   </Taxonomy_Mapping>
+	   <Taxonomy_Mapping Taxonomy_Name="ISA/IEC 62443">
+	     <Entry_ID>Part 4-1</Entry_ID>
+	     <Entry_Name>Req SG-3</Entry_Name>
+	   </Taxonomy_Mapping>
+	   <Taxonomy_Mapping Taxonomy_Name="ISA/IEC 62443">
+	     <Entry_ID>Part 4-1</Entry_ID>
+	     <Entry_Name>Req SG-4</Entry_Name>
+	   </Taxonomy_Mapping>
+	   <Taxonomy_Mapping Taxonomy_Name="ISA/IEC 62443">
+	     <Entry_ID>Part 4-1</Entry_ID>
+	     <Entry_Name>Req SG-5</Entry_Name>
+	   </Taxonomy_Mapping>
+	   <Taxonomy_Mapping Taxonomy_Name="ISA/IEC 62443">
+	     <Entry_ID>Part 4-1</Entry_ID>
+	     <Entry_Name>Req SG-6</Entry_Name>
+	   </Taxonomy_Mapping>
+	   <Taxonomy_Mapping Taxonomy_Name="ISA/IEC 62443">
+	     <Entry_ID>Part 4-1</Entry_ID>
+	     <Entry_Name>Req SG-7</Entry_Name>
+	   </Taxonomy_Mapping>
+	 </Taxonomy_Mappings>
+	 <References>
+	   <Reference External_Reference_ID="REF-1248" Section="Poorly Documented or Undocumented Features" />
+           <Reference External_Reference_ID="REF-1254" />
+	 </References>
+         <Mapping_Notes>
+           <Usage>Prohibited</Usage>
+           <Rationale>This entry is primarily a quality issue with no direct security implications.</Rationale>
+           <Comments>Look for weaknesses that are focused specifically on insecure behaviors that have more direct security implications.</Comments>
+           <Reasons>
+             <Reason Type="Other" />
+           </Reasons>
+         </Mapping_Notes>
+         <Content_History>
+            <Submission>
+               <Submission_Name>CWE Content Team</Submission_Name>
+               <Submission_Organization>MITRE</Submission_Organization>
+               <Submission_Date>2018-07-02</Submission_Date>
+               <Submission_Version>3.2</Submission_Version>
+               <Submission_ReleaseDate>2019-01-03</Submission_ReleaseDate>
+               <Submission_Comment>Entry derived from Common Quality Enumeration (CQE) Draft 0.9.</Submission_Comment>
+            </Submission>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-02-24</Modification_Date>
+					<Modification_Version>4.0</Modification_Version>
+					<Modification_ReleaseDate>2020-02-24</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-04-28</Modification_Date>
+					<Modification_Version>4.7</Modification_Version>
+					<Modification_ReleaseDate>2022-04-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Applicable_Platforms, Common_Consequences, Description, Name, Potential_Mitigations, References, Relationships, Time_of_Introduction</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-01-31</Modification_Date>
+					<Modification_Version>4.10</Modification_Version>
+					<Modification_ReleaseDate>2023-01-31</Modification_ReleaseDate>
+					<Modification_Comment>updated Applicable_Platforms, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships, Taxonomy_Mappings</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes, Taxonomy_Mappings</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-10-26</Modification_Date>
+					<Modification_Version>4.13</Modification_Version>
+					<Modification_ReleaseDate>2023-10-26</Modification_ReleaseDate>
+					<Modification_Comment>updated Observed_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2024-02-29</Modification_Date>
+					<Modification_Version>4.14</Modification_Version>
+					<Modification_ReleaseDate>2024-02-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-09-09</Modification_Date>
+					<Modification_Version>4.18</Modification_Version>
+					<Modification_ReleaseDate>2025-09-09</Modification_ReleaseDate>
+					<Modification_Comment>updated References</Modification_Comment>
+				</Modification>
+            <Contribution Type="Content">
+               <Contribution_Name>Paul A. Wortman</Contribution_Name>
+               <Contribution_Organization>Wells Fargo</Contribution_Organization>
+               <Contribution_Date>2021-06-11</Contribution_Date>
+               <Contribution_Comment>Submitted hardware-specific information about a "golden standard" that was integrated into this entry</Contribution_Comment>
+            </Contribution>
+            <Contribution Type="Content">
+               <Contribution_Name>"Mapping CWE to 62443" Sub-Working Group</Contribution_Name>
+               <Contribution_Organization>CWE-CAPEC ICS/OT SIG</Contribution_Organization>
+               <Contribution_Date>2023-04-25</Contribution_Date>
+               <Contribution_Comment>Suggested mappings to ISA/IEC 62443.</Contribution_Comment>
+            </Contribution>
+	    <Previous_Entry_Name Date="2022-04-28">Incomplete Documentation</Previous_Entry_Name>
+         </Content_History>
+      </Weakness>
+      

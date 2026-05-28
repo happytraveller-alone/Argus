@@ -1,0 +1,655 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="456" Name="Missing Initialization of a Variable" Abstraction="Variant" Structure="Simple" Status="Draft">
+         <Description>The product does not initialize critical variables, which causes the execution environment to use unexpected values.</Description>
+         <Related_Weaknesses>
+             <Related_Weakness Nature="ChildOf" CWE_ID="909" View_ID="1000" Ordinal="Primary" />
+             <Related_Weakness Nature="ChildOf" CWE_ID="665" View_ID="1305" Ordinal="Primary" />
+			 <Related_Weakness Nature="ChildOf" CWE_ID="665" View_ID="1340" Ordinal="Primary" />
+             <Related_Weakness Nature="CanPrecede" CWE_ID="89" View_ID="1000" />
+             <Related_Weakness Nature="CanPrecede" CWE_ID="120" View_ID="1000" />
+             <Related_Weakness Nature="CanPrecede" CWE_ID="98" View_ID="1000" />
+             <Related_Weakness Nature="CanPrecede" CWE_ID="457" View_ID="1000" />
+         </Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+            <Weakness_Ordinality>
+               <Ordinality>Indirect</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+         <Applicable_Platforms>
+            <Language Class="Not Language-Specific" Prevalence="Undetermined" />
+         </Applicable_Platforms>
+         <Modes_Of_Introduction>
+            <Introduction>
+               <Phase>Implementation</Phase>
+            </Introduction>
+         </Modes_Of_Introduction>
+         <Common_Consequences>
+            <Consequence>
+               <Scope>Integrity</Scope>
+               <Scope>Other</Scope>
+               <Impact>Unexpected State</Impact>
+               <Impact>Quality Degradation</Impact>
+               <Impact>Varies by Context</Impact>
+               <Note>The uninitialized data may be invalid, causing logic errors within the program. In some cases, this could result in a security problem.</Note>
+            </Consequence>
+         </Common_Consequences>
+         <Detection_Methods>
+           <Detection_Method Detection_Method_ID="DM-14">
+             <Method>Automated Static Analysis</Method>
+             <Description>Automated static analysis, commonly referred to as Static Application Security Testing (SAST), can find some instances of this weakness by analyzing source code (or binary/compiled code) without having to execute it. Typically, this is done by building a model of data flow and control flow, then searching for potentially-vulnerable patterns that connect "sources" (origins of input) with "sinks" (destinations where the data interacts with external components, a lower layer such as the OS, etc.)</Description>
+             <Effectiveness>High</Effectiveness>
+           </Detection_Method>
+         </Detection_Methods>
+         <Potential_Mitigations>
+            <Mitigation Mitigation_ID="MIT-57">
+               <Phase>Implementation</Phase>
+               <Strategy>Attack Surface Reduction</Strategy>
+               <Description>Ensure that critical variables are initialized before first use [REF-1485].</Description>
+            </Mitigation>
+            <Mitigation>
+               <Phase>Requirements</Phase>
+	       <Strategy>Language Selection</Strategy>
+               <Description>Choose a language that is not susceptible to these issues.</Description>
+            </Mitigation>
+         </Potential_Mitigations>
+         <Demonstrative_Examples>
+            <Demonstrative_Example>
+               <Intro_Text>This function attempts to extract a pair of numbers from a user-supplied string.</Intro_Text>
+               <Example_Code Nature="Bad" Language="C">
+                  <xhtml:div>void parse_data(char *untrusted_input){<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>int m, n, error;<xhtml:br />error = sscanf(untrusted_input, "%d:%d", &amp;m, &amp;n);<xhtml:br />if ( EOF == error ){<xhtml:div style="margin-left:1em;">die("Did not specify integer value. Die evil hacker!\n");</xhtml:div>}<xhtml:br />
+                           <xhtml:i>/* proceed assuming n and m are initialized correctly */</xhtml:i>
+                           <xhtml:br />
+                        </xhtml:div>
+                     </xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>This code attempts to extract two integer values out of a formatted, user-supplied input. However, if an attacker were to provide an input of the form:</Body_Text>
+               <Example_Code Nature="Attack">
+                  <xhtml:div>123:</xhtml:div>
+               </Example_Code>
+               <Body_Text>then only the m variable will be initialized. Subsequent use of n may result in the use of an uninitialized variable (CWE-457).</Body_Text>
+            </Demonstrative_Example>
+            <Demonstrative_Example>
+               <Intro_Text>Here, an uninitialized field in a Java class is used in a seldom-called method, which would cause a NullPointerException to be thrown.</Intro_Text>
+               <Example_Code Nature="Bad" Language="Java">
+                  <xhtml:div>private User user;<xhtml:br />public void someMethod() {<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>
+                           <xhtml:br />
+                           <xhtml:i>// Do something interesting.</xhtml:i>
+                           <xhtml:br />...<xhtml:br />
+                           <xhtml:br />
+                           <xhtml:i>// Throws NPE if user hasn't been properly initialized.</xhtml:i>
+                           <xhtml:br />String username = user.getName();</xhtml:div>
+                     </xhtml:div>}</xhtml:div>
+               </Example_Code>
+            </Demonstrative_Example>
+            <Demonstrative_Example>
+               <Intro_Text>This code first authenticates a user, then allows a delete command if the user is an administrator.</Intro_Text>
+               <Example_Code Nature="Bad" Language="PHP">
+                  <xhtml:div>if (authenticate($username,$password) &amp;&amp; setAdmin($username)){<xhtml:div style="margin-left:1em;">$isAdmin = true;</xhtml:div>}<xhtml:br />
+                     <xhtml:i>/.../</xhtml:i>
+                     <xhtml:br />
+                     <xhtml:br />if ($isAdmin){<xhtml:div style="margin-left:1em;">deleteUser($userToDelete);</xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>The $isAdmin variable is set to true if the user is an admin, but is uninitialized otherwise. If PHP's register_globals feature is enabled, an attacker can set uninitialized variables like $isAdmin to arbitrary values, in this case gaining administrator privileges by setting $isAdmin to true.</Body_Text>
+            </Demonstrative_Example>
+            <Demonstrative_Example>
+               <Intro_Text>In the following Java code the BankManager class uses the user variable of the class User to allow authorized users to perform bank manager tasks. The user variable is initialized within the method setUser that retrieves the User from the User database. The user is then authenticated as unauthorized user through the method authenticateUser.</Intro_Text>
+               <Example_Code Nature="Bad" Language="Java">
+                  <xhtml:div>public class BankManager {<xhtml:br />
+                     <xhtml:div style="margin-left:1em;">
+                        <xhtml:div>
+                           <xhtml:br />
+                           <xhtml:i>// user allowed to perform bank manager tasks</xhtml:i>
+                           <xhtml:br />private User user = null;<xhtml:br />private boolean isUserAuthentic = false;<xhtml:br />
+                           <xhtml:br />
+                           <xhtml:i>// constructor for BankManager class</xhtml:i>
+                           <xhtml:br />public BankManager() {<xhtml:div style="margin-left:1em;">...</xhtml:div>}<xhtml:br />
+                           <xhtml:br />
+                           <xhtml:i>// retrieve user from database of users</xhtml:i>
+                           <xhtml:br />public User getUserFromUserDatabase(String username){<xhtml:div style="margin-left:1em;">...</xhtml:div>}<xhtml:br />
+                           <xhtml:br />
+                           <xhtml:i>// set user variable using username</xhtml:i>
+                           <xhtml:br />public void setUser(String username) {<xhtml:div style="margin-left:1em;">this.user = getUserFromUserDatabase(username);</xhtml:div>}<xhtml:br />
+                           <xhtml:br />
+                           <xhtml:i>// authenticate user</xhtml:i>
+                           <xhtml:br />public boolean authenticateUser(String username, String password) {<xhtml:div style="margin-left:1em;">if (username.equals(user.getUsername()) &amp;&amp; password.equals(user.getPassword())) {<xhtml:div style="margin-left:1em;">isUserAuthentic = true;</xhtml:div>}<xhtml:br />return isUserAuthentic;</xhtml:div>}<xhtml:br />
+                           <xhtml:br />
+                           <xhtml:i>// methods for performing bank manager tasks</xhtml:i>
+                           <xhtml:br />...</xhtml:div>
+                     </xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>However, if the method setUser is not called before authenticateUser then the user variable will not have been initialized and will result in a NullPointerException. The code should verify that the user variable has been initialized before it is used, as in the following code.</Body_Text>
+               <Example_Code Nature="Good" Language="Java">
+                  <xhtml:div>public class BankManager {<xhtml:br />
+                     <xhtml:div style="margin-left:1em;">
+                        <xhtml:div>
+                           <xhtml:br />
+                           <xhtml:i>// user allowed to perform bank manager tasks</xhtml:i>
+                           <xhtml:br />private User user = null;<xhtml:br />private boolean isUserAuthentic = false;<xhtml:br />
+                           <xhtml:br />
+                           <xhtml:i>// constructor for BankManager class</xhtml:i>
+                           <xhtml:br />public BankManager(String username) {<xhtml:div style="margin-left:1em;">user = getUserFromUserDatabase(username);</xhtml:div>}<xhtml:br />
+                           <xhtml:br />
+                           <xhtml:i>// retrieve user from database of users</xhtml:i>
+                           <xhtml:br />public User getUserFromUserDatabase(String username) {...}<xhtml:br />
+                           <xhtml:br />
+                           <xhtml:i>// authenticate user</xhtml:i>
+                           <xhtml:br />public boolean authenticateUser(String username, String password) {<xhtml:div style="margin-left:1em;">
+                              <xhtml:div>if (user == null) {<xhtml:div style="margin-left:1em;">System.out.println("Cannot find user " + username);</xhtml:div>}<xhtml:br />else {<xhtml:div style="margin-left:1em;">if (password.equals(user.getPassword())) {<xhtml:div style="margin-left:1em;">isUserAuthentic = true;</xhtml:div>}</xhtml:div>}<xhtml:br />return isUserAuthentic;</xhtml:div>
+                           </xhtml:div>}<xhtml:br />
+                           <xhtml:div style="margin-left:1em;">
+                              <xhtml:div>
+                                 <xhtml:br />
+                                 <xhtml:i>// methods for performing bank manager tasks</xhtml:i>
+                                 <xhtml:br />...</xhtml:div>
+                           </xhtml:div>
+                           <xhtml:br />
+                        </xhtml:div>
+                     </xhtml:div>}</xhtml:div>
+               </Example_Code>
+            </Demonstrative_Example>
+			<Demonstrative_Example Demonstrative_Example_ID="DX-144">
+			  <Intro_Text>This example will leave test_string in an
+			  unknown condition when i is the same value as err_val,
+			  because test_string is not initialized
+			  (CWE-456). Depending on where this code segment appears
+			  (e.g. within a function body), test_string might be
+			  random if it is stored on the heap or stack. If the
+			  variable is declared in static memory, it might be zero
+			  or NULL. Compiler optimization might contribute to the
+			  unpredictability of this address.</Intro_Text>
+			  <Example_Code Nature="Bad" Language="C">
+                char *test_string;<xhtml:br />
+                if (i != err_val)<xhtml:br />
+                {<xhtml:br />
+                <xhtml:div style="margin-left:1em;">test_string = "Hello World!";</xhtml:div>
+                }<xhtml:br />
+                printf("%s", test_string);
+              </Example_Code>
+              <Body_Text><xhtml:p>When the printf() is reached,
+              test_string might be an unexpected address, so the
+              printf might print junk strings (CWE-457).</xhtml:p>
+			  <xhtml:p>
+			  To fix this code, there are a couple approaches to
+			  making sure that test_string has been properly set once
+			  it reaches the printf().</xhtml:p>
+			  <xhtml:p>One solution would be to set test_string to an
+			  acceptable default before the conditional:</xhtml:p>
+			  </Body_Text>
+			  <Example_Code Nature="Good" Language="C">
+				char *test_string = "Done at the beginning";<xhtml:br />
+				if (i != err_val)<xhtml:br />
+				{<xhtml:br />
+				<xhtml:div style="margin-left:1em;">test_string = "Hello World!";</xhtml:div>
+				}<xhtml:br />
+				printf("%s", test_string);
+			  </Example_Code>
+			  <Body_Text>Another solution is to ensure that each
+			  branch of the conditional - including the default/else
+			  branch - could ensure that test_string is set:</Body_Text>
+			  <Example_Code Nature="Good" Language="C">
+				char *test_string;<xhtml:br />
+				if (i != err_val)<xhtml:br />
+				{<xhtml:br />
+				<xhtml:div style="margin-left:1em;">test_string = "Hello World!";</xhtml:div>
+				}<xhtml:br />
+				else {<xhtml:br />
+				<xhtml:div style="margin-left:1em;">test_string = "Done on the other side!";</xhtml:div>
+				}<xhtml:br />
+				printf("%s", test_string);
+			  </Example_Code>
+			</Demonstrative_Example>
+			<Demonstrative_Example>
+			  <Intro_Text><xhtml:p>Consider the following merchant server application as implemented in
+			  [REF-1475]. It receives card payment information (orderPgData instance
+			  in OrderPgData.java) from the payment gateway (such as PayPal). The
+			  next step is to complete the payment (finalizeOrder() in
+			  Main.java). The merchant server validates the amount (validateAmount()
+			  in OrderPgData.java), and if the validation is successful, then the
+			  payment is completed.</xhtml:p>
+			  </Intro_Text>
+			  <Example_Code Nature="Bad" Language="Java">
+			    <xhtml:br />
+			    File: OrderPgData.java<xhtml:br />
+			    <xhtml:br />
+			    public class OrderPgData {<xhtml:br />
+			    <xhtml:div style="margin-left:1em;">
+			      String PgType;<xhtml:br />
+			      int productPrice;<xhtml:br />
+			      int paymentAmount;<xhtml:br />
+			      private boolean isPaymentAmountTampered;<xhtml:br />
+			      <xhtml:div style="margin-left:1em;">
+				public boolean getIsPaymentAmountTampered() {<xhtml:br />
+				<xhtml:div style="margin-left:1em;">
+				  return this.isPaymentAmountTampered;<xhtml:br />
+				</xhtml:div>
+				}<xhtml:br />
+			      </xhtml:div>
+			      ...<xhtml:br />
+			    </xhtml:div>
+			    public void validateAmount() {<xhtml:br />
+			    <xhtml:div style="margin-left:1em;">
+			      ... [sets this.setIsPaymentAmountTampered to true or false depending on whether the product price matches the payment amount]<xhtml:br />
+			    </xhtml:div>
+			    }<xhtml:br />
+			  </Example_Code>
+			  <Example_Code Nature="Bad" Language="Java">
+			    <xhtml:br />
+			    File: PgServiceResolver.java<xhtml:br />
+			    <xhtml:br />
+			    public class PgServiceResolver {<xhtml:br />
+			    <xhtml:div style="margin-left:1em;">
+			      public OrderPgData getOrderPgDataByPgType(String pgType, int productPrice, int paymentAmount) {<xhtml:br />
+			      <xhtml:div style="margin-left:1em;">
+				...<xhtml:br />
+				switch(pgType) {<xhtml:br />
+				<xhtml:div style="margin-left:1em;">
+				  case "card":<xhtml:br />
+				  <xhtml:div style="margin-left:1em;">
+				    System.out.println("In "+pgType+" payment logic, orderPgData does not verify whether the product amount and payment amount have been tampered with.");<xhtml:br />
+				    break;<xhtml:br />
+				  </xhtml:div>
+				  case "paypal":<xhtml:br />
+				  <xhtml:div style="margin-left:1em;">
+				    System.out.println("In "+pgType+" payment logic, orderPgData verifies whether the product amount and payment amount have been tampered with.");<xhtml:br />
+				    orderPgData.validateAmount();<xhtml:br />
+				    break;<xhtml:br />
+				  </xhtml:div>
+				  }<xhtml:br />
+				  ...<xhtml:br />
+				</xhtml:div>
+			      </xhtml:div>
+			    </xhtml:div>
+			  </Example_Code>
+			  <Example_Code Nature="Bad" Language="Java">
+			    <xhtml:br />
+			    File: Main.java<xhtml:br />
+			    <xhtml:br />
+			    public class Main {<xhtml:br />
+			    <xhtml:div style="margin-left:1em;">
+			      public static void main(String[] args) {
+			      <xhtml:div style="margin-left:1em;">
+				String pgType = "card"; // or paypal<xhtml:br />
+				int productPrice = 100;<xhtml:br />
+				int paymentAmount = 10;<xhtml:br />
+				PgServiceResolver pgServiceResolver = new PgServiceResolver();<xhtml:br />
+				OrderPgData orderPgData = pgServiceResolver.getOrderPgDataByPgType(pgType, productPrice, paymentAmount);<xhtml:br />
+				finalizeOrder(orderPgData);<xhtml:br />
+			      </xhtml:div>
+			      }<xhtml:br />
+			      private static void finalizeOrder(OrderPgData orderPgData) {<xhtml:br />
+			      <xhtml:div style="margin-left:1em;">
+				if (orderPgData.getIsPaymentAmountTampered()) {<xhtml:br />
+				<xhtml:div style="margin-left:1em;">
+				  System.out.println("The attacker tampered with the payment amount, but product payment is canceled.");<xhtml:br />
+				</xhtml:div>
+				} else {<xhtml:br />
+				<xhtml:div style="margin-left:1em;">
+				  ... /* the product payment is completed */<xhtml:br />
+				</xhtml:div>
+				}
+			      </xhtml:div>
+			      }
+			    </xhtml:div>
+			    }
+			  </Example_Code>
+			  <Body_Text>
+			    <xhtml:p>In PgServiceResolver.java, when pgType is "card" indicating a card
+			    payment, orderPgData.validateAmount() is not called - that is, the
+			    amount is not validated to be the same as the expected price.</xhtml:p>
+			    <xhtml:p>Since isPaymentAmountTampered is declared as a private boolean, but it
+			    is not initialized, it is forcibly initialized to false by the Java
+			    compiler [REF-1476].</xhtml:p>
+			    <xhtml:p>If the adversary modifies the price, e.g., changing paymentAmount from
+			    100 to 10, then no validation is performed. Since
+			    isPaymentAmountTampered is "false" because of the default
+			    initialization, the code finishes processing the payment because it
+			    does not believe that the amount has been changed.</xhtml:p>
+			  </Body_Text>
+			  <Body_Text>
+			    <xhtml:p>This weakness could be addressed by setting the value of
+			    isPaymentAmountTampered to true. This is a "secure-by-default" value
+			    that reflects a "default deny" policy - i.e., it's assumed that the
+			    payment amount is tampered, and only a special validation step can
+			    change this assumption.</xhtml:p>
+			  </Body_Text>
+			  <Example_Code Nature="Good" Language="Java">
+			    File: OrderPgData.java<xhtml:br />
+			    ...<xhtml:br />
+			    <xhtml:div style="margin-left:1em;">
+			      private boolean isPaymentAmountTampered = true;
+			    </xhtml:div>
+			  </Example_Code>
+			</Demonstrative_Example>
+		      </Demonstrative_Examples>
+         <Observed_Examples>
+            <Observed_Example>
+               <Reference>CVE-2020-6078</Reference>
+               <Description>Chain: The return value of a function returning a pointer is not checked for success (CWE-252) resulting in the later use of an uninitialized variable (CWE-456) and a null pointer dereference (CWE-476)</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2020-6078</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2019-3836</Reference>
+               <Description>Chain: secure communications library does not initialize a local variable for a data structure (CWE-456), leading to access of an uninitialized pointer (CWE-824).</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2019-3836</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2018-14641</Reference>
+               <Description>Chain: C union member is not initialized (CWE-456), leading to access of invalid pointer (CWE-824)</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2018-14641</Link>
+            </Observed_Example>
+	   <Observed_Example>
+	     <Reference>CVE-2009-2692</Reference>
+	     <Description>Chain: Use of an unimplemented network socket operation pointing to an uninitialized handler function (CWE-456) causes a crash because of a null pointer dereference (CWE-476)</Description>
+	     <Link>https://www.cve.org/CVERecord?id=CVE-2009-2692</Link>
+	   </Observed_Example>
+	   <Observed_Example>
+	     <Reference>CVE-2020-20739</Reference>
+	     <Description>A variable that has its value set in a conditional statement is sometimes used when the conditional fails, sometimes causing data leakage</Description>
+	     <Link>https://www.cve.org/CVERecord?id=CVE-2020-20739</Link>
+	   </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2005-2978</Reference>
+               <Description>Product uses uninitialized variables for size and index, leading to resultant buffer overflow.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2005-2978</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2005-2109</Reference>
+               <Description>Internal variable in PHP application is not initialized, allowing external modification.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2005-2109</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2005-2193</Reference>
+               <Description>Array variable not initialized in PHP application, leading to resultant SQL injection.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2005-2193</Link>
+            </Observed_Example>
+         </Observed_Examples>
+         <Taxonomy_Mappings>
+            <Taxonomy_Mapping Taxonomy_Name="PLOVER">
+               <Entry_Name>Missing Initialization</Entry_Name>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="Software Fault Patterns">
+               <Entry_ID>SFP1</Entry_ID>
+               <Entry_Name>Glitch in computation</Entry_Name>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="CERT C Secure Coding">
+               <Entry_ID>ERR30-C</Entry_ID>
+               <Entry_Name>Set errno to zero before calling a library function known to set errno,  and check errno only after the function returns a value indicating failure</Entry_Name>
+               <Mapping_Fit>CWE More Abstract</Mapping_Fit>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="SEI CERT Perl Coding Standard">
+               <Entry_ID>DCL04-PL</Entry_ID>
+               <Entry_Name>Always initialize local variables</Entry_Name>
+               <Mapping_Fit>Exact</Mapping_Fit>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="SEI CERT Perl Coding Standard">
+               <Entry_ID>DCL33-PL</Entry_ID>
+               <Entry_Name>Declare identifiers before using them</Entry_Name>
+               <Mapping_Fit>Imprecise</Mapping_Fit>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="OMG ASCSM">
+                <Entry_ID>ASCSM-CWE-456</Entry_ID>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="OMG ASCRM">
+                <Entry_ID>ASCRM-CWE-456</Entry_ID>
+            </Taxonomy_Mapping>
+         </Taxonomy_Mappings>
+         <References>
+            <Reference External_Reference_ID="REF-62" Section="Chapter 7, &quot;Variable Initialization&quot;, Page 312" />
+            <Reference External_Reference_ID="REF-961" Section="ASCRM-CWE-456" />
+            <Reference External_Reference_ID="REF-962" Section="ASCSM-CWE-456" />
+            <Reference External_Reference_ID="REF-1475" />
+            <Reference External_Reference_ID="REF-1476" />
+            <Reference External_Reference_ID="REF-1485" />
+         </References>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Variant level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+         <Notes>
+            <Note Type="Relationship">This weakness is a major factor in a number of resultant weaknesses, especially in web applications that allow global variable initialization (such as PHP) with libraries that can be directly requested.</Note>
+            <Note Type="Research Gap">It is highly likely that a large number of resultant weaknesses have missing initialization as a primary factor, but researcher reports generally do not provide this level of detail.</Note>
+         </Notes>
+         <Content_History>
+            <Submission>
+               <Submission_Name>PLOVER</Submission_Name>
+               <Submission_Date>2006-07-19</Submission_Date>
+               <Submission_Version>Draft 3</Submission_Version>
+               <Submission_ReleaseDate>2006-07-19</Submission_ReleaseDate>
+            </Submission>
+            <Modification>
+               <Modification_Name>Sean Eidemiller</Modification_Name>
+               <Modification_Organization>Cigital</Modification_Organization>
+               <Modification_Date>2008-07-01</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>added/updated demonstrative examples</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>Eric Dalci</Modification_Name>
+               <Modification_Organization>Cigital</Modification_Organization>
+               <Modification_Date>2008-07-01</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>updated Potential_Mitigations, Time_of_Introduction</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2008-09-08</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships, Other_Notes, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2010-02-16</Modification_Date>
+               <Modification_Version>1.8</Modification_Version>
+               <Modification_ReleaseDate>2010-02-16</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2010-04-05</Modification_Date>
+               <Modification_Version>1.8.1</Modification_Version>
+               <Modification_ReleaseDate>2010-04-05</Modification_ReleaseDate>
+               <Modification_Comment>updated Applicable_Platforms, Demonstrative_Examples</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2010-06-21</Modification_Date>
+               <Modification_Version>1.9</Modification_Version>
+               <Modification_ReleaseDate>2010-06-21</Modification_ReleaseDate>
+               <Modification_Comment>updated Other_Notes, Relationship_Notes</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-03-29</Modification_Date>
+               <Modification_Version>1.12</Modification_Version>
+               <Modification_ReleaseDate>2011-03-30</Modification_ReleaseDate>
+               <Modification_Comment>updated Demonstrative_Examples</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-06-01</Modification_Date>
+               <Modification_Version>1.13</Modification_Version>
+               <Modification_ReleaseDate>2011-06-01</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-06-27</Modification_Date>
+               <Modification_Version>2.0</Modification_Version>
+               <Modification_ReleaseDate>2011-06-27</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences, Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2012-05-11</Modification_Date>
+               <Modification_Version>2.2</Modification_Version>
+               <Modification_ReleaseDate>2012-05-15</Modification_ReleaseDate>
+               <Modification_Comment>updated References, Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2012-10-30</Modification_Date>
+               <Modification_Version>2.3</Modification_Version>
+               <Modification_ReleaseDate>2012-10-30</Modification_ReleaseDate>
+               <Modification_Comment>updated Potential_Mitigations</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2013-02-21</Modification_Date>
+               <Modification_Version>2.4</Modification_Version>
+               <Modification_ReleaseDate>2013-02-21</Modification_ReleaseDate>
+               <Modification_Comment>updated Name, Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2014-07-30</Modification_Date>
+               <Modification_Version>2.8</Modification_Version>
+               <Modification_ReleaseDate>2014-07-31</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2017-11-08</Modification_Date>
+               <Modification_Version>3.0</Modification_Version>
+               <Modification_ReleaseDate>2017-11-08</Modification_ReleaseDate>
+               <Modification_Comment>updated Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2019-01-03</Modification_Date>
+					<Modification_Version>3.2</Modification_Version>
+					<Modification_ReleaseDate>2019-01-03</Modification_ReleaseDate>
+					<Modification_Comment>updated References, Relationships, Taxonomy_Mappings</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2019-06-20</Modification_Date>
+					<Modification_Version>3.3</Modification_Version>
+					<Modification_ReleaseDate>2019-06-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships, Type</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-02-24</Modification_Date>
+					<Modification_Version>4.0</Modification_Version>
+					<Modification_ReleaseDate>2020-02-24</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-06-25</Modification_Date>
+					<Modification_Version>4.1</Modification_Version>
+					<Modification_ReleaseDate>2020-06-25</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-08-20</Modification_Date>
+					<Modification_Version>4.2</Modification_Version>
+					<Modification_ReleaseDate>2020-08-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-12-10</Modification_Date>
+					<Modification_Version>4.3</Modification_Version>
+					<Modification_ReleaseDate>2020-12-10</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-03-15</Modification_Date>
+					<Modification_Version>4.4</Modification_Version>
+					<Modification_ReleaseDate>2021-03-15</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples, Observed_Examples, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-01-31</Modification_Date>
+					<Modification_Version>4.10</Modification_Version>
+					<Modification_ReleaseDate>2023-01-31</Modification_ReleaseDate>
+					<Modification_Comment>updated Description</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Detection_Factors, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-04-03</Modification_Date>
+					<Modification_Version>4.17</Modification_Version>
+					<Modification_ReleaseDate>2025-04-03</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples, Observed_Examples, References</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-09-09</Modification_Date>
+					<Modification_Version>4.18</Modification_Version>
+					<Modification_ReleaseDate>2025-09-09</Modification_ReleaseDate>
+					<Modification_Comment>updated Potential_Mitigations, References</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+				<Contribution Type="Content">
+					<Contribution_Name>Hyeongkwan Lee</Contribution_Name>
+					<Contribution_Organization>SK Planet</Contribution_Organization>
+					<Contribution_Date>2022-09-13</Contribution_Date>
+					<Contribution_Version>4.17</Contribution_Version>
+					<Contribution_ReleaseDate>2025-04-03</Contribution_ReleaseDate>
+					<Contribution_Comment>provided demonstratuve example for Java boolean variables</Contribution_Comment>
+				</Contribution>
+            <Previous_Entry_Name Date="2013-02-21">Missing Initialization</Previous_Entry_Name>
+         </Content_History>
+      </Weakness>
+      

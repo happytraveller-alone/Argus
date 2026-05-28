@@ -1,0 +1,212 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="1259" Name="Improper Restriction of Security Token Assignment" Abstraction="Base" Structure="Simple" Status="Incomplete">
+			<Description>The System-On-A-Chip (SoC) implements a Security Token mechanism to differentiate what actions are allowed or disallowed when a transaction originates from an entity. However, the Security Tokens are improperly protected.</Description>
+			<Extended_Description>Systems-On-A-Chip (Integrated circuits and hardware engines) implement Security Tokens to differentiate and identify which actions originated from which agent. These actions may be one of the directives: 'read', 'write', 'program', 'reset', 'fetch', 'compute', etc. Security Tokens are assigned to every agent in the System that is capable of generating an action or receiving an action from another agent. Multiple Security Tokens may be assigned to an agent and may be unique based on the agent's trust level or allowed privileges. Since the Security Tokens are integral for the maintenance of security in an SoC, they need to be protected properly. A common weakness afflicting Security Tokens is improperly restricting the assignment to trusted components.
+			</Extended_Description>
+			<Related_Weaknesses>
+			  <Related_Weakness Nature="ChildOf" CWE_ID="284" View_ID="1000" Ordinal="Primary" />
+			  <Related_Weakness Nature="ChildOf" CWE_ID="1294" View_ID="1194" Ordinal="Primary" />
+			</Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+			<Applicable_Platforms>	
+				<Language Class="Not Language-Specific" Prevalence="Undetermined" />
+				<Operating_System Class="Not OS-Specific" Prevalence="Undetermined" />
+				<Architecture Class="Not Architecture-Specific" Prevalence="Undetermined" />
+				<Technology Name="Processor Hardware" Class="Not Technology-Specific" Prevalence="Undetermined" />
+				<Technology Class="System on Chip" Prevalence="Undetermined" />
+			</Applicable_Platforms>
+			<Modes_Of_Introduction>
+				<Introduction>
+					<Phase>Architecture and Design</Phase>
+				</Introduction>
+				<Introduction>
+					<Phase>Implementation</Phase>
+				</Introduction>
+			</Modes_Of_Introduction>
+			<Common_Consequences>
+				<Consequence>
+					<Scope>Confidentiality</Scope>
+					<Scope>Integrity</Scope>
+					<Scope>Availability</Scope>
+					<Scope>Access Control</Scope>
+					<Impact>Modify Files or Directories</Impact>
+					<Impact>Execute Unauthorized Code or Commands</Impact>
+					<Impact>Bypass Protection Mechanism</Impact>
+					<Impact>Gain Privileges or Assume Identity</Impact>
+					<Impact>Modify Memory</Impact>
+					<Impact>Modify Memory</Impact>
+					<Impact>DoS: Crash, Exit, or Restart</Impact>
+					<Likelihood>High</Likelihood>
+					<Note>An improperly protected Security Token may be able to be programmed by a malicious agent (i.e., the Security Token is mutable) to spoof the action as if it originated from a trusted agent.</Note>
+				</Consequence>
+			</Common_Consequences>
+			<Potential_Mitigations>
+				<Mitigation>
+					<Phase>Architecture and Design</Phase>
+					<Phase>Implementation</Phase>
+					<Description>
+						<xhtml:ul>
+							<xhtml:li>Security Token assignment review checks for design inconsistency and common weaknesses.</xhtml:li>
+							<xhtml:li>Security-Token definition and programming flow is tested in both pre-silicon and post-silicon testing.</xhtml:li>
+						</xhtml:ul>
+					</Description>
+				</Mitigation>
+			</Potential_Mitigations>
+			<Demonstrative_Examples>
+				<Demonstrative_Example>
+					<Intro_Text>For example, consider a system with a register for storing an AES key for encryption and decryption. The key is of 128 bits implemented as a set of four 32-bit registers. The key register assets have an associated control register, AES_KEY_ACCESS_POLICY, which provides the necessary access controls. This access-policy register defines which agents may engage in a transaction, and the type of transaction, with the AES-key registers. Each bit in this 32-bit register defines a security Token. There could be a maximum of 32 security Tokens that are allowed access to the AES-key registers. The number of the bit when set (i.e., "1") allows respective action from an agent whose identity matches the number of the bit and, if "0" (i.e., Clear), disallows the respective action to that corresponding agent.</Intro_Text>
+					
+					
+					<Body_Text>Let's assume the system has two agents: a Main-controller and an Aux-controller. The respective Security Tokens are "1" and "2".
+					
+					<xhtml:table>
+						<xhtml:tr>
+							<xhtml:th>Register</xhtml:th>
+							<xhtml:th>Description</xhtml:th>
+							<xhtml:th>Default</xhtml:th>
+						</xhtml:tr>
+						<xhtml:tr>
+							<xhtml:td>AES_ENC_DEC_KEY_0</xhtml:td>
+							<xhtml:td>AES key [0:31] for encryption or decryption</xhtml:td>
+							<xhtml:td>0x00000000</xhtml:td>
+						</xhtml:tr>
+						<xhtml:tr>
+							<xhtml:td>AES_ENC_DEC_KEY_1</xhtml:td>
+							<xhtml:td>AES key [32:63] for encryption or decryption</xhtml:td>
+							<xhtml:td>0x00000000</xhtml:td>
+						</xhtml:tr>
+						<xhtml:tr>
+							<xhtml:td>AES_ENC_DEC_KEY_2</xhtml:td>
+							<xhtml:td>AES key [64:95] for encryption or decryption</xhtml:td>
+							<xhtml:td>0x00000000</xhtml:td>
+						</xhtml:tr>
+						<xhtml:tr>
+							<xhtml:td>AES_ENC_DEC_KEY_3</xhtml:td>
+							<xhtml:td>AES key [96:127] for encryption or decryption</xhtml:td>
+							<xhtml:td>0x00000000</xhtml:td>
+						</xhtml:tr>
+						<xhtml:tr>
+							<xhtml:td>AES_KEY_ACCESS_POLICY</xhtml:td>
+							<xhtml:td>AES key access register [31:0]</xhtml:td>
+							<xhtml:td>0x00000002</xhtml:td>
+						</xhtml:tr>
+					</xhtml:table>
+				</Body_Text>
+					
+					<Body_Text>An agent with Security Token "1" has access to AES_ENC_DEC_KEY_0 through AES_ENC_DEC_KEY_3 registers. As per the above access policy, the AES-Key-access policy allows access to the AES-key registers if the security Token is "1".</Body_Text>
+					
+					<Example_Code Nature="Bad" Language="Other">The Aux-controller could program its Security Token to "1" from "2".</Example_Code>
+					<Body_Text>The SoC does not properly protect the Security Token of the agents, and, hence, the Aux-controller in the above example can spoof the transaction (i.e., send the transaction as if it is coming from the Main-controller to access the AES-Key registers)</Body_Text>
+					<Example_Code Nature="Good" Language="Other">The SoC needs to protect the Security Tokens. None of the agents in the SoC should have the ability to change the Security Token.</Example_Code>
+				</Demonstrative_Example>
+			</Demonstrative_Examples>
+         <Related_Attack_Patterns>
+            <Related_Attack_Pattern CAPEC_ID="121" />
+            <Related_Attack_Pattern CAPEC_ID="681" />
+         </Related_Attack_Patterns>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Base level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+         <Notes>
+        <Note Type="Maintenance">
+          This entry is still under development and will continue to see updates and content improvements. Currently it is expressed as a general absence of a protection mechanism as opposed to a specific mistake, and the entry's name and description could be interpreted as applying to software.
+        </Note>
+      </Notes>
+			<Content_History>
+				<Submission>
+					<Submission_Name>Arun Kanuparthi, Hareesh Khattri, Parbati Kumar Manna, Narasimha Kumar V Mangipudi</Submission_Name>
+					<Submission_Organization>Intel Corporation</Submission_Organization>
+					<Submission_Date>2020-03-06</Submission_Date>
+					<Submission_Version>4.1</Submission_Version>
+					<Submission_ReleaseDate>2020-02-24</Submission_ReleaseDate>
+				</Submission>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-08-20</Modification_Date>
+					<Modification_Version>4.2</Modification_Version>
+					<Modification_ReleaseDate>2020-08-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples, Description, Modes_of_Introduction, Name, Potential_Mitigations, Related_Attack_Patterns, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-03-15</Modification_Date>
+					<Modification_Version>4.4</Modification_Version>
+					<Modification_ReleaseDate>2021-03-15</Modification_ReleaseDate>
+					<Modification_Comment>updated Maintenance_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-10-28</Modification_Date>
+					<Modification_Version>4.6</Modification_Version>
+					<Modification_ReleaseDate>2021-10-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Description</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-04-28</Modification_Date>
+					<Modification_Version>4.7</Modification_Version>
+					<Modification_ReleaseDate>2022-04-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Applicable_Platforms, Related_Attack_Patterns</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-06-28</Modification_Date>
+					<Modification_Version>4.8</Modification_Version>
+					<Modification_ReleaseDate>2022-06-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Applicable_Platforms</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-01-31</Modification_Date>
+					<Modification_Version>4.10</Modification_Version>
+					<Modification_ReleaseDate>2023-01-31</Modification_ReleaseDate>
+					<Modification_Comment>updated Description</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Common_Consequences, Description, Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+            <Contribution Type="Feedback">
+               <Contribution_Name>MaineK00n</Contribution_Name>
+               <Contribution_Date>2022-10-31</Contribution_Date>
+               <Contribution_Comment>corrected a typo in extended description</Contribution_Comment>
+            </Contribution>
+			<Previous_Entry_Name Date="2020-08-20">Improper Protection of Security Identifiers</Previous_Entry_Name>
+			</Content_History>
+		</Weakness>
+      

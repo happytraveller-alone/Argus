@@ -1,0 +1,168 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="1249" Name="Application-Level Admin Tool with Inconsistent View of Underlying Operating System" Abstraction="Base" Structure="Simple" Status="Incomplete">
+            <Description>The product provides an application for administrators to manage parts of the underlying operating system, but the application does not accurately identify all of the relevant entities or resources that exist in the OS; that is, the application's model of the OS's state is inconsistent with the OS's actual state.</Description>
+            <Extended_Description>
+                <xhtml:p>Many products provide web-based applications or other interfaces for managing the underlying operating system. This is common with cloud, network access devices, home networking, and other systems.  When the management tool does not accurately represent what is in the OS - such as user accounts - then the administrator might not see suspicious activities that would be noticed otherwise.</xhtml:p>
+				<xhtml:p>For example, numerous systems utilize a web
+				front-end for administrative control. They also offer
+				the ability to add, alter, and drop users with various
+				privileges as it relates to the functionality of the
+				system.  A potential architectural weakness may exist
+				where the user information reflected in the web
+				interface does not mirror the users in the underlying
+				operating system.  Many web UI or REST APIs use the
+				underlying operating system for authentication; the
+				system's logic may also track an additional set of
+				user capabilities within configuration files
+				and datasets for authorization capabilities. When
+				there is a discrepancy between the user information in
+				the UI or REST API's interface system and the
+				underlying operating system's user listing, this may
+				introduce a weakness into the system.  For example, if an
+				attacker compromises the OS and adds a new user
+				account - a "ghost" account - then the attacker could escape detection if
+				the management tool does not list the newly-added
+				account.</xhtml:p>
+				<xhtml:p>This discrepancy could be exploited in several ways:</xhtml:p>
+                    <xhtml:ul>
+					  <xhtml:li>A rogue admin could insert a new account into a system that will
+persist if they are terminated or wish to take action on a system that
+cannot be directly associated with them.</xhtml:li>
+					  <xhtml:li>An attacker can leverage a separate command injection attack available through the web interface to insert a ghost account with shell privileges such as ssh.</xhtml:li>
+					  <xhtml:li>An attacker can leverage existing web interface APIs, manipulated in such a way that a new user is inserted into the operating system, and the user web account is either partially created or not at all.</xhtml:li>
+					  <xhtml:li>An attacker could create an admin
+					  account which is viewable by an administrator,
+					  use this account to create the ghost account,
+					  delete logs and delete the first created admin
+					  account.</xhtml:li>
+                    </xhtml:ul>
+				<xhtml:p>Many of these attacker scenarios can be
+				realized by leveraging separate vulnerabilities
+				related to XSS, command injection, authentication
+				bypass, or logic flaws on the various systems.
+				</xhtml:p>
+            </Extended_Description>
+			<Related_Weaknesses>
+              <Related_Weakness Nature="ChildOf" CWE_ID="1250" View_ID="1000" Ordinal="Primary" />
+			</Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+            <Applicable_Platforms>
+                <Language Class="Not Language-Specific" Prevalence="Undetermined" />
+                <Operating_System Class="Not OS-Specific" Prevalence="Undetermined" />
+				<Technology Class="Web Based" Prevalence="Undetermined" />
+            </Applicable_Platforms>
+			<Alternate_Terms>
+              <Alternate_Term>
+				<Term>Ghost in the Shell</Term>
+              </Alternate_Term>
+			</Alternate_Terms>
+            <Modes_Of_Introduction>
+                <Introduction>
+                    <Phase>Architecture and Design</Phase>
+					<Note>The design might assume that the underlying OS does not change.</Note>
+                </Introduction>
+                <Introduction>
+                    <Phase>Implementation</Phase>
+					<Note>Assumptions about the underlying OS might be hard-coded into the application or otherwise in external data stores in a way that is not updated when the OS's state changes.</Note>
+                </Introduction>
+            </Modes_Of_Introduction>
+            <Common_Consequences>
+                <Consequence>
+                    <Scope>Access Control</Scope>
+                    <Impact>Varies by Context</Impact>
+                </Consequence>
+                <Consequence>
+                    <Scope>Accountability</Scope>
+                    <Impact>Hide Activities</Impact>
+                </Consequence>
+                <Consequence>
+                    <Scope>Other</Scope>
+                    <Impact>Unexpected State</Impact>
+                </Consequence>
+            </Common_Consequences>
+            <Potential_Mitigations>
+                <Mitigation>
+                    <Phase>Architecture and Design</Phase>
+                    <Description>
+                        <xhtml:p>Ensure that the admin tool refreshes its model of the underlying OS on a regular basis, and note any inconsistencies with configuration files or other data sources that are expected to have the same data.</xhtml:p>
+                    </Description>
+                </Mitigation>
+            </Potential_Mitigations>
+            <Demonstrative_Examples>
+                <Demonstrative_Example>
+                    <Intro_Text>Suppose that an attacker successfully gains root privileges on a Linux system and adds a new 'user2' account:</Intro_Text>
+                    <Example_Code Nature="Attack" Language="Other">
+					  <xhtml:div>echo "user2:x:0:0::/root:/" &gt;&gt; /etc/passwd;</xhtml:div>
+					  <xhtml:div>echo
+					  "user2:\$6\$IdvyrM6VJnG8Su5U\$1gmW3Nm.IO4vxTQDQ1C8urm72JCadOHZQwqiH/nRtL8dPY80xS4Ovsv5bPCMWnXKKWwmsocSWXupUf17LB3oS.:17256:0:99999:7:::" &gt;&gt; /etc/shadow;</xhtml:div>
+                    </Example_Code>
+                    <Body_Text>This new user2 account would not be noticed on the web interface, if the interface does not refresh its data of available users.</Body_Text>
+
+					<Body_Text>It could be argued that for this specific example, an attacker with root privileges would be likely to compromise the admin tool or otherwise feed it with false data.  However, this example shows how the discrepancy in critical data can help attackers to escape detection.</Body_Text>
+            	</Demonstrative_Example>
+            </Demonstrative_Examples>
+			<References>
+              <Reference External_Reference_ID="REF-1070" />
+			</References>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Base level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+            <Content_History>
+                <Submission>
+                    <Submission_Name>Tony Martin</Submission_Name>
+                    <Submission_Date>2019-06-06</Submission_Date>
+                    <Submission_Version>4.0</Submission_Version>
+                    <Submission_ReleaseDate>2020-02-24</Submission_ReleaseDate>
+                </Submission>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-06-25</Modification_Date>
+					<Modification_Version>4.1</Modification_Version>
+					<Modification_ReleaseDate>2020-06-25</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-01-31</Modification_Date>
+					<Modification_Version>4.10</Modification_Version>
+					<Modification_ReleaseDate>2023-01-31</Modification_ReleaseDate>
+					<Modification_Comment>updated Description</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated References, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+            </Content_History>
+        </Weakness>
+      

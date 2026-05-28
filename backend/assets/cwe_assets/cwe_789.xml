@@ -1,0 +1,412 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="789" Name="Memory Allocation with Excessive Size Value" Abstraction="Variant" Structure="Simple" Status="Draft">
+         <Description>The product allocates memory based on an untrusted, large size value, but it does not ensure that the size is within expected limits, allowing arbitrary amounts of memory to be allocated.</Description>
+         <Related_Weaknesses>
+            <Related_Weakness Nature="ChildOf" CWE_ID="770" View_ID="1000" Ordinal="Primary" />
+            <Related_Weakness Nature="CanPrecede" CWE_ID="476" View_ID="1000" />
+         </Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+            <Weakness_Ordinality>
+               <Ordinality>Resultant</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+         <Applicable_Platforms>
+            <Language Name="C" Prevalence="Undetermined" />
+            <Language Name="C++" Prevalence="Undetermined" />
+            <Language Class="Not Language-Specific" Prevalence="Undetermined" />
+         </Applicable_Platforms>
+	 <Alternate_Terms>
+	   <Alternate_Term>
+	     <Term>Stack Exhaustion</Term>
+	     <Description>When a weakness allocates excessive memory on the stack, it is often described as "stack exhaustion," which is a technical impact of the weakness. This technical impact is often encountered as a consequence of CWE-789 and/or CWE-1325.</Description>
+	   </Alternate_Term>
+	 </Alternate_Terms>
+         <Modes_Of_Introduction>
+            <Introduction>
+               <Phase>Implementation</Phase>
+            </Introduction>
+         </Modes_Of_Introduction>
+         <Common_Consequences>
+            <Consequence>
+               <Scope>Availability</Scope>
+               <Impact>DoS: Resource Consumption (Memory)</Impact>
+               <Note>Not controlling memory allocation can result in a request for too much system memory, possibly leading to a crash of the application due to out-of-memory conditions, or the consumption of a large amount of memory on the system.</Note>
+            </Consequence>
+         </Common_Consequences>
+         <Detection_Methods>
+           <Detection_Method Detection_Method_ID="DM-13">
+             <Method>Fuzzing</Method>
+             <Description>Fuzz testing (fuzzing) is a powerful technique for generating large numbers of diverse inputs - either randomly or algorithmically - and dynamically invoking the code with those inputs. Even with random inputs, it is often capable of generating unexpected results such as crashes, memory corruption, or resource consumption. Fuzzing effectively produces repeatable test cases that clearly indicate bugs, which helps developers to diagnose the issues.</Description>
+             <Effectiveness>High</Effectiveness>
+           </Detection_Method>
+           <Detection_Method Detection_Method_ID="DM-14">
+             <Method>Automated Static Analysis</Method>
+             <Description>Automated static analysis, commonly referred to as Static Application Security Testing (SAST), can find some instances of this weakness by analyzing source code (or binary/compiled code) without having to execute it. Typically, this is done by building a model of data flow and control flow, then searching for potentially-vulnerable patterns that connect "sources" (origins of input) with "sinks" (destinations where the data interacts with external components, a lower layer such as the OS, etc.)</Description>
+             <Effectiveness>High</Effectiveness>
+           </Detection_Method>
+	   <Detection_Method Detection_Method_ID="DM-15">
+	     <Method>Automated Dynamic Analysis</Method>
+	     <Description>Use tools that are integrated during
+	     compilation to insert runtime error-checking mechanisms
+	     related to memory safety errors, such as AddressSanitizer
+	     (ASan) for C/C++ [REF-1518].</Description>
+	     <Effectiveness>Moderate</Effectiveness>
+	     <Effectiveness_Notes>Crafted inputs are necessary to
+	     reach the code containing the error, such as generated
+	     by fuzzers.  Also, these tools may reduce performance,
+	     and they only report the error condition - not the
+	     original mistake that led to the
+	     error.</Effectiveness_Notes>
+	   </Detection_Method>
+         </Detection_Methods>
+         <Potential_Mitigations>
+            <Mitigation>
+               <Phase>Implementation</Phase>
+               <Phase>Architecture and Design</Phase>
+               <Description>Perform adequate input validation against any value that influences the amount of memory that is allocated. Define an appropriate strategy for handling requests that exceed the limit, and consider supporting a configuration option so that the administrator can extend the amount of memory to be used if necessary.</Description>
+            </Mitigation>
+            <Mitigation>
+               <Phase>Operation</Phase>
+               <Description>Run your program using system-provided resource limits for memory. This might still cause the program to crash or exit, but the impact to the rest of the system will be minimized.</Description>
+            </Mitigation>
+         </Potential_Mitigations>
+         <Demonstrative_Examples>
+            <Demonstrative_Example>
+               <Intro_Text>Consider the following code, which accepts an untrusted size value and allocates a buffer to contain a string of the given size.</Intro_Text>
+               <Example_Code Nature="Bad" Language="C">
+                  <xhtml:div>unsigned int size = GetUntrustedInt();<xhtml:br />
+                     <xhtml:i>/* ignore integer overflow (CWE-190) for this example */</xhtml:i>
+                     <xhtml:br />
+                     <xhtml:br />unsigned int totBytes = size * sizeof(char);<xhtml:br />char *string = (char *)malloc(totBytes);<xhtml:br />InitializeString(string);</xhtml:div>
+               </Example_Code>
+               <Body_Text>Suppose an attacker provides a size value of:</Body_Text>
+               <Body_Text>
+                  <xhtml:div>
+                     <xhtml:div>12345678</xhtml:div>
+                  </xhtml:div>
+               </Body_Text>
+               <Body_Text>This will cause 305,419,896 bytes (over 291 megabytes) to be allocated for the string.</Body_Text>
+            </Demonstrative_Example>
+            <Demonstrative_Example>
+               <Intro_Text>Consider the following code, which accepts an untrusted size value and uses the size as an initial capacity for a HashMap.</Intro_Text>
+               <Example_Code Nature="Bad" Language="Java">
+                  <xhtml:div>unsigned int size = GetUntrustedInt();<xhtml:br />HashMap list = new HashMap(size);</xhtml:div>
+               </Example_Code>
+               <Body_Text>The HashMap constructor will verify that the initial capacity is not negative, however there is no check in place to verify that sufficient memory is present. If the attacker provides a large enough value, the application will run into an OutOfMemoryError.</Body_Text>
+            </Demonstrative_Example>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-137">
+               <Intro_Text>This code performs a stack allocation based on a length calculation.</Intro_Text>
+               <Example_Code Nature="Bad" Language="C">
+                  <xhtml:div>
+		    int a = 5, b = 6;<xhtml:br />
+		    size_t len = a - b;<xhtml:br />
+		    char buf[len];    // Just blows up the stack
+		  </xhtml:div>
+		  }
+               </Example_Code>
+               <Body_Text>Since a and b are declared as signed ints, the "a - b" subtraction gives a negative result (-1). However, since len is declared to be unsigned, len is cast to an extremely large positive number (on 32-bit systems - 4294967295). As a result, the buffer buf[len] declaration uses an extremely large size to allocate on the stack, very likely more than the entire computer's memory space.</Body_Text>
+	       <Body_Text>Miscalculations usually will not be so obvious. The calculation will either be complicated or the result of an attacker's input to attain the negative value.</Body_Text>
+            </Demonstrative_Example>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-138">
+               <Intro_Text>This example shows a typical attempt to parse a string with an error resulting from a difference in assumptions between the caller to a function and the function's action.</Intro_Text>
+               <Example_Code Nature="Bad" Language="C">
+		 int proc_msg(char *s, int msg_len)<xhtml:br />
+		 {<xhtml:br />
+                  <xhtml:div>
+		    <xhtml:i>// Note space at the end of the string - assume all strings have preamble with space</xhtml:i><xhtml:br />
+		    int pre_len = sizeof("preamble: ");<xhtml:br />
+		    char buf[pre_len - msg_len];<xhtml:br />
+		    <xhtml:i>... Do processing here if we get this far</xhtml:i>
+		  </xhtml:div>
+		  }<xhtml:br />
+		  char *s = "preamble: message\n";<xhtml:br />
+		  char *sl = strchr(s, ':');        // Number of characters up to ':' (not including space)<xhtml:br />
+		  int jnklen = sl == NULL ? 0 : sl - s;    // If undefined pointer, use zero length<xhtml:br />
+		  int ret_val = proc_msg ("s",  jnklen);    // Violate assumption of preamble length, end up with negative value, blow out stack<xhtml:br />
+               </Example_Code>
+               <Body_Text>The buffer length ends up being -1, resulting in a blown out stack. The space character after the colon is included in the function calculation, but not in the caller's calculation. This, unfortunately, is not usually so obvious but exists in an obtuse series of calculations.</Body_Text>
+            </Demonstrative_Example>
+            <Demonstrative_Example>
+               <Intro_Text>The following code obtains an untrusted number that is used as an index into an array of messages.</Intro_Text>
+               <Example_Code Nature="Bad" Language="Perl">
+                  <xhtml:div>my $num = GetUntrustedNumber();<xhtml:br />my @messages = ();<xhtml:br />
+                     <xhtml:br />$messages[$num] = "Hello World";</xhtml:div>
+               </Example_Code>
+               <Body_Text>The index is not validated at all (CWE-129), so it might be possible for an attacker to modify an element in @messages that was not intended. If an index is used that is larger than the current size of the array, the Perl interpreter automatically expands the array so that the large index works.</Body_Text>
+               <Body_Text>If $num is a large value such as 2147483648 (1&lt;&lt;31), then the assignment to $messages[$num] would attempt to create a very large array, then eventually produce an error message such as:</Body_Text>
+               <Body_Text>Out of memory during array extend</Body_Text>
+               <Body_Text>This memory exhaustion will cause the Perl program to exit, possibly a denial of service. In addition, the lack of memory could also prevent many other programs from successfully running on the system.</Body_Text>
+            </Demonstrative_Example>
+        <Demonstrative_Example>
+          <Intro_Text>This example shows a typical attempt to parse a string with an error resulting from a difference in assumptions between the caller to a function and the function's action. The buffer length ends up being -1 resulting in a blown out stack. The space character after the colon is included  in the function calculation, but not in the caller's calculation. This, unfortunately, is not usually so obvious but exists in an obtuse series of calculations.</Intro_Text>
+          <Example_Code Nature="Bad" Language="C">
+int proc_msg(char *s, int msg_len)<xhtml:br />
+{<xhtml:br />
+<xhtml:div style="margin-left:1em;">int pre_len = sizeof("preamble: ");    // Note space at the end of the string - assume all strings have preamble with space</xhtml:div>
+<xhtml:div style="margin-left:1em;">char buf[pre_len - msg_len];</xhtml:div>
+<xhtml:div style="margin-left:1em;">... Do processing here and set status</xhtml:div>
+<xhtml:div style="margin-left:1em;">return status;</xhtml:div>
+}
+<xhtml:br />
+char *s = "preamble: message\n";<xhtml:br />
+char *sl = strchr(s, ':');        // Number of characters up to ':' (not including space)<xhtml:br />
+int jnklen = sl == NULL ? 0 : sl - s;    // If undefined pointer, use zero length<xhtml:br />
+int ret_val = proc_msg ("s",  jnklen);    // Violate assumption of preamble length, end up with negative value, blow out stack
+         </Example_Code>
+          <Example_Code Nature="Good" Language="C">
+int proc_msg(char *s, int msg_len)<xhtml:br />
+{<xhtml:br />
+<xhtml:div style="margin-left:1em;">int pre_len = sizeof("preamble: ");    // Note space at the end of the string - assume all strings have preamble with space</xhtml:div>
+<xhtml:div style="margin-left:1em;">if (pre_len &lt;= msg_len) { // Log error; return error_code; }</xhtml:div>
+<xhtml:div style="margin-left:1em;">char buf[pre_len - msg_len];</xhtml:div>
+<xhtml:div style="margin-left:1em;">... Do processing here and set status</xhtml:div>
+<xhtml:div style="margin-left:1em;">return status;</xhtml:div>
+}
+<xhtml:br />
+char *s = "preamble: message\n";<xhtml:br />
+char *sl = strchr(s, ':');        // Number of characters up to ':' (not including space)<xhtml:br />
+int jnklen = sl == NULL ? 0 : sl - s;    // If undefined pointer, use zero length<xhtml:br />
+int ret_val = proc_msg ("s",  jnklen);    // Violate assumption of preamble length, end up with negative value, blow out stack
+         </Example_Code>
+        </Demonstrative_Example>
+         </Demonstrative_Examples>
+         <Observed_Examples>
+            <Observed_Example>
+               <Reference>CVE-2023-2253</Reference>
+               <Description>Query capability for API endpoint allows a large value for number of records to return, leading to allocation of a large array</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2023-2253</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2019-19911</Reference>
+               <Description>Chain: Python library does not limit the resources used to process images that specify a very large number of bands (CWE-1284), leading to excessive memory consumption (CWE-789) or an integer overflow (CWE-190).</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2019-19911</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2010-3701</Reference>
+               <Description>program uses ::alloca() for encoding messages, but large messages trigger segfault</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2010-3701</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2008-1708</Reference>
+               <Description>memory consumption and daemon exit by specifying a large value in a length field</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2008-1708</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2008-0977</Reference>
+               <Description>large value in a length field leads to memory consumption and crash when no more memory is available</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2008-0977</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2006-3791</Reference>
+               <Description>large key size in game program triggers crash when a resizing function cannot allocate enough memory</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2006-3791</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2004-2589</Reference>
+               <Description>large Content-Length HTTP header value triggers application crash in instant messaging application due to failure in memory allocation</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2004-2589</Link>
+            </Observed_Example>
+         </Observed_Examples>
+         <Functional_Areas>
+            <Functional_Area>Memory Management</Functional_Area>
+         </Functional_Areas>
+         <Affected_Resources>
+            <Affected_Resource>Memory</Affected_Resource>
+         </Affected_Resources>
+         <Taxonomy_Mappings>
+            <Taxonomy_Mapping Taxonomy_Name="WASC">
+               <Entry_ID>35</Entry_ID>
+               <Entry_Name>SOAP Array Abuse</Entry_Name>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="CERT C Secure Coding">
+               <Entry_ID>MEM35-C</Entry_ID>
+               <Entry_Name>Allocate sufficient memory for an object</Entry_Name>
+               <Mapping_Fit>Imprecise</Mapping_Fit>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="SEI CERT Perl Coding Standard">
+               <Entry_ID>IDS32-PL</Entry_ID>
+               <Entry_Name>Validate any integer that is used as an array index</Entry_Name>
+               <Mapping_Fit>Imprecise</Mapping_Fit>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="OMG ASCSM">
+                <Entry_ID>ASCSM-CWE-789</Entry_ID>
+            </Taxonomy_Mapping>
+         </Taxonomy_Mappings>
+         <References>
+            <Reference External_Reference_ID="REF-62" Section="Chapter 10, &quot;Resource Limits&quot;, Page 574" />
+            <Reference External_Reference_ID="REF-962" Section="ASCSM-CWE-789" />
+	    <Reference External_Reference_ID="REF-1518" />
+         </References>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Variant level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+         <Notes>
+            <Note Type="Relationship">This weakness can be closely associated with integer overflows (CWE-190). Integer overflow attacks would concentrate on providing an extremely large number that triggers an overflow that causes less memory to be allocated than expected. By providing a large value that does not trigger an integer overflow, the attacker could still cause excessive amounts of memory to be allocated.</Note>
+            <Note Type="Applicable Platform">
+               <xhtml:p>Uncontrolled memory allocation is possible in many languages, such as dynamic array allocation in perl or initial size parameters in Collections in Java. However, languages like C and C++ where programmers have the power to more directly control memory management will be more susceptible.</xhtml:p>
+            </Note>
+         </Notes>
+         <Content_History>
+            <Submission>
+               <Submission_Name>CWE Content Team</Submission_Name>
+               <Submission_Organization>MITRE</Submission_Organization>
+               <Submission_Date>2009-10-21</Submission_Date>
+               <Submission_Version>1.6</Submission_Version>
+               <Submission_ReleaseDate>2009-10-29</Submission_ReleaseDate>
+            </Submission>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2010-02-16</Modification_Date>
+               <Modification_Version>1.8</Modification_Version>
+               <Modification_ReleaseDate>2010-02-16</Modification_ReleaseDate>
+               <Modification_Comment>updated Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-03-29</Modification_Date>
+               <Modification_Version>1.12</Modification_Version>
+               <Modification_ReleaseDate>2011-03-30</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences, Observed_Examples</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-06-01</Modification_Date>
+               <Modification_Version>1.13</Modification_Version>
+               <Modification_ReleaseDate>2011-06-01</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2012-05-11</Modification_Date>
+               <Modification_Version>2.2</Modification_Version>
+               <Modification_ReleaseDate>2012-05-15</Modification_ReleaseDate>
+               <Modification_Comment>updated References</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2017-11-08</Modification_Date>
+               <Modification_Version>3.0</Modification_Version>
+               <Modification_ReleaseDate>2017-11-08</Modification_ReleaseDate>
+               <Modification_Comment>updated Applicable_Platforms, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2019-01-03</Modification_Date>
+					<Modification_Version>3.2</Modification_Version>
+					<Modification_ReleaseDate>2019-01-03</Modification_ReleaseDate>
+					<Modification_Comment>updated References, Relationships, Taxonomy_Mappings</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2019-06-20</Modification_Date>
+					<Modification_Version>3.3</Modification_Version>
+					<Modification_ReleaseDate>2019-06-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-02-24</Modification_Date>
+					<Modification_Version>4.0</Modification_Version>
+					<Modification_ReleaseDate>2020-02-24</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-06-25</Modification_Date>
+					<Modification_Version>4.1</Modification_Version>
+					<Modification_ReleaseDate>2020-06-25</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-08-20</Modification_Date>
+					<Modification_Version>4.2</Modification_Version>
+					<Modification_ReleaseDate>2020-08-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-12-10</Modification_Date>
+					<Modification_Version>4.3</Modification_Version>
+					<Modification_ReleaseDate>2020-12-10</Modification_ReleaseDate>
+					<Modification_Comment>updated Alternate_Terms, Demonstrative_Examples, Description, Likelihood_of_Exploit, Name, Observed_Examples, Relationships, Time_of_Introduction</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-03-15</Modification_Date>
+					<Modification_Version>4.4</Modification_Version>
+					<Modification_ReleaseDate>2021-03-15</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-10-13</Modification_Date>
+					<Modification_Version>4.9</Modification_Version>
+					<Modification_ReleaseDate>2022-10-13</Modification_ReleaseDate>
+					<Modification_Comment>updated Observed_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Detection_Factors, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-09-09</Modification_Date>
+					<Modification_Version>4.18</Modification_Version>
+					<Modification_ReleaseDate>2025-09-09</Modification_ReleaseDate>
+					<Modification_Comment>updated Affected_Resources, Functional_Areas, Observed_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Detection_Factors, References</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2026-04-30</Modification_Date>
+					<Modification_Version>4.20</Modification_Version>
+					<Modification_ReleaseDate>2026-04-30</Modification_ReleaseDate>
+					<Modification_Comment>updated Observed_Examples</Modification_Comment>
+				</Modification>
+			<Previous_Entry_Name Date="2020-12-10">Uncontrolled Memory Allocation</Previous_Entry_Name>
+         </Content_History>
+      </Weakness>
+      

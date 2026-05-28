@@ -1,0 +1,220 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="537" Name="Java Runtime Error Message Containing Sensitive Information" Abstraction="Variant" Structure="Simple" Status="Incomplete">
+         <Description>In many cases, an attacker can leverage the conditions that cause unhandled exception errors in order to gain unauthorized access to the system.</Description>
+         <Related_Weaknesses>
+            <Related_Weakness Nature="ChildOf" CWE_ID="211" View_ID="1000" Ordinal="Primary" />
+         </Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Resultant</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+         <Applicable_Platforms>
+            <Language Name="Java" Prevalence="Undetermined" />
+         </Applicable_Platforms>
+         <Modes_Of_Introduction>
+            <Introduction>
+               <Phase>Implementation</Phase>
+            </Introduction>
+         </Modes_Of_Introduction>
+         <Common_Consequences>
+            <Consequence>
+               <Scope>Confidentiality</Scope>
+               <Impact>Read Application Data</Impact>
+            </Consequence>
+         </Common_Consequences>
+         <Potential_Mitigations>
+            <Mitigation>
+               <Phase>Implementation</Phase>
+               <Description>Do not expose sensitive error information to the user.</Description>
+            </Mitigation>
+         </Potential_Mitigations>
+         <Demonstrative_Examples>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-191">
+               <Intro_Text>In the following Java example the class InputFileRead enables an input file to be read using a FileReader object. In the constructor of this class a default input file path is set to some directory on the local file system and the method setInputFile must be called to set the name of the input file to be read in the default directory. The method readInputFile will create the FileReader object and will read the contents of the file. If the method setInputFile is not called prior to calling the method readInputFile then the File object will remain null when initializing the FileReader object. A Java RuntimeException will be raised, and an error message will be output to the user.</Intro_Text>
+               <Example_Code Nature="Bad" Language="Java">
+                  <xhtml:div>public class InputFileRead {<xhtml:br />
+                     <xhtml:div style="margin-left:1em;">
+                        <xhtml:div>private File readFile = null;<xhtml:br />private FileReader reader = null;<xhtml:br />private String inputFilePath = null;<xhtml:br />private final String DEFAULT_FILE_PATH = "c:\\somedirectory\\";<xhtml:br />
+                           <xhtml:br />public InputFileRead() {<xhtml:div style="margin-left:1em;">inputFilePath = DEFAULT_FILE_PATH;</xhtml:div>}<xhtml:br />
+                           <xhtml:br />public void setInputFile(String inputFile) {<xhtml:div style="margin-left:1em;">
+                              <xhtml:div>
+                                 <xhtml:br />
+                                 <xhtml:i>/* Assume appropriate validation / encoding is used and privileges / permissions are preserved */</xhtml:i>
+                                 <xhtml:br />
+                              </xhtml:div>
+                           </xhtml:div>}<xhtml:br />
+                           <xhtml:br />public void readInputFile() {<xhtml:div style="margin-left:1em;">
+                              <xhtml:div>try {<xhtml:div style="margin-left:1em;">reader = new FileReader(readFile);<xhtml:br />...</xhtml:div>} catch (RuntimeException rex) {<xhtml:div style="margin-left:1em;">System.err.println("Error: Cannot open input file in the directory " + inputFilePath);<xhtml:br />System.err.println("Input file has not been set, call setInputFile method before calling readInputFile");</xhtml:div>
+                                 <xhtml:br />
+                                 <xhtml:br />} catch (FileNotFoundException ex) {...}<xhtml:br />
+                              </xhtml:div>
+                           </xhtml:div>}</xhtml:div>
+                     </xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>However, the error message output to the user contains information regarding the default directory on the local file system. This information can be exploited and may lead to unauthorized access or use of the system. Any Java RuntimeExceptions that are handled should not expose sensitive information to the user.</Body_Text>
+            </Demonstrative_Example>
+            <Demonstrative_Example>
+               <Intro_Text>In the example below, the BankManagerLoginServlet servlet class will process a login request to determine if a user is authorized to use the BankManager Web service. The doPost method will retrieve the username and password from the servlet request and will determine if the user is authorized. If the user is authorized the servlet will go to the successful login page. Otherwise, the servlet will raise a FailedLoginException and output the failed login message to the error page of the service.</Intro_Text>
+               <Example_Code Nature="Bad" Language="Java">
+                  <xhtml:div>public class BankManagerLoginServlet extends HttpServlet {<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>protected void doPost(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {<xhtml:div style="margin-left:1em;">
+                              <xhtml:div>try {<xhtml:div style="margin-left:1em;">
+                                    <xhtml:div>
+                                       <xhtml:br />
+                                       <xhtml:i>// Get username and password from login page request</xhtml:i>
+                                       <xhtml:br />String username = request.getParameter("username");<xhtml:br />String password = request.getParameter("password");<xhtml:br />
+                                       <xhtml:i>// Authenticate user</xhtml:i>
+                                       <xhtml:br />BankManager bankMgr = new BankManager();<xhtml:br />boolean isAuthentic = bankMgr.authenticateUser(username, password);<xhtml:br />
+                                       <xhtml:i>// If user is authenticated then go to successful login page</xhtml:i>
+                                       <xhtml:br />if (isAuthentic) {<xhtml:div style="margin-left:1em;">request.setAttribute("login", new String("Login Successful."));<xhtml:br />getServletContext().getRequestDispatcher("/BankManagerServiceLoggedIn.jsp"). forward(request, response);</xhtml:div>}<xhtml:br />else {<xhtml:div style="margin-left:1em;">
+                                          <xhtml:div>
+                                             <xhtml:br />
+                                             <xhtml:i>// Otherwise, raise failed login exception and output unsuccessful login message to error page</xhtml:i>
+                                             <xhtml:br />throw new FailedLoginException("Failed Login for user " + username + " with password " + password);</xhtml:div>
+                                       </xhtml:div>}</xhtml:div>
+                                 </xhtml:div>} catch (FailedLoginException ex) {<xhtml:div style="margin-left:1em;">
+                                    <xhtml:div>
+                                       <xhtml:br />
+                                       <xhtml:i>// output failed login message to error page</xhtml:i>
+                                       <xhtml:br />request.setAttribute("error", new String("Login Error"));<xhtml:br />request.setAttribute("message", ex.getMessage());<xhtml:br />getServletContext().getRequestDispatcher("/ErrorPage.jsp").forward(request, response);</xhtml:div>
+                                 </xhtml:div>}</xhtml:div>
+                           </xhtml:div>}</xhtml:div>
+                     </xhtml:div>
+                  </xhtml:div>
+               </Example_Code>
+               <Body_Text>However, the output message generated by the FailedLoginException includes the user-supplied password. Even if the password is erroneous, it is probably close to the correct password. Since it is printed to the user's page, anybody who can see the screen display will be able to see the password. Also, if the page is cached, the password might be written to disk.</Body_Text>
+            </Demonstrative_Example>
+         </Demonstrative_Examples>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Variant level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+         <Content_History>
+            <Submission>
+               <Submission_Name>Anonymous Tool Vendor (under NDA)</Submission_Name>
+               <Submission_Date>2006-07-19</Submission_Date>
+               <Submission_Version>Draft 3</Submission_Version>
+               <Submission_ReleaseDate>2006-07-19</Submission_ReleaseDate>
+            </Submission>
+            <Modification>
+               <Modification_Name>Eric Dalci</Modification_Name>
+               <Modification_Organization>Cigital</Modification_Organization>
+               <Modification_Date>2008-07-01</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>updated Potential_Mitigations, Time_of_Introduction</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2008-09-08</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2010-02-16</Modification_Date>
+               <Modification_Version>1.8</Modification_Version>
+               <Modification_ReleaseDate>2010-02-16</Modification_ReleaseDate>
+               <Modification_Comment>updated Demonstrative_Examples, Potential_Mitigations</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-03-29</Modification_Date>
+               <Modification_Version>1.12</Modification_Version>
+               <Modification_ReleaseDate>2011-03-30</Modification_ReleaseDate>
+               <Modification_Comment>updated Demonstrative_Examples, Name</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-06-01</Modification_Date>
+               <Modification_Version>1.13</Modification_Version>
+               <Modification_ReleaseDate>2011-06-01</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2012-05-11</Modification_Date>
+               <Modification_Version>2.2</Modification_Version>
+               <Modification_ReleaseDate>2012-05-15</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2014-07-30</Modification_Date>
+               <Modification_Version>2.8</Modification_Version>
+               <Modification_ReleaseDate>2014-07-31</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2017-11-08</Modification_Date>
+               <Modification_Version>3.0</Modification_Version>
+               <Modification_ReleaseDate>2017-11-08</Modification_ReleaseDate>
+               <Modification_Comment>updated Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-02-24</Modification_Date>
+					<Modification_Version>4.0</Modification_Version>
+					<Modification_ReleaseDate>2020-02-24</Modification_ReleaseDate>
+					<Modification_Comment>updated Name, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-10-28</Modification_Date>
+					<Modification_Version>4.6</Modification_Version>
+					<Modification_ReleaseDate>2021-10-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2024-02-29</Modification_Date>
+					<Modification_Version>4.14</Modification_Version>
+					<Modification_ReleaseDate>2024-02-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+            <Previous_Entry_Name Date="2011-03-29">Information Leak Through Java Runtime Error Message</Previous_Entry_Name>
+			<Previous_Entry_Name Date="2020-02-24">Information Exposure Through Java Runtime Error Message</Previous_Entry_Name>
+         </Content_History>
+      </Weakness>
+      

@@ -1,0 +1,184 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" ID="1393" Name="Use of Default Password" Abstraction="Base" Structure="Simple" Status="Incomplete">
+      <Description>The product uses default passwords for potentially critical functionality.</Description>
+      <Extended_Description>
+	It is common practice for products to be designed to use
+	default passwords for authentication.  The rationale is to
+	simplify the manufacturing process or the system
+	administrator's task of installation and deployment into an
+	enterprise. However, if admins do not change the defaults,
+	then it makes it easier for attackers to quickly bypass
+	authentication across multiple organizations. There are many
+	lists of default passwords and default-password scanning tools
+	that are easily available from the World Wide Web.
+      </Extended_Description>
+      <Related_Weaknesses>
+	<Related_Weakness Nature="ChildOf" CWE_ID="1392" View_ID="1000" Ordinal="Primary" />
+      </Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+      <Applicable_Platforms>
+		<Language Class="Not Language-Specific" Prevalence="Undetermined" />
+		<Operating_System Class="Not OS-Specific" Prevalence="Undetermined" />
+		<Architecture Class="Not Architecture-Specific" Prevalence="Undetermined" />
+		<Technology Class="Not Technology-Specific" Prevalence="Undetermined" />
+		<Technology Class="ICS/OT" Prevalence="Undetermined" />
+      </Applicable_Platforms>
+      <Modes_Of_Introduction>
+	<Introduction>
+	  <Phase>Architecture and Design</Phase>
+	</Introduction>
+      </Modes_Of_Introduction>
+      <Common_Consequences>
+	<Consequence>
+	  <Scope>Authentication</Scope>
+	  <Impact>Gain Privileges or Assume Identity</Impact>
+	</Consequence>
+      </Common_Consequences>
+      <Potential_Mitigations>
+	<Mitigation>
+	  <Phase>Requirements</Phase>
+	  <Description>Prohibit use of default, hard-coded, or other values that do not vary for each installation of the product - especially for separate organizations.</Description>
+	  <Effectiveness>High</Effectiveness>
+	</Mitigation>
+	<Mitigation>
+	  <Phase>Documentation</Phase>
+	  <Description>Ensure that product documentation clearly emphasizes the presence of default passwords and provides steps for the administrator to change them.</Description>
+	  <Effectiveness>Limited</Effectiveness>
+	</Mitigation>
+	<Mitigation>
+	  <Phase>Architecture and Design</Phase>
+	  <Description>Force the administrator to change the credential upon installation.</Description>
+	  <Effectiveness>High</Effectiveness>
+	</Mitigation>
+	<Mitigation>
+	  <Phase>Installation</Phase>
+	  <Phase>Operation</Phase>
+	  <Description>The product administrator could change the defaults upon installation or during operation.</Description>
+	  <Effectiveness>Moderate</Effectiveness>
+	</Mitigation>
+      </Potential_Mitigations>
+	<Demonstrative_Examples>
+        <Demonstrative_Example Demonstrative_Example_ID="DX-153">
+          <Intro_Text>In 2022, the OT:ICEFALL study examined products by 10 different Operational Technology (OT) vendors. The researchers reported 56 vulnerabilities and said that the products were "insecure by design" [REF-1283]. If exploited, these vulnerabilities often allowed adversaries to change how the products operated, ranging from denial of service to changing the code that the products executed. Since these products were often used in industries such as power, electrical, water, and others, there could even be safety implications.</Intro_Text>
+          <Body_Text>Multiple OT products used default credentials.</Body_Text>
+        </Demonstrative_Example>
+    </Demonstrative_Examples>
+      <Observed_Examples>
+	<Observed_Example>
+	  <Reference>CVE-2022-30270</Reference>
+	  <Description>Remote Terminal Unit (RTU) uses default credentials for some SSH accounts</Description>
+	  <Link>https://www.cve.org/CVERecord?id=CVE-2022-30270</Link>
+	</Observed_Example>
+	<Observed_Example>
+	  <Reference>CVE-2022-2336</Reference>
+	  <Description>OPC Unified Architecture (OPC UA) industrial automation product has a default password</Description>
+	  <Link>https://www.cve.org/CVERecord?id=CVE-2022-2336</Link>
+	</Observed_Example>
+	<Observed_Example>
+	  <Reference>CVE-2021-38759</Reference>
+	  <Description>microcontroller board has default password, allowing admin access</Description>
+	  <Link>https://www.cve.org/CVERecord?id=CVE-2021-38759</Link>
+	</Observed_Example>
+	<Observed_Example>
+	  <Reference>CVE-2021-44480</Reference>
+	  <Description>children's smart watch has default passwords allowing attackers to send SMS commands and listen to the device's surroundings</Description>
+	  <Link>https://www.cve.org/CVERecord?id=CVE-2021-44480</Link>
+	</Observed_Example>
+	<Observed_Example>
+	  <Reference>CVE-2020-11624</Reference>
+	  <Description>surveillance camera has default password for the admin account</Description>
+	  <Link>https://www.cve.org/CVERecord?id=CVE-2020-11624</Link>
+	</Observed_Example>
+	<Observed_Example>
+	  <Reference>CVE-2018-15719</Reference>
+	  <Description>medical dental records product installs a MySQL database with a blank default password</Description>
+	  <Link>https://www.cve.org/CVERecord?id=CVE-2018-15719</Link>
+	</Observed_Example>
+	<Observed_Example>
+	  <Reference>CVE-2014-9736</Reference>
+	  <Description>healthcare system for archiving patient images has default passwords for key management and storage databases</Description>
+	  <Link>https://www.cve.org/CVERecord?id=CVE-2014-9736</Link>
+	</Observed_Example>
+	<Observed_Example>
+	  <Reference>CVE-2000-1209</Reference>
+	  <Description>database product installs admin account with default null password, allowing privileges, as exploited by various worms </Description>
+	  <Link>https://www.cve.org/CVERecord?id=CVE-2000-1209</Link>
+	</Observed_Example>
+      </Observed_Examples>
+      <References>
+	<Reference External_Reference_ID="REF-1283" />
+	<Reference External_Reference_ID="REF-1303" />
+        <Reference External_Reference_ID="REF-1446" />
+	<Reference External_Reference_ID="REF-1493" />
+      </References>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Base level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+      <Content_History>
+	<Submission>
+	  <Submission_Name>CWE Content Team</Submission_Name>
+	  <Submission_Organization>MITRE</Submission_Organization>
+	  <Submission_Date>2022-10-07</Submission_Date>
+	  <Submission_Version>4.9</Submission_Version>
+	  <Submission_ReleaseDate>2022-10-13</Submission_ReleaseDate>
+	</Submission>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-01-31</Modification_Date>
+					<Modification_Version>4.10</Modification_Version>
+					<Modification_ReleaseDate>2023-01-31</Modification_ReleaseDate>
+					<Modification_Comment>updated Applicable_Platforms, Demonstrative_Examples, Observed_Examples, References, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2024-07-16</Modification_Date>
+					<Modification_Version>4.15</Modification_Version>
+					<Modification_ReleaseDate>2024-07-16</Modification_ReleaseDate>
+					<Modification_Comment>updated References</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-09-09</Modification_Date>
+					<Modification_Version>4.18</Modification_Version>
+					<Modification_ReleaseDate>2025-09-09</Modification_ReleaseDate>
+					<Modification_Comment>updated References</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Observed_Examples, References, Relationships, Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+      </Content_History>
+    </Weakness>
+      

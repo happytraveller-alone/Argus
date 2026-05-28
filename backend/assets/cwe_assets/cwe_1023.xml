@@ -1,0 +1,175 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="1023" Name="Incomplete Comparison with Missing Factors" Abstraction="Class" Structure="Simple" Status="Incomplete">
+         <Description>The product performs a comparison between entities that must consider multiple factors or characteristics of each entity, but the comparison does not include one or more of these factors.</Description>
+         <Related_Weaknesses>
+            <Related_Weakness Nature="ChildOf" CWE_ID="697" View_ID="1000" Ordinal="Primary" />
+         </Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+         <Applicable_Platforms>
+            <Language Class="Not Language-Specific" Prevalence="Undetermined" />
+	    <Technology Class="Not Technology-Specific" Prevalence="Undetermined" />
+         </Applicable_Platforms>
+         <Modes_Of_Introduction>
+            <Introduction>
+               <Phase>Implementation</Phase>
+            </Introduction>
+         </Modes_Of_Introduction>
+         <Common_Consequences>
+            <Consequence>
+               <Scope>Integrity</Scope>
+               <Scope>Access Control</Scope>
+               <Impact>Alter Execution Logic</Impact>
+               <Impact>Bypass Protection Mechanism</Impact>
+	       <Note>An incomplete comparison can lead to resultant weaknesses, e.g., by operating on the wrong object or making a security decision without considering a required factor.</Note>
+            </Consequence>
+         </Common_Consequences>
+         <Detection_Methods>
+           <Detection_Method>
+			 <Method>Manual Static Analysis</Method>
+			 <Description>Thoroughly test the comparison scheme before deploying code into production. Perform positive testing as well as negative testing.</Description>
+		   </Detection_Method>
+		 </Detection_Methods>
+         <Demonstrative_Examples>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-115">
+               <Intro_Text>Consider an application in which Truck objects are defined to be the same if they have the same make, the same model, and were manufactured in the same year.</Intro_Text>
+               <Example_Code Nature="Bad" Language="Java">
+                  <xhtml:div>public class Truck {<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>private String make;<xhtml:br />private String model;<xhtml:br />private int year;<xhtml:br />
+                           <xhtml:br />public boolean equals(Object o) {<xhtml:div style="margin-left:1em;">
+                              <xhtml:div>if (o == null) return false;<xhtml:br />if (o == this) return true;<xhtml:br />if (!(o instanceof Truck)) return false;<xhtml:br />
+                                 <xhtml:br />Truck t = (Truck) o;<xhtml:br />
+                                 <xhtml:br />return (this.make.equals(t.getMake()) &amp;&amp; this.model.equals(t.getModel()));</xhtml:div>
+                           </xhtml:div>}</xhtml:div>
+                     </xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>Here, the equals() method only checks the make and model of the Truck objects, but the year of manufacture is not included.</Body_Text>
+            </Demonstrative_Example>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-116">
+               <Intro_Text>This example defines a fixed username and password. The AuthenticateUser() function is intended to accept a username and a password from an untrusted user, and check to ensure that it matches the username and password. If the username and password match, AuthenticateUser() is intended to indicate that authentication succeeded.</Intro_Text>
+               <Example_Code Nature="Bad" Language="C">
+                  <xhtml:div>
+                     <xhtml:i>/* Ignore CWE-259 (hard-coded password) and CWE-309 (use of password system for authentication) for this example. */</xhtml:i>
+                     <xhtml:br />
+                     <xhtml:br />char *username = "admin";<xhtml:br />char *pass = "password";<xhtml:br />
+                     <xhtml:br />int AuthenticateUser(char *inUser, char *inPass) {<xhtml:div style="margin-left:1em;">if (strncmp(username, inUser, strlen(inUser))) {<xhtml:div style="margin-left:1em;">logEvent("Auth failure of username using strlen of inUser");<xhtml:br />return(AUTH_FAIL);</xhtml:div>}<xhtml:br />if (! strncmp(pass, inPass, strlen(inPass))) {<xhtml:div style="margin-left:1em;">logEvent("Auth success of password using strlen of inUser");<xhtml:br />return(AUTH_SUCCESS);</xhtml:div>}<xhtml:br />else {<xhtml:div style="margin-left:1em;">logEvent("Auth fail of password using sizeof");<xhtml:br />return(AUTH_FAIL);</xhtml:div>}</xhtml:div>}<xhtml:br />
+                     <xhtml:br />int main (int argc, char **argv) {<xhtml:div style="margin-left:1em;">
+					 int authResult;<xhtml:br /><xhtml:br />if (argc &lt; 3) {<xhtml:div style="margin-left:1em;">ExitError("Usage: Provide a username and password");</xhtml:div>}<xhtml:br />authResult = AuthenticateUser(argv[1], argv[2]);<xhtml:br />if (authResult == AUTH_SUCCESS) {<xhtml:div style="margin-left:1em;">DoAuthenticatedTask(argv[1]);</xhtml:div>}<xhtml:br />else {<xhtml:div style="margin-left:1em;">ExitError("Authentication failed");</xhtml:div>}</xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>In AuthenticateUser(), the strncmp() call uses the string length of an attacker-provided inPass parameter in order to determine how many characters to check in the password. So, if the attacker only provides a password of length 1, the check will only examine the first byte of the application's password before determining success.</Body_Text>
+               <Body_Text>As a result, this partial comparison leads to improper authentication (CWE-287).</Body_Text>
+               <Body_Text>Any of these passwords would still cause authentication to succeed for the "admin" user:</Body_Text>
+               <Example_Code Nature="Attack">
+                  <xhtml:div>p<xhtml:br />pa<xhtml:br />pas<xhtml:br />pass</xhtml:div>
+               </Example_Code>
+               <Body_Text>This significantly reduces the search space for an attacker, making brute force attacks more feasible.</Body_Text>
+               <Body_Text>The same problem also applies to the username, so values such as "a" and "adm" will succeed for the username.</Body_Text>
+               <Body_Text>While this demonstrative example may not seem realistic, see the Observed Examples for CVE entries that effectively reflect this same weakness.</Body_Text>
+            </Demonstrative_Example>
+         </Demonstrative_Examples>
+         <Observed_Examples>
+            <Observed_Example>
+               <Reference>CVE-2005-2782</Reference>
+               <Description>PHP remote file inclusion in web application that filters "http" and "https" URLs, but not "ftp".</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2005-2782</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2014-6394</Reference>
+               <Description>Product does not prevent access to restricted directories due to partial string comparison with a public directory</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2014-6394</Link>
+            </Observed_Example>
+         </Observed_Examples>
+         <Mapping_Notes>
+            <Usage>Allowed-with-Review</Usage>
+            <Rationale>This CWE entry is a Class and might have Base-level children that would be more appropriate</Rationale>
+            <Comments>Examine children of this entry to see if there is a better fit</Comments>
+            <Reasons>
+               <Reason Type="Abstraction" />
+            </Reasons>
+         </Mapping_Notes>
+         <Content_History>
+            <Submission>
+               <Submission_Name>CWE Content Team</Submission_Name>
+               <Submission_Organization>MITRE</Submission_Organization>
+               <Submission_Date>2018-01-04</Submission_Date>
+               <Submission_Version>3.1</Submission_Version>
+               <Submission_ReleaseDate>2018-03-29</Submission_ReleaseDate>
+            </Submission>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2019-01-03</Modification_Date>
+					<Modification_Version>3.2</Modification_Version>
+					<Modification_ReleaseDate>2019-01-03</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-02-24</Modification_Date>
+					<Modification_Version>4.0</Modification_Version>
+					<Modification_ReleaseDate>2020-02-24</Modification_ReleaseDate>
+					<Modification_Comment>updated Description, Relationships, Type</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-03-15</Modification_Date>
+					<Modification_Version>4.4</Modification_Version>
+					<Modification_ReleaseDate>2021-03-15</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-01-31</Modification_Date>
+					<Modification_Version>4.10</Modification_Version>
+					<Modification_ReleaseDate>2023-01-31</Modification_ReleaseDate>
+					<Modification_Comment>updated Description</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-10-26</Modification_Date>
+					<Modification_Version>4.13</Modification_Version>
+					<Modification_ReleaseDate>2023-10-26</Modification_ReleaseDate>
+					<Modification_Comment>updated Observed_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Applicable_Platforms, Common_Consequences, Description</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2026-04-30</Modification_Date>
+					<Modification_Version>4.20</Modification_Version>
+					<Modification_ReleaseDate>2026-04-30</Modification_ReleaseDate>
+					<Modification_Comment>updated Detection_Factors, Potential_Mitigations</Modification_Comment>
+				</Modification>
+         </Content_History>
+      </Weakness>
+      

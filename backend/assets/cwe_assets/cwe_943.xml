@@ -1,0 +1,268 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="943" Name="Improper Neutralization of Special Elements in Data Query Logic" Abstraction="Class" Structure="Simple" Status="Incomplete">
+         <Description>The product generates a query intended to access or manipulate data in a data store such as a database, but it does not neutralize or incorrectly neutralizes special elements that can modify the intended logic of the query.</Description>
+         <Extended_Description>
+            <xhtml:p>Depending on the capabilities of the query language, an attacker could inject additional logic into the query to:</xhtml:p>
+               <xhtml:ul>
+                  <xhtml:li>Modify the intended selection criteria, thus changing which data entities (e.g., records) are returned, modified, or otherwise manipulated</xhtml:li>
+                  <xhtml:li>Append additional commands to the query</xhtml:li>
+                  <xhtml:li>Return more entities than intended</xhtml:li>
+                  <xhtml:li>Return fewer entities than intended</xhtml:li>
+                  <xhtml:li>Cause entities to be sorted in an unexpected way</xhtml:li>
+               </xhtml:ul>
+            <xhtml:p>The ability to execute additional commands or change which entities are returned has obvious risks. But when the product logic depends on the order or number of entities, this can also lead to vulnerabilities. For example, if the query expects to return only one entity that specifies an administrative user, but an attacker can change which entities are returned, this could cause the logic to return information for a regular user and incorrectly assume that the user has administrative privileges.</xhtml:p>
+            <xhtml:p>While this weakness is most commonly associated with SQL injection, there are many other query languages that are also subject to injection attacks, including HTSQL, LDAP, DQL, XQuery, Xpath, and "NoSQL" languages.</xhtml:p>
+         </Extended_Description>
+         <Related_Weaknesses>
+            <Related_Weakness Nature="ChildOf" CWE_ID="74" View_ID="1000" Ordinal="Primary" />
+         </Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+         <Applicable_Platforms>
+            <Language Class="Not Language-Specific" Prevalence="Undetermined" />
+         </Applicable_Platforms>
+         <Alternate_Terms>
+            <Alternate_Term>
+               <Term>NoSQL Injection, NoSQLi</Term>
+               <Description>Injection of data query language into NoSQL databases such as Cassandra, ElasticSearch, MongoDB, Redis, and others</Description>
+            </Alternate_Term>
+         </Alternate_Terms>
+         <Modes_Of_Introduction>
+            <Introduction>
+               <Phase>Implementation</Phase>
+               <Note>REALIZATION: This weakness is caused during implementation of an architectural security tactic.</Note>
+            </Introduction>
+         </Modes_Of_Introduction>
+         <Common_Consequences>
+            <Consequence>
+               <Scope>Confidentiality</Scope>
+               <Scope>Integrity</Scope>
+               <Scope>Availability</Scope>
+               <Scope>Access Control</Scope>
+               <Impact>Bypass Protection Mechanism</Impact>
+               <Impact>Read Application Data</Impact>
+               <Impact>Modify Application Data</Impact>
+               <Impact>Varies by Context</Impact>
+            </Consequence>
+         </Common_Consequences>
+         <Detection_Methods>
+           <Detection_Method Detection_Method_ID="DM-14">
+             <Method>Automated Static Analysis</Method>
+             <Description>Automated static analysis, commonly referred to as Static Application Security Testing (SAST), can find some instances of this weakness by analyzing source code (or binary/compiled code) without having to execute it. Typically, this is done by building a model of data flow and control flow, then searching for potentially-vulnerable patterns that connect "sources" (origins of input) with "sinks" (destinations where the data interacts with external components, a lower layer such as the OS, etc.)</Description>
+             <Effectiveness>High</Effectiveness>
+           </Detection_Method>
+         </Detection_Methods>
+         <Demonstrative_Examples>
+           <Demonstrative_Example Demonstrative_Example_ID="DX-209">
+             <Intro_Text>The following code dynamically constructs and executes a SQL query that searches for items matching a specified name. The query restricts the items displayed to those where owner matches the user name of the currently-authenticated user.</Intro_Text>
+             <Example_Code Nature="Bad" Language="C#">
+               <xhtml:div>...<xhtml:br />string userName = ctx.getAuthenticatedUserName();<xhtml:br />string query = "SELECT * FROM items WHERE owner = '" + userName + "' AND itemname = '" + ItemName.Text + "'";<xhtml:br />sda = new SqlDataAdapter(query, conn);<xhtml:br />DataTable dt = new DataTable();<xhtml:br />sda.Fill(dt);<xhtml:br />...</xhtml:div>
+             </Example_Code>
+             <Body_Text>The query that this code intends to execute follows:</Body_Text>
+             <Example_Code Nature="Informative">
+               <xhtml:div>SELECT * FROM items WHERE owner = &lt;userName&gt; AND itemname = &lt;itemName&gt;;</xhtml:div>
+             </Example_Code>
+             <Body_Text>However, because the query is constructed dynamically by concatenating a constant base query string and a user input string, the query only behaves correctly if itemName does not contain a single-quote character. If an attacker with the user name wiley enters the string:</Body_Text>
+             <Example_Code Nature="Attack">
+               <xhtml:div>name' OR 'a'='a</xhtml:div>
+             </Example_Code>
+             <Body_Text>for itemName, then the query becomes the following:</Body_Text>
+             <Example_Code Nature="Attack">
+               <xhtml:div>SELECT * FROM items WHERE owner = 'wiley' AND itemname = 'name' OR 'a'='a';</xhtml:div>
+             </Example_Code>
+             <Body_Text>The addition of the:</Body_Text>
+             <Example_Code Nature="Attack">
+               <xhtml:div>OR 'a'='a</xhtml:div>
+             </Example_Code>
+             <Body_Text>condition causes the WHERE clause to always evaluate to true, so the query becomes logically equivalent to the much simpler query:</Body_Text>
+             <Example_Code Nature="Attack">
+               <xhtml:div>SELECT * FROM items;</xhtml:div>
+             </Example_Code>
+             <Body_Text>This simplification of the query allows the attacker to bypass the requirement that the query only return items owned by the authenticated user; the query now returns all entries stored in the items table, regardless of their specified owner.</Body_Text>
+           </Demonstrative_Example>
+           <Demonstrative_Example Demonstrative_Example_ID="DX-210">
+             <Intro_Text>The code below constructs an LDAP query using user input address data:</Intro_Text>
+             <Example_Code Nature="Bad" Language="Java">
+               <xhtml:div>context = new InitialDirContext(env);<xhtml:br />String searchFilter = "StreetAddress=" + address;<xhtml:br />NamingEnumeration answer = context.search(searchBase, searchFilter, searchCtls);</xhtml:div>
+             </Example_Code>
+             <Body_Text>Because the code fails to neutralize the address string used to construct the query, an attacker can supply an address that includes additional LDAP queries.</Body_Text>
+           </Demonstrative_Example>
+           <Demonstrative_Example Demonstrative_Example_ID="DX-211">
+             <Intro_Text>Consider the following simple XML document that stores authentication information and a snippet of Java code that uses XPath query to retrieve authentication information:</Intro_Text>
+             <Example_Code Nature="Informative" Language="XML">
+               <xhtml:div>&lt;users&gt;<xhtml:div style="margin-left:1em;">&lt;user&gt;<xhtml:div style="margin-left:1em;">&lt;login&gt;john&lt;/login&gt;<xhtml:br />&lt;password&gt;abracadabra&lt;/password&gt;<xhtml:br />&lt;home_dir&gt;/home/john&lt;/home_dir&gt;</xhtml:div>&lt;/user&gt;<xhtml:br />&lt;user&gt;<xhtml:div style="margin-left:1em;">&lt;login&gt;cbc&lt;/login&gt;<xhtml:br />&lt;password&gt;1mgr8&lt;/password&gt;<xhtml:br />&lt;home_dir&gt;/home/cbc&lt;/home_dir&gt;</xhtml:div>&lt;/user&gt;</xhtml:div>&lt;/users&gt;</xhtml:div>
+             </Example_Code>
+             <Body_Text>The Java code used to retrieve the home directory based on the provided credentials is:</Body_Text>
+             <Example_Code Nature="Bad" Language="Java">
+               <xhtml:div>XPath xpath = XPathFactory.newInstance().newXPath();<xhtml:br />XPathExpression xlogin = xpath.compile("//users/user[login/text()='" + login.getUserName() + "' and password/text() = '" + login.getPassword() + "']/home_dir/text()");<xhtml:br />Document d = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(new File("db.xml"));<xhtml:br />String homedir = xlogin.evaluate(d);</xhtml:div>
+             </Example_Code>
+             <Body_Text>Assume that user "john" wishes to leverage XPath Injection and login without a valid password. By providing a username "john" and password "' or ''='" the XPath expression now becomes</Body_Text>
+             <Example_Code Nature="Attack">
+               <xhtml:div>//users/user[login/text()='john' or ''='' and password/text() = '' or ''='']/home_dir/text()</xhtml:div>
+             </Example_Code>
+             <Body_Text>This lets user "john" login without a valid password, thus bypassing authentication.</Body_Text>
+           </Demonstrative_Example>
+         </Demonstrative_Examples>
+         <Observed_Examples>
+            <Observed_Example>
+               <Reference>CVE-2024-50672</Reference>
+               <Description>NoSQL injection in product for building eLearning courses allows password resets using a query processed by the Mongoose find function</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2024-50672</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2021-20736</Reference>
+               <Description>NoSQL injection in team collaboration product</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2021-20736</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2020-35666</Reference>
+               <Description>NoSQL injection in a PaaS platform using a MongoDB operator</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2020-35666</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2014-2503</Reference>
+               <Description>Injection using Documentum Query Language (DQL)</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2014-2503</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2014-2508</Reference>
+               <Description>Injection using Documentum Query Language (DQL)</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2014-2508</Link>
+            </Observed_Example>
+         </Observed_Examples>
+         <Related_Attack_Patterns>
+            <Related_Attack_Pattern CAPEC_ID="676" />
+         </Related_Attack_Patterns>
+         <References>
+            <Reference External_Reference_ID="REF-1454" />
+            <Reference External_Reference_ID="REF-1455" />
+         </References>
+         <Mapping_Notes>
+            <Usage>Allowed-with-Review</Usage>
+            <Rationale>This CWE entry is a Class and might have Base-level children that would be more appropriate</Rationale>
+            <Comments>Examine children of this entry to see if there is a better fit</Comments>
+            <Reasons>
+               <Reason Type="Abstraction" />
+            </Reasons>
+         </Mapping_Notes>
+         <Notes>
+            <Note Type="Relationship">It could be argued that data query languages are effectively a command language - albeit with a limited set of commands - and thus any query-language injection issue could be treated as a child of CWE-74. However, CWE-943 is intended to better organize query-oriented issues to separate them from fully-functioning programming languages, and also to provide a more precise identifier for the many query languages that do not have their own CWE identifier.</Note>
+         </Notes>
+         <Content_History>
+            <Submission>
+               <Submission_Name>CWE Content Team</Submission_Name>
+               <Submission_Organization>MITRE</Submission_Organization>
+               <Submission_Date>2014-06-19</Submission_Date>
+               <Submission_Version>2.7</Submission_Version>
+               <Submission_ReleaseDate>2014-06-23</Submission_ReleaseDate>
+            </Submission>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2015-12-07</Modification_Date>
+               <Modification_Version>2.9</Modification_Version>
+               <Modification_ReleaseDate>2015-12-07</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2017-11-08</Modification_Date>
+               <Modification_Version>3.0</Modification_Version>
+               <Modification_ReleaseDate>2017-11-08</Modification_ReleaseDate>
+               <Modification_Comment>updated Modes_of_Introduction, Observed_Examples, Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2018-03-27</Modification_Date>
+               <Modification_Version>3.1</Modification_Version>
+               <Modification_ReleaseDate>2018-03-27</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships</Modification_Comment>
+            </Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2019-06-20</Modification_Date>
+					<Modification_Version>3.3</Modification_Version>
+					<Modification_ReleaseDate>2019-06-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-02-24</Modification_Date>
+					<Modification_Version>4.0</Modification_Version>
+					<Modification_ReleaseDate>2020-02-24</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-03-15</Modification_Date>
+					<Modification_Version>4.4</Modification_Version>
+					<Modification_ReleaseDate>2021-03-15</Modification_ReleaseDate>
+					<Modification_Comment>updated Maintenance_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-04-28</Modification_Date>
+					<Modification_Version>4.7</Modification_Version>
+					<Modification_ReleaseDate>2022-04-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Related_Attack_Patterns</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-01-31</Modification_Date>
+					<Modification_Version>4.10</Modification_Version>
+					<Modification_ReleaseDate>2023-01-31</Modification_ReleaseDate>
+					<Modification_Comment>updated Description</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Detection_Factors, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2024-02-29</Modification_Date>
+					<Modification_Version>4.14</Modification_Version>
+					<Modification_ReleaseDate>2024-02-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-04-03</Modification_Date>
+					<Modification_Version>4.17</Modification_Version>
+					<Modification_ReleaseDate>2025-04-03</Modification_ReleaseDate>
+					<Modification_Comment>updated Alternate_Terms, Observed_Examples, References</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+         </Content_History>
+      </Weakness>
+      

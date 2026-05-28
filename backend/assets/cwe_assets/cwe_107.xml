@@ -1,0 +1,208 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="107" Name="Struts: Unused Validation Form" Abstraction="Variant" Structure="Simple" Status="Draft">
+         <Description>An unused validation form indicates that validation logic is not up-to-date.</Description>
+         <Related_Weaknesses>
+            <Related_Weakness Nature="ChildOf" CWE_ID="1164" View_ID="1000" Ordinal="Primary" />
+            <Related_Weakness Nature="ChildOf" CWE_ID="20" View_ID="700" Ordinal="Primary" />
+         </Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Resultant</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+         <Applicable_Platforms>
+            <Language Name="Java" Prevalence="Undetermined" />
+         </Applicable_Platforms>
+         <Modes_Of_Introduction>
+            <Introduction>
+               <Phase>Implementation</Phase>
+	       <Note>It is easy for developers to forget to update validation logic when they remove or rename action form mappings. One indication that validation logic is not being properly maintained is the presence of an unused validation form.</Note>
+            </Introduction>
+            <Introduction>
+               <Phase>Operation</Phase>
+            </Introduction>
+         </Modes_Of_Introduction>
+         <Common_Consequences>
+            <Consequence>
+               <Scope>Other</Scope>
+               <Impact>Quality Degradation</Impact>
+            </Consequence>
+         </Common_Consequences>
+         <Potential_Mitigations>
+            <Mitigation>
+               <Phase>Implementation</Phase>
+               <Description>Remove the unused Validation Form from the validation.xml file.</Description>
+            </Mitigation>
+         </Potential_Mitigations>
+         <Demonstrative_Examples>
+            <Demonstrative_Example>
+               <Intro_Text>In the following example the class RegistrationForm is a Struts framework ActionForm Bean that will maintain user input data from a registration webpage for an online business site. The user will enter registration data and, through the Struts framework, the RegistrationForm bean will maintain the user data in the form fields using the private member variables. The RegistrationForm class uses the Struts validation capability by extending the ValidatorForm class and including the validation for the form fields within the validator XML file, validator.xml.</Intro_Text>
+               <Example_Code Nature="Bad" Language="Java">
+                  <xhtml:div>public class RegistrationForm extends org.apache.struts.validator.ValidatorForm {<xhtml:br />
+                     <xhtml:div style="margin-left:1em;">
+                        <xhtml:div>
+                           <xhtml:br />
+                           <xhtml:i>// private variables for registration form</xhtml:i>
+                           <xhtml:br />private String name;<xhtml:br />private String address;<xhtml:br />private String city;<xhtml:br />private String state;<xhtml:br />private String zipcode;<xhtml:br />
+                           <xhtml:i>// no longer using the phone form field</xhtml:i>
+                           <xhtml:br />
+                           <xhtml:br />
+                           <xhtml:i>// private String phone;</xhtml:i>
+                           <xhtml:br />private String email;<xhtml:br />
+                           <xhtml:br />public RegistrationForm() {<xhtml:div style="margin-left:1em;">super();</xhtml:div>}<xhtml:br />
+                           <xhtml:br />
+                           <xhtml:i>// getter and setter methods for private variables</xhtml:i>
+                           <xhtml:br />...</xhtml:div>
+                     </xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Example_Code Nature="Bad" Language="XML">
+                  <xhtml:div>&lt;form-validation&gt;<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>&lt;formset&gt;<xhtml:div style="margin-left:1em;">
+                              <xhtml:div>&lt;form name="RegistrationForm"&gt;<xhtml:div style="margin-left:1em;">
+                                    <xhtml:div>&lt;field property="name" depends="required"&gt;<xhtml:div style="margin-left:1em;">&lt;arg position="0" key="prompt.name"/&gt;</xhtml:div>&lt;/field&gt;<xhtml:br />&lt;field property="address" depends="required"&gt;<xhtml:div style="margin-left:1em;">&lt;arg position="0" key="prompt.address"/&gt;</xhtml:div>&lt;/field&gt;<xhtml:br />&lt;field property="city" depends="required"&gt;<xhtml:div style="margin-left:1em;">&lt;arg position="0" key="prompt.city"/&gt;</xhtml:div>&lt;/field&gt;<xhtml:br />&lt;field property="state" depends="required,mask"&gt;<xhtml:div style="margin-left:1em;">&lt;arg position="0" key="prompt.state"/&gt;<xhtml:br />&lt;var&gt;<xhtml:div style="margin-left:1em;">&lt;var-name&gt;mask&lt;/var-name&gt;<xhtml:br />&lt;var-value&gt;[a-zA-Z]{2}&lt;/var-value&gt;</xhtml:div>&lt;/var&gt;</xhtml:div>&lt;/field&gt;<xhtml:br />&lt;field property="zipcode" depends="required,mask"&gt;<xhtml:div style="margin-left:1em;">&lt;arg position="0" key="prompt.zipcode"/&gt;<xhtml:br />&lt;var&gt;<xhtml:div style="margin-left:1em;">&lt;var-name&gt;mask&lt;/var-name&gt;<xhtml:br />&lt;var-value&gt;\d{5}&lt;/var-value&gt;</xhtml:div>&lt;/var&gt;</xhtml:div>&lt;/field&gt;<xhtml:br />&lt;field property="phone" depends="required,mask"&gt;<xhtml:div style="margin-left:1em;">&lt;arg position="0" key="prompt.phone"/&gt;<xhtml:br />&lt;var&gt;<xhtml:div style="margin-left:1em;">&lt;var-name&gt;mask&lt;/var-name&gt;<xhtml:br />&lt;var-value&gt;^([0-9]{3})(-)([0-9]{4}|[0-9]{4})$&lt;/var-value&gt;</xhtml:div>&lt;/var&gt;</xhtml:div>&lt;/field&gt;<xhtml:br />&lt;field property="email" depends="required,email"&gt;<xhtml:div style="margin-left:1em;">&lt;arg position="0" key="prompt.email"/&gt;</xhtml:div>&lt;/field&gt;</xhtml:div>
+                                 </xhtml:div>&lt;/form&gt;</xhtml:div>
+                           </xhtml:div>&lt;/formset&gt;</xhtml:div>
+                     </xhtml:div>&lt;/form-validation&gt;</xhtml:div>
+               </Example_Code>
+               <Body_Text>However, the validator XML file, validator.xml, for the RegistrationForm class includes the validation form for the user input form field "phone" that is no longer used by the input form and the RegistrationForm class. Any validation forms that are no longer required should be removed from the validator XML file, validator.xml.</Body_Text>
+               <Body_Text>The existence of unused forms may be an indication to attackers that this code is out of date or poorly maintained.</Body_Text>
+            </Demonstrative_Example>
+         </Demonstrative_Examples>
+         <Taxonomy_Mappings>
+            <Taxonomy_Mapping Taxonomy_Name="7 Pernicious Kingdoms">
+               <Entry_Name>Struts: Unused Validation Form</Entry_Name>
+            </Taxonomy_Mapping>
+         </Taxonomy_Mappings>
+         <References>
+            <Reference External_Reference_ID="REF-6" />
+         </References>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Variant level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+         <Content_History>
+            <Submission>
+               <Submission_Name>7 Pernicious Kingdoms</Submission_Name>
+               <Submission_Date>2006-07-19</Submission_Date>
+               <Submission_Version>Draft 3</Submission_Version>
+               <Submission_ReleaseDate>2006-07-19</Submission_ReleaseDate>
+            </Submission>
+            <Modification>
+               <Modification_Name>Eric Dalci</Modification_Name>
+               <Modification_Organization>Cigital</Modification_Organization>
+               <Modification_Date>2008-07-01</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>updated Potential_Mitigations, Time_of_Introduction</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2008-09-08</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>updated Description, Relationships, Taxonomy_Mappings, Weakness_Ordinalities</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2010-06-21</Modification_Date>
+               <Modification_Version>1.9</Modification_Version>
+               <Modification_ReleaseDate>2010-06-21</Modification_ReleaseDate>
+               <Modification_Comment>updated Demonstrative_Examples</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-06-01</Modification_Date>
+               <Modification_Version>1.13</Modification_Version>
+               <Modification_ReleaseDate>2011-06-01</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-06-27</Modification_Date>
+               <Modification_Version>2.0</Modification_Version>
+               <Modification_ReleaseDate>2011-06-27</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2012-05-11</Modification_Date>
+               <Modification_Version>2.2</Modification_Version>
+               <Modification_ReleaseDate>2012-05-15</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2012-10-30</Modification_Date>
+               <Modification_Version>2.3</Modification_Version>
+               <Modification_ReleaseDate>2012-10-30</Modification_ReleaseDate>
+               <Modification_Comment>updated Potential_Mitigations</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2014-07-30</Modification_Date>
+               <Modification_Version>2.8</Modification_Version>
+               <Modification_ReleaseDate>2014-07-31</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2017-11-08</Modification_Date>
+               <Modification_Version>3.0</Modification_Version>
+               <Modification_ReleaseDate>2017-11-08</Modification_ReleaseDate>
+               <Modification_Comment>updated Causal_Nature, Relationships</Modification_Comment>
+            </Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-02-24</Modification_Date>
+					<Modification_Version>4.0</Modification_Version>
+					<Modification_ReleaseDate>2020-02-24</Modification_ReleaseDate>
+					<Modification_Comment>updated References, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-04-28</Modification_Date>
+					<Modification_Version>4.7</Modification_Version>
+					<Modification_ReleaseDate>2022-04-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Description, Modes_of_Introduction</Modification_Comment>
+				</Modification>
+         </Content_History>
+      </Weakness>
+      

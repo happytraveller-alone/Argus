@@ -1,0 +1,449 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="150" Name="Improper Neutralization of Escape, Meta, or Control Sequences" Abstraction="Variant" Structure="Simple" Status="Incomplete">
+         <Description>The product receives input from an upstream component, but it does not neutralize or incorrectly neutralizes special elements that could be interpreted as escape, meta, or control character sequences when they are sent to a downstream component.</Description>
+         <Related_Weaknesses>
+            <Related_Weakness Nature="ChildOf" CWE_ID="138" View_ID="1000" Ordinal="Primary" />
+         </Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+         <Applicable_Platforms>
+            <Language Class="Not Language-Specific" Prevalence="Undetermined" />
+	    <Technology Name="AI/ML" Prevalence="Undetermined" />
+         </Applicable_Platforms>
+         <Alternate_Terms>
+            <Alternate_Term>
+               <Term>ANSI injection</Term>
+               <Description>injection of ANSI escape sequences.</Description>
+            </Alternate_Term>
+         </Alternate_Terms>
+         <Modes_Of_Introduction>
+            <Introduction>
+               <Phase>Build and Compilation</Phase>
+               <Note>During LLM training, escape sequences may be
+               assigned within token entry values.</Note>
+            </Introduction>
+            <Introduction>
+               <Phase>Implementation</Phase>
+               <Note>Interactive command line interfaces have become
+               more commonplace with growing system administration
+               needs and human-friendly TUIs (text-based user
+               interfaces); logging user-generated values into the
+               terminal into one of these sessions is no longer
+               safe.</Note>
+            </Introduction>
+            <Introduction>
+               <Phase>Implementation</Phase>
+               <Note>REALIZATION: This weakness is caused during implementation of an architectural security tactic.</Note>
+            </Introduction>
+         </Modes_Of_Introduction>
+         <Common_Consequences>
+            <Consequence>
+               <Scope>Integrity</Scope>
+               <Impact>Execute Unauthorized Code or Commands</Impact>
+               <Impact>Hide Activities</Impact>
+               <Impact>Unexpected State</Impact>
+	       <Note>ANSI escape codes can be used for low-severity
+	       attacks such as changing the color of console output,
+	       but they can also be used to arbitrarily move the
+	       cursor, clear the screen, and make fake prompts inside
+	       the interactive CLI via malicious user input. In some
+	       contexts - depending on the functionality of the
+	       terminal in use - ANSI escape codes can be used to
+	       execute arbitrary code.</Note>
+            </Consequence>
+         </Common_Consequences>
+         <Detection_Methods>
+	   <Detection_Method Detection_Method_ID="DM-14">
+	     <Method>Automated Static Analysis</Method>
+	     <Description>Automated static analysis, commonly referred to as Static Application Security Testing (SAST), can find some instances of this weakness by analyzing source code (or binary/compiled code) without having to execute it. Typically, this is done by building a model of data flow and control flow, then searching for potentially-vulnerable patterns that connect "sources" (origins of input) with "sinks" (destinations where the data interacts with external components, a lower layer such as the OS, etc.)</Description>
+	     <Effectiveness>High</Effectiveness>
+	   </Detection_Method>
+         </Detection_Methods>
+         <Potential_Mitigations>
+            <Mitigation>
+               <Description>Developers should anticipate that escape, meta and control characters/sequences will be injected/removed/manipulated in the input vectors of their product. Use an appropriate combination of denylists and allowlists to ensure only valid, expected and appropriate input is processed by the system.</Description>
+            </Mitigation>
+            <Mitigation Mitigation_ID="MIT-5">
+               <Phase>Implementation</Phase>
+               <Strategy>Input Validation</Strategy>
+               <Description>
+                  <xhtml:p>Assume all input is malicious. Use an "accept known good" input validation strategy, i.e., use a list of acceptable inputs that strictly conform to specifications. Reject any input that does not strictly conform to specifications, or transform it into something that does.</xhtml:p>
+                  <xhtml:p>When performing input validation, consider all potentially relevant properties, including length, type of input, the full range of acceptable values, missing or extra inputs, syntax, consistency across related fields, and conformance to business rules. As an example of business rule logic, "boat" may be syntactically valid because it only contains alphanumeric characters, but it is not valid if the input is only expected to contain colors such as "red" or "blue."</xhtml:p>
+                  <xhtml:p>Do not rely exclusively on looking for malicious or malformed inputs.  This is likely to miss at least one undesirable input, especially if the code's environment changes. This can give attackers enough room to bypass the intended validation. However, denylists can be useful for detecting potential attacks or determining which inputs are so malformed that they should be rejected outright.</xhtml:p>
+               </Description>
+            </Mitigation>
+            <Mitigation Mitigation_ID="MIT-28">
+               <Phase>Implementation</Phase>
+               <Strategy>Output Encoding</Strategy>
+               <Description>While it is risky to use dynamically-generated query strings, code, or commands that mix control and data together, sometimes it may be unavoidable. Properly quote arguments and escape any special characters within those arguments. The most conservative approach is to escape or filter all characters that do not pass an extremely strict allowlist (such as everything that is not alphanumeric or white space). If some special characters are still needed, such as white space, wrap each argument in quotes after the escaping/filtering step. Be careful of argument injection (CWE-88).</Description>
+            </Mitigation>
+            <Mitigation Mitigation_ID="MIT-20">
+               <Phase>Implementation</Phase>
+               <Strategy>Input Validation</Strategy>
+               <Description>Inputs should be decoded and canonicalized to the application's current internal representation before being validated (CWE-180). Make sure that the application does not decode the same input twice (CWE-174). Such errors could be used to bypass allowlist validation schemes by introducing dangerous inputs after they have been checked.</Description>
+            </Mitigation>
+            <Mitigation>
+	      <Phase>Implementation</Phase>
+              <Description>When using output from an LLM, neutralize
+              or strip escape codes before redirecting output to the
+              terminal or other rendering engine that would process
+              the codes. The neutralization could require that the
+              character be printable and/or allowable whitespace, such
+              as a carriage return or newline. Be deliberate about
+              what to allow.</Description>
+	      <Effectiveness>High</Effectiveness>
+	      <Effectiveness_Notes>By restricting output to only printable
+	      characters, this effectively removes any escape codes.</Effectiveness_Notes>
+            </Mitigation>
+            <Mitigation>
+	      <Phase>Build and Compilation</Phase>
+              <Description>When using an LLM: during tokenizer
+              training, suppress escape codes from the tokenizer's
+              vocabulary. Depending on context, this could be
+              accomplished by removing the codes from input to the
+              tokenizer, or removing the map from the string to its
+              token ID. It is generally unlikely that this removal
+              would adversely affect the quality or correctness of
+              what is generated, e.g. advice requests for terminal
+              settings to change colors.</Description>
+	      <Effectiveness>Limited</Effectiveness>
+	      <Effectiveness_Notes>This could raise the exploitation
+	      effort for an adversary, but the adversary might still
+	      be able to get string together multiple tokens in order
+	      to form the escape code.</Effectiveness_Notes>
+            </Mitigation>
+         </Potential_Mitigations>
+	 <Demonstrative_Examples>
+	   <Demonstrative_Example>
+	     <Intro_Text>Consider a situation in which an AI agent
+	     uses LLM output based on training data from untrusted
+	     sources.</Intro_Text>
+	     <Body_Text>Suppose an attacker is able to inject input
+	     into the training data that is used by the LLM. If a
+	     person is using a terminal emulator to interact with the
+	     LLM on the command line, if the output contains escape
+	     codes, then the emulator might act on those codes, e.g.,
+	     to change color, flash text, or (in some cases) leak
+	     sensitive information or execute code. In one documented
+	     case, a terminal would handle an OSC (Operating System
+	     Command) for setting the working directory by processing
+	     a file:// URL in a way that could perform a DNS lookup
+	     for an adversary-controlled domain, leading to an
+	     information leak [REF-1526].</Body_Text>
+	   </Demonstrative_Example>
+	 </Demonstrative_Examples>
+         <Observed_Examples>
+            <Observed_Example>
+               <Reference>CVE-2024-27936</Reference>
+               <Description>Chain: JavaScript-based application removes ANSI escape sequences in a dialog that asks permission for a particular file, causing the wrong filename to be visually presented for user approval (CWE-451), but the filename still contains the ANSI escape sequences (CWE-150), potentially causing the user to grant access to the wrong file.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2024-27936</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2002-0542</Reference>
+               <Description>The mail program processes special "~" escape sequence even when not in interactive mode.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2002-0542</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2000-0703</Reference>
+               <Description>Setuid program does not filter escape sequences before calling mail program.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2000-0703</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2002-0986</Reference>
+               <Description>Mail function does not filter control characters from arguments, allowing mail message content to be modified.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2002-0986</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2003-0020</Reference>
+               <Description>Multi-channel issue. Terminal escape sequences not filtered from log files.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2003-0020</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2003-0083</Reference>
+               <Description>Multi-channel issue. Terminal escape sequences not filtered from log files.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2003-0083</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2003-0021</Reference>
+               <Description>Terminal escape sequences not filtered by terminals when displaying files.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2003-0021</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2003-0022</Reference>
+               <Description>Terminal escape sequences not filtered by terminals when displaying files.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2003-0022</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2003-0023</Reference>
+               <Description>Terminal escape sequences not filtered by terminals when displaying files.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2003-0023</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2003-0063</Reference>
+               <Description>Terminal escape sequences not filtered by terminals when displaying files.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2003-0063</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2000-0476</Reference>
+               <Description>Terminal escape sequences not filtered by terminals when displaying files.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2000-0476</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2001-1556</Reference>
+               <Description>MFV. (multi-channel). Injection of control characters into log files that allow information hiding when using raw Unix programs to read the files.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2001-1556</Link>
+            </Observed_Example>
+         </Observed_Examples>
+         <Taxonomy_Mappings>
+            <Taxonomy_Mapping Taxonomy_Name="PLOVER">
+               <Entry_Name>Escape, Meta, or Control Character / Sequence</Entry_Name>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="The CERT Oracle Secure Coding Standard for Java (2011)">
+               <Entry_ID>IDS03-J</Entry_ID>
+               <Entry_Name>Do not log unsanitized user input</Entry_Name>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="Software Fault Patterns">
+               <Entry_ID>SFP24</Entry_ID>
+               <Entry_Name>Tainted input to command</Entry_Name>
+            </Taxonomy_Mapping>
+         </Taxonomy_Mappings>
+         <Related_Attack_Patterns>
+            <Related_Attack_Pattern CAPEC_ID="134" />
+            <Related_Attack_Pattern CAPEC_ID="41" />
+            <Related_Attack_Pattern CAPEC_ID="81" />
+            <Related_Attack_Pattern CAPEC_ID="93" />
+         </Related_Attack_Patterns>
+         <References>
+            <Reference External_Reference_ID="REF-1532" />
+            <Reference External_Reference_ID="REF-1527" />
+            <Reference External_Reference_ID="REF-1526" />
+            <Reference External_Reference_ID="REF-1529" />
+            <Reference External_Reference_ID="REF-1530" />
+            <Reference External_Reference_ID="REF-1531" />
+            <Reference External_Reference_ID="REF-1533" />
+         </References>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Variant level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+         <Notes>
+            <Note Type="Research Gap">As of CWE 4.20: while
+            exploitation and research interest in ANSI escape codes
+            (and other terminal sequences) was popular in the early
+            2000's [REF-1527] - and known as an attack vector going
+            back to at least 1994 [REF-1532] - there has been renewed
+            interest in this type of injection as new attack vectors
+            have arrived (e.g., from LLM output, or CLIs that were not
+            based on OS sessions).</Note>
+	 </Notes>
+         <Content_History>
+            <Submission>
+               <Submission_Name>PLOVER</Submission_Name>
+               <Submission_Date>2006-07-19</Submission_Date>
+               <Submission_Version>Draft 3</Submission_Version>
+               <Submission_ReleaseDate>2006-07-19</Submission_ReleaseDate>
+            </Submission>
+            <Modification>
+               <Modification_Name>Eric Dalci</Modification_Name>
+               <Modification_Organization>Cigital</Modification_Organization>
+               <Modification_Date>2008-07-01</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>updated Potential_Mitigations, Time_of_Introduction</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2008-09-08</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2008-10-14</Modification_Date>
+               <Modification_Version>1.0.1</Modification_Version>
+               <Modification_ReleaseDate>2008-10-14</Modification_ReleaseDate>
+               <Modification_Comment>updated Description</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2009-07-27</Modification_Date>
+               <Modification_Version>1.5</Modification_Version>
+               <Modification_ReleaseDate>2009-07-27</Modification_ReleaseDate>
+               <Modification_Comment>updated Potential_Mitigations</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2010-04-05</Modification_Date>
+               <Modification_Version>1.8.1</Modification_Version>
+               <Modification_ReleaseDate>2010-04-05</Modification_ReleaseDate>
+               <Modification_Comment>updated Description, Name</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-03-29</Modification_Date>
+               <Modification_Version>1.12</Modification_Version>
+               <Modification_ReleaseDate>2011-03-30</Modification_ReleaseDate>
+               <Modification_Comment>updated Potential_Mitigations</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-06-01</Modification_Date>
+               <Modification_Version>1.13</Modification_Version>
+               <Modification_ReleaseDate>2011-06-01</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences, Observed_Examples, Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-06-27</Modification_Date>
+               <Modification_Version>2.0</Modification_Version>
+               <Modification_ReleaseDate>2011-06-27</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2012-05-11</Modification_Date>
+               <Modification_Version>2.2</Modification_Version>
+               <Modification_ReleaseDate>2012-05-15</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2012-10-30</Modification_Date>
+               <Modification_Version>2.3</Modification_Version>
+               <Modification_ReleaseDate>2012-10-30</Modification_ReleaseDate>
+               <Modification_Comment>updated Potential_Mitigations</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2014-07-30</Modification_Date>
+               <Modification_Version>2.8</Modification_Version>
+               <Modification_ReleaseDate>2014-07-31</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2017-05-03</Modification_Date>
+               <Modification_Version>2.11</Modification_Version>
+               <Modification_ReleaseDate>2017-05-05</Modification_ReleaseDate>
+               <Modification_Comment>updated Potential_Mitigations</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2017-11-08</Modification_Date>
+               <Modification_Version>3.0</Modification_Version>
+               <Modification_ReleaseDate>2017-11-08</Modification_ReleaseDate>
+               <Modification_Comment>updated Applicable_Platforms, Modes_of_Introduction, Relationships</Modification_Comment>
+            </Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2019-01-03</Modification_Date>
+					<Modification_Version>3.2</Modification_Version>
+					<Modification_ReleaseDate>2019-01-03</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships, Taxonomy_Mappings</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2019-06-20</Modification_Date>
+					<Modification_Version>3.3</Modification_Version>
+					<Modification_ReleaseDate>2019-06-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Related_Attack_Patterns</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-02-24</Modification_Date>
+					<Modification_Version>4.0</Modification_Version>
+					<Modification_ReleaseDate>2020-02-24</Modification_ReleaseDate>
+					<Modification_Comment>updated Potential_Mitigations, Relationships, Taxonomy_Mappings</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-06-25</Modification_Date>
+					<Modification_Version>4.1</Modification_Version>
+					<Modification_ReleaseDate>2020-06-25</Modification_ReleaseDate>
+					<Modification_Comment>updated Potential_Mitigations</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-01-31</Modification_Date>
+					<Modification_Version>4.10</Modification_Version>
+					<Modification_ReleaseDate>2023-01-31</Modification_ReleaseDate>
+					<Modification_Comment>updated Description, Potential_Mitigations</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Detection_Factors, Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2026-04-30</Modification_Date>
+					<Modification_Version>4.20</Modification_Version>
+					<Modification_ReleaseDate>2026-04-30</Modification_ReleaseDate>
+					<Modification_Comment>updated Alternate_Terms, Applicable_Platforms, Common_Consequences, Demonstrative_Examples, Description, Modes_of_Introduction, Observed_Examples, Potential_Mitigations, References, Research_Gaps, Time_of_Introduction</Modification_Comment>
+				</Modification>
+				<Contribution Type="Feedback">
+				  <Contribution_Name>GitHub user tristan-f-r</Contribution_Name>
+				  <Contribution_Date>2024-06-15</Contribution_Date>
+				  <Contribution_Version>4.20</Contribution_Version>
+				  <Contribution_ReleaseDate>2026-04-30</Contribution_ReleaseDate>
+				  <Contribution_Comment>suggested changes that were integrated into observed examples, common consequences, references, and others.</Contribution_Comment>
+				</Contribution>
+				<Contribution Type="Content">
+				  <Contribution_Name>Erick Galinkin</Contribution_Name>
+				  <Contribution_Organization>NVIDIA</Contribution_Organization>
+				  <Contribution_Date>2025-08-15</Contribution_Date>
+				  <Contribution_Version>4.20</Contribution_Version>
+				  <Contribution_ReleaseDate>2026-04-30</Contribution_ReleaseDate>
+				  <Contribution_Comment>Suggested coverage of LLM-specific considerations, providing modes of introduction, mitigations, references, and a demonstrative example. Additional feedback provided by the CWE AI WG.</Contribution_Comment>
+				</Contribution>
+            <Previous_Entry_Name Date="2008-01-30">Escape, Meta, or Control Character / Sequence</Previous_Entry_Name>
+            <Previous_Entry_Name Date="2008-04-11">Failure to Remove Escape, Meta, or Control Character / Sequence</Previous_Entry_Name>
+            <Previous_Entry_Name Date="2010-04-05">Failure to Sanitize Escape, Meta, or Control Sequences</Previous_Entry_Name>
+         </Content_History>
+      </Weakness>
+      

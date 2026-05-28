@@ -1,0 +1,431 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="184" Name="Incomplete List of Disallowed Inputs" Abstraction="Base" Structure="Simple" Status="Draft" Diagram="/data/images/CWE-184-Diagram.png">
+         <Description>The product implements a protection mechanism that relies on a list of inputs (or properties of inputs) that are not allowed by policy or otherwise require other action to neutralize before additional processing takes place, but the list is incomplete.</Description>
+         <Related_Weaknesses>
+            <Related_Weakness Nature="ChildOf" CWE_ID="693" View_ID="1000" Ordinal="Primary" />
+            <Related_Weakness Nature="ChildOf" CWE_ID="1023" View_ID="1000" />
+            <Related_Weakness Nature="CanPrecede" CWE_ID="79" View_ID="1000" Chain_ID="692" />
+            <Related_Weakness Nature="CanPrecede" CWE_ID="78" View_ID="1000" />
+            <Related_Weakness Nature="CanPrecede" CWE_ID="434" View_ID="1000" />
+            <Related_Weakness Nature="CanPrecede" CWE_ID="98" View_ID="1000" />
+         </Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+         <Applicable_Platforms>
+            <Language Class="Not Language-Specific" Prevalence="Undetermined" />
+	    <Technology Class="Not Technology-Specific" Prevalence="Undetermined" />
+         </Applicable_Platforms>
+         <Alternate_Terms>
+            <Alternate_Term>
+               <Term>Denylist / Deny List</Term>
+	       <Description>This is used by CWE and CAPEC instead of other commonly-used terms.  Its counterpart is allowlist.</Description>
+            </Alternate_Term>
+            <Alternate_Term>
+               <Term>Blocklist / Block List</Term>
+	       <Description>This is often used by security tools such as firewalls, email or web gateways, proxies, etc.</Description>
+            </Alternate_Term>
+            <Alternate_Term>
+               <Term>Blacklist / Black List</Term>
+	       <Description>This term is frequently used, but usage has been declining as organizations have started to adopt other terms.</Description>
+            </Alternate_Term>
+         </Alternate_Terms>
+         <Modes_Of_Introduction>
+            <Introduction>
+               <Phase>Implementation</Phase>
+	       <Note>Developers often try to protect their products against malicious input by checking against lists of known bad inputs, such as special characters that can invoke new commands. However, such lists often only address the most well-known bad inputs. As a quick fix, developers might rely on these lists instead of addressing the root cause of the issue. See [REF-141].</Note>
+            </Introduction>
+            <Introduction>
+               <Phase>Architecture and Design</Phase>
+	       <Note>The design might rely solely on detection of malicious inputs as a protection mechanism.</Note>
+            </Introduction>
+         </Modes_Of_Introduction>
+         <Common_Consequences>
+            <Consequence>
+               <Scope>Access Control</Scope>
+               <Impact>Bypass Protection Mechanism</Impact>
+               <Note>Attackers may be able to find other malicious inputs that were not expected by the developer, allowing them to bypass the intended protection mechanism.</Note>
+            </Consequence>
+         </Common_Consequences>
+         <Detection_Methods>
+            <Detection_Method>
+               <Method>Black Box</Method>
+               <Description>Exploitation of a vulnerability with commonly-used manipulations might fail, but minor variations might succeed.</Description>
+            </Detection_Method>
+         </Detection_Methods>
+         <Potential_Mitigations>
+            <Mitigation>
+               <Phase>Implementation</Phase>
+               <Strategy>Input Validation</Strategy>
+               <Description>Do not rely exclusively on detecting disallowed inputs.  There are too many variants to encode a character, especially when different environments are used, so there is a high likelihood of missing some variants.  Only use detection of disallowed inputs as a mechanism for detecting suspicious activity. Ensure that you are using other protection mechanisms that only identify "good" input - such as lists of allowed inputs - and ensure that you are properly encoding your outputs.</Description>
+            </Mitigation>
+         </Potential_Mitigations>
+         <Demonstrative_Examples>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-226">
+               <Intro_Text>The following code attempts to stop XSS attacks by removing all occurences of "script" in an input string.</Intro_Text>
+               <Example_Code Nature="Bad" Language="Java">
+                  <xhtml:div>public String removeScriptTags(String input, String mask) {<xhtml:div style="margin-left:1em;">return input.replaceAll("script", mask);</xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>Because the code only checks for the lower-case "script" string, it can be easily defeated with upper-case script tags.</Body_Text>
+            </Demonstrative_Example>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-225">
+               <Intro_Text>This example takes user input, passes it through an encoding scheme, then lists the contents of the user's home directory based on the user name.</Intro_Text>
+               <Example_Code Nature="Bad" Language="Perl">
+                  <xhtml:div>sub GetUntrustedInput {<xhtml:div style="margin-left:1em;">return($ARGV[0]);</xhtml:div>}<xhtml:br />
+                     <xhtml:br />sub encode {<xhtml:div style="margin-left:1em;">my($str) = @_;<xhtml:br />$str =~ s/\&amp;/\&amp;amp;/gs;<xhtml:br />$str =~ s/\"/\&amp;quot;/gs;<xhtml:br />$str =~ s/\'/\&amp;apos;/gs;<xhtml:br />$str =~ s/\&lt;/\&amp;lt;/gs;<xhtml:br />$str =~ s/\&gt;/\&amp;gt;/gs;<xhtml:br />return($str);</xhtml:div>}<xhtml:br />
+                     <xhtml:br />sub doit {<xhtml:div style="margin-left:1em;">my $uname = encode(GetUntrustedInput("username"));<xhtml:br />print "&lt;b&gt;Welcome, $uname!&lt;/b&gt;&lt;p&gt;\n";<xhtml:br />system("cd /home/$uname; /bin/ls -l");<xhtml:br />
+                     </xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>The programmer attempts to encode dangerous characters, however the denylist for encoding is incomplete (CWE-184) and an attacker can still pass a semicolon, resulting in a chain with OS command injection (CWE-78).</Body_Text>
+               <Body_Text>Additionally, the encoding routine is used inappropriately with command execution. An attacker doesn't even need to insert their own semicolon. The attacker can instead leverage the encoding routine to provide the semicolon to separate the commands. If an attacker supplies a string of the form:</Body_Text>
+               <Example_Code Nature="Attack">
+                  <xhtml:div>' pwd</xhtml:div>
+               </Example_Code>
+               <Body_Text>then the program will encode the apostrophe and insert the semicolon, which functions as a command separator when passed to the system function. This allows the attacker to complete the command injection.</Body_Text>
+            </Demonstrative_Example>
+         </Demonstrative_Examples>
+         <Observed_Examples>
+            <Observed_Example>
+               <Reference>CVE-2024-6091</Reference>
+               <Description>Chain: AI agent platform does not restrict pathnames containing internal "/./" sequences (CWE-55), leading to an incomplete denylist (CWE-184) that does not prevent OS command injection (CWE-78)</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2024-6091</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2024-4315</Reference>
+               <Description>Chain: API for text generation using Large Language Models (LLMs) does
+			   not include the "\" Windows folder separator in its denylist (CWE-184)
+			   when attempting to prevent Local File Inclusion via path traversal
+			   (CWE-22), allowing deletion of arbitrary files on Windows systems.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2024-4315</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2024-44335</Reference>
+               <Description>Chain: filter only checks for some shell-injection characters (CWE-184), enabling OS command injection (CWE-78)</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2024-44335</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2008-2309</Reference>
+               <Description>product uses a denylist to identify potentially dangerous content, allowing attacker to bypass a warning</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2008-2309</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2005-2782</Reference>
+               <Description>PHP remote file inclusion in web application that filters "http" and "https" URLs, but not "ftp".</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2005-2782</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2004-0542</Reference>
+               <Description>Programming language does not filter certain shell metacharacters in Windows environment.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2004-0542</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2004-0595</Reference>
+               <Description>XSS filter doesn't filter null characters before looking for dangerous tags, which are ignored by web browsers. MIE and validate-before-cleanse.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2004-0595</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2005-3287</Reference>
+               <Description>Web-based mail product doesn't restrict dangerous extensions such as ASPX on a web server, even though others are prohibited.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2005-3287</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2004-2351</Reference>
+               <Description>Resultant XSS when only &lt;script&gt; and &lt;style&gt; are checked.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2004-2351</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2005-2959</Reference>
+               <Description>Privileged program does not clear sensitive environment variables that are used by bash. Overlaps multiple interpretation error.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2005-2959</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2005-1824</Reference>
+               <Description>SQL injection protection scheme does not quote the "\" special character.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2005-1824</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2005-2184</Reference>
+               <Description>Detection of risky filename extensions prevents users from automatically executing .EXE files, but .LNK is accepted, allowing resultant Windows symbolic link.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2005-2184</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2007-1343</Reference>
+               <Description>Product uses list of protected variables, but accidentally omits one dangerous variable, allowing external modification</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2007-1343</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2007-5727</Reference>
+               <Description>Chain: product only removes SCRIPT tags (CWE-184), enabling XSS (CWE-79)</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2007-5727</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2006-4308</Reference>
+               <Description>Chain: product only checks for use of "javascript:" tag (CWE-184), allowing XSS (CWE-79) using other tags</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2006-4308</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2007-3572</Reference>
+               <Description>Chain: OS command injection (CWE-78) enabled by using an unexpected character that is not explicitly disallowed (CWE-184)</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2007-3572</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2002-0661</Reference>
+               <Description>"\" not in list of disallowed values for web server, allowing path traversal attacks when the server is run on Windows and other OSes.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2002-0661</Link>
+            </Observed_Example>
+         </Observed_Examples>
+         <Taxonomy_Mappings>
+            <Taxonomy_Mapping Taxonomy_Name="PLOVER">
+               <Entry_Name>Incomplete Blacklist</Entry_Name>
+            </Taxonomy_Mapping>
+         </Taxonomy_Mappings>
+         <Related_Attack_Patterns>
+            <Related_Attack_Pattern CAPEC_ID="120" />
+            <Related_Attack_Pattern CAPEC_ID="15" />
+            <Related_Attack_Pattern CAPEC_ID="182" />
+            <Related_Attack_Pattern CAPEC_ID="3" />
+            <Related_Attack_Pattern CAPEC_ID="43" />
+            <Related_Attack_Pattern CAPEC_ID="6" />
+            <Related_Attack_Pattern CAPEC_ID="71" />
+            <Related_Attack_Pattern CAPEC_ID="73" />
+            <Related_Attack_Pattern CAPEC_ID="85" />
+         </Related_Attack_Patterns>
+         <References>
+            <Reference External_Reference_ID="REF-140" />
+            <Reference External_Reference_ID="REF-141" />
+            <Reference External_Reference_ID="REF-62" Section="Chapter 8, &quot;Eliminating Metacharacters&quot;, Page 435" />
+         </References>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Base level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+         <Notes>
+            <Note Type="Relationship">
+               <xhtml:p>Multiple interpretation errors can indirectly introduce inputs that should be disallowed. For example, a list of dangerous shell metacharacters might not include a metacharacter that only has meaning in one particular shell, not all of them; or a check for XSS manipulations might ignore an unusual construct that is supported by one web browser, but not others.</xhtml:p>
+            </Note>
+         </Notes>
+         <Content_History>
+            <Submission>
+               <Submission_Name>PLOVER</Submission_Name>
+               <Submission_Date>2006-07-19</Submission_Date>
+               <Submission_Version>Draft 3</Submission_Version>
+               <Submission_ReleaseDate>2006-07-19</Submission_ReleaseDate>
+            </Submission>
+            <Modification>
+               <Modification_Name>Sean Eidemiller</Modification_Name>
+               <Modification_Organization>Cigital</Modification_Organization>
+               <Modification_Date>2008-07-01</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>added/updated demonstrative examples</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>Eric Dalci</Modification_Name>
+               <Modification_Organization>Cigital</Modification_Organization>
+               <Modification_Date>2008-07-01</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>updated Potential_Mitigations, Time_of_Introduction</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2008-09-08</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>updated Detection_Factors, Relationships, Other_Notes, Relationship_Notes, Taxonomy_Mappings, Weakness_Ordinalities</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2008-11-24</Modification_Date>
+               <Modification_Version>1.1</Modification_Version>
+               <Modification_ReleaseDate>2008-11-25</Modification_ReleaseDate>
+               <Modification_Comment>updated Observed_Examples</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2009-05-27</Modification_Date>
+               <Modification_Version>1.4</Modification_Version>
+               <Modification_ReleaseDate>2009-05-27</Modification_ReleaseDate>
+               <Modification_Comment>updated Description, Other_Notes, Relationship_Notes, Time_of_Introduction</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2010-02-16</Modification_Date>
+               <Modification_Version>1.8</Modification_Version>
+               <Modification_ReleaseDate>2010-02-16</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2010-04-05</Modification_Date>
+               <Modification_Version>1.8.1</Modification_Version>
+               <Modification_ReleaseDate>2010-04-05</Modification_ReleaseDate>
+               <Modification_Comment>updated Related_Attack_Patterns</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2010-06-21</Modification_Date>
+               <Modification_Version>1.9</Modification_Version>
+               <Modification_ReleaseDate>2010-06-21</Modification_ReleaseDate>
+               <Modification_Comment>updated Demonstrative_Examples</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-06-01</Modification_Date>
+               <Modification_Version>1.13</Modification_Version>
+               <Modification_ReleaseDate>2011-06-01</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2012-05-11</Modification_Date>
+               <Modification_Version>2.2</Modification_Version>
+               <Modification_ReleaseDate>2012-05-15</Modification_ReleaseDate>
+               <Modification_Comment>updated References, Related_Attack_Patterns, Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2013-02-21</Modification_Date>
+               <Modification_Version>2.4</Modification_Version>
+               <Modification_ReleaseDate>2013-02-21</Modification_ReleaseDate>
+               <Modification_Comment>updated Potential_Mitigations</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2014-07-30</Modification_Date>
+               <Modification_Version>2.8</Modification_Version>
+               <Modification_ReleaseDate>2014-07-31</Modification_ReleaseDate>
+               <Modification_Comment>updated Demonstrative_Examples, Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2015-12-07</Modification_Date>
+               <Modification_Version>2.9</Modification_Version>
+               <Modification_ReleaseDate>2015-12-07</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2017-05-03</Modification_Date>
+               <Modification_Version>2.11</Modification_Version>
+               <Modification_ReleaseDate>2017-05-05</Modification_ReleaseDate>
+               <Modification_Comment>updated Potential_Mitigations, Related_Attack_Patterns</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2017-11-08</Modification_Date>
+               <Modification_Version>3.0</Modification_Version>
+               <Modification_ReleaseDate>2017-11-08</Modification_ReleaseDate>
+               <Modification_Comment>updated Applicable_Platforms, References</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2018-03-27</Modification_Date>
+               <Modification_Version>3.1</Modification_Version>
+               <Modification_ReleaseDate>2018-03-27</Modification_ReleaseDate>
+               <Modification_Comment>updated Observed_Examples, Relationships</Modification_Comment>
+            </Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2019-01-03</Modification_Date>
+					<Modification_Version>3.2</Modification_Version>
+					<Modification_ReleaseDate>2019-01-03</Modification_ReleaseDate>
+					<Modification_Comment>updated Related_Attack_Patterns</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2019-06-20</Modification_Date>
+					<Modification_Version>3.3</Modification_Version>
+					<Modification_ReleaseDate>2019-06-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Related_Attack_Patterns, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-02-24</Modification_Date>
+					<Modification_Version>4.0</Modification_Version>
+					<Modification_ReleaseDate>2020-02-24</Modification_ReleaseDate>
+					<Modification_Comment>updated Alternate_Terms, Description, Detection_Factors, Modes_of_Introduction, Name, Observed_Examples, Potential_Mitigations, Relationship_Notes, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-06-25</Modification_Date>
+					<Modification_Version>4.1</Modification_Version>
+					<Modification_ReleaseDate>2020-06-25</Modification_ReleaseDate>
+					<Modification_Comment>updated Alternate_Terms, Observed_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-10-28</Modification_Date>
+					<Modification_Version>4.6</Modification_Version>
+					<Modification_ReleaseDate>2021-10-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated References, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2024-07-16</Modification_Date>
+					<Modification_Version>4.15</Modification_Version>
+					<Modification_ReleaseDate>2024-07-16</Modification_ReleaseDate>
+					<Modification_Comment>updated Observed_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2024-11-19</Modification_Date>
+					<Modification_Version>4.16</Modification_Version>
+					<Modification_ReleaseDate>2024-11-19</Modification_ReleaseDate>
+					<Modification_Comment>updated Common_Consequences, Description, Diagram, Modes_of_Introduction</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Applicable_Platforms, Demonstrative_Examples, Observed_Examples</Modification_Comment>
+				</Modification>
+			<Previous_Entry_Name Date="2020-02-24">Incomplete Blacklist</Previous_Entry_Name>
+         </Content_History>
+      </Weakness>
+      

@@ -1,0 +1,582 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="295" Name="Improper Certificate Validation" Abstraction="Base" Structure="Simple" Status="Draft" Diagram="/data/images/CWE-295-Diagram.png">
+         <Description>The product does not validate, or incorrectly validates, a certificate.</Description>
+         <Related_Weaknesses>
+            <Related_Weakness Nature="ChildOf" CWE_ID="287" View_ID="1000" Ordinal="Primary" />
+            <Related_Weakness Nature="ChildOf" CWE_ID="287" View_ID="1003" Ordinal="Primary" />
+            <Related_Weakness Nature="PeerOf" CWE_ID="322" View_ID="1000" />
+         </Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+         <Applicable_Platforms>
+            <Language Class="Not Language-Specific" Prevalence="Undetermined" />
+	    <Technology Class="Not Technology-Specific" Prevalence="Undetermined" />
+            <Technology Class="Web Based" Prevalence="Undetermined" />
+            <Technology Class="Mobile" Prevalence="Undetermined" />
+         </Applicable_Platforms>
+         <Background_Details>
+            <Background_Detail>A certificate is a token that associates an identity (principal) to a cryptographic key. Certificates can be used to check if a public key belongs to the assumed owner.</Background_Detail>
+         </Background_Details>
+         <Modes_Of_Introduction>
+            <Introduction>
+               <Phase>Architecture and Design</Phase>
+            </Introduction>
+            <Introduction>
+               <Phase>Implementation</Phase>
+               <Note>REALIZATION: This weakness is caused during implementation of an architectural security tactic.</Note>
+            </Introduction>
+            <Introduction>
+               <Phase>Implementation</Phase>
+               <Note>When the product uses certificate pinning, the developer might not properly validate all relevant components of the certificate before pinning the certificate. This can make it difficult or expensive to test after the pinning is complete.</Note>
+            </Introduction>
+         </Modes_Of_Introduction>
+         <Common_Consequences>
+            <Consequence>
+               <Scope>Integrity</Scope>
+               <Scope>Authentication</Scope>
+               <Impact>Bypass Protection Mechanism</Impact>
+               <Impact>Gain Privileges or Assume Identity</Impact>
+               <Note>When a certificate is invalid or malicious, it might allow an attacker to spoof a trusted entity by interfering in the communication path between the host and client. The product might connect to a malicious host while believing it is a trusted host, or the product might be deceived into accepting spoofed data that appears to originate from a trusted host.</Note>
+            </Consequence>
+         </Common_Consequences>
+         <Detection_Methods>
+            <Detection_Method>
+               <Method>Automated Static Analysis - Binary or Bytecode</Method>
+               <Description>
+                  <xhtml:p>According to SOAR [REF-1479], the following detection techniques may be useful:</xhtml:p>
+                  <xhtml:div style="margin-left:1em;">
+                     <xhtml:div>Cost effective for partial coverage:</xhtml:div>
+                        <xhtml:ul>
+                           <xhtml:li>Bytecode Weakness Analysis - including disassembler + source code weakness analysis</xhtml:li>
+                           <xhtml:li>Binary Weakness Analysis - including disassembler + source code weakness analysis</xhtml:li>
+                        </xhtml:ul>
+                  </xhtml:div>
+               </Description>
+               <Effectiveness>SOAR Partial</Effectiveness>
+            </Detection_Method>
+            <Detection_Method>
+               <Method>Manual Static Analysis - Binary or Bytecode</Method>
+               <Description>
+                  <xhtml:p>According to SOAR [REF-1479], the following detection techniques may be useful:</xhtml:p>
+                  <xhtml:div style="margin-left:1em;">
+                     <xhtml:div>Cost effective for partial coverage:</xhtml:div>
+                        <xhtml:ul>
+                           <xhtml:li>Binary / Bytecode disassembler - then use manual analysis for vulnerabilities &amp; anomalies</xhtml:li>
+                        </xhtml:ul>
+                  </xhtml:div>
+               </Description>
+               <Effectiveness>SOAR Partial</Effectiveness>
+            </Detection_Method>
+            <Detection_Method>
+               <Method>Dynamic Analysis with Automated Results Interpretation</Method>
+               <Description>
+                  <xhtml:p>According to SOAR [REF-1479], the following detection techniques may be useful:</xhtml:p>
+                  <xhtml:div style="margin-left:1em;">
+                     <xhtml:div>Cost effective for partial coverage:</xhtml:div>
+                        <xhtml:ul>
+                           <xhtml:li>Web Application Scanner</xhtml:li>
+                        </xhtml:ul>
+                  </xhtml:div>
+               </Description>
+               <Effectiveness>SOAR Partial</Effectiveness>
+            </Detection_Method>
+            <Detection_Method>
+               <Method>Dynamic Analysis with Manual Results Interpretation</Method>
+               <Description>
+                  <xhtml:p>According to SOAR [REF-1479], the following detection techniques may be useful:</xhtml:p>
+                  <xhtml:div style="margin-left:1em;">
+                     <xhtml:div>Highly cost effective:</xhtml:div>
+                        <xhtml:ul>
+                           <xhtml:li>Man-in-the-middle attack tool</xhtml:li>
+                        </xhtml:ul>
+                  </xhtml:div>
+               </Description>
+               <Effectiveness>High</Effectiveness>
+            </Detection_Method>
+            <Detection_Method>
+               <Method>Manual Static Analysis - Source Code</Method>
+               <Description>
+                  <xhtml:p>According to SOAR [REF-1479], the following detection techniques may be useful:</xhtml:p>
+                  <xhtml:div style="margin-left:1em;">
+                     <xhtml:div>Highly cost effective:</xhtml:div>
+                        <xhtml:ul>
+                           <xhtml:li>Focused Manual Spotcheck - Focused manual analysis of source</xhtml:li>
+                           <xhtml:li>Manual Source Code Review (not inspections)</xhtml:li>
+                        </xhtml:ul>
+                  </xhtml:div>
+               </Description>
+               <Effectiveness>High</Effectiveness>
+            </Detection_Method>
+            <Detection_Method>
+               <Method>Automated Static Analysis - Source Code</Method>
+               <Description>
+                  <xhtml:p>According to SOAR [REF-1479], the following detection techniques may be useful:</xhtml:p>
+                  <xhtml:div style="margin-left:1em;">
+                     <xhtml:div>Cost effective for partial coverage:</xhtml:div>
+                        <xhtml:ul>
+                           <xhtml:li>Source code Weakness Analyzer</xhtml:li>
+                           <xhtml:li>Context-configured Source Code Weakness Analyzer</xhtml:li>
+                        </xhtml:ul>
+                  </xhtml:div>
+               </Description>
+               <Effectiveness>SOAR Partial</Effectiveness>
+            </Detection_Method>
+            <Detection_Method>
+               <Method>Architecture or Design Review</Method>
+               <Description>
+                  <xhtml:p>According to SOAR [REF-1479], the following detection techniques may be useful:</xhtml:p>
+                  <xhtml:div style="margin-left:1em;">
+                     <xhtml:div>Highly cost effective:</xhtml:div>
+                        <xhtml:ul>
+                           <xhtml:li>Inspection (IEEE 1028 standard) (can apply to requirements, design, source code, etc.)</xhtml:li>
+                        </xhtml:ul>
+                  </xhtml:div>
+               </Description>
+               <Effectiveness>High</Effectiveness>
+            </Detection_Method>
+         </Detection_Methods>
+         <Potential_Mitigations>
+            <Mitigation>
+               <Phase>Architecture and Design</Phase>
+               <Phase>Implementation</Phase>
+               <Description>Certificates should be carefully managed and checked to assure that data are encrypted with the intended owner's public key.</Description>
+            </Mitigation>
+            <Mitigation>
+               <Phase>Implementation</Phase>
+               <Description>If certificate pinning is being used, ensure that all relevant properties of the certificate are fully validated before the certificate is pinned, including the hostname.</Description>
+            </Mitigation>
+         </Potential_Mitigations>
+         <Demonstrative_Examples>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-121">
+               <Intro_Text>This code checks the certificate of a connected peer.</Intro_Text>
+               <Example_Code Nature="Bad" Language="C">
+                  <xhtml:div>if ((cert = SSL_get_peer_certificate(ssl)) &amp;&amp; host)<xhtml:div style="margin-left:1em;">foo=SSL_get_verify_result(ssl);</xhtml:div>
+                     <xhtml:br />if ((X509_V_OK==foo) || X509_V_ERR_SELF_SIGNED_CERT_IN_CHAIN==foo))<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>
+                           <xhtml:br />
+                           <xhtml:i>// certificate looks good, host can be trusted</xhtml:i>
+                           <xhtml:br />
+                        </xhtml:div>
+                     </xhtml:div>
+                  </xhtml:div>
+               </Example_Code>
+               <Body_Text>In this case, because the certificate is self-signed, there was no external authority that could prove the identity of the host. The program could be communicating with a different system that is spoofing the host, e.g. by poisoning the DNS cache or using an Adversary-in-the-Middle (AITM) attack to modify the traffic from server to client.</Body_Text>
+            </Demonstrative_Example>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-122">
+               <Intro_Text>The following OpenSSL code obtains a certificate and verifies it.</Intro_Text>
+               <Example_Code Nature="Bad" Language="C">
+                  <xhtml:div>cert = SSL_get_peer_certificate(ssl);<xhtml:br />if (cert &amp;&amp; (SSL_get_verify_result(ssl)==X509_V_OK)) {<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>
+                           <xhtml:br />
+                           <xhtml:i>// do secret things</xhtml:i>
+                           <xhtml:br />
+                        </xhtml:div>
+                     </xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>Even though the "verify" step returns X509_V_OK, this step does not include checking the Common Name against the name of the host. That is, there is no guarantee that the certificate is for the desired host. The SSL connection could have been established with a malicious host that provided a valid certificate.</Body_Text>
+            </Demonstrative_Example>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-123">
+               <Intro_Text>The following OpenSSL code ensures that there is a certificate and allows the use of expired certificates.</Intro_Text>
+               <Example_Code Nature="Bad" Language="C">
+                  <xhtml:div>if (cert = SSL_get_peer(certificate(ssl)) {<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>foo=SSL_get_verify_result(ssl);<xhtml:br />if ((X509_V_OK==foo) || (X509_V_ERR_CERT_HAS_EXPIRED==foo))<xhtml:div style="margin-left:1em;">
+                              <xhtml:div>
+                                 <xhtml:br />
+                                 <xhtml:i>//do stuff</xhtml:i>
+                                 <xhtml:br />
+                              </xhtml:div>
+                           </xhtml:div>
+                        </xhtml:div>
+                     </xhtml:div>
+                  </xhtml:div>
+               </Example_Code>
+               <Body_Text>If the call to SSL_get_verify_result() returns X509_V_ERR_CERT_HAS_EXPIRED, this means that the certificate has expired. As time goes on, there is an increasing chance for attackers to compromise the certificate.</Body_Text>
+            </Demonstrative_Example>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-124">
+               <Intro_Text>The following OpenSSL code ensures that there is a certificate before continuing execution.</Intro_Text>
+               <Example_Code Nature="Bad" Language="C">
+                  <xhtml:div>if (cert = SSL_get_peer_certificate(ssl)) {<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>
+                           <xhtml:br />
+                           <xhtml:i>// got a certificate, do secret things</xhtml:i>
+                           <xhtml:br />
+                        </xhtml:div>
+                     </xhtml:div>
+                  </xhtml:div>
+               </Example_Code>
+               <Body_Text>Because this code does not use SSL_get_verify_results() to check the certificate, it could accept certificates that have been revoked (X509_V_ERR_CERT_REVOKED). The software could be communicating with a malicious host.</Body_Text>
+            </Demonstrative_Example>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-125">
+               <Intro_Text>The following OpenSSL code ensures that the host has a certificate.</Intro_Text>
+               <Example_Code Nature="Bad" Language="C">
+                  <xhtml:div>if (cert = SSL_get_peer_certificate(ssl)) {<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>
+                           <xhtml:br />
+                           <xhtml:i>// got certificate, host can be trusted</xhtml:i>
+                           <xhtml:br />
+                           <xhtml:br />
+                           <xhtml:i>//foo=SSL_get_verify_result(ssl);</xhtml:i>
+                           <xhtml:br />
+                           <xhtml:br />
+                           <xhtml:i>//if (X509_V_OK==foo) ...</xhtml:i>
+                           <xhtml:br />
+                        </xhtml:div>
+                     </xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>Note that the code does not call SSL_get_verify_result(ssl), which effectively disables the validation step that checks the certificate.</Body_Text>
+            </Demonstrative_Example>
+         </Demonstrative_Examples>
+         <Observed_Examples>
+            <Observed_Example>
+               <Reference>CVE-2019-12496</Reference>
+               <Description>A Go framework for robotics, drones, and IoT devices skips verification of root CA certificates by default.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2019-12496</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2014-1266</Reference>
+               <Description>Chain: incorrect "goto" in Apple SSL product bypasses certificate validation, allowing Adversary-in-the-Middle (AITM) attack (Apple "goto fail" bug). CWE-705 (Incorrect Control Flow Scoping) -&gt; CWE-561 (Dead Code) -&gt; CWE-295 (Improper Certificate Validation) -&gt; CWE-393 (Return of Wrong Status Code) -&gt; CWE-300 (Channel Accessible by Non-Endpoint). The code's whitespace indentation did not reflect the actual control flow (CWE-1114) and did not explicitly delimit the block (CWE-483), which could have made it more difficult for human code auditors to detect the vulnerability.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2014-1266</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2021-22909</Reference>
+               <Description>Chain: router's firmware update procedure uses curl with "-k" (insecure) option that disables certificate validation (CWE-295), allowing adversary-in-the-middle (AITM) compromise with a malicious firmware image (CWE-494).</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2021-22909</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2008-4989</Reference>
+               <Description>Verification function trusts certificate chains in which the last certificate is self-signed.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2008-4989</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2012-5821</Reference>
+               <Description>Web browser uses a TLS-related function incorrectly, preventing it from verifying that a server's certificate is signed by a trusted certification authority (CA)</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2012-5821</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2009-3046</Reference>
+               <Description>Web browser does not check if any intermediate certificates are revoked.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2009-3046</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2011-0199</Reference>
+               <Description>Operating system does not check Certificate Revocation List (CRL) in some cases, allowing spoofing using a revoked certificate.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2011-0199</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2012-5810</Reference>
+               <Description>Mobile banking application does not verify hostname, leading to financial loss.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2012-5810</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2012-3446</Reference>
+               <Description>Cloud-support library written in Python uses incorrect regular expression when matching hostname.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2012-3446</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2009-2408</Reference>
+               <Description>Web browser does not correctly handle '\0' character (NUL) in Common Name, allowing spoofing of https sites.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2009-2408</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2012-2993</Reference>
+               <Description>Smartphone device does not verify hostname, allowing spoofing of mail services.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2012-2993</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2012-5822</Reference>
+               <Description>Application uses third-party library that does not validate hostname.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2012-5822</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2012-5819</Reference>
+               <Description>Cloud storage management application does not validate hostname.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2012-5819</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2012-5817</Reference>
+               <Description>Java library uses JSSE SSLSocket and SSLEngine classes, which do not verify the hostname.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2012-5817</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2010-1378</Reference>
+               <Description>Chain: incorrect calculation (CWE-682) allows attackers to bypass certificate checks (CWE-295)</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2010-1378</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2007-6746</Reference>
+               <Description>library for SSL and TLS does not check the activation or expiration dates of CA certificates</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2007-6746</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2005-3170</Reference>
+               <Description>LDAP client accepts certificates even if they are not from a trusted CA.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2005-3170</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2009-0265</Reference>
+               <Description>chain: DNS server does not correctly check return value from the OpenSSL EVP_VerifyFinal function allows bypass of validation of the certificate chain.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2009-0265</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2003-1229</Reference>
+               <Description>chain: product checks if client is trusted when it intended to check if the server is trusted, allowing validation of signed code.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2003-1229</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2002-0862</Reference>
+               <Description>Cryptographic API, as used in web browsers, mail clients, and other software, does not properly validate Basic Constraints.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2002-0862</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2009-1358</Reference>
+               <Description>chain: OS package manager does not check properly check the return value, allowing bypass using a revoked certificate.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2009-1358</Link>
+            </Observed_Example>
+         </Observed_Examples>
+         <Taxonomy_Mappings>
+            <Taxonomy_Mapping Taxonomy_Name="OWASP Top Ten 2004">
+               <Entry_ID>A10</Entry_ID>
+               <Entry_Name>Insecure Configuration Management</Entry_Name>
+               <Mapping_Fit>CWE More Specific</Mapping_Fit>
+            </Taxonomy_Mapping>
+         </Taxonomy_Mappings>
+         <Related_Attack_Patterns>
+            <Related_Attack_Pattern CAPEC_ID="459" />
+            <Related_Attack_Pattern CAPEC_ID="475" />
+         </Related_Attack_Patterns>
+         <References>
+            <Reference External_Reference_ID="REF-243" />
+            <Reference External_Reference_ID="REF-244" />
+            <Reference External_Reference_ID="REF-1479" />
+         </References>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Base level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+         <Content_History>
+            <Submission>
+                <Submission_Name>CWE Community</Submission_Name>
+                <Submission_Date>2006-07-19</Submission_Date>
+                <Submission_Version>Draft 3</Submission_Version>
+                <Submission_ReleaseDate>2006-07-19</Submission_ReleaseDate>
+				<Submission_Comment>Submitted by members of the CWE community to extend early CWE versions</Submission_Comment>
+            </Submission>
+            <Modification>
+               <Modification_Organization>Veracode</Modification_Organization>
+               <Modification_Date>2008-08-15</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>Suggested OWASP Top Ten 2004 mapping</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2008-09-08</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2008-10-14</Modification_Date>
+               <Modification_Version>1.0.1</Modification_Version>
+               <Modification_ReleaseDate>2008-10-14</Modification_ReleaseDate>
+               <Modification_Comment>updated Background_Details, Description</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2012-05-11</Modification_Date>
+               <Modification_Version>2.2</Modification_Version>
+               <Modification_ReleaseDate>2012-05-15</Modification_ReleaseDate>
+               <Modification_Comment>updated Related_Attack_Patterns</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2012-12-28</Modification_Date>
+               <Modification_Version>2.4</Modification_Version>
+               <Modification_ReleaseDate>2013-02-21</Modification_ReleaseDate>
+               <Modification_Importance>Critical</Modification_Importance>
+               <Modification_Comment>Converted from category to weakness class.</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2013-02-21</Modification_Date>
+               <Modification_Version>2.4</Modification_Version>
+               <Modification_ReleaseDate>2013-02-21</Modification_ReleaseDate>
+               <Modification_Comment>updated Applicable_Platforms, Common_Consequences, Description, Name, Observed_Examples, Potential_Mitigations, References, Relationships, Time_of_Introduction, Type</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2014-06-23</Modification_Date>
+               <Modification_Version>2.7</Modification_Version>
+               <Modification_ReleaseDate>2014-06-23</Modification_ReleaseDate>
+               <Modification_Comment>updated Observed_Examples</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2014-07-30</Modification_Date>
+               <Modification_Version>2.8</Modification_Version>
+               <Modification_ReleaseDate>2014-07-31</Modification_ReleaseDate>
+               <Modification_Comment>updated Detection_Factors</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2015-12-07</Modification_Date>
+               <Modification_Version>2.9</Modification_Version>
+               <Modification_ReleaseDate>2015-12-07</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2017-01-19</Modification_Date>
+               <Modification_Version>2.10</Modification_Version>
+               <Modification_ReleaseDate>2017-01-19</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2017-11-08</Modification_Date>
+               <Modification_Version>3.0</Modification_Version>
+               <Modification_ReleaseDate>2017-11-08</Modification_ReleaseDate>
+               <Modification_Comment>updated Modes_of_Introduction, References, Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2018-03-27</Modification_Date>
+               <Modification_Version>3.1</Modification_Version>
+               <Modification_ReleaseDate>2018-03-27</Modification_ReleaseDate>
+               <Modification_Comment>updated Background_Details, Modes_of_Introduction, Potential_Mitigations, Relationships</Modification_Comment>
+            </Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2019-06-20</Modification_Date>
+					<Modification_Version>3.3</Modification_Version>
+					<Modification_ReleaseDate>2019-06-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2019-09-19</Modification_Date>
+					<Modification_Version>3.4</Modification_Version>
+					<Modification_ReleaseDate>2019-09-19</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-02-24</Modification_Date>
+					<Modification_Version>4.0</Modification_Version>
+					<Modification_ReleaseDate>2020-02-24</Modification_ReleaseDate>
+					<Modification_Comment>updated Applicable_Platforms, Demonstrative_Examples, Description, Observed_Examples, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-08-20</Modification_Date>
+					<Modification_Version>4.2</Modification_Version>
+					<Modification_ReleaseDate>2020-08-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Related_Attack_Patterns</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-07-20</Modification_Date>
+					<Modification_Version>4.5</Modification_Version>
+					<Modification_ReleaseDate>2021-07-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples, Observed_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-10-28</Modification_Date>
+					<Modification_Version>4.6</Modification_Version>
+					<Modification_ReleaseDate>2021-10-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Observed_Examples, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-04-28</Modification_Date>
+					<Modification_Version>4.7</Modification_Version>
+					<Modification_ReleaseDate>2022-04-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-10-13</Modification_Date>
+					<Modification_Version>4.9</Modification_Version>
+					<Modification_ReleaseDate>2022-10-13</Modification_ReleaseDate>
+					<Modification_Comment>updated Observed_Examples, References</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-01-31</Modification_Date>
+					<Modification_Version>4.10</Modification_Version>
+					<Modification_ReleaseDate>2023-01-31</Modification_ReleaseDate>
+					<Modification_Comment>updated Description, Modes_of_Introduction</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-09-09</Modification_Date>
+					<Modification_Version>4.18</Modification_Version>
+					<Modification_ReleaseDate>2025-09-09</Modification_ReleaseDate>
+					<Modification_Comment>updated Common_Consequences, Description, Detection_Factors, Diagram, References</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Applicable_Platforms, Observed_Examples, Relationships, Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2026-04-30</Modification_Date>
+					<Modification_Version>4.20</Modification_Version>
+					<Modification_ReleaseDate>2026-04-30</Modification_ReleaseDate>
+					<Modification_Comment>updated Observed_Examples</Modification_Comment>
+				</Modification>
+            <Previous_Entry_Name Date="2013-02-21">Certificate Issues</Previous_Entry_Name>
+         </Content_History>
+      </Weakness>
+      

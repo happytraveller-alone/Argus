@@ -1,0 +1,240 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="1204" Name="Generation of Weak Initialization Vector (IV)" Abstraction="Base" Structure="Simple" Status="Incomplete">
+			<Description>The product uses a cryptographic primitive that uses an Initialization
+			Vector (IV), but the product does not generate IVs that are
+			sufficiently unpredictable or unique according to the expected
+			cryptographic requirements for that primitive.
+			</Description>
+			<Extended_Description>
+			  By design, some cryptographic primitives
+			  (such as block ciphers) require that IVs
+			  must have certain properties for the
+			  uniqueness and/or unpredictability of an
+			  IV. Primitives may vary in how important
+			  these properties are. If these properties
+			  are not maintained, e.g. by a bug in the
+			  code, then the cryptography may be weakened
+			  or broken by attacking the IVs themselves.
+			</Extended_Description>
+			<Related_Weaknesses>
+			  <Related_Weakness Nature="ChildOf" CWE_ID="330" View_ID="1000" Ordinal="Primary" />
+			</Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+            <Weakness_Ordinality>
+               <Ordinality>Resultant</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+			<Applicable_Platforms>
+			  <Language Class="Not Language-Specific" Prevalence="Undetermined" />
+			</Applicable_Platforms>
+			<Modes_Of_Introduction>
+				<Introduction>
+				  <Phase>Implementation</Phase>
+				</Introduction>
+			</Modes_Of_Introduction>
+			<Common_Consequences>
+			  <Consequence>
+			    <Scope>Confidentiality</Scope>
+			    <Impact>Read Application Data</Impact>
+			    <Note>If the IV is not properly initialized, data that is encrypted can be compromised and information about the data can be leaked. See [REF-1179].</Note>
+			  </Consequence>
+			</Common_Consequences>
+			<Detection_Methods>
+			  <Detection_Method Detection_Method_ID="DM-14">
+			    <Method>Automated Static Analysis</Method>
+			    <Description>Automated static analysis, commonly referred to as Static Application Security Testing (SAST), can find some instances of this weakness by analyzing source code (or binary/compiled code) without having to execute it. Typically, this is done by building a model of data flow and control flow, then searching for potentially-vulnerable patterns that connect "sources" (origins of input) with "sinks" (destinations where the data interacts with external components, a lower layer such as the OS, etc.)</Description>
+			    <Effectiveness>High</Effectiveness>
+			  </Detection_Method>
+			</Detection_Methods>
+			<Potential_Mitigations>
+			  <Mitigation>
+			    <Phase>Implementation</Phase>
+			    <Description><xhtml:p>Different cipher
+			    modes have different requirements for
+			    their IVs. When choosing and implementing
+			    a mode, it is important to understand
+			    those requirements in order to keep
+			    security guarantees intact. Generally, it
+			    is safest to generate a random IV, since
+			    it will be both unpredictable and have a
+			    very low chance of being non-unique. IVs
+			    do not have to be kept secret, so if
+			    generating duplicate IVs is a concern, a
+			    list of already-used IVs can be kept and
+			    checked against.
+			    </xhtml:p>
+			    <xhtml:p>
+			      NIST offers recommendations on generation of IVs for modes of which they have approved. These include options for when random IVs are not practical. For CBC, CFB, and OFB, see [REF-1175]; for GCM, see [REF-1178].
+			    </xhtml:p>
+			    </Description>
+			  </Mitigation>
+			</Potential_Mitigations>
+			<Demonstrative_Examples>
+			  <Demonstrative_Example Demonstrative_Example_ID="DX-143">
+			    <Intro_Text>In the following examples, CBC mode is used when encrypting data:</Intro_Text>
+			    <Example_Code Nature="Bad" Language="C">
+			      <xhtml:div>EVP_CIPHER_CTX ctx;<xhtml:br />char key[EVP_MAX_KEY_LENGTH];<xhtml:br />char iv[EVP_MAX_IV_LENGTH];<xhtml:br />RAND_bytes(key, b);<xhtml:br />memset(iv,0,EVP_MAX_IV_LENGTH);<xhtml:br />EVP_EncryptInit(&amp;ctx,EVP_bf_cbc(), key,iv);</xhtml:div>
+			    </Example_Code>
+			    <Example_Code Nature="Bad" Language="Java">
+			      <xhtml:div>public class SymmetricCipherTest {<xhtml:div style="margin-left:1em;">
+                              <xhtml:div>public static void main() {<xhtml:div style="margin-left:1em;">
+                              <xhtml:div>
+                              <xhtml:br />byte[] text ="Secret".getBytes();<xhtml:br />byte[] iv ={<xhtml:div style="margin-left:1em;">0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00</xhtml:div>};<xhtml:br />KeyGenerator kg = KeyGenerator.getInstance("DES");<xhtml:br />kg.init(56);<xhtml:br />SecretKey key = kg.generateKey();<xhtml:br />Cipher cipher = Cipher.getInstance("DES/CBC/PKCS5Padding");<xhtml:br />IvParameterSpec ips = new IvParameterSpec(iv);<xhtml:br />cipher.init(Cipher.ENCRYPT_MODE, key, ips);<xhtml:br />return cipher.doFinal(inpBytes);</xhtml:div>
+                              </xhtml:div>}</xhtml:div>
+			      </xhtml:div>}</xhtml:div>
+			    </Example_Code>
+			    <Body_Text>In both of these examples, the initialization vector (IV) is always a block of zeros. This makes the resulting cipher text much more predictable and susceptible to a dictionary attack.</Body_Text>
+			  </Demonstrative_Example>
+			  <Demonstrative_Example>
+			    <Intro_Text>
+			    The Wired Equivalent Privacy (WEP) protocol used in the 802.11
+			    wireless standard only supported 40-bit keys, and the IVs were only 24
+			    bits, increasing the chances that the same IV would be reused for
+			    multiple messages. The IV was included in plaintext as part of the packet, making
+			    it directly observable to attackers. Only 5000 messages are needed
+			    before a collision occurs due to the "birthday paradox" [REF-1176]. Some
+			    implementations would reuse the same IV for each packet. This IV reuse
+			    made it much easier for attackers to recover plaintext from
+			    two packets with the same IV, using well-understood attacks,
+			    especially if the plaintext was known for one of the packets [REF-1175].
+			    </Intro_Text>
+			  </Demonstrative_Example>
+			</Demonstrative_Examples>
+			<Observed_Examples>
+			  <Observed_Example>
+			    <Reference>CVE-2020-1472</Reference>
+			    <Description>ZeroLogon vulnerability - use of a static IV of all zeroes in AES-CFB8 mode</Description>
+			    <Link>https://www.cve.org/CVERecord?id=CVE-2020-1472</Link>
+			  </Observed_Example>
+			  <Observed_Example>
+			    <Reference>CVE-2011-3389</Reference>
+			    <Description>BEAST attack in SSL 3.0 / TLS 1.0. In CBC mode, chained initialization vectors are non-random, allowing decryption of HTTPS traffic using a chosen plaintext attack.</Description>
+			    <Link>https://www.cve.org/CVERecord?id=CVE-2011-3389</Link>
+			  </Observed_Example>
+			  <Observed_Example>
+			    <Reference>CVE-2001-0161</Reference>
+			    <Description>wireless router does not use 6 of the 24 bits for WEP encryption, making it easier for attackers to decrypt traffic</Description>
+			    <Link>https://www.cve.org/CVERecord?id=CVE-2001-0161</Link>
+			  </Observed_Example>
+			  <Observed_Example>
+			    <Reference>CVE-2001-0160</Reference>
+			    <Description>WEP card generates predictable IV values, making it easier for attackers to decrypt traffic</Description>
+			    <Link>https://www.cve.org/CVERecord?id=CVE-2001-0160</Link>
+			  </Observed_Example>
+			  <Observed_Example>
+			    <Reference>CVE-2017-3225</Reference>
+			    <Description>device bootloader uses a zero initialization vector during AES-CBC</Description>
+			    <Link>https://www.cve.org/CVERecord?id=CVE-2017-3225</Link>
+			  </Observed_Example>
+			  <Observed_Example>
+			    <Reference>CVE-2016-6485</Reference>
+			    <Description>crypto framework uses PHP rand function - which is not cryptographically secure - for an initialization vector</Description>
+			    <Link>https://www.cve.org/CVERecord?id=CVE-2016-6485</Link>
+			  </Observed_Example>
+			  <Observed_Example>
+			    <Reference>CVE-2014-5386</Reference>
+			    <Description>encryption routine does not seed the random number generator, causing the same initialization vector to be generated repeatedly</Description>
+			    <Link>https://www.cve.org/CVERecord?id=CVE-2014-5386</Link>
+			  </Observed_Example>
+			  <Observed_Example>
+			    <Reference>CVE-2020-5408</Reference>
+			    <Description>encryption functionality in an authentication framework uses a fixed null IV with CBC mode, allowing attackers to decrypt traffic in applications that use this functionality</Description>
+			    <Link>https://www.cve.org/CVERecord?id=CVE-2020-5408</Link>
+			  </Observed_Example>
+			  <Observed_Example>
+			    <Reference>CVE-2017-17704</Reference>
+			    <Description>messages for a door-unlocking product use a fixed IV in CBC mode, which is the same after each restart </Description>
+			    <Link>https://www.cve.org/CVERecord?id=CVE-2017-17704</Link>
+			  </Observed_Example>
+			  <Observed_Example>
+			    <Reference>CVE-2017-11133</Reference>
+			    <Description>application uses AES in CBC mode, but the pseudo-random secret and IV are generated using math.random, which is not cryptographically strong.</Description>
+			    <Link>https://www.cve.org/CVERecord?id=CVE-2017-11133</Link>
+			  </Observed_Example>
+			  <Observed_Example>
+			    <Reference>CVE-2007-3528</Reference>
+			    <Description>Blowfish-CBC implementation constructs an IV where each byte is calculated modulo 8 instead of modulo 256, resulting in less than 12 bits for the effective IV length, and less than 4096 possible IV values.</Description>
+			    <Link>https://www.cve.org/CVERecord?id=CVE-2007-3528</Link>
+			  </Observed_Example>
+			</Observed_Examples>
+			<Functional_Areas>
+			  <Functional_Area>Cryptography</Functional_Area>
+			</Functional_Areas>
+         <Related_Attack_Patterns>
+            <Related_Attack_Pattern CAPEC_ID="20" />
+            <Related_Attack_Pattern CAPEC_ID="97" />
+         </Related_Attack_Patterns>
+         <References>
+				<Reference External_Reference_ID="REF-1175" Section="3. Risks of Keystream Reuse" />
+				<Reference External_Reference_ID="REF-1175" Section="Appendix C" />
+				<Reference External_Reference_ID="REF-1176" />
+				<Reference External_Reference_ID="REF-1177" />
+				<Reference External_Reference_ID="REF-1178" Section="8.2 IV Constructions" />
+				<Reference External_Reference_ID="REF-1179" />
+			</References>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Base level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+			<Notes>
+			  <Note Type="Maintenance">As of CWE 4.5, terminology related to randomness, entropy, and
+			  predictability can vary widely. Within the developer and other
+			  communities, "randomness" is used heavily. However, within
+			  cryptography, "entropy" is distinct, typically implied as a
+			  measurement. There are no commonly-used definitions, even within
+			  standards documents and cryptography papers. Future versions of
+			  CWE will attempt to define these terms and, if necessary,
+			  distinguish between them in ways that are appropriate for
+			  different communities but do not reduce the usability of CWE for
+			  mapping, understanding, or other scenarios.</Note>
+			</Notes>
+			<Content_History>
+				<Submission>
+					<Submission_Name>CWE Content Team</Submission_Name>
+					<Submission_Organization>MITRE</Submission_Organization>
+					<Submission_Date>2021-03-09</Submission_Date>
+					<Submission_Version>4.4</Submission_Version>
+					<Submission_ReleaseDate>2021-03-15</Submission_ReleaseDate>
+				</Submission>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-07-20</Modification_Date>
+					<Modification_Version>4.5</Modification_Version>
+					<Modification_ReleaseDate>2021-07-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Maintenance_Notes, Observed_Examples, References</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated References, Relationships, Time_of_Introduction</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Detection_Factors, Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+			</Content_History>
+		</Weakness>
+      

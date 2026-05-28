@@ -1,0 +1,257 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="1317" Name="Improper Access Control in Fabric Bridge" Abstraction="Base" Structure="Simple" Status="Draft">
+			<Description>The product uses a fabric bridge for transactions between two Intellectual Property (IP) blocks, but the bridge does not properly perform the expected privilege, identity, or other access control checks between those IP blocks.</Description>
+			<Extended_Description>
+				<xhtml:p>In hardware designs, different IP blocks are connected through interconnect-bus fabrics (e.g. AHB and OCP). Within a System on Chip (SoC), the IP block subsystems could be using different bus protocols. In such a case, the IP blocks are then linked to the central bus (and to other IP blocks) through a fabric bridge. Bridges are used as bus-interconnect-routing modules that link different protocols or separate, different segments of the overall SoC interconnect.</xhtml:p>
+				<xhtml:p>For overall system security, it is important that the access-control privileges associated with any fabric transaction are consistently maintained and applied, even when they are routed or translated by a fabric bridge. A bridge that is connected to a fabric without security features forwards transactions to the slave without checking the privilege level of the master and results in a weakness in SoC access-control security. The same weakness occurs if a bridge does not check the hardware identity of the transaction received from the slave interface of the bridge.</xhtml:p>
+			</Extended_Description>
+			<Related_Weaknesses>
+				<Related_Weakness Nature="ChildOf" CWE_ID="284" View_ID="1000" Ordinal="Primary" />
+			</Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+			<Applicable_Platforms>	
+				<Language Class="Not Language-Specific" Prevalence="Undetermined" />
+				<Operating_System Class="Not OS-Specific" Prevalence="Undetermined" />
+				<Architecture Class="Not Architecture-Specific" Prevalence="Undetermined" />
+				<Technology Name="Processor Hardware" Prevalence="Undetermined" />
+				<Technology Class="Not Technology-Specific" Prevalence="Undetermined" />
+			</Applicable_Platforms>
+			<Modes_Of_Introduction>
+				<Introduction>
+					<Phase>Architecture and Design</Phase>
+				</Introduction>
+				<Introduction>
+					<Phase>Implementation</Phase>
+				</Introduction>
+			</Modes_Of_Introduction>
+			<Common_Consequences>
+				<Consequence>
+					<Scope>Confidentiality</Scope>
+					<Scope>Integrity</Scope>
+					<Scope>Access Control</Scope>
+					<Scope>Availability</Scope>
+					<Impact>DoS: Crash, Exit, or Restart</Impact>
+					<Impact>Bypass Protection Mechanism</Impact>
+					<Impact>Read Memory</Impact>
+					<Impact>Modify Memory</Impact>
+					<Likelihood>Medium</Likelihood>
+				</Consequence>
+			</Common_Consequences>
+			<Detection_Methods>
+				<Detection_Method>
+				<Method>Simulation / Emulation</Method>
+				<Description>RTL simulation to ensure that bridge-access controls are implemented properly.</Description>
+				<Effectiveness>High</Effectiveness>
+				</Detection_Method>
+				<Detection_Method>
+				<Method>Formal Verification</Method>
+				<Description>Formal verification of bridge RTL to ensure that access control cannot be bypassed. </Description>
+				<Effectiveness>High</Effectiveness>
+				</Detection_Method>
+			</Detection_Methods>
+			<Potential_Mitigations>
+				<Mitigation>
+					<Phase>Architecture and Design</Phase>
+					<Description>Ensure that the design includes provisions for access-control checks in the bridge for both upstream and downstream transactions.</Description>
+				</Mitigation>
+				<Mitigation>
+					<Phase>Implementation</Phase>
+					<Description>Implement access-control checks in the bridge for both upstream and downstream transactions.</Description>
+				</Mitigation>
+			</Potential_Mitigations>
+			<Demonstrative_Examples>
+				<Demonstrative_Example>
+					<Intro_Text>This example is from CVE-2019-6260 [REF-1138]. The iLPC2AHB bridge connects a CPU (with multiple, privilege levels, such as user, super user, debug, etc.) over AHB interface to an LPC bus. Several peripherals are connected to the LPC bus. The bridge is expected to check the privilege level of the transactions initiated in the core before forwarding them to the peripherals on the LPC bus. </Intro_Text>
+					<Body_Text>The bridge does not implement the checks and allows reads and writes from all privilege levels. </Body_Text>
+					<Body_Text>To address this, designers should implement hardware-based checks that are either hardcoded to block untrusted agents from accessing secure peripherals or implement firmware flows that configure the bridge to block untrusted agents from making arbitrary reads or writes.</Body_Text>
+				</Demonstrative_Example>
+				<Demonstrative_Example>
+					<Intro_Text>The example code below is taken from the AES and core local interrupt (CLINT) peripherals of the HACK@DAC'21 buggy OpenPiton SoC. The access to all the peripherals for a given privilege level of the processor is controlled by an access control module in the SoC. This ensures that malicious users with insufficient privileges do not get access to sensitive data, such as the AES keys used by the operating system to encrypt and decrypt information. The security of the entire system will be compromised if the access controls are incorrectly enforced. The access controls are enforced through the interconnect-bus fabrics, where access requests with insufficient access control permissions will be rejected.</Intro_Text>
+					<Example_Code Nature="Bad" Language="Verilog">
+					...<xhtml:br />
+					module aes0_wrapper #(...)(...);<xhtml:br />
+					...<xhtml:br />
+						<xhtml:div style="margin-left:1em;">
+						input logic     acct_ctrl_i;<xhtml:br />
+						</xhtml:div>
+					...<xhtml:br />
+						<xhtml:div style="margin-left:1em;">
+						axi_lite_interface #(...<xhtml:br />
+						) axi_lite_interface_i (<xhtml:br />
+						...<xhtml:br />
+							<xhtml:div style="margin-left:1em;">
+							<xhtml:b>.en_o       ( en_acct    ),</xhtml:b><xhtml:br />
+							</xhtml:div>
+						</xhtml:div>
+					...<xhtml:br />
+					..);<xhtml:br />
+						<xhtml:div style="margin-left:1em;">
+						<xhtml:b>assign en = en_acct &amp;&amp; acct_ctrl_i;</xhtml:b><xhtml:br />
+						</xhtml:div>
+					...<xhtml:br />
+					endmodule<xhtml:br />
+					...<xhtml:br />
+					module clint #(...)(...);<xhtml:br />
+					...<xhtml:br />
+						<xhtml:div style="margin-left:1em;">
+						axi_lite_interface #(...<xhtml:br />
+						) axi_lite_interface_i (<xhtml:br />
+						...<xhtml:br />
+							<xhtml:div style="margin-left:1em;">
+							<xhtml:b>.en_o       ( en         ),</xhtml:b><xhtml:br />
+							</xhtml:div>
+						</xhtml:div>
+					...<xhtml:br />
+					  );<xhtml:br />
+					...<xhtml:br />
+					endmodule<xhtml:br />
+					</Example_Code>
+					<Body_Text>The previous code snippet [REF-1382] illustrates an instance of a vulnerable implementation of access control for the CLINT peripheral (see module clint). It also shows a correct implementation of access control for the AES peripheral (see module aes0_wrapper) [REF-1381]. An enable signal (en_o) from the fabric's AXI interface (present in both modules) is used to determine if an access request is made to the peripheral. In the case of the AES peripheral, this en_o signal is first received in a temporary signal en_acct. Then, the access request is enabled (by asserting the en signal) only if the request has sufficient access permissions (i.e., acct_ctrl_i signal should be enabled). However, in the case of the CLINT peripheral, the enable signal, en_o, from the AXI interface, is directly used to enable accesses. As a result, users with insufficient access permissions also get full access to the CLINT peripheral.</Body_Text>
+					<Body_Text>To fix this, enable access requests to CLINT [REF-1383] only if the user has sufficient access as indicated by the acct_ctrl_i signal in the boolean &amp;&amp; with en_acct.</Body_Text>
+					<Example_Code Nature="Good" Language="Verilog">
+					module clint #(...<xhtml:br />
+					) (<xhtml:br />
+					... <xhtml:br />
+						<xhtml:div style="margin-left:1em;">
+						<xhtml:b>input logic     acct_ctrl_i,</xhtml:b><xhtml:br />
+						</xhtml:div>
+					...<xhtml:br />
+					);<xhtml:br />
+						<xhtml:div style="margin-left:1em;">
+						logic     en<xhtml:b>, en_acct</xhtml:b>;<xhtml:br />
+						</xhtml:div>
+					...<xhtml:br />
+						<xhtml:div style="margin-left:1em;">
+						axi_lite_interface #(...<xhtml:br />
+						) axi_lite_interface_i (<xhtml:br />
+						</xhtml:div>
+					...<xhtml:br />
+						<xhtml:div style="margin-left:1em;">
+						.en_o       ( <xhtml:b>en_acct</xhtml:b>    ),<xhtml:br />
+						</xhtml:div>
+					...<xhtml:br />
+						<xhtml:div style="margin-left:1em;">
+						);<xhtml:br />
+						<xhtml:b>assign en = en_acct &amp;&amp; acct_ctrl_i;</xhtml:b><xhtml:br />
+						</xhtml:div>
+					...<xhtml:br />
+					endmodule<xhtml:br />
+					</Example_Code>
+				</Demonstrative_Example>
+			</Demonstrative_Examples>
+			<Observed_Examples>
+			  <Observed_Example>
+			    <Reference>CVE-2019-6260</Reference>
+			    <Description>Baseboard Management Controller (BMC) device implements Advanced High-performance Bus (AHB) bridges that do not require authentication for arbitrary read and write access to the BMC's physical address space from the host, and possibly the network [REF-1138].</Description>
+			    <Link>https://www.cve.org/CVERecord?id=CVE-2019-6260</Link>
+			  </Observed_Example>
+			</Observed_Examples>
+         <Related_Attack_Patterns>
+            <Related_Attack_Pattern CAPEC_ID="122" />
+         </Related_Attack_Patterns>
+         <References>
+				<Reference External_Reference_ID="REF-1138" />
+				<Reference External_Reference_ID="REF-1381" />
+				<Reference External_Reference_ID="REF-1382" />
+				<Reference External_Reference_ID="REF-1383" />
+			</References>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Base level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+			<Content_History>
+				<Submission>
+					<Submission_Name>Arun Kanuparthi, Hareesh Khattri, Parbati Kumar Manna</Submission_Name>
+					<Submission_Organization>Intel Corporation</Submission_Organization>
+					<Submission_Date>2020-05-19</Submission_Date>
+					<Submission_Version>4.3</Submission_Version>
+					<Submission_ReleaseDate>2020-12-10</Submission_ReleaseDate>
+				</Submission>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-10-28</Modification_Date>
+					<Modification_Version>4.6</Modification_Version>
+					<Modification_ReleaseDate>2021-10-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Observed_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-04-28</Modification_Date>
+					<Modification_Version>4.7</Modification_Version>
+					<Modification_ReleaseDate>2022-04-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Applicable_Platforms</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-06-28</Modification_Date>
+					<Modification_Version>4.8</Modification_Version>
+					<Modification_ReleaseDate>2022-06-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Applicable_Platforms</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-10-13</Modification_Date>
+					<Modification_Version>4.9</Modification_Version>
+					<Modification_ReleaseDate>2022-10-13</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples, Description, Detection_Factors, Name, Potential_Mitigations</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2024-02-29</Modification_Date>
+					<Modification_Version>4.14</Modification_Version>
+					<Modification_ReleaseDate>2024-02-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples, References</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+				<Contribution Type="Content">
+					<Contribution_Name>Chen Chen, Rahul Kande, Jeyavijayan Rajendran</Contribution_Name>
+					<Contribution_Organization>Texas A&amp;M University</Contribution_Organization>
+					<Contribution_Date>2023-06-21</Contribution_Date>
+					<Contribution_Comment>suggested demonstrative example</Contribution_Comment>
+				</Contribution>
+				<Contribution Type="Content">
+					<Contribution_Name>Shaza Zeitouni, Mohamadreza Rostami, Ahmad-Reza Sadeghi</Contribution_Name>
+					<Contribution_Organization>Technical University of Darmstadt</Contribution_Organization>
+					<Contribution_Date>2023-06-21</Contribution_Date>
+					<Contribution_Comment>suggested demonstrative example</Contribution_Comment>
+				</Contribution>
+			<Previous_Entry_Name Date="2022-10-13">Missing Security Checks in Fabric Bridge</Previous_Entry_Name>
+			</Content_History>
+		</Weakness>
+      

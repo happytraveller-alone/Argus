@@ -1,0 +1,344 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="749" Name="Exposed Dangerous Method or Function" Abstraction="Base" Structure="Simple" Status="Incomplete">
+         <Description>The product provides an Applications Programming Interface (API) or similar interface for interaction with external actors, but the interface includes a dangerous method or function that is not properly restricted.</Description>
+         <Extended_Description>
+            <xhtml:p>This weakness can lead to a wide variety of resultant weaknesses, depending on the behavior of the exposed method. It can apply to any number of technologies and approaches, such as ActiveX controls, Java functions, IOCTLs, and so on.</xhtml:p>
+            <xhtml:p>The exposure can occur in a few different ways:</xhtml:p>
+            <xhtml:ul>
+               <xhtml:li>The function/method was never intended to be exposed to outside actors.</xhtml:li>
+               <xhtml:li>The function/method was only intended to be accessible to a limited set of actors, such as Internet-based access from a single web site.</xhtml:li>
+            </xhtml:ul>
+         </Extended_Description>
+         <Related_Weaknesses>
+            <Related_Weakness Nature="ChildOf" CWE_ID="284" View_ID="1000" Ordinal="Primary" />
+         </Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+         <Applicable_Platforms>
+            <Language Class="Not Language-Specific" Prevalence="Undetermined" />
+         </Applicable_Platforms>
+         <Modes_Of_Introduction>
+            <Introduction>
+               <Phase>Architecture and Design</Phase>
+            </Introduction>
+            <Introduction>
+               <Phase>Implementation</Phase>
+            </Introduction>
+         </Modes_Of_Introduction>
+         <Likelihood_Of_Exploit>Low</Likelihood_Of_Exploit>
+         <Common_Consequences>
+            <Consequence>
+               <Scope>Integrity</Scope>
+               <Scope>Confidentiality</Scope>
+               <Scope>Availability</Scope>
+               <Scope>Access Control</Scope>
+               <Scope>Other</Scope>
+               <Impact>Gain Privileges or Assume Identity</Impact>
+               <Impact>Read Application Data</Impact>
+               <Impact>Modify Application Data</Impact>
+               <Impact>Execute Unauthorized Code or Commands</Impact>
+               <Impact>Other</Impact>
+               <Note>Exposing critical functionality essentially provides an attacker with the privilege level of the exposed functionality. This could result in the modification or exposure of sensitive data or possibly even execution of arbitrary code.</Note>
+            </Consequence>
+         </Common_Consequences>
+         <Detection_Methods>
+           <Detection_Method Detection_Method_ID="DM-14">
+             <Method>Automated Static Analysis</Method>
+             <Description>Automated static analysis, commonly referred to as Static Application Security Testing (SAST), can find some instances of this weakness by analyzing source code (or binary/compiled code) without having to execute it. Typically, this is done by building a model of data flow and control flow, then searching for potentially-vulnerable patterns that connect "sources" (origins of input) with "sinks" (destinations where the data interacts with external components, a lower layer such as the OS, etc.)</Description>
+             <Effectiveness>High</Effectiveness>
+           </Detection_Method>
+         </Detection_Methods>
+         <Potential_Mitigations>
+            <Mitigation>
+               <Phase>Architecture and Design</Phase>
+               <Description>If you must expose a method, make sure to perform input validation on all arguments, limit access to authorized parties, and protect against all possible vulnerabilities.</Description>
+            </Mitigation>
+            <Mitigation>
+               <Phase>Architecture and Design</Phase>
+               <Phase>Implementation</Phase>
+               <Strategy>Attack Surface Reduction</Strategy>
+               <Description>
+                  <xhtml:p>Identify all exposed functionality. Explicitly list all functionality that must be exposed to some user or set of users. Identify which functionality may be:</xhtml:p>
+                     <xhtml:ul>
+                        <xhtml:li>accessible to all users</xhtml:li>
+                        <xhtml:li>restricted to a small set of privileged users</xhtml:li>
+                        <xhtml:li>prevented from being directly accessible at all</xhtml:li>
+                     </xhtml:ul>
+                  <xhtml:p>Ensure that the implemented code follows these expectations. This includes setting the appropriate access modifiers where applicable (public, private, protected, etc.) or not marking ActiveX controls safe-for-scripting.</xhtml:p>
+               </Description>
+            </Mitigation>
+         </Potential_Mitigations>
+         <Demonstrative_Examples>
+            <Demonstrative_Example>
+               <Intro_Text>In the following Java example the method removeDatabase will delete the database with the name specified in the input parameter.</Intro_Text>
+               <Example_Code Nature="Bad" Language="Java">
+                  <xhtml:div>public void removeDatabase(String databaseName) {<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>try {<xhtml:div style="margin-left:1em;">
+                              <xhtml:div>Statement stmt = conn.createStatement();<xhtml:br />stmt.execute("DROP DATABASE " + databaseName);<xhtml:br />
+                              </xhtml:div>
+                           </xhtml:div>} catch (SQLException ex) {...}</xhtml:div>
+                     </xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>The method in this example is declared public and therefore is exposed to any class in the application. Deleting a database should be considered a critical operation within an application and access to this potentially dangerous method should be restricted. Within Java this can be accomplished simply by declaring the method private thereby exposing it only to the enclosing class as in the following example.</Body_Text>
+               <Example_Code Nature="Good" Language="Java">
+                  <xhtml:div>private void removeDatabase(String databaseName) {<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>try {<xhtml:div style="margin-left:1em;">
+                              <xhtml:div>Statement stmt = conn.createStatement();<xhtml:br />stmt.execute("DROP DATABASE " + databaseName);<xhtml:br />
+                              </xhtml:div>
+                           </xhtml:div>} catch (SQLException ex) {...}<xhtml:br />}</xhtml:div>
+                     </xhtml:div>
+                  </xhtml:div>
+               </Example_Code>
+            </Demonstrative_Example>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-109">
+               <Intro_Text>These Android and iOS applications intercept URL loading within a WebView and perform special actions if a particular URL scheme is used, thus allowing the Javascript within the WebView to communicate with the application:</Intro_Text>
+               <Example_Code Nature="Bad" Language="Java">
+                  <xhtml:div>
+                     <xhtml:i>// Android</xhtml:i>
+                     <xhtml:br />@Override<xhtml:br />public boolean shouldOverrideUrlLoading(WebView view, String url){<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>if (url.substring(0,14).equalsIgnoreCase("examplescheme:")){<xhtml:div style="margin-left:1em;">if(url.substring(14,25).equalsIgnoreCase("getUserInfo")){<xhtml:div style="margin-left:1em;">writeDataToView(view, UserData);<xhtml:br />return false;</xhtml:div>}<xhtml:br />else{<xhtml:div style="margin-left:1em;">return true;</xhtml:div>}</xhtml:div>}</xhtml:div>
+                     </xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Example_Code Nature="Bad" Language="Objective-C">
+                  <xhtml:div>
+                     <xhtml:i>// iOS</xhtml:i>
+                     <xhtml:br />-(BOOL) webView:(UIWebView *)exWebView shouldStartLoadWithRequest:(NSURLRequest *)exRequest navigationType:(UIWebViewNavigationType)exNavigationType<xhtml:br />{<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>NSURL *URL = [exRequest URL];<xhtml:br />if ([[URL scheme] isEqualToString:@"exampleScheme"])<xhtml:br />{<xhtml:div style="margin-left:1em;">
+                              <xhtml:div>NSString *functionString = [URL resourceSpecifier];<xhtml:br />if ([functionString hasPrefix:@"specialFunction"])<xhtml:br />{<xhtml:div style="margin-left:1em;">
+                                    <xhtml:div>
+                                       <xhtml:br />
+                                       <xhtml:i>// Make data available back in webview.</xhtml:i>
+                                       <xhtml:br />UIWebView *webView = [self writeDataToView:[URL query]];</xhtml:div>
+                                 </xhtml:div>}<xhtml:br />return NO;</xhtml:div>
+                           </xhtml:div>}<xhtml:br />return YES;</xhtml:div>
+                     </xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>A call into native code can then be initiated by passing parameters within the URL:</Body_Text>
+               <Example_Code Nature="Attack" Language="JavaScript">
+                  <xhtml:div>window.location = examplescheme://method?parameter=value</xhtml:div>
+               </Example_Code>
+               <Body_Text>Because the application does not check the source, a malicious website loaded within this WebView has the same access to the API as a trusted site.</Body_Text>
+            </Demonstrative_Example>
+            <Demonstrative_Example>
+               <Intro_Text>This application uses a WebView to display websites, and creates a Javascript interface to a Java object to allow enhanced functionality on a trusted website:</Intro_Text>
+               <Example_Code Nature="Bad" Language="Java">
+                  <xhtml:div>public class WebViewGUI extends Activity {<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>WebView mainWebView;<xhtml:br />
+                           <xhtml:br />public void onCreate(Bundle savedInstanceState) {<xhtml:div style="margin-left:1em;">super.onCreate(savedInstanceState);<xhtml:br />mainWebView = new WebView(this);<xhtml:br />mainWebView.getSettings().setJavaScriptEnabled(true);<xhtml:br />mainWebView.addJavascriptInterface(new JavaScriptInterface(), "userInfoObject");<xhtml:br />mainWebView.loadUrl("file:///android_asset/www/index.html");<xhtml:br />setContentView(mainWebView);</xhtml:div>}<xhtml:br />
+                           <xhtml:br />final class JavaScriptInterface {<xhtml:div style="margin-left:1em;">
+                              <xhtml:div>JavaScriptInterface () {}<xhtml:br />
+                                 <xhtml:br />public String getUserInfo() {<xhtml:div style="margin-left:1em;">return currentUser.Info();</xhtml:div>}</xhtml:div>
+                           </xhtml:div>}</xhtml:div>
+                     </xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>Before Android 4.2 all methods, including inherited ones, are exposed to Javascript when using addJavascriptInterface(). This means that a malicious website loaded within this WebView can use reflection to acquire a reference to arbitrary Java objects. This will allow the website code to perform any action the parent application is authorized to.</Body_Text>
+               <Body_Text>For example, if the application has permission to send text messages:</Body_Text>
+               <Example_Code Nature="Attack" Language="JavaScript">
+                  <xhtml:div>&lt;script&gt;<xhtml:div style="margin-left:1em;">userInfoObject.getClass().forName('android.telephony.SmsManager').getMethod('getDefault',null).sendTextMessage(attackNumber, null, attackMessage, null, null);</xhtml:div>&lt;/script&gt;</xhtml:div>
+               </Example_Code>
+               <Body_Text>This malicious script can use the userInfoObject object to load the SmsManager object and send arbitrary text messages to any recipient.</Body_Text>
+            </Demonstrative_Example>
+            <Demonstrative_Example>
+               <Intro_Text>After Android 4.2, only methods annotated with @JavascriptInterface are available in JavaScript, protecting usage of getClass() by default, as in this example:</Intro_Text>
+               <Example_Code Nature="Bad" Language="Java">
+                  <xhtml:div>final class JavaScriptInterface {<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>JavaScriptInterface () { }<xhtml:br />
+                           <xhtml:br />@JavascriptInterface<xhtml:br />public String getUserInfo() {<xhtml:div style="margin-left:1em;">return currentUser.Info();</xhtml:div>}</xhtml:div>
+                     </xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>This code is not vulnerable to the above attack, but still may expose user info to malicious pages loaded in the WebView. Even malicious iframes loaded within a trusted page may access the exposed interface:</Body_Text>
+               <Example_Code Nature="Attack" Language="JavaScript">
+                  <xhtml:div>&lt;script&gt;<xhtml:div style="margin-left:1em;">var info = window.userInfoObject.getUserInfo();<xhtml:br />sendUserInfo(info);</xhtml:div>&lt;/script&gt;</xhtml:div>
+               </Example_Code>
+               <Body_Text>This malicious code within an iframe is able to access the interface object and steal the user's data.</Body_Text>
+            </Demonstrative_Example>
+         </Demonstrative_Examples>
+         <Observed_Examples>
+            <Observed_Example>
+               <Reference>CVE-2007-6382</Reference>
+               <Description>arbitrary Java code execution via exposed method</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2007-6382</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2007-1112</Reference>
+               <Description>security tool ActiveX control allows download or upload of files</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2007-1112</Link>
+            </Observed_Example>
+         </Observed_Examples>
+         <Related_Attack_Patterns>
+            <Related_Attack_Pattern CAPEC_ID="500" />
+         </Related_Attack_Patterns>
+         <References>
+            <Reference External_Reference_ID="REF-503" />
+            <Reference External_Reference_ID="REF-510" />
+         </References>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Base level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+         <Notes>
+            <Note Type="Research Gap">Under-reported and under-studied. This weakness could appear in any technology, language, or framework that allows the programmer to provide a functional interface to external parties, but it is not heavily reported. In 2007, CVE began showing a notable increase in reports of exposed method vulnerabilities in ActiveX applications, as well as IOCTL access to OS-level resources. These weaknesses have been documented for Java applications in various secure programming sources, but there are few reports in CVE, which suggests limited awareness in most parts of the vulnerability research community.</Note>
+         </Notes>
+         <Content_History>
+            <Submission>
+               <Submission_Name>CWE Content Team</Submission_Name>
+               <Submission_Organization>MITRE</Submission_Organization>
+               <Submission_Date>2008-11-24</Submission_Date>
+               <Submission_Version>1.1</Submission_Version>
+               <Submission_ReleaseDate>2008-11-24</Submission_ReleaseDate>
+            </Submission>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2009-01-12</Modification_Date>
+               <Modification_Version>1.2</Modification_Version>
+               <Modification_ReleaseDate>2009-01-12</Modification_ReleaseDate>
+               <Modification_Comment>updated Name</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2009-07-27</Modification_Date>
+               <Modification_Version>1.5</Modification_Version>
+               <Modification_ReleaseDate>2009-07-27</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2009-12-28</Modification_Date>
+               <Modification_Version>1.7</Modification_Version>
+               <Modification_ReleaseDate>2009-12-28</Modification_ReleaseDate>
+               <Modification_Comment>updated Applicable_Platforms, Likelihood_of_Exploit</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2010-02-16</Modification_Date>
+               <Modification_Version>1.8</Modification_Version>
+               <Modification_ReleaseDate>2010-02-16</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences, Demonstrative_Examples, Potential_Mitigations, References, Related_Attack_Patterns, Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2010-04-05</Modification_Date>
+               <Modification_Version>1.8.1</Modification_Version>
+               <Modification_ReleaseDate>2010-04-05</Modification_ReleaseDate>
+               <Modification_Comment>updated Demonstrative_Examples, Related_Attack_Patterns</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2010-06-21</Modification_Date>
+               <Modification_Version>1.9</Modification_Version>
+               <Modification_ReleaseDate>2010-06-21</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-06-01</Modification_Date>
+               <Modification_Version>1.13</Modification_Version>
+               <Modification_ReleaseDate>2011-06-01</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2012-05-11</Modification_Date>
+               <Modification_Version>2.2</Modification_Version>
+               <Modification_ReleaseDate>2012-05-15</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2014-02-18</Modification_Date>
+               <Modification_Version>2.6</Modification_Version>
+               <Modification_ReleaseDate>2014-02-19</Modification_ReleaseDate>
+               <Modification_Comment>updated Demonstrative_Examples</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2014-07-30</Modification_Date>
+               <Modification_Version>2.8</Modification_Version>
+               <Modification_ReleaseDate>2014-07-31</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2015-12-07</Modification_Date>
+               <Modification_Version>2.9</Modification_Version>
+               <Modification_ReleaseDate>2015-12-07</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2017-11-08</Modification_Date>
+               <Modification_Version>3.0</Modification_Version>
+               <Modification_ReleaseDate>2017-11-08</Modification_ReleaseDate>
+               <Modification_Comment>updated Likelihood_of_Exploit, References, Relationships</Modification_Comment>
+            </Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2019-06-20</Modification_Date>
+					<Modification_Version>3.3</Modification_Version>
+					<Modification_ReleaseDate>2019-06-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-02-24</Modification_Date>
+					<Modification_Version>4.0</Modification_Version>
+					<Modification_ReleaseDate>2020-02-24</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-01-31</Modification_Date>
+					<Modification_Version>4.10</Modification_Version>
+					<Modification_ReleaseDate>2023-01-31</Modification_ReleaseDate>
+					<Modification_Comment>updated Description, Related_Attack_Patterns, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Detection_Factors, References, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+            <Previous_Entry_Name Date="2009-01-12">Exposed Insecure Method or Function</Previous_Entry_Name>
+         </Content_History>
+      </Weakness>
+      

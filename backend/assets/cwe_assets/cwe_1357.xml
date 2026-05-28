@@ -1,0 +1,233 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="1357" Name="Reliance on Insufficiently Trustworthy Component" Abstraction="Class" Structure="Simple" Status="Incomplete">
+      <Description>The product is built from multiple separate components, but it uses a component that is not sufficiently trusted to meet expectations for security, reliability, updateability, and maintainability.</Description>
+      <Extended_Description>
+		<xhtml:p>Many modern hardware and software products are built by combining multiple smaller components together into one larger entity, often during the design or architecture phase. For example, a hardware component might be built by a separate supplier, or the product might use an open-source software library from a third party.</xhtml:p>
+		<xhtml:p>Regardless of the source, each component should be sufficiently trusted to ensure correct, secure operation of the product. If a component is not trustworthy, it can produce significant risks for the overall product, such as vulnerabilities that cannot be patched fast enough (if at all); hidden functionality such as malware; inability to update or replace the component if needed for security purposes; hardware components built from parts that do not meet specifications in ways that can lead to weaknesses; etc. Note that a component might not be trustworthy even if it is owned by the product vendor, such as a software component whose source code is lost and was built by developers who left the company, or a component that was developed by a separate company that was acquired and brought into the product's own company.</xhtml:p>
+		<xhtml:p>Note that there can be disagreement as to whether a component is sufficiently trustworthy, since trust is ultimately subjective. Different stakeholders (e.g., customers, vendors, governments) have various threat models and ways to assess trust, and design/architecture choices might make tradeoffs between security, reliability, safety, privacy, cost, and other characteristics.</xhtml:p>
+      </Extended_Description>
+    <Related_Weaknesses>
+      <Related_Weakness Nature="ChildOf" CWE_ID="710" View_ID="1000" Ordinal="Primary" />
+    </Related_Weaknesses>
+    <Weakness_Ordinalities>
+      <Weakness_Ordinality>
+	<Ordinality>Indirect</Ordinality>
+      </Weakness_Ordinality>
+    </Weakness_Ordinalities>
+    <Applicable_Platforms>
+      <Architecture Class="Not Architecture-Specific" Prevalence="Undetermined" />
+      <Technology Class="Not Technology-Specific" Prevalence="Undetermined" />
+	  <Technology Class="ICS/OT" Prevalence="Undetermined" />
+    </Applicable_Platforms>
+    <Modes_Of_Introduction>
+      <Introduction>
+		<Phase>Requirements</Phase>
+		<Note>Requirements might include criteria for which the only available solutions are provided by insufficiently trusted components.</Note>
+      </Introduction>
+      <Introduction>
+		<Phase>Architecture and Design</Phase>
+		<Note>An insufficiently trusted component might be selected because it is less expensive to do in-house, requires expertise that is not available in-house, or might allow the product to reach the market faster.</Note>
+      </Introduction>
+    </Modes_Of_Introduction>
+    <Common_Consequences>
+      <Consequence>
+	<Scope>Other</Scope>
+	<Impact>Reduce Maintainability</Impact>
+      </Consequence>
+    </Common_Consequences>
+    <Detection_Methods>
+      <Detection_Method Detection_Method_ID="DM-14">
+	<Method>Automated Static Analysis</Method>
+	<Description>Automated static analysis, commonly referred to as Static Application Security Testing (SAST), can find some instances of this weakness by analyzing source code (or binary/compiled code) without having to execute it. Typically, this is done by building a model of data flow and control flow, then searching for potentially-vulnerable patterns that connect "sources" (origins of input) with "sinks" (destinations where the data interacts with external components, a lower layer such as the OS, etc.)</Description>
+	<Effectiveness>High</Effectiveness>
+      </Detection_Method>
+    </Detection_Methods>
+    <Potential_Mitigations>
+	  <Mitigation>
+		<Phase>Requirements</Phase>
+		<Phase>Architecture and Design</Phase>
+		<Phase>Implementation</Phase>
+		<Description>For each component, ensure that its supply chain is well-controlled with sub-tier suppliers using best practices. For third-party software components such as libraries, ensure that they are developed and actively maintained by reputable vendors.</Description>
+	  </Mitigation>
+      <Mitigation>
+	<Phase>Architecture and Design</Phase>
+	<Phase>Implementation</Phase>
+	<Phase>Integration</Phase>
+	<Phase>Manufacturing</Phase>
+	<Description>Maintain a Bill of Materials for all components and sub-components of the product. For software, maintain a Software Bill of Materials (SBOM). According to [REF-1247], "An SBOM is a formal, machine-readable inventory of software components and dependencies, information about those components, and their hierarchical relationships."</Description>
+      </Mitigation>
+      <Mitigation>
+	<Phase>Operation</Phase>
+	<Phase>Patching and Maintenance</Phase>
+	<Description>Continue to monitor changes in each of the product's components, especially when the changes indicate new vulnerabilities, end-of-life (EOL) plans, supplier practices that affect trustworthiness, etc.</Description>
+      </Mitigation>
+    </Potential_Mitigations>
+	<Demonstrative_Examples>
+	  <Demonstrative_Example Demonstrative_Example_ID="DX-145">
+		<Intro_Text>A refrigerator has an Internet interface for the official purpose of alerting the manufacturer when that refrigerator detects a fault. Because the device is attached to the Internet, the refrigerator is a target for hackers who may wish to use the device other potentially more nefarious purposes.</Intro_Text>
+		<Example_Code Nature="Bad" Language="Other">The refrigerator has no means of patching and is hacked, becoming a spewer of email spam.</Example_Code>
+		<Example_Code Nature="Good" Language="Other">The device automatically patches itself and provides considerable more protection against being hacked.</Example_Code>
+	  </Demonstrative_Example>
+	</Demonstrative_Examples>
+    <Observed_Examples>
+      <Observed_Example>
+        <Reference>CVE-2020-9054</Reference>
+        <Description>Chain: network-attached storage (NAS) device has a critical OS command injection (CWE-78) vulnerability that is actively exploited to place IoT devices into a botnet, but some products are "end-of-support" and cannot be patched (CWE-1277). [REF-1097]</Description>
+        <Link>https://www.cve.org/CVERecord?id=CVE-2020-9054</Link>
+      </Observed_Example>
+    </Observed_Examples>
+	<Taxonomy_Mappings>
+	  <Taxonomy_Mapping Taxonomy_Name="ISA/IEC 62443">
+		<Entry_ID>Part 2-4</Entry_ID>
+		<Entry_Name>Req SP.03.02 RE(1)</Entry_Name>
+	  </Taxonomy_Mapping>
+	  <Taxonomy_Mapping Taxonomy_Name="ISA/IEC 62443">
+		<Entry_ID>Part 2-4</Entry_ID>
+		<Entry_Name>Req SP.03.02 RE(2)</Entry_Name>
+	  </Taxonomy_Mapping>
+	  <Taxonomy_Mapping Taxonomy_Name="ISA/IEC 62443">
+		<Entry_ID>Part 3-3</Entry_ID>
+		<Entry_Name>Req SR 1.13</Entry_Name>
+	  </Taxonomy_Mapping>
+	  <Taxonomy_Mapping Taxonomy_Name="ISA/IEC 62443">
+		<Entry_ID>Part 4-2</Entry_ID>
+		<Entry_Name>Req EDR 3.12</Entry_Name>
+	  </Taxonomy_Mapping>
+	  <Taxonomy_Mapping Taxonomy_Name="ISA/IEC 62443">
+		<Entry_ID>Part 4-2</Entry_ID>
+		<Entry_Name>Req HDR 3.12</Entry_Name>
+	  </Taxonomy_Mapping>
+	  <Taxonomy_Mapping Taxonomy_Name="ISA/IEC 62443">
+		<Entry_ID>Part 4-2</Entry_ID>
+		<Entry_Name>Req NDR 3.12</Entry_Name>
+	  </Taxonomy_Mapping>
+	  <Taxonomy_Mapping Taxonomy_Name="ISA/IEC 62443">
+		<Entry_ID>Part 4-2</Entry_ID>
+		<Entry_Name>Req EDR 3.13</Entry_Name>
+	  </Taxonomy_Mapping>
+	  <Taxonomy_Mapping Taxonomy_Name="ISA/IEC 62443">
+		<Entry_ID>Part 4-2</Entry_ID>
+		<Entry_Name>Req HDR 3.13</Entry_Name>
+	  </Taxonomy_Mapping>
+	  <Taxonomy_Mapping Taxonomy_Name="ISA/IEC 62443">
+		<Entry_ID>Part 4-2</Entry_ID>
+		<Entry_Name>Req NDR 3.13</Entry_Name>
+	  </Taxonomy_Mapping>
+	  <Taxonomy_Mapping Taxonomy_Name="ISA/IEC 62443">
+		<Entry_ID>Part 4-2</Entry_ID>
+		<Entry_Name>Req CR-7.8</Entry_Name>
+	  </Taxonomy_Mapping>
+	  <Taxonomy_Mapping Taxonomy_Name="ISA/IEC 62443">
+		<Entry_ID>Part 4-1</Entry_ID>
+		<Entry_Name>Req SM-6</Entry_Name>
+	  </Taxonomy_Mapping>
+	  <Taxonomy_Mapping Taxonomy_Name="ISA/IEC 62443">
+		<Entry_ID>Part 4-1</Entry_ID>
+		<Entry_Name>Req SM-9</Entry_Name>
+	  </Taxonomy_Mapping>
+	  <Taxonomy_Mapping Taxonomy_Name="ISA/IEC 62443">
+		<Entry_ID>Part 4-1</Entry_ID>
+		<Entry_Name>Req SM-10</Entry_Name>
+	  </Taxonomy_Mapping>
+	</Taxonomy_Mappings>
+    <References>
+      <Reference External_Reference_ID="REF-1212" />
+      <Reference External_Reference_ID="REF-1246" />
+      <Reference External_Reference_ID="REF-1247" />
+      <Reference External_Reference_ID="REF-1097" />
+    </References>
+         <Mapping_Notes>
+            <Usage>Allowed-with-Review</Usage>
+            <Rationale>This CWE entry is a Class and might have Base-level children that would be more appropriate</Rationale>
+            <Comments>Examine children of this entry to see if there is a better fit</Comments>
+            <Reasons>
+               <Reason Type="Abstraction" />
+            </Reasons>
+         </Mapping_Notes>
+    <Notes>
+	  <Note Type="Maintenance">As of CWE 4.10, the name and description for this entry has undergone significant change and is still under public discussion, especially by members of the HW SIG.</Note>
+    </Notes>
+    <Content_History>
+      <Submission>
+	<Submission_Name>CWE Content Team</Submission_Name>
+	<Submission_Organization>MITRE</Submission_Organization>
+	<Submission_Date>2022-04-20</Submission_Date>
+	<Submission_Version>4.7</Submission_Version>
+	<Submission_ReleaseDate>2022-04-28</Submission_ReleaseDate>
+      </Submission>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-10-13</Modification_Date>
+					<Modification_Version>4.9</Modification_Version>
+					<Modification_ReleaseDate>2022-10-13</Modification_ReleaseDate>
+					<Modification_Comment>updated References</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-01-31</Modification_Date>
+					<Modification_Version>4.10</Modification_Version>
+					<Modification_ReleaseDate>2023-01-31</Modification_ReleaseDate>
+					<Modification_Comment>updated Applicable_Platforms, Description, Maintenance_Notes, Modes_of_Introduction, Name, Potential_Mitigations, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated References, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes, Taxonomy_Mappings</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-04-03</Modification_Date>
+					<Modification_Version>4.17</Modification_Version>
+					<Modification_ReleaseDate>2025-04-03</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-09-09</Modification_Date>
+					<Modification_Version>4.18</Modification_Version>
+					<Modification_ReleaseDate>2025-09-09</Modification_ReleaseDate>
+					<Modification_Comment>updated References</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples, Detection_Factors</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2026-04-30</Modification_Date>
+					<Modification_Version>4.20</Modification_Version>
+					<Modification_ReleaseDate>2026-04-30</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Contribution Type="Content">
+				  <Contribution_Name>"Mapping CWE to 62443" Sub-Working Group</Contribution_Name>
+				  <Contribution_Organization>CWE-CAPEC ICS/OT SIG</Contribution_Organization>
+				  <Contribution_Date>2023-06-29</Contribution_Date>
+				  <Contribution_Version>4.12</Contribution_Version>
+				  <Contribution_ReleaseDate>2023-06-29</Contribution_ReleaseDate>
+				  <Contribution_Comment>Suggested mappings to ISA/IEC 62443.</Contribution_Comment>
+				</Contribution>
+			<Previous_Entry_Name Date="2023-01-31">Reliance on Uncontrolled Component</Previous_Entry_Name>
+    </Content_History>
+  </Weakness>
+      

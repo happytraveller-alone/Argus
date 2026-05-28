@@ -1,0 +1,557 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="805" Name="Buffer Access with Incorrect Length Value" Abstraction="Base" Structure="Simple" Status="Incomplete">
+         <Description>The product uses a sequential operation to read or write a buffer, but it uses an incorrect length value that causes it to access memory that is outside of the bounds of the buffer.</Description>
+         <Extended_Description>When the length value exceeds the size of the destination, a buffer overflow could occur.</Extended_Description>
+         <Related_Weaknesses>
+             <Related_Weakness Nature="ChildOf" CWE_ID="119" View_ID="1000" Ordinal="Primary" />
+             <Related_Weakness Nature="ChildOf" CWE_ID="119" View_ID="1305" Ordinal="Primary" />
+			 <Related_Weakness Nature="ChildOf" CWE_ID="119" View_ID="1340" Ordinal="Primary" />
+         </Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Resultant</Ordinality>
+            </Weakness_Ordinality>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+         <Applicable_Platforms>
+	   <Language Class="Memory-Unsafe" Prevalence="Undetermined" />
+            <Language Name="C" Prevalence="Often" />
+            <Language Name="C++" Prevalence="Often" />
+            <Language Class="Assembly" Prevalence="Undetermined" />
+         </Applicable_Platforms>
+         <Modes_Of_Introduction>
+            <Introduction>
+               <Phase>Implementation</Phase>
+            </Introduction>
+         </Modes_Of_Introduction>
+         <Likelihood_Of_Exploit>High</Likelihood_Of_Exploit>
+         <Common_Consequences>
+            <Consequence>
+               <Scope>Integrity</Scope>
+               <Scope>Confidentiality</Scope>
+               <Scope>Availability</Scope>
+               <Impact>Read Memory</Impact>
+               <Impact>Modify Memory</Impact>
+               <Impact>Execute Unauthorized Code or Commands</Impact>
+               <Note>Buffer overflows often can be used to execute arbitrary code, which is usually outside the scope of a program's implicit security policy. This can often be used to subvert any other security service.</Note>
+            </Consequence>
+            <Consequence>
+               <Scope>Availability</Scope>
+               <Impact>Modify Memory</Impact>
+               <Impact>DoS: Crash, Exit, or Restart</Impact>
+               <Impact>DoS: Resource Consumption (CPU)</Impact>
+               <Note>Buffer overflows generally lead to crashes. Other attacks leading to lack of availability are possible, including putting the program into an infinite loop.</Note>
+            </Consequence>
+         </Common_Consequences>
+         <Detection_Methods>
+            <Detection_Method Detection_Method_ID="DM-1">
+               <Method>Automated Static Analysis</Method>
+               <Description>
+                  <xhtml:p>This weakness can often be detected using automated static analysis tools. Many modern tools use data flow analysis or constraint-based techniques to minimize the number of false positives.</xhtml:p>
+                  <xhtml:p>Automated static analysis generally does not account for environmental considerations when reporting out-of-bounds memory operations. This can make it difficult for users to determine which warnings should be investigated first. For example, an analysis tool might report buffer overflows that originate from command line arguments in a program that is not expected to run with setuid or other special privileges.</xhtml:p>
+               </Description>
+               <Effectiveness>High</Effectiveness>
+               <Effectiveness_Notes>Detection techniques for buffer-related errors are more mature than for most other weakness types.</Effectiveness_Notes>
+            </Detection_Method>
+            <Detection_Method Detection_Method_ID="DM-2">
+               <Method>Automated Dynamic Analysis</Method>
+               <Description>This weakness can be detected using dynamic tools and techniques that interact with the product using large test suites with many diverse inputs, such as fuzz testing (fuzzing), robustness testing, and fault injection. The product's operation may slow down, but it should not become unstable, crash, or generate incorrect results.</Description>
+               <Effectiveness>Moderate</Effectiveness>
+               <Effectiveness_Notes>Without visibility into the code, black box methods may not be able to sufficiently distinguish this weakness from others, requiring manual methods to diagnose the underlying problem.</Effectiveness_Notes>
+            </Detection_Method>
+            <Detection_Method Detection_Method_ID="DM-9">
+               <Method>Manual Analysis</Method>
+               <Description>Manual analysis can be useful for finding this weakness, but it might not achieve desired code coverage within limited time constraints. This becomes difficult for weaknesses that must be considered for all inputs, since the attack surface can be too large.</Description>
+            </Detection_Method>
+	    <Detection_Method Detection_Method_ID="DM-15">
+	      <Method>Automated Dynamic Analysis</Method>
+	      <Description>Use tools that are integrated during
+	      compilation to insert runtime error-checking mechanisms
+	      related to memory safety errors, such as AddressSanitizer
+	      (ASan) for C/C++ [REF-1518].</Description>
+	      <Effectiveness>Moderate</Effectiveness>
+	      <Effectiveness_Notes>Crafted inputs are necessary to
+	      reach the code containing the error, such as generated
+	      by fuzzers.  Also, these tools may reduce performance,
+	      and they only report the error condition - not the
+	      original mistake that led to the
+	      error.</Effectiveness_Notes>
+	    </Detection_Method>
+         </Detection_Methods>
+         <Potential_Mitigations>
+            <Mitigation Mitigation_ID="MIT-3">
+               <Phase>Requirements</Phase>
+               <Strategy>Language Selection</Strategy>
+               <Description>
+                  <xhtml:p>Use a language that does not allow this weakness to occur or provides constructs that make this weakness easier to avoid.</xhtml:p>
+                  <xhtml:p>For example, many languages that perform their own memory management, such as Java and Perl, are not subject to buffer overflows. Other languages, such as Ada and C#, typically provide overflow protection, but the protection can be disabled by the programmer.</xhtml:p>
+                  <xhtml:p>Be wary that a language's interface to native code may still be subject to overflows, even if the language itself is theoretically safe.</xhtml:p>
+               </Description>
+            </Mitigation>
+            <Mitigation Mitigation_ID="MIT-4.1">
+               <Phase>Architecture and Design</Phase>
+               <Strategy>Libraries or Frameworks</Strategy>
+               <Description>
+                  <xhtml:p>Use a vetted library or framework that does not allow this weakness to occur or provides constructs that make this weakness easier to avoid.</xhtml:p>
+                  <xhtml:p>Examples include the Safe C String Library (SafeStr) by Messier and Viega [REF-57], and the Strsafe.h library from Microsoft [REF-56]. These libraries provide safer versions of overflow-prone string-handling functions.</xhtml:p>
+               </Description>
+               <Effectiveness_Notes>This is not a complete solution, since many buffer overflows are not related to strings.</Effectiveness_Notes>
+            </Mitigation>
+            <Mitigation Mitigation_ID="MIT-10">
+              <Phase>Operation</Phase> 
+	      <Phase>Build and Compilation</Phase>
+	      <Strategy>Environment Hardening</Strategy> 
+	      <Description> 
+		<xhtml:p>Use automatic buffer overflow detection mechanisms that are offered by certain compilers or compiler extensions. Examples include: the Microsoft Visual Studio /GS flag, Fedora/Red Hat FORTIFY_SOURCE GCC flag, StackGuard, and ProPolice, which provide various mechanisms including canary-based detection and range/index checking. </xhtml:p> 
+		<xhtml:p> D3-SFCV (Stack Frame Canary Validation) from D3FEND [REF-1334] discusses canary-based detection in detail. </xhtml:p> 
+
+	      </Description> 
+	      <Effectiveness>Defense in Depth</Effectiveness> 
+	      <Effectiveness_Notes> 
+		<xhtml:p> This is not necessarily a complete solution, since these mechanisms only detect certain types of overflows. In addition, the result is still a denial of service, since the typical response is to exit the application. </xhtml:p> 
+	      </Effectiveness_Notes> 
+            </Mitigation>
+            <Mitigation Mitigation_ID="MIT-9">
+               <Phase>Implementation</Phase>
+               <Description>
+                  <xhtml:p>Consider adhering to the following rules when allocating and managing an application's memory:</xhtml:p>
+                     <xhtml:ul>
+                        <xhtml:li>Double check that the buffer is as large as specified.</xhtml:li>
+                        <xhtml:li>When using functions that accept a number of bytes to copy, such as strncpy(), be aware that if the destination buffer size is equal to the source buffer size, it may not NULL-terminate the string.</xhtml:li>
+                        <xhtml:li>Check buffer boundaries if accessing the buffer in a loop and make sure there is no danger of writing past the allocated space.</xhtml:li>
+                        <xhtml:li>If necessary, truncate all input strings to a reasonable length before passing them to the copy and concatenation functions.</xhtml:li>
+                     </xhtml:ul>
+               </Description>
+            </Mitigation>
+            <Mitigation Mitigation_ID="MIT-15">
+               <Phase>Architecture and Design</Phase>
+               <Description>For any security checks that are performed on the client side, ensure that these checks are duplicated on the server side, in order to avoid CWE-602. Attackers can bypass the client-side checks by modifying values after the checks have been performed, or by changing the client to remove the client-side checks entirely. Then, these modified values would be submitted to the server.</Description>
+            </Mitigation>
+            <Mitigation Mitigation_ID="MIT-11">
+               <Phase>Operation</Phase> 
+	       <Phase>Build and Compilation</Phase> 
+	       <Strategy>Environment Hardening</Strategy> 
+	       <Description>
+		 <xhtml:p>Run or compile the software using features or extensions that randomly arrange the positions of a program's executable and libraries in memory. Because this makes the addresses unpredictable, it can prevent an attacker from reliably jumping to exploitable code. </xhtml:p> 
+		 <xhtml:p> Examples include Address Space Layout Randomization (ASLR) [REF-58] [REF-60] and Position-Independent Executables (PIE) [REF-64]. Imported modules may be similarly realigned if their default memory addresses conflict with other modules, in a process known as "rebasing" (for Windows) and "prelinking" (for Linux) [REF-1332] using randomly generated addresses. ASLR for libraries cannot be used in conjunction with prelink since it would require relocating the libraries at run-time, defeating the whole purpose of prelinking. </xhtml:p> 
+		 <xhtml:p> For more information on these techniques see D3-SAOR (Segment Address Offset Randomization) from D3FEND [REF-1335]. </xhtml:p>
+	       </Description> 
+	       <Effectiveness>Defense in Depth</Effectiveness> 
+	       <Effectiveness_Notes>These techniques do not provide a complete solution.  For instance, exploits frequently use a bug that discloses memory addresses in order to maximize reliability of code execution [REF-1337]. It has also been shown that a side-channel attack can bypass ASLR [REF-1333].</Effectiveness_Notes> 
+            </Mitigation>
+            <Mitigation Mitigation_ID="MIT-12">
+                <Phase>Operation</Phase> 
+	       <Strategy>Environment Hardening</Strategy> 
+	       <Description> 
+		 <xhtml:p> Use a CPU and operating system that offers Data Execution Protection (using hardware NX or XD bits) or the equivalent techniques that simulate this feature in software, such as PaX [REF-60] [REF-61]. These techniques ensure that any instruction executed is exclusively at a memory address that is part of the code segment.  </xhtml:p> 
+	         <xhtml:p> For more information on these techniques see D3-PSEP (Process Segment Execution Prevention) from D3FEND [REF-1336]. </xhtml:p>
+	       </Description> 
+	       <Effectiveness>Defense in Depth</Effectiveness> 
+	       <Effectiveness_Notes>This is not a complete solution, since buffer overflows could be used to overwrite nearby variables to modify the software's state in dangerous ways. In addition, it cannot be used in cases in which self-modifying code is required. Finally, an attack could still cause a denial of service, since the typical response is to exit the application. </Effectiveness_Notes> 
+            </Mitigation>
+            <Mitigation Mitigation_ID="MIT-17">
+               <Phase>Architecture and Design</Phase>
+               <Phase>Operation</Phase>
+               <Strategy>Environment Hardening</Strategy>
+               <Description>Run your code using the lowest privileges that are required to accomplish the necessary tasks [REF-76]. If possible, create isolated accounts with limited privileges that are only used for a single task. That way, a successful attack will not immediately give the attacker access to the rest of the product or its environment. For example, database applications rarely need to run as the database administrator, especially in day-to-day operations.</Description>
+            </Mitigation>
+            <Mitigation Mitigation_ID="MIT-22">
+               <Phase>Architecture and Design</Phase>
+               <Phase>Operation</Phase>
+               <Strategy>Sandbox or Jail</Strategy>
+               <Description>
+                  <xhtml:p>Run the code in a "jail" or similar sandbox environment that enforces strict boundaries between the process and the operating system. This may effectively restrict which files can be accessed in a particular directory or which commands can be executed by the software.</xhtml:p>
+                  <xhtml:p>OS-level examples include the Unix chroot jail, AppArmor, and SELinux. In general, managed code may provide some protection. For example, java.io.FilePermission in the Java SecurityManager allows the software to specify restrictions on file operations.</xhtml:p>
+                  <xhtml:p>This may not be a feasible solution, and it only limits the impact to the operating system; the rest of the application may still be subject to compromise.</xhtml:p>
+                  <xhtml:p>Be careful to avoid CWE-243 and other weaknesses related to jails.</xhtml:p>
+               </Description>
+               <Effectiveness>Limited</Effectiveness>
+               <Effectiveness_Notes>The effectiveness of this mitigation depends on the prevention capabilities of the specific sandbox or jail being used and might only help to reduce the scope of an attack, such as restricting the attacker to certain system calls or limiting the portion of the file system that can be accessed.</Effectiveness_Notes>
+            </Mitigation>
+         </Potential_Mitigations>
+         <Demonstrative_Examples>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-1">
+               <Intro_Text>This example takes an IP address from a user, verifies that it is well formed and then looks up the hostname and copies it into a buffer.</Intro_Text>
+               <Example_Code Nature="Bad" Language="C">
+                  <xhtml:div>void host_lookup(char *user_supplied_addr){<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>struct hostent *hp;<xhtml:br />in_addr_t *addr;<xhtml:br />char hostname[64];<xhtml:br />in_addr_t inet_addr(const char *cp);<xhtml:br />
+                           <xhtml:br />
+                           <xhtml:i>/*routine that ensures user_supplied_addr is in the right format for conversion */</xhtml:i>
+                           <xhtml:br />
+                           <xhtml:br />validate_addr_form(user_supplied_addr);<xhtml:br />addr = inet_addr(user_supplied_addr);<xhtml:br />hp = gethostbyaddr( addr, sizeof(struct in_addr), AF_INET);<xhtml:br />strcpy(hostname, hp-&gt;h_name);</xhtml:div>
+                     </xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>This function allocates a buffer of 64 bytes to store the hostname under the assumption that the maximum length value of hostname is 64 bytes, however there is no guarantee that the hostname will not be larger than 64 bytes. If an attacker specifies an address which resolves to a very large hostname, then the function may overwrite sensitive data or even relinquish control flow to the attacker.</Body_Text>
+               <Body_Text>Note that this example also contains an unchecked return value (CWE-252) that can lead to a NULL pointer dereference (CWE-476).</Body_Text>
+            </Demonstrative_Example>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-114">
+               <Intro_Text>In the following example, it is possible to request that memcpy move a much larger segment of memory than assumed:</Intro_Text>
+               <Example_Code Nature="Bad" Language="C">
+                  <xhtml:div>int returnChunkSize(void *) {<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>
+                           <xhtml:br />
+                           <xhtml:i>/* if chunk info is valid, return the size of usable memory,</xhtml:i>
+                           <xhtml:br />
+                           <xhtml:br />
+                           <xhtml:i>* else, return -1 to indicate an error</xhtml:i>
+                           <xhtml:br />
+                           <xhtml:br />
+                           <xhtml:i>*/</xhtml:i>
+                           <xhtml:br />...</xhtml:div>
+                     </xhtml:div>}<xhtml:br />int main() {<xhtml:div style="margin-left:1em;">...<xhtml:br />memcpy(destBuf, srcBuf, (returnChunkSize(destBuf)-1));<xhtml:br />...</xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>If returnChunkSize() happens to encounter an error it will return -1. Notice that the return value is not checked before the memcpy operation (CWE-252), so -1 can be passed as the size argument to memcpy() (CWE-805). Because memcpy() assumes that the value is unsigned, it will be interpreted as MAXINT-1 (CWE-195), and therefore will copy far more memory than is likely available to the destination buffer (CWE-787, CWE-788).</Body_Text>
+            </Demonstrative_Example>
+            <Demonstrative_Example>
+               <Intro_Text>In the following example, the source character string is copied to the dest character string using the method strncpy.</Intro_Text>
+               <Example_Code Nature="Bad" Language="C">
+                  <xhtml:div>...<xhtml:br />char source[21] = "the character string";<xhtml:br />char dest[12];<xhtml:br />strncpy(dest, source, sizeof(source)-1);<xhtml:br />...</xhtml:div>
+               </Example_Code>
+               <Body_Text>However, in the call to strncpy the source character string is used within the sizeof call to determine the number of characters to copy. This will create a buffer overflow as the size of the source character string is greater than the dest character string. The dest character string should be used within the sizeof call to ensure that the correct number of characters are copied, as shown below.</Body_Text>
+               <Example_Code Nature="Good" Language="C">
+                  <xhtml:div>...<xhtml:br />char source[21] = "the character string";<xhtml:br />char dest[12];<xhtml:br />strncpy(dest, source, sizeof(dest)-1);<xhtml:br />...</xhtml:div>
+               </Example_Code>
+            </Demonstrative_Example>
+            <Demonstrative_Example>
+               <Intro_Text>In this example, the method outputFilenameToLog outputs a filename to a log file. The method arguments include a pointer to a character string containing the file name and an integer for the number of characters in the string. The filename is copied to a buffer where the buffer size is set to a maximum size for inputs to the log file. The method then calls another method to save the contents of the buffer to the log file.</Intro_Text>
+               <Example_Code Nature="Bad" Language="C">
+                  <xhtml:div>#define LOG_INPUT_SIZE 40<xhtml:br />
+                     <xhtml:br />
+                     <xhtml:i>// saves the file name to a log file</xhtml:i>
+                     <xhtml:br />int outputFilenameToLog(char *filename, int length) {<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>int success;<xhtml:br />
+                           <xhtml:br />
+                           <xhtml:i>// buffer with size set to maximum size for input to log file</xhtml:i>
+                           <xhtml:br />char buf[LOG_INPUT_SIZE];<xhtml:br />
+                           <xhtml:br />
+                           <xhtml:i>// copy filename to buffer</xhtml:i>
+                           <xhtml:br />strncpy(buf, filename, length);<xhtml:br />
+                           <xhtml:br />
+                           <xhtml:i>// save to log file</xhtml:i>
+                           <xhtml:br />success = saveToLogFile(buf);<xhtml:br />
+                           <xhtml:br />return success;</xhtml:div>
+                     </xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>However, in this case the string copy method, strncpy, mistakenly uses the length method argument to determine the number of characters to copy rather than using the size of the local character string, buf. This can lead to a buffer overflow if the number of characters contained in character string pointed to by filename is larger then the number of characters allowed for the local character string. The string copy method should use the buf character string within a sizeof call to ensure that only characters up to the size of the buf array are copied to avoid a buffer overflow, as shown below.</Body_Text>
+               <Example_Code Nature="Good" Language="C">
+                  <xhtml:div>...<xhtml:br />
+                     <xhtml:i>// copy filename to buffer</xhtml:i>
+                     <xhtml:br />strncpy(buf, filename, sizeof(buf)-1);<xhtml:br />...</xhtml:div>
+               </Example_Code>
+            </Demonstrative_Example>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-189">
+              <Intro_Text>Windows provides the MultiByteToWideChar(), WideCharToMultiByte(), UnicodeToBytes(), and BytesToUnicode() functions to convert between arbitrary multibyte (usually ANSI) character strings and Unicode (wide character) strings. The size arguments to these functions are specified in different units, (one in bytes, the other in characters) making their use prone to error.</Intro_Text>
+              <Body_Text>In a multibyte character string, each character occupies a varying number of bytes, and therefore the size of such strings is most easily specified as a total number of bytes. In Unicode, however, characters are always a fixed size, and string lengths are typically given by the number of characters they contain. Mistakenly specifying the wrong units in a size argument can lead to a buffer overflow.</Body_Text>
+              <Body_Text>The following function takes a username specified as a multibyte string and a pointer to a structure for user information and populates the structure with information about the specified user. Since Windows authentication uses Unicode for usernames, the username argument is first converted from a multibyte string to a Unicode string.</Body_Text>
+              <Example_Code Nature="Bad" Language="C">
+                <xhtml:div>void getUserInfo(char *username, struct _USER_INFO_2 info){<xhtml:div style="margin-left:1em;">WCHAR unicodeUser[UNLEN+1];<xhtml:br />MultiByteToWideChar(CP_ACP, 0, username, -1, unicodeUser, sizeof(unicodeUser));<xhtml:br />NetUserGetInfo(NULL, unicodeUser, 2, (LPBYTE *)&amp;info);</xhtml:div>}</xhtml:div>
+              </Example_Code>
+              <Body_Text>This function incorrectly passes the size of unicodeUser in bytes instead of characters. The call to MultiByteToWideChar() can therefore write up to (UNLEN+1)*sizeof(WCHAR) wide characters, or (UNLEN+1)*sizeof(WCHAR)*sizeof(WCHAR) bytes, to the unicodeUser array, which has only (UNLEN+1)*sizeof(WCHAR) bytes allocated.</Body_Text>
+              <Body_Text>If the username string contains more than UNLEN characters, the call to MultiByteToWideChar() will overflow the buffer unicodeUser.</Body_Text>
+            </Demonstrative_Example>
+         </Demonstrative_Examples>
+         <Observed_Examples>
+            <Observed_Example>
+               <Reference>CVE-2011-1959</Reference>
+               <Description>Chain: large length value causes buffer over-read (CWE-126)</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2011-1959</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2011-1848</Reference>
+               <Description>Use of packet length field to make a calculation, then copy into a fixed-size buffer</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2011-1848</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2011-0105</Reference>
+               <Description>Chain: retrieval of length value from an uninitialized memory location</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2011-0105</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2011-0606</Reference>
+               <Description>Crafted length value in document reader leads to buffer overflow</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2011-0606</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2011-0651</Reference>
+               <Description>SSL server overflow when the sum of multiple length fields exceeds a given value</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2011-0651</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2010-4156</Reference>
+               <Description>Language interpreter API function doesn't validate length argument, leading to information exposure</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2010-4156</Link>
+            </Observed_Example>
+         </Observed_Examples>
+         <Functional_Areas>
+            <Functional_Area>Memory Management</Functional_Area>
+         </Functional_Areas>
+         <Affected_Resources>
+            <Affected_Resource>Memory</Affected_Resource>
+         </Affected_Resources>
+         <Taxonomy_Mappings>
+            <Taxonomy_Mapping Taxonomy_Name="CERT C Secure Coding">
+               <Entry_ID>ARR38-C</Entry_ID>
+               <Entry_Name>Guarantee that library functions do not form invalid pointers</Entry_Name>
+               <Mapping_Fit>Imprecise</Mapping_Fit>
+            </Taxonomy_Mapping>
+         </Taxonomy_Mappings>
+         <Related_Attack_Patterns>
+            <Related_Attack_Pattern CAPEC_ID="100" />
+            <Related_Attack_Pattern CAPEC_ID="256" />
+         </Related_Attack_Patterns>
+         <References>
+            <Reference External_Reference_ID="REF-7" Section="Chapter 6, &quot;Why ACLs Are Important&quot; Page 171" />
+            <Reference External_Reference_ID="REF-58" />
+            <Reference External_Reference_ID="REF-59" />
+            <Reference External_Reference_ID="REF-60" />
+            <Reference External_Reference_ID="REF-741" />
+            <Reference External_Reference_ID="REF-57" />
+            <Reference External_Reference_ID="REF-56" />
+            <Reference External_Reference_ID="REF-61" />
+            <Reference External_Reference_ID="REF-76" />
+            <Reference External_Reference_ID="REF-64" />
+	    <Reference External_Reference_ID="REF-1332" />
+	    <Reference External_Reference_ID="REF-1333" />
+	    <Reference External_Reference_ID="REF-1334" />
+	    <Reference External_Reference_ID="REF-1335" />
+	    <Reference External_Reference_ID="REF-1336" />
+	    <Reference External_Reference_ID="REF-1337" Section="Memory information leaks" />
+	    <Reference External_Reference_ID="REF-1518" />
+         </References>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Base level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+         <Content_History>
+            <Submission>
+               <Submission_Name>CWE Content Team</Submission_Name>
+               <Submission_Organization>MITRE</Submission_Organization>
+               <Submission_Date>2010-01-15</Submission_Date>
+               <Submission_Version>1.8</Submission_Version>
+               <Submission_ReleaseDate>2010-02-16</Submission_ReleaseDate>
+            </Submission>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2010-04-05</Modification_Date>
+               <Modification_Version>1.8.1</Modification_Version>
+               <Modification_ReleaseDate>2010-04-05</Modification_ReleaseDate>
+               <Modification_Comment>updated Related_Attack_Patterns</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2010-06-21</Modification_Date>
+               <Modification_Version>1.9</Modification_Version>
+               <Modification_ReleaseDate>2010-06-21</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences, Potential_Mitigations, References</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2010-09-27</Modification_Date>
+               <Modification_Version>1.10</Modification_Version>
+               <Modification_ReleaseDate>2010-09-27</Modification_ReleaseDate>
+               <Modification_Comment>updated Potential_Mitigations</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2010-12-13</Modification_Date>
+               <Modification_Version>1.11</Modification_Version>
+               <Modification_ReleaseDate>2010-12-13</Modification_ReleaseDate>
+               <Modification_Comment>updated Potential_Mitigations</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-06-01</Modification_Date>
+               <Modification_Version>1.13</Modification_Version>
+               <Modification_ReleaseDate>2011-06-01</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-06-27</Modification_Date>
+               <Modification_Version>2.0</Modification_Version>
+               <Modification_ReleaseDate>2011-06-27</Modification_ReleaseDate>
+               <Modification_Comment>updated Demonstrative_Examples, Observed_Examples, Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-09-13</Modification_Date>
+               <Modification_Version>2.1</Modification_Version>
+               <Modification_ReleaseDate>2011-09-13</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2012-05-11</Modification_Date>
+               <Modification_Version>2.2</Modification_Version>
+               <Modification_ReleaseDate>2012-05-15</Modification_ReleaseDate>
+               <Modification_Comment>updated Potential_Mitigations, References, Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2012-10-30</Modification_Date>
+               <Modification_Version>2.3</Modification_Version>
+               <Modification_ReleaseDate>2012-10-30</Modification_ReleaseDate>
+               <Modification_Comment>updated Potential_Mitigations</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2014-02-18</Modification_Date>
+               <Modification_Version>2.6</Modification_Version>
+               <Modification_ReleaseDate>2014-02-19</Modification_ReleaseDate>
+               <Modification_Comment>updated Potential_Mitigations, References</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2014-06-23</Modification_Date>
+               <Modification_Version>2.7</Modification_Version>
+               <Modification_ReleaseDate>2014-06-23</Modification_ReleaseDate>
+               <Modification_Comment>updated Demonstrative_Examples</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2017-11-08</Modification_Date>
+               <Modification_Version>3.0</Modification_Version>
+               <Modification_ReleaseDate>2017-11-08</Modification_ReleaseDate>
+               <Modification_Comment>updated Applicable_Platforms, Causal_Nature, Demonstrative_Examples, Likelihood_of_Exploit, References, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2018-03-27</Modification_Date>
+               <Modification_Version>3.1</Modification_Version>
+               <Modification_ReleaseDate>2018-03-27</Modification_ReleaseDate>
+               <Modification_Comment>updated References</Modification_Comment>
+            </Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2019-01-03</Modification_Date>
+					<Modification_Version>3.2</Modification_Version>
+					<Modification_ReleaseDate>2019-01-03</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2019-06-20</Modification_Date>
+					<Modification_Version>3.3</Modification_Version>
+					<Modification_ReleaseDate>2019-06-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Related_Attack_Patterns</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-02-24</Modification_Date>
+					<Modification_Version>4.0</Modification_Version>
+					<Modification_ReleaseDate>2020-02-24</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-06-25</Modification_Date>
+					<Modification_Version>4.1</Modification_Version>
+					<Modification_ReleaseDate>2020-06-25</Modification_ReleaseDate>
+					<Modification_Comment>updated Common_Consequences</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-08-20</Modification_Date>
+					<Modification_Version>4.2</Modification_Version>
+					<Modification_ReleaseDate>2020-08-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-12-10</Modification_Date>
+					<Modification_Version>4.3</Modification_Version>
+					<Modification_ReleaseDate>2020-12-10</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-07-20</Modification_Date>
+					<Modification_Version>4.5</Modification_Version>
+					<Modification_ReleaseDate>2021-07-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples, Potential_Mitigations</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-10-13</Modification_Date>
+					<Modification_Version>4.9</Modification_Version>
+					<Modification_ReleaseDate>2022-10-13</Modification_ReleaseDate>
+					<Modification_Comment>updated References</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-01-31</Modification_Date>
+					<Modification_Version>4.10</Modification_Version>
+					<Modification_ReleaseDate>2023-01-31</Modification_ReleaseDate>
+					<Modification_Comment>updated Description, Detection_Factors, Potential_Mitigations</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Potential_Mitigations, References, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2024-02-29</Modification_Date>
+					<Modification_Version>4.14</Modification_Version>
+					<Modification_ReleaseDate>2024-02-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-09-09</Modification_Date>
+					<Modification_Version>4.18</Modification_Version>
+					<Modification_ReleaseDate>2025-09-09</Modification_ReleaseDate>
+					<Modification_Comment>updated Functional_Areas</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Applicable_Platforms, Detection_Factors, References</Modification_Comment>
+				</Modification>
+         </Content_History>
+      </Weakness>
+      

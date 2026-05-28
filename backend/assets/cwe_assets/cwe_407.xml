@@ -1,0 +1,319 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="407" Name="Inefficient Algorithmic Complexity" Abstraction="Class" Structure="Simple" Status="Incomplete">
+         <Description>An algorithm in a product has an inefficient worst-case computational complexity that may be detrimental to system performance and can be triggered by an attacker, typically using crafted manipulations that ensure that the worst case is being reached.</Description>
+         <Related_Weaknesses>
+            <Related_Weakness Nature="ChildOf" CWE_ID="405" View_ID="1000" Ordinal="Primary" />
+         </Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+         <Applicable_Platforms>
+            <Language Class="Not Language-Specific" Prevalence="Undetermined" />
+         </Applicable_Platforms>
+         <Alternate_Terms>
+            <Alternate_Term>
+               <Term>Quadratic Complexity</Term>
+               <Description>Used when the algorithmic complexity is related to the square of the number of inputs (N^2)</Description>
+            </Alternate_Term>
+         </Alternate_Terms>
+         <Modes_Of_Introduction>
+            <Introduction>
+               <Phase>Architecture and Design</Phase>
+            </Introduction>
+            <Introduction>
+               <Phase>Implementation</Phase>
+            </Introduction>
+         </Modes_Of_Introduction>
+         <Likelihood_Of_Exploit>Low</Likelihood_Of_Exploit>
+         <Common_Consequences>
+            <Consequence>
+               <Scope>Availability</Scope>
+               <Impact>DoS: Resource Consumption (CPU)</Impact>
+               <Impact>DoS: Resource Consumption (Memory)</Impact>
+               <Impact>DoS: Resource Consumption (Other)</Impact>
+               <Note>The typical consequence is CPU consumption, but memory consumption and consumption of other resources can also occur.</Note>
+            </Consequence>
+         </Common_Consequences>
+	 <Demonstrative_Examples>
+	   <Demonstrative_Example Demonstrative_Example_ID="DX-158">
+             <Intro_Text>This example attempts to check if an input string is a "sentence" [REF-1164].</Intro_Text>
+             <Example_Code Nature="Bad" Language="JavaScript">
+               var test_string = "Bad characters: $@#";<xhtml:br />
+               var bad_pattern  = /^(\w+\s?)*$/i;<xhtml:br />
+               var result = test_string.search(bad_pattern);
+             </Example_Code>
+             <Body_Text><xhtml:p>The regular expression has a vulnerable backtracking clause inside (\w+\s?)*$ which can be triggered to cause a Denial of Service by processing particular phrases.</xhtml:p>
+	     <xhtml:p>To fix the backtracking problem, backtracking is removed with the ?= portion of the expression which changes it to a lookahead and the \2 which prevents the backtracking. The modified example is:</xhtml:p></Body_Text>
+             <Example_Code Nature="Good" Language="JavaScript">
+               var test_string = "Bad characters: $@#";<xhtml:br />
+               var good_pattern  = /^((?=(\w+))\2\s?)*$/i;<xhtml:br />
+               var result = test_string.search(good_pattern);
+             </Example_Code>
+             <Body_Text>Note that [REF-1164] has a more thorough (and lengthy) explanation of everything going on within the RegEx.</Body_Text>
+	   </Demonstrative_Example>
+	 </Demonstrative_Examples>
+         <Observed_Examples>
+            <Observed_Example>
+               <Reference>CVE-2021-32617</Reference>
+               <Description>C++ library for image metadata has "quadratic complexity" issue with unnecessarily repetitive parsing each time an invalid character is encountered</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2021-32617</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2020-10735</Reference>
+               <Description>Python has "quadratic complexity" issue when converting string to int with many digits in unexpected bases</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2020-10735</Link>
+            </Observed_Example>
+            <Observed_Example>
+              <Reference>CVE-2020-5243</Reference>
+              <Description>server allows ReDOS with crafted User-Agent strings, due to overlapping capture groups that cause excessive backtracking.</Description>
+              <Link>https://www.cve.org/CVERecord?id=CVE-2020-5243</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2014-1474</Reference>
+               <Description>Perl-based email address parser has "quadratic complexity" issue via a string that does not contain a valid address</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2014-1474</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2003-0244</Reference>
+               <Description>CPU consumption via inputs that cause many hash table collisions.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2003-0244</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2003-0364</Reference>
+               <Description>CPU consumption via inputs that cause many hash table collisions.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2003-0364</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2002-1203</Reference>
+               <Description>Product performs unnecessary processing before dropping an invalid packet.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2002-1203</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2001-1501</Reference>
+               <Description>CPU and memory consumption using many wildcards.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2001-1501</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2004-2527</Reference>
+               <Description>Product allows attackers to cause multiple copies of a program to be loaded more quickly than the program can detect that other copies are running, then exit. This type of error should probably have its own category, where teardown takes more time than initialization.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2004-2527</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2006-6931</Reference>
+               <Description>Network monitoring system allows remote attackers to cause a denial of service (CPU consumption and detection outage) via crafted network traffic, aka a "backtracking attack."</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2006-6931</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2006-3380</Reference>
+               <Description>Wiki allows remote attackers to cause a denial of service (CPU consumption) by performing a diff between large, crafted pages that trigger the worst case algorithmic complexity.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2006-3380</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2006-3379</Reference>
+               <Description>Wiki allows remote attackers to cause a denial of service (CPU consumption) by performing a diff between large, crafted pages that trigger the worst case algorithmic complexity.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2006-3379</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2005-2506</Reference>
+               <Description>OS allows attackers to cause a denial of service (CPU consumption) via crafted Gregorian dates.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2005-2506</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2005-1792</Reference>
+               <Description>Memory leak by performing actions faster than the software can clear them.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2005-1792</Link>
+            </Observed_Example>
+         </Observed_Examples>
+         <Functional_Areas>
+            <Functional_Area>Cryptography</Functional_Area>
+         </Functional_Areas>
+         <Taxonomy_Mappings>
+            <Taxonomy_Mapping Taxonomy_Name="PLOVER">
+               <Entry_Name>Algorithmic Complexity</Entry_Name>
+            </Taxonomy_Mapping>
+         </Taxonomy_Mappings>
+         <References>
+            <Reference External_Reference_ID="REF-395" />
+            <Reference External_Reference_ID="REF-1164" />
+         </References>
+         <Mapping_Notes>
+            <Usage>Allowed-with-Review</Usage>
+            <Rationale>This CWE entry is a Class and might have Base-level children that would be more appropriate</Rationale>
+            <Comments>Examine children of this entry to see if there is a better fit</Comments>
+            <Reasons>
+               <Reason Type="Abstraction" />
+            </Reasons>
+         </Mapping_Notes>
+         <Content_History>
+            <Submission>
+               <Submission_Name>PLOVER</Submission_Name>
+               <Submission_Date>2006-07-19</Submission_Date>
+               <Submission_Version>Draft 3</Submission_Version>
+               <Submission_ReleaseDate>2006-07-19</Submission_ReleaseDate>
+            </Submission>
+            <Modification>
+               <Modification_Name>Eric Dalci</Modification_Name>
+               <Modification_Organization>Cigital</Modification_Organization>
+               <Modification_Date>2008-07-01</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>updated Time_of_Introduction</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2008-09-08</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences, Relationships, Other_Notes, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2009-07-27</Modification_Date>
+               <Modification_Version>1.5</Modification_Version>
+               <Modification_ReleaseDate>2009-07-27</Modification_ReleaseDate>
+               <Modification_Comment>updated Functional_Areas, Other_Notes</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2009-10-29</Modification_Date>
+               <Modification_Version>1.6</Modification_Version>
+               <Modification_ReleaseDate>2009-10-29</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2009-12-28</Modification_Date>
+               <Modification_Version>1.7</Modification_Version>
+               <Modification_ReleaseDate>2009-12-28</Modification_ReleaseDate>
+               <Modification_Comment>updated Applicable_Platforms, Likelihood_of_Exploit</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-06-01</Modification_Date>
+               <Modification_Version>1.13</Modification_Version>
+               <Modification_ReleaseDate>2011-06-01</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2012-05-11</Modification_Date>
+               <Modification_Version>2.2</Modification_Version>
+               <Modification_ReleaseDate>2012-05-15</Modification_ReleaseDate>
+               <Modification_Comment>updated Observed_Examples, Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2014-07-30</Modification_Date>
+               <Modification_Version>2.8</Modification_Version>
+               <Modification_ReleaseDate>2014-07-31</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2015-12-07</Modification_Date>
+               <Modification_Version>2.9</Modification_Version>
+               <Modification_ReleaseDate>2015-12-07</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2017-11-08</Modification_Date>
+               <Modification_Version>3.0</Modification_Version>
+               <Modification_ReleaseDate>2017-11-08</Modification_ReleaseDate>
+               <Modification_Comment>updated Likelihood_of_Exploit</Modification_Comment>
+            </Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2019-06-20</Modification_Date>
+					<Modification_Version>3.3</Modification_Version>
+					<Modification_ReleaseDate>2019-06-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Name, Relationships, Type</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-02-24</Modification_Date>
+					<Modification_Version>4.0</Modification_Version>
+					<Modification_ReleaseDate>2020-02-24</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-08-20</Modification_Date>
+					<Modification_Version>4.2</Modification_Version>
+					<Modification_ReleaseDate>2020-08-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-03-15</Modification_Date>
+					<Modification_Version>4.4</Modification_Version>
+					<Modification_ReleaseDate>2021-03-15</Modification_ReleaseDate>
+					<Modification_Comment>updated References, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-07-20</Modification_Date>
+					<Modification_Version>4.5</Modification_Version>
+					<Modification_ReleaseDate>2021-07-20</Modification_ReleaseDate>
+					<Modification_Comment>updated References</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-10-13</Modification_Date>
+					<Modification_Version>4.9</Modification_Version>
+					<Modification_ReleaseDate>2022-10-13</Modification_ReleaseDate>
+					<Modification_Comment>updated Alternate_Terms, Observed_Examples, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-01-31</Modification_Date>
+					<Modification_Version>4.10</Modification_Version>
+					<Modification_ReleaseDate>2023-01-31</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples, Observed_Examples, References</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+			<Previous_Entry_Name Date="2019-06-20">Algorithmic Complexity</Previous_Entry_Name>
+         </Content_History>
+      </Weakness>
+      

@@ -1,0 +1,393 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="480" Name="Use of Incorrect Operator" Abstraction="Base" Structure="Simple" Status="Draft">
+         <Description>The product accidentally uses the wrong operator, which changes the logic in security-relevant ways.</Description>
+         <Extended_Description>These types of errors are generally the result of a typo by the programmer.</Extended_Description>
+         <Related_Weaknesses>
+            <Related_Weakness Nature="ChildOf" CWE_ID="670" View_ID="1000" Ordinal="Primary" />
+         </Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+         <Applicable_Platforms>
+            <Language Name="C" Prevalence="Sometimes" />
+            <Language Name="C++" Prevalence="Sometimes" />
+            <Language Name="Perl" Prevalence="Sometimes" />
+            <Language Class="Not Language-Specific" Prevalence="Undetermined" />
+         </Applicable_Platforms>
+         <Modes_Of_Introduction>
+            <Introduction>
+               <Phase>Implementation</Phase>
+            </Introduction>
+         </Modes_Of_Introduction>
+         <Likelihood_Of_Exploit>Low</Likelihood_Of_Exploit>
+         <Common_Consequences>
+            <Consequence>
+               <Scope>Other</Scope>
+               <Impact>Alter Execution Logic</Impact>
+               <Note>This weakness can cause unintended logic to be executed and other unexpected application behavior.</Note>
+            </Consequence>
+         </Common_Consequences>
+         <Detection_Methods>
+            <Detection_Method>
+               <Method>Automated Static Analysis</Method>
+               <Description>This weakness can be found easily using static analysis. However in some cases an operator might appear to be incorrect, but is actually correct and reflects unusual logic within the program.</Description>
+            </Detection_Method>
+            <Detection_Method>
+               <Method>Manual Static Analysis</Method>
+               <Description>This weakness can be found easily using static analysis. However in some cases an operator might appear to be incorrect, but is actually correct and reflects unusual logic within the program.</Description>
+            </Detection_Method>
+         </Detection_Methods>
+         <Demonstrative_Examples>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-140">
+               <Intro_Text>The following C/C++ and C# examples attempt to validate an int input parameter against the integer value 100.</Intro_Text>
+               <Example_Code Nature="Bad" Language="C">
+                  <xhtml:div>int isValid(int value) {<xhtml:div style="margin-left:1em;">if (value=100) {<xhtml:div style="margin-left:1em;">printf("Value is valid\n");<xhtml:br />return(1);</xhtml:div>}<xhtml:br />printf("Value is not valid\n");<xhtml:br />return(0);</xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Example_Code Nature="Bad" Language="C#">
+                  <xhtml:div>bool isValid(int value) {<xhtml:div style="margin-left:1em;">if (value=100) {<xhtml:div style="margin-left:1em;">Console.WriteLine("Value is valid.");<xhtml:br />return true;</xhtml:div>}<xhtml:br />Console.WriteLine("Value is not valid.");<xhtml:br />return false;</xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>However, the expression to be evaluated in the if statement uses the assignment operator "=" rather than the comparison operator "==". The result of using the assignment operator instead of the comparison operator causes the int variable to be reassigned locally and the expression in the if statement will always evaluate to the value on the right hand side of the expression. This will result in the input value not being properly validated, which can cause unexpected results.</Body_Text>
+            </Demonstrative_Example>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-103">
+               <Intro_Text>The following C/C++ example shows a simple implementation of a stack that includes methods for adding and removing integer values from the stack. The example uses pointers to add and remove integer values to the stack array variable.</Intro_Text>
+               <Example_Code Nature="Bad" Language="C">
+                  <xhtml:div>#define SIZE 50<xhtml:br />int *tos, *p1, stack[SIZE];<xhtml:br />
+                     <xhtml:br />void push(int i) {<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>p1++;<xhtml:br />if(p1==(tos+SIZE)) {<xhtml:div style="margin-left:1em;">
+                              <xhtml:div>
+                                 <xhtml:br />
+                                 <xhtml:i>// Print stack overflow error message and exit</xhtml:i>
+                                 <xhtml:br />
+                              </xhtml:div>
+                           </xhtml:div>}<xhtml:br />*p1 == i;</xhtml:div>
+                     </xhtml:div>}<xhtml:br />
+                     <xhtml:br />int pop(void) {<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>if(p1==tos) {<xhtml:div style="margin-left:1em;">
+                              <xhtml:div>
+                                 <xhtml:br />
+                                 <xhtml:i>// Print stack underflow error message and exit</xhtml:i>
+                                 <xhtml:br />
+                              </xhtml:div>
+                           </xhtml:div>}<xhtml:br />p1--;<xhtml:br />return *(p1+1);</xhtml:div>
+                     </xhtml:div>}<xhtml:br />
+                     <xhtml:br />int main(int argc, char *argv[]) {<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>
+                           <xhtml:br />
+                           <xhtml:i>// initialize tos and p1 to point to the top of stack</xhtml:i>
+                           <xhtml:br />tos = stack;<xhtml:br />p1 = stack;<xhtml:br />
+                           <xhtml:i>// code to add and remove items from stack</xhtml:i>
+                           <xhtml:br />...<xhtml:br />return 0;</xhtml:div>
+                     </xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>The push method includes an expression to assign the integer value to the location in the stack pointed to by the pointer variable.</Body_Text>
+               <Body_Text>However, this expression uses the comparison operator "==" rather than the assignment operator "=". The result of using the comparison operator instead of the assignment operator causes erroneous values to be entered into the stack and can cause unexpected results.</Body_Text>
+            </Demonstrative_Example>
+            <Demonstrative_Example>
+               <Intro_Text>The example code below is taken from the CVA6 processor core of the HACK@DAC'21 buggy OpenPiton SoC. Debug access allows users to access internal hardware registers that are otherwise not exposed for user access or restricted access through access control protocols. Hence, requests to enter debug mode are checked and authorized only if the processor has sufficient privileges. In addition, debug accesses are also locked behind password checkers. Thus, the processor enters debug mode only when the privilege level requirement is met, and the correct debug password is provided.</Intro_Text>
+               <Body_Text>The following code [REF-1377] illustrates an instance of a vulnerable implementation of debug mode. The core correctly checks if the debug requests have sufficient privileges and enables the debug_mode_d and debug_mode_q signals. It also correctly checks for debug password and enables umode_i signal.</Body_Text>
+               <Example_Code Nature="Bad" Language="Verilog">
+               module csr_regfile #(<xhtml:br />
+               ...<xhtml:br />
+                  <xhtml:div style="margin-left:1em;">
+                  // check that we actually want to enter debug depending on the privilege level we are currently in<xhtml:br />
+                  unique case (priv_lvl_o)<xhtml:br />
+                        <xhtml:div style="margin-left:1em;">
+                        riscv::PRIV_LVL_M: begin<xhtml:br />
+                           <xhtml:div style="margin-left:1em;">
+                           debug_mode_d = dcsr_q.ebreakm;<xhtml:br />
+                           </xhtml:div>
+                        </xhtml:div>
+                  </xhtml:div>
+               ...<xhtml:br />
+                  <xhtml:div style="margin-left:1em;">
+                        <xhtml:div style="margin-left:1em;">
+                        riscv::PRIV_LVL_U: begin<xhtml:br />
+                           <xhtml:div style="margin-left:1em;">
+                           debug_mode_d = dcsr_q.ebreaku;<xhtml:br />
+                           </xhtml:div>
+                        </xhtml:div>
+                  </xhtml:div>
+               ...<xhtml:br />
+                  <xhtml:div style="margin-left:1em;">
+                  <xhtml:b>assign priv_lvl_o = (debug_mode_q || umode_i) ?  riscv::PRIV_LVL_M : priv_lvl_q;</xhtml:b><xhtml:br />
+                  </xhtml:div>
+               ...<xhtml:br />
+                  <xhtml:div style="margin-left:1em;">
+                  debug_mode_q  &lt;= debug_mode_d;<xhtml:br />
+                  </xhtml:div>
+               ...<xhtml:br />
+               </Example_Code>
+               <Body_Text>However, it grants debug access and changes the privilege level, priv_lvl_o, even when one of the two checks is satisfied and the other is not. Because of this, debug access can be granted by simply requesting with sufficient privileges (i.e., debug_mode_q is enabled) and failing the password check (i.e., umode_i is disabled). This allows an attacker to bypass the debug password checking and gain debug access to the core, compromising the security of the processor.</Body_Text>
+               <Body_Text>A fix to this issue is to only change the privilege level of the processor when both checks are satisfied, i.e., the request has enough privileges (i.e., debug_mode_q is enabled) and the password checking is successful (i.e., umode_i is enabled) [REF-1378].</Body_Text>
+               <Example_Code Nature="Good" Language="Verilog">
+               module csr_regfile #(<xhtml:br />
+               ...<xhtml:br />
+                  <xhtml:div style="margin-left:1em;">
+                  // check that we actually want to enter debug depending on the privilege level we are currently in<xhtml:br />
+                  unique case (priv_lvl_o)<xhtml:br />
+                        <xhtml:div style="margin-left:1em;">
+                        riscv::PRIV_LVL_M: begin<xhtml:br />
+                           <xhtml:div style="margin-left:1em;">
+                           debug_mode_d = dcsr_q.ebreakm;<xhtml:br />
+                           </xhtml:div>
+                        </xhtml:div>
+                  </xhtml:div>
+               ...<xhtml:br />
+                  <xhtml:div style="margin-left:1em;">
+                        <xhtml:div style="margin-left:1em;">
+                        riscv::PRIV_LVL_U: begin<xhtml:br />
+                           <xhtml:div style="margin-left:1em;">
+                           debug_mode_d = dcsr_q.ebreaku;<xhtml:br />
+                           </xhtml:div>
+                        </xhtml:div>
+                  </xhtml:div>
+               ...<xhtml:br />
+                  <xhtml:div style="margin-left:1em;">
+                  assign priv_lvl_o = <xhtml:b>(debug_mode_q &amp;&amp; umode_i) ? riscv::PRIV_LVL_M : priv_lvl_q;</xhtml:b><xhtml:br />
+                  </xhtml:div>
+               ...<xhtml:br />
+                  <xhtml:div style="margin-left:1em;">
+                  debug_mode_q  &lt;= debug_mode_d;<xhtml:br />
+                  </xhtml:div>
+               ...<xhtml:br />
+               </Example_Code>
+            </Demonstrative_Example>
+         </Demonstrative_Examples>
+         <Observed_Examples>
+            <Observed_Example>
+               <Reference>CVE-2022-3979</Reference>
+               <Description>Chain: data visualization program written in PHP uses the "!=" operator instead of the type-strict "!==" operator (CWE-480) when validating hash values, potentially leading to an incorrect type conversion (CWE-704)</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2022-3979</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2021-3116</Reference>
+               <Description>Chain: Python-based HTTP Proxy server uses the wrong boolean operators (CWE-480) causing an  incorrect comparison (CWE-697) that identifies an authN failure if all three conditions are met instead of only one, allowing bypass of the proxy authentication (CWE-1390)</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2021-3116</Link>
+            </Observed_Example>
+         </Observed_Examples>
+         <Taxonomy_Mappings>
+            <Taxonomy_Mapping Taxonomy_Name="CLASP">
+               <Entry_Name>Using the wrong operator</Entry_Name>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="CERT C Secure Coding">
+               <Entry_ID>EXP45-C</Entry_ID>
+               <Entry_Name>Do not perform assignments in selection statements</Entry_Name>
+               <Mapping_Fit>CWE More Abstract</Mapping_Fit>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="CERT C Secure Coding">
+               <Entry_ID>EXP46-C</Entry_ID>
+               <Entry_Name>Do not use a bitwise operator with a Boolean-like operand</Entry_Name>
+               <Mapping_Fit>CWE More Abstract</Mapping_Fit>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="Software Fault Patterns">
+               <Entry_ID>SFP1</Entry_ID>
+               <Entry_Name>Glitch in Computation</Entry_Name>
+            </Taxonomy_Mapping>
+         </Taxonomy_Mappings>
+         <References>
+            <Reference External_Reference_ID="REF-18" />
+            <Reference External_Reference_ID="REF-62" Section="Chapter 6, &quot;Typos&quot;, Page 289" />
+            <Reference External_Reference_ID="REF-1377" />
+            <Reference External_Reference_ID="REF-1378" />
+         </References>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Base level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+         <Content_History>
+            <Submission>
+               <Submission_Name>CLASP</Submission_Name>
+               <Submission_Date>2006-07-19</Submission_Date>
+               <Submission_Version>Draft 3</Submission_Version>
+               <Submission_ReleaseDate>2006-07-19</Submission_ReleaseDate>
+            </Submission>
+            <Modification>
+               <Modification_Name>Eric Dalci</Modification_Name>
+               <Modification_Organization>Cigital</Modification_Organization>
+               <Modification_Date>2008-07-01</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>updated Time_of_Introduction</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2008-09-08</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>updated Applicable_Platforms, Relationships, Other_Notes, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2008-10-14</Modification_Date>
+               <Modification_Version>1.0.1</Modification_Version>
+               <Modification_ReleaseDate>2008-10-14</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2008-11-24</Modification_Date>
+               <Modification_Version>1.1</Modification_Version>
+               <Modification_ReleaseDate>2008-11-25</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-06-01</Modification_Date>
+               <Modification_Version>1.13</Modification_Version>
+               <Modification_ReleaseDate>2011-06-01</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences, Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-09-13</Modification_Date>
+               <Modification_Version>2.1</Modification_Version>
+               <Modification_ReleaseDate>2011-09-13</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2012-05-11</Modification_Date>
+               <Modification_Version>2.2</Modification_Version>
+               <Modification_ReleaseDate>2012-05-15</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences, References, Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2012-10-30</Modification_Date>
+               <Modification_Version>2.3</Modification_Version>
+               <Modification_ReleaseDate>2012-10-30</Modification_ReleaseDate>
+               <Modification_Comment>updated Demonstrative_Examples, Potential_Mitigations</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2014-06-23</Modification_Date>
+               <Modification_Version>2.7</Modification_Version>
+               <Modification_ReleaseDate>2014-06-23</Modification_ReleaseDate>
+               <Modification_Comment>updated Applicable_Platforms, Description, Detection_Factors, Other_Notes</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2014-07-30</Modification_Date>
+               <Modification_Version>2.8</Modification_Version>
+               <Modification_ReleaseDate>2014-07-31</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2017-11-08</Modification_Date>
+               <Modification_Version>3.0</Modification_Version>
+               <Modification_ReleaseDate>2017-11-08</Modification_ReleaseDate>
+               <Modification_Comment>updated Demonstrative_Examples, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2019-01-03</Modification_Date>
+					<Modification_Version>3.2</Modification_Version>
+					<Modification_ReleaseDate>2019-01-03</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-02-24</Modification_Date>
+					<Modification_Version>4.0</Modification_Version>
+					<Modification_ReleaseDate>2020-02-24</Modification_ReleaseDate>
+					<Modification_Comment>updated References, Relationships, Taxonomy_Mappings</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-08-20</Modification_Date>
+					<Modification_Version>4.2</Modification_Version>
+					<Modification_ReleaseDate>2020-08-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-03-15</Modification_Date>
+					<Modification_Version>4.4</Modification_Version>
+					<Modification_ReleaseDate>2021-03-15</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-01-31</Modification_Date>
+					<Modification_Version>4.10</Modification_Version>
+					<Modification_ReleaseDate>2023-01-31</Modification_ReleaseDate>
+					<Modification_Comment>updated Description, Observed_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-10-26</Modification_Date>
+					<Modification_Version>4.13</Modification_Version>
+					<Modification_ReleaseDate>2023-10-26</Modification_ReleaseDate>
+					<Modification_Comment>updated Observed_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2024-02-29</Modification_Date>
+					<Modification_Version>4.14</Modification_Version>
+					<Modification_ReleaseDate>2024-02-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples, References</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+            <Contribution Type="Content">
+					<Contribution_Name>Chen Chen, Rahul Kande, Jeyavijayan Rajendran</Contribution_Name>
+					<Contribution_Organization>Texas A&amp;M University</Contribution_Organization>
+					<Contribution_Date>2023-11-07</Contribution_Date>
+					<Contribution_Comment>suggested demonstrative example</Contribution_Comment>
+				</Contribution>
+				<Contribution Type="Content">
+					<Contribution_Name>Shaza Zeitouni, Mohamadreza Rostami, Ahmad-Reza Sadeghi</Contribution_Name>
+					<Contribution_Organization>Technical University of Darmstadt</Contribution_Organization>
+					<Contribution_Date>2023-11-07</Contribution_Date>
+					<Contribution_Comment>suggested demonstrative example</Contribution_Comment>
+				</Contribution>
+            <Previous_Entry_Name Date="2008-04-11">Using the Wrong Operator</Previous_Entry_Name>
+         </Content_History>
+      </Weakness>
+      

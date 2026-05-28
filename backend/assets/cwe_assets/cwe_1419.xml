@@ -1,0 +1,358 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="1419" Name="Incorrect Initialization of Resource" Abstraction="Class" Structure="Simple" Status="Incomplete">
+			<Description>The product attempts to initialize a resource but does not correctly do so, which might leave the resource in an unexpected, incorrect, or insecure state when it is accessed.</Description>
+			<Extended_Description>
+				<xhtml:p>This can have security implications when the associated resource is expected to have certain properties or values. Examples include a variable that determines whether a user has been authenticated or not, or a register or fuse value that determines the security state of the product.</xhtml:p>
+				<xhtml:p>For software, this weakness can frequently occur when implicit initialization is used, meaning the resource is not explicitly set to a specific value. For example, in C, memory is not necessarily cleared when it is allocated on the stack, and many scripting languages use a default empty, null value, or zero value when a variable is not explicitly initialized.</xhtml:p>
+				<xhtml:p>For hardware, this weakness frequently appears with reset values and fuses. After a product reset, hardware may initialize registers incorrectly. During different phases of a product lifecycle, fuses may be set to incorrect values. Even if fuses are set to correct values, the lines to the fuse could be broken or there might be hardware on the fuse line that alters the fuse value to be incorrect.</xhtml:p>
+			</Extended_Description>
+			<Related_Weaknesses>
+				<Related_Weakness Nature="ChildOf" CWE_ID="665" View_ID="1000" Ordinal="Primary" />
+			</Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+            <Weakness_Ordinality>
+               <Ordinality>Resultant</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+			<Applicable_Platforms>
+				<Language Class="Not Language-Specific" Prevalence="Undetermined" />
+				<Operating_System Class="Not OS-Specific" Prevalence="Undetermined" />
+				<Architecture Class="Not Architecture-Specific" Prevalence="Undetermined" />
+				<Technology Class="Not Technology-Specific" Prevalence="Undetermined" />
+				</Applicable_Platforms>
+			<Modes_Of_Introduction>
+				<Introduction>
+					<Phase>Implementation</Phase>
+				</Introduction>
+				<Introduction>
+					<Phase>Manufacturing</Phase>
+				</Introduction>
+				<Introduction>
+					<Phase>Installation</Phase>
+				</Introduction>
+				<Introduction>
+					<Phase>System Configuration</Phase>
+				</Introduction>
+				<Introduction>
+					<Phase>Operation</Phase>
+				</Introduction>
+			</Modes_Of_Introduction>
+			<Common_Consequences>
+				<Consequence>
+					<Scope>Confidentiality</Scope>
+					<Impact>Read Memory</Impact>
+					<Impact>Read Application Data</Impact>
+					<Impact>Unexpected State</Impact>
+					<Likelihood>Unknown</Likelihood>
+				</Consequence>
+				<Consequence>
+				  <Scope>Authorization</Scope>
+				  <Scope>Integrity</Scope>
+				  <Impact>Gain Privileges or Assume Identity</Impact>
+				</Consequence>
+				<Consequence>
+					<Scope>Other</Scope>
+					<Impact>Varies by Context</Impact>
+					<Note>The technical impact can vary widely based on how the resource is used in the product, and whether its contents affect security decisions.</Note>
+				</Consequence>
+			</Common_Consequences>
+			<Detection_Methods>
+			  <Detection_Method Detection_Method_ID="DM-14">
+			    <Method>Automated Static Analysis</Method>
+			    <Description>Automated static analysis, commonly referred to as Static Application Security Testing (SAST), can find some instances of this weakness by analyzing source code (or binary/compiled code) without having to execute it. Typically, this is done by building a model of data flow and control flow, then searching for potentially-vulnerable patterns that connect "sources" (origins of input) with "sinks" (destinations where the data interacts with external components, a lower layer such as the OS, etc.)</Description>
+			  </Detection_Method>
+			</Detection_Methods>
+			<Potential_Mitigations>
+				<Mitigation>
+					<Phase>Implementation</Phase>
+					<Description>Choose the safest-possible initialization for security-related resources.</Description>
+				</Mitigation>
+				<Mitigation>
+					<Phase>Implementation</Phase>
+					<Description>Ensure that each resource (whether variable, memory buffer, register, etc.) is fully initialized.</Description>
+				</Mitigation>
+				<Mitigation>
+					<Phase>Implementation</Phase>
+					<Description>Pay close attention to complex conditionals or reset sources   that affect initialization, since some paths might not perform the initialization.</Description>
+				</Mitigation>
+				<Mitigation>
+					<Phase>Architecture and Design</Phase>
+					<Description>Ensure that the design and architecture clearly identify what the initialization should be, and that the initialization does not have security implications.</Description>
+				</Mitigation>
+			</Potential_Mitigations>
+			<Demonstrative_Examples>
+              <Demonstrative_Example Demonstrative_Example_ID="DX-162">
+                <Intro_Text>Consider example design module system verilog code shown below. The register_example module is an example parameterized module that defines two parameters, REGISTER_WIDTH and REGISTER_DEFAULT. Register_example module defines a Secure_mode setting, which when set makes the register content read-only and not modifiable by software writes. register_top module instantiates two registers, Insecure_Device_ID_1 and Insecure_Device_ID_2. Generally, registers containing device identifier values are required to be read only to prevent any possibility of software modifying these values. </Intro_Text>
+                <Example_Code Nature="Bad" Language="Verilog">
+                  // Parameterized Register module example <xhtml:br />
+				  // Secure_mode : REGISTER_DEFAULT[0] : When set to 1 register is read only and not writable// <xhtml:br />
+				  module register_example <xhtml:br />
+				  #( <xhtml:br />
+				  parameter REGISTER_WIDTH = 8, // Parameter defines width of register, default 8 bits <xhtml:br />
+				  parameter [REGISTER_WIDTH-1:0] REGISTER_DEFAULT = 2**REGISTER_WIDTH -2 // Default value of register computed from Width. Sets all bits to 1s except bit 0 (Secure _mode) <xhtml:br />
+				  ) <xhtml:br />
+				  ( <xhtml:br />
+				  input [REGISTER_WIDTH-1:0] Data_in, <xhtml:br />
+				  input Clk, <xhtml:br />
+				  input resetn, <xhtml:br />
+				  input write, <xhtml:br />
+				  output reg [REGISTER_WIDTH-1:0] Data_out <xhtml:br />
+				  ); <xhtml:br />
+				  <xhtml:br />
+				  reg Secure_mode; <xhtml:br />
+				  <xhtml:br />
+				  always @(posedge Clk or negedge resetn) <xhtml:br />
+				  <xhtml:div style="margin-left:1em;">
+					if (~resetn) <xhtml:br />
+					begin <xhtml:br />
+					<xhtml:div style="margin-left:1em;">
+					  Data_out &lt;= REGISTER_DEFAULT; // Register content set to Default at reset <xhtml:br />
+					  Secure_mode &lt;= REGISTER_DEFAULT[0]; // Register Secure_mode set at reset <xhtml:br />
+					</xhtml:div>
+					end <xhtml:br />
+					else if (write &amp; ~Secure_mode) <xhtml:br />
+					begin <xhtml:br />
+					<xhtml:div style="margin-left:1em;">
+					  Data_out &lt;= Data_in; <xhtml:br />
+					</xhtml:div>
+					end <xhtml:br />
+				  </xhtml:div>
+				  endmodule <xhtml:br />
+                  <xhtml:br />
+                  <xhtml:br />
+				  module register_top <xhtml:br />
+				  ( <xhtml:br />
+				  input Clk, <xhtml:br />
+				  input resetn, <xhtml:br />
+				  input write, <xhtml:br />
+				  input [31:0] Data_in, <xhtml:br />
+				  output reg [31:0] Secure_reg, <xhtml:br />
+				  output reg [31:0] Insecure_reg <xhtml:br />
+				  ); <xhtml:br />
+				  <xhtml:br />
+				  register_example #( <xhtml:br />
+				  <xhtml:div style="margin-left:1em;">
+					.REGISTER_WIDTH (32), <xhtml:br />
+					.REGISTER_DEFAULT (1224) // Incorrect Default value used bit 0 is 0. <xhtml:br />
+				  </xhtml:div>
+				  ) Insecure_Device_ID_1 ( <xhtml:br />
+				  <xhtml:div style="margin-left:1em;">
+					.Data_in (Data_in), <xhtml:br />
+					.Data_out (Secure_reg), <xhtml:br />
+					.Clk (Clk), <xhtml:br />
+					.resetn (resetn), <xhtml:br />
+					.write (write) <xhtml:br />
+				  </xhtml:div>
+				  ); <xhtml:br />
+                  <xhtml:br />
+				  register_example #(<xhtml:br />
+				  <xhtml:div style="margin-left:1em;">
+					.REGISTER_WIDTH (32) // Default not defined 2^32-2 value will be used as default. <xhtml:br />
+				  </xhtml:div>
+				  ) Insecure_Device_ID_2 ( <xhtml:br />
+				  <xhtml:div style="margin-left:1em;">
+					.Data_in (Data_in), <xhtml:br />
+					.Data_out (Insecure_reg), <xhtml:br />
+					.Clk (Clk), <xhtml:br />
+					.resetn (resetn), <xhtml:br />
+					.write (write) <xhtml:br />
+				  </xhtml:div>
+				  ); <xhtml:br />
+                  <xhtml:br />
+				  endmodule <xhtml:br />
+                </Example_Code>
+                <Body_Text>These example instantiations show how, in a hardware design, it would be possible to instantiate the register module with insecure defaults and parameters.</Body_Text>
+                <Body_Text>In the example design, both registers will be software writable since Secure_mode is defined as zero. </Body_Text>
+                <Example_Code Nature="Good" Language="Verilog">
+                  register_example #( <xhtml:br />
+				  <xhtml:div style="margin-left:1em;">
+					.REGISTER_WIDTH (32), <xhtml:br />
+					.REGISTER_DEFAULT (1225) // Correct default value set, to enable Secure_mode <xhtml:br />
+				  </xhtml:div>
+				  ) Secure_Device_ID_example ( <xhtml:br />
+				  <xhtml:div style="margin-left:1em;">
+					.Data_in (Data_in), <xhtml:br />
+					.Data_out (Secure_reg), <xhtml:br />
+					.Clk (Clk), <xhtml:br />
+					.resetn (resetn), <xhtml:br />
+					.write (write) <xhtml:br />
+				  </xhtml:div>
+				  );
+                </Example_Code>
+              </Demonstrative_Example>
+              <Demonstrative_Example Demonstrative_Example_ID="DX-163">
+				<Intro_Text>This code attempts to login a user using credentials from a POST request:</Intro_Text>
+				<Example_Code Nature="Bad" Language="PHP">
+                  <xhtml:div>
+                    <xhtml:br />
+                    <xhtml:i>// $user and $pass automatically set from POST request</xhtml:i>
+                    <xhtml:br />if (login_user($user,$pass)) {<xhtml:div style="margin-left:1em;">$authorized = true;</xhtml:div>}<xhtml:br />
+                    <xhtml:i>...</xhtml:i>
+                    <xhtml:br />
+                  <xhtml:br />if ($authorized) {<xhtml:div style="margin-left:1em;">generatePage();</xhtml:div>}</xhtml:div>
+				</Example_Code>
+				<Body_Text>Because the $authorized variable is never initialized, PHP will automatically set $authorized to any value included in the POST request if register_globals is enabled. An attacker can send a POST request with an unexpected third value 'authorized' set to 'true' and gain authorized status without supplying valid credentials.</Body_Text>
+				<Body_Text>Here is a fixed version:</Body_Text>
+				<Example_Code Nature="Good" Language="PHP">
+                  <xhtml:div>$user = $_POST['user'];<xhtml:br />$pass = $_POST['pass'];<xhtml:br />$authorized = false;<xhtml:br />if (login_user($user,$pass)) {<xhtml:div style="margin-left:1em;">$authorized = true;</xhtml:div>}<xhtml:br />
+                  <xhtml:i>...</xhtml:i>
+                  <xhtml:br />
+                  </xhtml:div>
+				</Example_Code>
+				<Body_Text>This code avoids the issue by initializing the $authorized variable to false and explicitly retrieving the login credentials from the $_POST variable. Regardless, register_globals should never be enabled and is disabled by default in current versions of PHP.</Body_Text>
+              </Demonstrative_Example>
+			  <Demonstrative_Example Demonstrative_Example_ID="DX-222">
+					<Intro_Text>The following example code is excerpted from the Access Control module, acct_wrapper, in the Hack@DAC'21 buggy OpenPiton System-on-Chip (SoC). Within this module, a set of memory-mapped I/O registers, referred to as acct_mem, each 32-bit wide, is utilized to store access control permissions for peripherals [REF-1437]. Access control registers are typically used to define and enforce permissions and access rights for various system resources.</Intro_Text>
+					<Body_Text>However, in the buggy SoC, these registers are all enabled at reset, i.e., essentially granting unrestricted access to all system resources [REF-1438]. This will introduce security vulnerabilities and risks to the system, such as privilege escalation or exposing sensitive information to unauthorized users or processes.</Body_Text>
+					<Example_Code Nature="Bad" Language="Verilog">
+						module acct_wrapper #(<xhtml:br />
+						...<xhtml:br />
+						<xhtml:div style="margin-left:1em;">
+							always @(posedge clk_i)<xhtml:br />
+							<xhtml:div style="margin-left:1em;">
+								begin<xhtml:br />
+								<xhtml:div style="margin-left:1em;">
+									if(~(rst_ni &amp;&amp; ~rst_6))<xhtml:br />
+									<xhtml:div style="margin-left:1em;">
+										begin<xhtml:br />
+										<xhtml:div style="margin-left:1em;">
+											for (j=0; j &lt; AcCt_MEM_SIZE; j=j+1)<xhtml:br />
+												<xhtml:div style="margin-left:1em;">
+													begin<xhtml:br />
+													<xhtml:div style="margin-left:1em;">
+														<xhtml:b>acct_mem[j] &lt;= 32'hffffffff;</xhtml:b><xhtml:br />
+													</xhtml:div>
+													end<xhtml:br />
+												</xhtml:div>
+										</xhtml:div>
+										end<xhtml:br />
+									</xhtml:div>
+								</xhtml:div>
+								...<xhtml:br />
+							</xhtml:div>
+						</xhtml:div>
+					</Example_Code>
+					<Body_Text>To fix this issue, the access control registers must be properly initialized during the reset phase of the SoC. Correct initialization values should be established to maintain the system's integrity, security, predictable behavior, and allow proper control of peripherals. The specifics of what values should be set depend on the SoC's design and the requirements of the system. To address the problem depicted in the bad code example [REF-1438], the default value for "acct_mem" should be set to 32'h00000000 (see good code example [REF-1439]). This ensures that during startup or after any reset, access to protected data is restricted until the system setup is complete and security procedures properly configure the access control settings.</Body_Text>
+					<Example_Code Nature="Good" Language="Verilog">
+						module acct_wrapper #(<xhtml:br />
+						...<xhtml:br />
+						<xhtml:div style="margin-left:1em;">
+							always @(posedge clk_i)<xhtml:br />
+							<xhtml:div style="margin-left:1em;">
+								begin<xhtml:br />
+								<xhtml:div style="margin-left:1em;">
+									if(~(rst_ni &amp;&amp; ~rst_6))
+									<xhtml:div style="margin-left:1em;">
+										begin<xhtml:br />
+										<xhtml:div style="margin-left:1em;">
+											for (j=0; j &lt; AcCt_MEM_SIZE; j=j+1)<xhtml:br />
+											<xhtml:div style="margin-left:1em;">
+												begin<xhtml:br />
+												<xhtml:div style="margin-left:1em;">
+													<xhtml:b>acct_mem[j] &lt;= 32'h00000000;</xhtml:b><xhtml:br />
+												</xhtml:div>
+												end<xhtml:br />
+											</xhtml:div>
+										</xhtml:div>
+										end<xhtml:br />
+									</xhtml:div>
+								</xhtml:div>
+								...<xhtml:br />
+							</xhtml:div>
+						</xhtml:div>
+					</Example_Code>
+				</Demonstrative_Example>
+			</Demonstrative_Examples>
+			<Observed_Examples>
+				<Observed_Example>
+					<Reference>CVE-2020-27211</Reference>
+					<Description>Chain: microcontroller system-on-chip uses a register value stored in flash to set product protection state on the memory bus and does not contain protection against fault injection (CWE-1319) which leads to an incorrect initialization of the memory bus (CWE-1419) causing the product to be in an unprotected state.</Description>
+					<Link>https://www.cve.org/CVERecord?id=CVE-2020-27211</Link>
+				</Observed_Example>
+				<Observed_Example>
+					<Reference>CVE-2023-25815</Reference>
+					<Description>chain: a change in an underlying package causes the gettext function to use implicit initialization with a hard-coded path (CWE-1419) under the user-writable C:\ drive, introducing an untrusted search path element (CWE-427) that enables spoofing of messages. </Description>
+					<Link>https://www.cve.org/CVERecord?id=CVE-2023-25815</Link>
+				</Observed_Example>
+				<Observed_Example>
+					<Reference>CVE-2022-43468</Reference>
+					<Description>WordPress module sets internal variables based on external inputs, allowing false reporting of the number of views </Description>
+					<Link>https://www.cve.org/CVERecord?id=CVE-2022-43468</Link>
+				</Observed_Example>
+				<Observed_Example>
+				  <Reference>CVE-2022-36349</Reference>
+				  <Description>insecure default variable initialization in BIOS firmware for a hardware board allows DoS</Description>
+				  <Link>https://www.cve.org/CVERecord?id=CVE-2022-36349</Link>
+				</Observed_Example>
+				<Observed_Example>
+					<Reference>CVE-2015-7763</Reference>
+					<Description>distributed filesystem only initializes part of the variable-length padding for a packet, allowing attackers to read sensitive information from previously-sent packets in the same memory location</Description>
+					<Link>https://www.cve.org/CVERecord?id=CVE-2015-7763</Link>
+				</Observed_Example>
+			</Observed_Examples>
+			<References>
+				<Reference External_Reference_ID="REF-1437" />
+				<Reference External_Reference_ID="REF-1438" />
+				<Reference External_Reference_ID="REF-1439" />
+			</References>
+			<Mapping_Notes>
+              <Usage>Allowed-with-Review</Usage>
+              <Rationale>This CWE entry is a Class and might have Base-level children that would be more appropriate</Rationale>
+              <Comments>Examine children of this entry to see if there is a better fit</Comments>
+              <Reasons>
+				<Reason Type="Abstraction" />
+              </Reasons>
+			</Mapping_Notes>
+			<Content_History>
+				<Submission>
+					<Submission_Name>CWE Content Team</Submission_Name>
+					<Submission_Organization>MITRE</Submission_Organization>
+					<Submission_Date>2023-10-11</Submission_Date>
+					<Submission_Version>4.13</Submission_Version>
+					<Submission_ReleaseDate>2023-10-26</Submission_ReleaseDate>
+				</Submission>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2024-07-16</Modification_Date>
+					<Modification_Version>4.15</Modification_Version>
+					<Modification_ReleaseDate>2024-07-16</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples, References</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Detection_Factors, Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+				<Contribution Type="Content">
+					<Contribution_Name>Anonymous External Contributor</Contribution_Name>
+					<Contribution_Date>2023-10-13</Contribution_Date>
+					<Contribution_Comment>Provided HW specific comments for Extended Description</Contribution_Comment>
+				</Contribution>
+				<Contribution Type="Content">
+					<Contribution_Name>Mohan Lal</Contribution_Name>
+					<Contribution_Organization>NVIDIA</Contribution_Organization>
+					<Contribution_Date>2023-10-13</Contribution_Date>
+					<Contribution_Comment>Provided HW specific comments for Extended Description</Contribution_Comment>
+				</Contribution>
+				<Contribution Type="Content">
+					<Contribution_Name>Chen Chen, Rahul Kande, Jeyavijayan Rajendran</Contribution_Name>
+					<Contribution_Organization>Texas A&amp;M University</Contribution_Organization>
+					<Contribution_Date>2023-11-07</Contribution_Date>
+					<Contribution_Comment>suggested demonstrative example</Contribution_Comment>
+				</Contribution>
+				<Contribution Type="Content">
+					<Contribution_Name>Shaza Zeitouni, Mohamadreza Rostami, Ahmad-Reza Sadeghi</Contribution_Name>
+					<Contribution_Organization>Technical University of Darmstadt</Contribution_Organization>
+					<Contribution_Date>2023-11-07</Contribution_Date>
+					<Contribution_Comment>suggested demonstrative example</Contribution_Comment>
+				</Contribution>
+			</Content_History>
+		</Weakness>
+      

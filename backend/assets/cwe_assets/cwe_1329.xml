@@ -1,0 +1,325 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="1329" Name="Reliance on Component That is Not Updateable" Abstraction="Base" Structure="Simple" Status="Incomplete">
+			<Description>The product contains a component that cannot be updated or patched in order to remove vulnerabilities or significant bugs.</Description>
+			<Extended_Description>
+			  <xhtml:p>
+			  If the component is discovered to contain a vulnerability or critical bug, but the issue cannot be fixed using an update or patch, then the product's owner will not be able to protect against the issue.  The only option might be replacement of the product, which could be too financially or operationally expensive for the product owner.  As a result, the inability to patch or update can leave the product open to attacker exploitation or critical operation failures. This weakness can be especially difficult to manage when using ROM, firmware, or similar components that traditionally have had limited or no update capabilities.
+			  </xhtml:p>
+			  <xhtml:p>
+			    In industries such as healthcare, "legacy"
+			    devices can be operated for decades.  As a
+			    US task force report [REF-1197] notes, "the inability
+			    to update or replace equipment has both
+			    large and small health care delivery
+			    organizations struggle with numerous
+			    unsupported legacy systems that cannot
+			    easily be replaced (hardware, software, and
+			    operating systems) with large numbers of
+			    vulnerabilities and few modern
+			    countermeasures."
+			    </xhtml:p>
+			  <xhtml:p>
+			    While hardware can be prone to this weakness, software systems can also be affected, such as when a third-party driver or library is no longer actively maintained or supported but is still critical for the required functionality.</xhtml:p>
+			</Extended_Description>
+			<Related_Weaknesses>
+			  <Related_Weakness Nature="ChildOf" CWE_ID="1357" View_ID="1000" Ordinal="Primary" />
+			  <Related_Weakness Nature="ChildOf" CWE_ID="1357" View_ID="1194" Ordinal="Primary" />
+			  <Related_Weakness Nature="ChildOf" CWE_ID="664" View_ID="1000" />
+			</Related_Weaknesses>
+			<Weakness_Ordinalities>
+			  <Weakness_Ordinality>
+			    <Ordinality>Primary</Ordinality>
+			  </Weakness_Ordinality>
+			</Weakness_Ordinalities>
+			<Applicable_Platforms>	
+				<Language Class="Not Language-Specific" Prevalence="Undetermined" />
+				<Operating_System Class="Not OS-Specific" Prevalence="Undetermined" />
+				<Architecture Class="Not Architecture-Specific" Prevalence="Undetermined" />
+				<Technology Class="Not Technology-Specific" Prevalence="Undetermined" />
+				<Technology Class="ICS/OT" Prevalence="Undetermined" />
+				</Applicable_Platforms>
+			<Modes_Of_Introduction>
+				<Introduction>
+					<Phase>Requirements</Phase>
+					<Note>Requirements development might not consider the importance of updates over the lifetime of the product or might intentionally exclude this capability due to concerns such as expense or speed to market.</Note>
+				</Introduction>
+				<Introduction>
+					<Phase>Architecture and Design</Phase>
+					<Note>Lack of planning during architecture development and design, or external pressures such as speed to market, could ignore the capability to update.</Note>
+				</Introduction>
+				<Introduction>
+					<Phase>Architecture and Design</Phase>
+					<Note>Designers might omit capabilities for updating a component due to time pressures to release the product or assumptions about the stability of the component.</Note>
+				</Introduction>
+				<Introduction>
+					<Phase>Implementation</Phase>
+					<Note>The weakness can appear through oversight during implementation.</Note>
+				</Introduction>
+			</Modes_Of_Introduction>
+			<Common_Consequences>
+				<Consequence>
+					<Scope>Confidentiality</Scope>
+					<Scope>Integrity</Scope>
+					<Scope>Access Control</Scope>
+					<Scope>Authentication</Scope>
+					<Scope>Authorization</Scope>
+					<Scope>Other</Scope>
+					<Impact>Gain Privileges or Assume Identity</Impact>
+					<Impact>Bypass Protection Mechanism</Impact>
+					<Impact>Execute Unauthorized Code or Commands</Impact>
+					<Impact>DoS: Crash, Exit, or Restart</Impact>
+					<Impact>Quality Degradation</Impact>
+					<Impact>Reduce Maintainability</Impact>
+					<Note>If an attacker can identify an exploitable vulnerability in one product that has no means of patching, the attack may be used against all affected versions of that product.</Note>
+				</Consequence>
+			</Common_Consequences>
+			<Detection_Methods>
+			  <Detection_Method>
+			    <Method>Architecture or Design Review</Method>
+			    <Description>Check the consumer or maintainer documentation, the architecture/design documentation, or the original requirements to ensure that the documentation includes details for how to update the firmware.</Description>
+			    <Effectiveness>Moderate</Effectiveness>
+			  </Detection_Method>
+			</Detection_Methods>
+			<Potential_Mitigations>
+				<Mitigation>
+					<Phase>Requirements</Phase>
+					<Description>Specify requirements that each component should be updateable, including ROM, firmware, etc.</Description>
+				</Mitigation>
+				<Mitigation>
+					<Phase>Architecture and Design</Phase>
+					<Description>Design the product to allow for updating of its components. Include the external infrastructure that might be necessary to support updates, such as distribution servers.</Description>
+				</Mitigation>
+				<Mitigation>
+					<Phase>Architecture and Design</Phase>
+					<Phase>Implementation</Phase>
+					<Description>
+					    With hardware, support patches that can be programmed in-field or during manufacturing through hardware fuses. This feature can be used for limited patching of devices after shipping, or for the next batch of silicon devices manufactured, without changing the full device ROM.
+                    </Description>
+                    <Effectiveness>Moderate</Effectiveness>
+                    <Effectiveness_Notes>
+                        Some parts of the hardware initialization or signature verification done to authenticate patches will always be "not patchable."  Hardware-fuse-based patches will also have limitations in terms of size and the number of patches that can be supported.
+                    </Effectiveness_Notes>
+				</Mitigation>
+				<Mitigation>
+					<Phase>Implementation</Phase>
+					<Description>Implement the necessary functionality to allow each component to be updated.</Description>
+				</Mitigation>
+			</Potential_Mitigations>
+			<Demonstrative_Examples>
+				<Demonstrative_Example Demonstrative_Example_ID="DX-145">
+					<Intro_Text>A refrigerator has an Internet interface for the official purpose of alerting the manufacturer when that refrigerator detects a fault. Because the device is attached to the Internet, the refrigerator is a target for hackers who may wish to use the device other potentially more nefarious purposes.</Intro_Text>
+					<Example_Code Nature="Bad" Language="Other">The refrigerator has no means of patching and is hacked, becoming a spewer of email spam.</Example_Code>
+					<Example_Code Nature="Good" Language="Other">The device automatically patches itself and provides considerable more protection against being hacked.</Example_Code>
+				</Demonstrative_Example>
+				<Demonstrative_Example Demonstrative_Example_ID="DX-146">
+					<Intro_Text>
+						<xhtml:p>A System-on-Chip (SOC) implements a Root-of-Trust (RoT) in ROM to boot secure code. However, at times this ROM code might have security vulnerabilities and need to be patched. Since ROM is immutable, it can be impossible to patch.</xhtml:p>
+					</Intro_Text>
+					<Body_Text>ROM does not have built-in application-programming interfaces (APIs) to patch if the code is vulnerable. Implement mechanisms to patch the vulnerable ROM code.</Body_Text>
+				</Demonstrative_Example>
+				<Demonstrative_Example>
+					<Intro_Text>The example code is taken from the JTAG module of the buggy OpenPiton SoC of HACK@DAC'21. JTAG is protected with a password checker. Access to JTAG operations will be denied unless the correct password is provided by the user. This user-provided password is first sent to the HMAC module where it is hashed with a secret crypto key. This user password hash (pass_hash) is then compared with the hash of the correct password (exp_hash).  If they match, JTAG will then be unlocked.</Intro_Text>
+					<Example_Code Nature="Bad" Language="Verilog">
+					module dmi_jtag(...)(...);<xhtml:br />
+					...<xhtml:br />
+						<xhtml:div style="margin-left:1em;">
+							<xhtml:div style="margin-left:1em;">
+								<xhtml:div style="margin-left:1em;">
+								PassChkValid: begin<xhtml:br />
+								if(hashValid) begin<xhtml:br />
+									<xhtml:div style="margin-left:1em;">
+										<xhtml:div style="margin-left:1em;">
+										if(exp_hash == pass_hash) begin<xhtml:br />
+											<xhtml:div style="margin-left:1em;"> 
+											pass_check = 1'b1;<xhtml:br />
+											</xhtml:div>
+										end else begin<xhtml:br />
+											<xhtml:div style="margin-left:1em;">
+											pass_check = 1'b0;<xhtml:br />
+											</xhtml:div>
+										end<xhtml:br />
+										state_d = Idle;<xhtml:br />
+										</xhtml:div>
+									end else begin<xhtml:br />
+									state_d = PassChkValid;<xhtml:br />
+									end<xhtml:br />
+									</xhtml:div>
+								end<xhtml:br />
+								</xhtml:div>
+							</xhtml:div>
+						</xhtml:div>
+					...<xhtml:br />
+						<xhtml:div style="margin-left:1em;">
+						hmac hmac(<xhtml:br />
+						</xhtml:div>
+					...<xhtml:br />
+						<xhtml:div style="margin-left:1em;">
+							<xhtml:div style="margin-left:1em;">
+							<xhtml:b>.key_i(256'h24e6fa2254c2ff632a41b...),</xhtml:b><xhtml:br />
+							</xhtml:div>
+						</xhtml:div>
+					...<xhtml:br />
+						<xhtml:div style="margin-left:1em;">
+						);<xhtml:br />
+						</xhtml:div>
+					...<xhtml:br />
+					endmodule
+					</Example_Code>
+					<Body_Text>However, the SoC's crypto key is hardcoded into the design and cannot be updated [REF-1387]. Therefore, if the key is leaked somehow, there is no way to reprovision the key without having the device replaced.</Body_Text>
+					<Body_Text>To fix this issue, a local register should be used (hmac_key_reg) to store the crypto key. If designers need to update the key, they can upload the new key through an input port (hmac_key_i) to the local register by enabling the patching signal (hmac_patch_en) [REF-1388].</Body_Text>
+					<Example_Code Nature="Good" Language="Verilog">
+					module dmi_jtag(...<xhtml:br />
+					) (<xhtml:br />
+						<xhtml:div style="margin-left:1em;">
+						<xhtml:b>input logic [255:0] hmac_key_i,</xhtml:b><xhtml:br />
+						<xhtml:b>input logic         hmac_patch_en,</xhtml:b><xhtml:br />
+						... <xhtml:br />
+						<xhtml:b>reg [255:0] hmac_key_reg;</xhtml:b><xhtml:br />
+						...<xhtml:br />
+						</xhtml:div>
+					);<xhtml:br />
+					...<xhtml:br />
+						<xhtml:div style="margin-left:1em;">
+						always_ff @(posedge tck_i or negedge trst_ni) begin<xhtml:br />
+						...<xhtml:br />
+						<xhtml:b>if (hmac_patch_en)</xhtml:b><xhtml:br />
+							<xhtml:div style="margin-left:1em;">
+							<xhtml:b>hmac_key_reg &lt;= hmac_key_i;</xhtml:b><xhtml:br />
+							</xhtml:div>
+						...<xhtml:br />
+						end<xhtml:br />
+						</xhtml:div>
+					...<xhtml:br />
+						<xhtml:div style="margin-left:1em;">
+						hmac hmac(<xhtml:br />
+						...<xhtml:br />
+						<xhtml:b>.key_i(hmac_key_reg),</xhtml:b><xhtml:br />
+						...<xhtml:br />
+						);<xhtml:br />
+						</xhtml:div>
+					...<xhtml:br />
+					endmodule
+					</Example_Code>
+				</Demonstrative_Example>
+			</Demonstrative_Examples>
+			<Observed_Examples>
+      			  <Observed_Example>
+        		    <Reference>CVE-2022-34381</Reference>
+        		    <Description>Java-based SDK for TLS has an unmaintained third-party component with a critical vulnerability</Description>
+        		    <Link>https://www.cve.org/CVERecord?id=CVE-2022-34381</Link>
+      			  </Observed_Example>
+      			  <Observed_Example>
+        		    <Reference>CVE-2020-9054</Reference>
+        		    <Description>Chain: network-attached storage (NAS) device has a critical OS command injection (CWE-78) vulnerability that is actively exploited to place IoT devices into a botnet, but some products are "end-of-support" and cannot be patched (CWE-1277). [REF-1097]</Description>
+        		    <Link>https://www.cve.org/CVERecord?id=CVE-2020-9054</Link>
+      			  </Observed_Example>
+      			</Observed_Examples>
+			<References>
+				<Reference External_Reference_ID="REF-1197" Section="Executive Summary" />
+				<Reference External_Reference_ID="REF-1097" />
+				<Reference External_Reference_ID="REF-1387" />
+				<Reference External_Reference_ID="REF-1388" />
+			</References>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Base level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+			<Content_History>
+				<Submission>
+					<Submission_Name>CWE Content Team</Submission_Name>
+					<Submission_Organization>MITRE</Submission_Organization>
+					<Submission_Date>2020-12-03</Submission_Date>
+					<Submission_Version>4.3</Submission_Version>
+					<Submission_ReleaseDate>2020-12-10</Submission_ReleaseDate>
+				</Submission>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-07-20</Modification_Date>
+					<Modification_Version>4.5</Modification_Version>
+					<Modification_ReleaseDate>2021-07-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples, Description, References</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-04-28</Modification_Date>
+					<Modification_Version>4.7</Modification_Version>
+					<Modification_ReleaseDate>2022-04-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Common_Consequences, Description, Detection_Factors, Maintenance_Notes, Modes_of_Introduction, Observed_Examples, Potential_Mitigations, References, Relationships, Time_of_Introduction, Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-01-31</Modification_Date>
+					<Modification_Version>4.10</Modification_Version>
+					<Modification_ReleaseDate>2023-01-31</Modification_ReleaseDate>
+					<Modification_Comment>updated Applicable_Platforms, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2024-02-29</Modification_Date>
+					<Modification_Version>4.14</Modification_Version>
+					<Modification_ReleaseDate>2024-02-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples, References</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-04-03</Modification_Date>
+					<Modification_Version>4.17</Modification_Version>
+					<Modification_ReleaseDate>2025-04-03</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2026-04-30</Modification_Date>
+					<Modification_Version>4.20</Modification_Version>
+					<Modification_ReleaseDate>2026-04-30</Modification_ReleaseDate>
+					<Modification_Comment>updated Observed_Examples</Modification_Comment>
+				</Modification>
+				<Contribution Type="Content">
+					<Contribution_Name>Chen Chen, Rahul Kande, Jeyavijayan Rajendran</Contribution_Name>
+					<Contribution_Organization>Texas A&amp;M University</Contribution_Organization>
+					<Contribution_Date>2023-06-21</Contribution_Date>
+					<Contribution_Comment>suggested demonstrative example</Contribution_Comment>
+				</Contribution>
+				<Contribution Type="Content">
+					<Contribution_Name>Shaza Zeitouni, Mohamadreza Rostami, Ahmad-Reza Sadeghi</Contribution_Name>
+					<Contribution_Organization>Technical University of Darmstadt</Contribution_Organization>
+					<Contribution_Date>2023-06-21</Contribution_Date>
+					<Contribution_Comment>suggested demonstrative example</Contribution_Comment>
+				</Contribution>
+			</Content_History>
+		</Weakness>
+      

@@ -1,0 +1,225 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="1258" Name="Exposure of Sensitive System Information Due to Uncleared Debug Information" Abstraction="Base" Structure="Simple" Status="Draft">
+         <Description>The hardware does not fully clear security-sensitive values, such as keys and intermediate values in cryptographic operations, when debug mode is entered.</Description>
+         <Extended_Description>
+            <xhtml:p>Security sensitive values, keys, intermediate steps of cryptographic operations, etc. are stored in temporary registers in the hardware. If these values are not cleared when debug mode is entered they may be accessed by a debugger allowing sensitive information to be accessible by untrusted parties.</xhtml:p>
+         </Extended_Description>
+			<Related_Weaknesses>
+			  <Related_Weakness Nature="ChildOf" CWE_ID="212" View_ID="1000" Ordinal="Primary" />
+			</Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+         <Applicable_Platforms>
+				<Language Class="Not Language-Specific" Prevalence="Undetermined" />
+				<Operating_System Class="Not OS-Specific" Prevalence="Undetermined" />
+				<Architecture Class="Not Architecture-Specific" Prevalence="Undetermined" />
+				<Technology Class="Not Technology-Specific" Prevalence="Undetermined" />
+				</Applicable_Platforms>
+         <Modes_Of_Introduction>
+            <Introduction>
+               <Phase>Architecture and Design</Phase>
+            </Introduction>
+            <Introduction>
+               <Phase>Implementation</Phase>
+            </Introduction>
+         </Modes_Of_Introduction>
+         <Common_Consequences>
+                <Consequence>
+               <Scope>Confidentiality</Scope>
+               <Impact>Read Memory</Impact>
+            </Consequence>
+            <Consequence>
+               <Scope>Access Control</Scope>
+               <Impact>Bypass Protection Mechanism</Impact>
+            </Consequence>
+         </Common_Consequences>
+         <Potential_Mitigations>
+            <Mitigation>
+               <Phase>Architecture and Design</Phase>
+               <Description>
+                 <xhtml:p>Whenever debug mode is enabled, all registers containing sensitive assets must be cleared.</xhtml:p>
+               </Description>
+            </Mitigation>
+         </Potential_Mitigations>
+         <Demonstrative_Examples>
+            <Demonstrative_Example>
+               <Intro_Text>A cryptographic core in a System-On-a-Chip (SoC) is used for cryptographic acceleration and implements several cryptographic operations (e.g., computation of AES encryption and decryption, SHA-256, HMAC, etc.). The keys for these operations or the intermediate values are stored in registers internal to the cryptographic core. These internal registers are in the Memory Mapped Input Output (MMIO) space and are blocked from access by software and other untrusted agents on the SoC. These registers are accessible through the debug and test interface.</Intro_Text>
+
+                <Example_Code Nature="Bad" Language="Other">In the above scenario, registers that store keys and intermediate values of cryptographic operations are not cleared when system enters debug mode. An untrusted actor running a debugger may read the contents of these registers and gain access to secret keys and other sensitive cryptographic information.</Example_Code>
+
+                <Example_Code Nature="Good" Language="Other">Whenever the chip enters debug mode, all registers containing security-sensitive data are be cleared rendering them unreadable.</Example_Code>
+            </Demonstrative_Example>
+            <Demonstrative_Example>
+               <Intro_Text>
+                  <xhtml:p>The following code example is extracted from the AES wrapper module, aes1_wrapper, of the Hack@DAC'21 buggy OpenPiton System-on-Chip (SoC). Within this wrapper module are four memory-mapped registers: core_key, core_key0, core_key1, and core_key2. Core_key0, core_key1, and core_key2 hold encryption/decryption keys. The core_key register selects a key and sends it to the underlying AES module to execute encryption/decryption operations.</xhtml:p>
+                  <xhtml:p>Debug mode in processors and SoCs facilitates design debugging by granting access to internal signal/register values, including physical pin values of peripherals/core, fabric bus data transactions, and inter-peripheral registers. Debug mode allows users to gather detailed, low-level information about the design to diagnose potential issues. While debug mode is beneficial for diagnosing processors or SoCs, it also introduces a new attack surface for potential attackers. For instance, if an attacker gains access to debug mode, they could potentially read any content transmitted through the fabric bus or access encryption/decryption keys stored in cryptographic peripherals.</xhtml:p>
+                  <xhtml:p>Therefore, it is crucial to clear the contents of secret registers upon entering debug mode. In the provided example of flawed code below, when debug_mode_i is activated, the register core_key0 is set to zero to prevent AES key leakage during debugging. However, this protective measure is not applied to the core_key1 register [REF-1435], leaving its contents uncleared during debug mode. This oversight enables a debugger to access sensitive information. Failing to clear sensitive data during debug mode may lead to unauthorized access to secret keys and compromise system security.</xhtml:p>
+               </Intro_Text>
+               <Example_Code Nature="Bad" Language="Verilog">
+                  module aes1_wrapper #(<xhtml:br />
+                  ...<xhtml:br />
+                  <xhtml:div style="margin-left:1em;">
+                     assign core_key0 = debug_mode_i ? 'b0 : { <xhtml:br />
+                     <xhtml:div style="margin-left:1em;">
+                        key_reg0[7],<xhtml:br />
+                        key_reg0[6],<xhtml:br />
+                        key_reg0[5],<xhtml:br />
+                        key_reg0[4],<xhtml:br />
+                        key_reg0[3],<xhtml:br />
+                        key_reg0[2],<xhtml:br />
+                        key_reg0[1],<xhtml:br />
+                        key_reg0[0]};<xhtml:br />
+                     </xhtml:div>
+                     <xhtml:b>assign core_key1 = { </xhtml:b><xhtml:br />
+                     <xhtml:div style="margin-left:1em;">
+                        <xhtml:b>key_reg1[7],</xhtml:b><xhtml:br />
+                        <xhtml:b>key_reg1[6],</xhtml:b><xhtml:br />
+                        <xhtml:b>key_reg1[5],</xhtml:b><xhtml:br />
+                        <xhtml:b>key_reg1[4],</xhtml:b><xhtml:br />
+                        <xhtml:b>key_reg1[3],</xhtml:b><xhtml:br />
+                        <xhtml:b>key_reg1[2],</xhtml:b><xhtml:br />
+                        <xhtml:b>key_reg1[1],</xhtml:b><xhtml:br />
+                        <xhtml:b>key_reg1[0]};</xhtml:b><xhtml:br />
+                     </xhtml:div>
+                  </xhtml:div>
+                  ...<xhtml:br />
+                  endmodule<xhtml:br />
+               </Example_Code>
+               <Body_Text>To address the issue, it is essential to ensure that the register is cleared and zeroized after activating debug mode on the SoC. In the correct implementation illustrated in the good code below, core_keyx registers are set to zero when debug mode is activated [REF-1436].</Body_Text>
+               <Example_Code Nature="Good" Language="Verilog">
+                  module aes1_wrapper #(<xhtml:br />
+                  ...<xhtml:br />
+                  <xhtml:div style="margin-left:1em;">
+                     assign core_key0 = debug_mode_i ? 'b0 : { <xhtml:br />
+                     <xhtml:div style="margin-left:1em;">
+                        key_reg0[7],<xhtml:br />
+                        key_reg0[6],<xhtml:br />
+                        key_reg0[5],<xhtml:br />
+                        key_reg0[4],<xhtml:br />
+                        key_reg0[3],<xhtml:br />
+                        key_reg0[2],<xhtml:br />
+                        key_reg0[1],<xhtml:br />
+                        key_reg0[0]};<xhtml:br />
+                     </xhtml:div>
+                     assign core_key1 = <xhtml:b>debug_mode_i ? 'b0 :</xhtml:b> { <xhtml:br />
+                     <xhtml:div style="margin-left:1em;">
+                        key_reg1[7],<xhtml:br />
+                        key_reg1[6],<xhtml:br />
+                        key_reg1[5],<xhtml:br />
+                        key_reg1[4],<xhtml:br />
+                        key_reg1[3],<xhtml:br />
+                        key_reg1[2],<xhtml:br />
+                        key_reg1[1],<xhtml:br />
+                        key_reg1[0]};<xhtml:br />
+                     </xhtml:div>
+                  </xhtml:div>
+                  ...<xhtml:br />
+                  endmodule<xhtml:br />
+               </Example_Code>
+            </Demonstrative_Example>
+         </Demonstrative_Examples>
+		 <Observed_Examples>
+		   <Observed_Example>
+			 <Reference>CVE-2021-33080</Reference>
+			 <Description>Uncleared debug information in memory accelerator for SSD product exposes sensitive system information</Description>
+			 <Link>https://www.cve.org/CVERecord?id=CVE-2021-33080</Link>
+		   </Observed_Example>
+		   <Observed_Example>
+			 <Reference>CVE-2022-31162</Reference>
+			 <Description>Rust library leaks Oauth client details in application debug logs</Description>
+			 <Link>https://www.cve.org/CVERecord?id=CVE-2022-31162</Link>
+		   </Observed_Example>
+		 </Observed_Examples>
+         <Related_Attack_Patterns>
+            <Related_Attack_Pattern CAPEC_ID="150" />
+            <Related_Attack_Pattern CAPEC_ID="204" />
+            <Related_Attack_Pattern CAPEC_ID="37" />
+            <Related_Attack_Pattern CAPEC_ID="545" />
+         </Related_Attack_Patterns>
+         <References>
+            <Reference External_Reference_ID="REF-1435" />
+            <Reference External_Reference_ID="REF-1436" />
+         </References>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Base level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+         <Content_History>
+            <Submission>
+               <Submission_Name>Arun Kanuparthi, Hareesh Khattri, Parbati Kumar Manna, Narasimha Kumar V Mangipudi</Submission_Name>
+               <Submission_Organization>Intel Corporation</Submission_Organization>
+               <Submission_Date>2020-02-12</Submission_Date>
+               <Submission_Version>4.1</Submission_Version>
+               <Submission_ReleaseDate>2020-02-24</Submission_ReleaseDate>
+            </Submission>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-08-20</Modification_Date>
+					<Modification_Version>4.2</Modification_Version>
+					<Modification_ReleaseDate>2020-08-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples, Description, Name, Related_Attack_Patterns, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-10-26</Modification_Date>
+					<Modification_Version>4.13</Modification_Version>
+					<Modification_ReleaseDate>2023-10-26</Modification_ReleaseDate>
+					<Modification_Comment>updated Observed_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2024-07-16</Modification_Date>
+					<Modification_Version>4.15</Modification_Version>
+					<Modification_ReleaseDate>2024-07-16</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples, References</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships, Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+            <Contribution Type="Content">
+					<Contribution_Name>Mohamadreza Rostami, Shaza Zeitouni, Ahmad-Reza Sadeghi</Contribution_Name>
+					<Contribution_Organization>Technical University of Darmstadt</Contribution_Organization>
+					<Contribution_Date>2023-11-07</Contribution_Date>
+					<Contribution_Comment>suggested demonstrative example</Contribution_Comment>
+				</Contribution>
+				<Contribution Type="Content">
+					<Contribution_Name>Rahul Kande, Chen Chen, Jeyavijayan Rajendran</Contribution_Name>
+					<Contribution_Organization>Texas A&amp;M University</Contribution_Organization>
+					<Contribution_Date>2023-11-07</Contribution_Date>
+					<Contribution_Comment>suggested demonstrative example</Contribution_Comment>
+				</Contribution>
+		   	<Previous_Entry_Name Date="2020-08-20">Sensitive Information Uncleared During Hardware Debug Flows</Previous_Entry_Name>
+         </Content_History>
+      </Weakness>
+      

@@ -1,0 +1,207 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="1039" Name="Inadequate Detection or Handling of Adversarial Input Perturbations in Automated Recognition Mechanism" Abstraction="Class" Structure="Simple" Status="Incomplete">
+         <Description>The product uses an automated mechanism such as machine learning to recognize complex data inputs (e.g. image or audio) as a particular concept or category, but it does not properly detect or handle inputs that have been modified or constructed in a way that causes the mechanism to detect a different, incorrect concept.</Description>
+         <Extended_Description>
+            <xhtml:p>When techniques such as machine learning are used to automatically classify input streams, and those classifications are used for security-critical decisions, then any mistake in classification can introduce a vulnerability that allows attackers to cause the product to make the wrong security decision or disrupt service of the automated mechanism.  If the mechanism is not developed or "trained" with enough input data or has not adequately undergone test and evaluation, then attackers may be able to craft malicious inputs that intentionally trigger the incorrect classification.</xhtml:p>
+            <xhtml:p>Targeted technologies include, but are not necessarily limited to:</xhtml:p>
+            <xhtml:ul>
+               <xhtml:li>automated speech recognition</xhtml:li>
+               <xhtml:li>automated image recognition</xhtml:li>
+               <xhtml:li>automated cyber defense</xhtml:li>
+               <xhtml:li>Chatbot, LLMs, generative AI</xhtml:li>
+            </xhtml:ul>
+            <xhtml:p>For example, an attacker might modify road signs or road surface markings to trick autonomous vehicles into misreading the sign/marking and performing a dangerous action. Another example includes an attacker that crafts highly specific and complex prompts to "jailbreak" a chatbot to bypass safety or privacy mechanisms, better known as prompt injection attacks.</xhtml:p>
+         </Extended_Description>
+         <Related_Weaknesses>
+            <Related_Weakness Nature="ChildOf" CWE_ID="693" View_ID="1000" Ordinal="Primary" />
+            <Related_Weakness Nature="ChildOf" CWE_ID="697" View_ID="1000" />
+         </Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+               <Description>This weakness does not depend on other weaknesses and is the result of choices made during optimization.</Description>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+         <Applicable_Platforms>
+            <Language Class="Not Language-Specific" Prevalence="Undetermined" />
+			<Technology Name="AI/ML" Prevalence="Undetermined" />
+         </Applicable_Platforms>
+         <Modes_Of_Introduction>
+            <Introduction>
+               <Phase>Architecture and Design</Phase>
+               <Note>This issue can be introduced into the automated algorithm itself due to inadequate training data used as well as lack of validation, verification, testing, and evaluation of the algorithm. These factors can affect the overall robustness of the algorithm when introduced into operational settings.</Note>
+            </Introduction>
+            <Introduction>
+               <Phase>Implementation</Phase>
+               <Note>The developer might not apply external validation of inputs into the algorithm.</Note>
+            </Introduction>
+         </Modes_Of_Introduction>
+         <Common_Consequences>
+            <Consequence>
+               <Scope>Integrity</Scope>
+               <Impact>Bypass Protection Mechanism</Impact>
+               <Note>When the automated recognition is used in a protection mechanism, an attacker may be able to craft inputs that are misinterpreted in a way that grants excess privileges.</Note>
+            </Consequence>
+            <Consequence>
+               <Scope>Availability</Scope>
+               <Impact>DoS: Resource Consumption (Other)</Impact>
+               <Impact>DoS: Instability</Impact>
+               <Note>There could be disruption to the service of the automated recognition system, which could cause further downstream failures of the software.</Note>
+            </Consequence>
+            <Consequence>
+               <Scope>Confidentiality</Scope>
+               <Impact>Read Application Data</Impact>
+               <Note>This weakness could lead to breaches of data privacy through exposing features of the training data, e.g., by using membership inference attacks or prompt injection attacks.</Note>
+            </Consequence>
+            <Consequence>
+               <Scope>Other</Scope>
+               <Impact>Varies by Context</Impact>
+               <Note>The consequences depend on how the application applies or integrates the affected algorithm.</Note>
+            </Consequence>
+         </Common_Consequences>
+         <Detection_Methods>
+            <Detection_Method>
+               <Method>Dynamic Analysis with Manual Results Interpretation</Method>
+               <Description>Use indicators from model performance deviations such as sudden drops in accuracy or unexpected outputs to verify the model.</Description>
+	    </Detection_Method>
+            <Detection_Method>
+               <Method>Dynamic Analysis with Manual Results Interpretation</Method>
+               <Description>Use indicators from input data collection mechanisms to verify that inputs are statistically within the distribution of the training and test data.</Description>
+	    </Detection_Method>
+            <Detection_Method>
+               <Method>Architecture or Design Review</Method>
+               <Description>Use multiple models or model ensembling techniques to check for consistency of predictions/inferences.</Description>
+	    </Detection_Method>
+         </Detection_Methods>
+         <Potential_Mitigations>
+            <Mitigation>
+               <Phase>Architecture and Design</Phase>
+               <Description>Algorithmic modifications such as model pruning or compression can help mitigate this weakness. Model pruning ensures that only weights that are most relevant to the task are used in the inference of incoming data and has shown resilience to adversarial perturbed data.</Description>
+            </Mitigation>
+            <Mitigation>
+               <Phase>Architecture and Design</Phase>
+               <Description>Consider implementing adversarial training, a method that introduces adversarial examples into the training data to promote robustness of algorithm at inference time. </Description>
+            </Mitigation>
+            <Mitigation>
+               <Phase>Architecture and Design</Phase>
+               <Description>Consider implementing model hardening to fortify the internal structure of the algorithm, including techniques such as regularization and optimization to desensitize algorithms to minor input perturbations and/or changes.</Description>
+            </Mitigation>
+            <Mitigation>
+               <Phase>Implementation</Phase>
+               <Description>Consider implementing multiple models or using model ensembling techniques to improve robustness of individual model weaknesses against adversarial input perturbations.</Description>
+            </Mitigation>
+            <Mitigation>
+               <Phase>Implementation</Phase>
+               <Description>Incorporate uncertainty estimations into the algorithm that trigger human intervention or secondary/fallback software when reached. This could be when inference predictions and confidence scores are abnormally high/low comparative to expected model performance.</Description>
+            </Mitigation>
+            <Mitigation>
+               <Phase>Integration</Phase>
+               <Description>Reactive defenses such as input sanitization, defensive distillation, and input transformations can all be implemented before input data reaches the algorithm for inference.</Description>
+            </Mitigation>
+            <Mitigation>
+               <Phase>Integration</Phase>
+               <Description>Consider reducing the output granularity of the inference/prediction such that attackers cannot gain additional information due to leakage in order to craft adversarially perturbed data.</Description>
+            </Mitigation>
+	 </Potential_Mitigations>
+     <Observed_Examples>
+       <Observed_Example>
+         <Reference>CVE-2025-26644</Reference>
+         <Description>biometric authentication capability allows attackers to spoof biometric data and bypass authentication using adversarial input perturbations that cause the ML model to accepting the input</Description>
+         <Link>https://www.cve.org/CVERecord?id=CVE-2025-26644</Link>
+       </Observed_Example>
+     </Observed_Examples>
+         <References>
+            <Reference External_Reference_ID="REF-16" />
+            <Reference External_Reference_ID="REF-17" />
+            <Reference External_Reference_ID="REF-15" />
+            <Reference External_Reference_ID="REF-13" />
+            <Reference External_Reference_ID="REF-14" />
+         </References>
+         <Mapping_Notes>
+            <Usage>Allowed-with-Review</Usage>
+            <Rationale>This CWE entry is a Class, but it does not have Base-level children.</Rationale>
+            <Comments>This entry is classified in a part of CWE's hierarchy that does not have sufficiently low-level coverage, which might reflect a lack of classification-oriented weakness research in the software security community. Conduct careful root cause analysis to determine the original mistake that led to this weakness. If closer analysis reveals that this weakness is appropriate, then this might be the best available CWE to use for mapping. If no other option is available, then it is acceptable to map to this CWE.</Comments>
+            <Reasons>
+               <Reason Type="Abstraction" />
+               <Reason Type="Other" />
+            </Reasons>
+         </Mapping_Notes>
+         <Notes>
+            <Note Type="Relationship">Further investigation is needed to determine if better relationships exist or if additional organizational entries need to be created.  For example, this issue might be better related to "recognition of input as an incorrect type," which might place it as a sibling of CWE-704 (incorrect type conversion).</Note>
+         </Notes>
+         <Content_History>
+            <Submission>
+               <Submission_Name>CWE Content Team</Submission_Name>
+               <Submission_Organization>MITRE</Submission_Organization>
+               <Submission_Date>2018-03-12</Submission_Date>
+               <Submission_Version>3.1</Submission_Version>
+               <Submission_ReleaseDate>2018-03-29</Submission_ReleaseDate>
+            </Submission>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2019-06-20</Modification_Date>
+					<Modification_Version>3.3</Modification_Version>
+					<Modification_ReleaseDate>2019-06-20</Modification_ReleaseDate>
+					<Modification_Comment>updated References</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-02-24</Modification_Date>
+					<Modification_Version>4.0</Modification_Version>
+					<Modification_ReleaseDate>2020-02-24</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated References, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2024-07-16</Modification_Date>
+					<Modification_Version>4.15</Modification_Version>
+					<Modification_ReleaseDate>2024-07-16</Modification_ReleaseDate>
+					<Modification_Comment>updated Applicable_Platforms</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-04-03</Modification_Date>
+					<Modification_Version>4.17</Modification_Version>
+					<Modification_ReleaseDate>2025-04-03</Modification_ReleaseDate>
+					<Modification_Comment>updated Common_Consequences, Description, Detection_Factors, Mapping_Notes, Modes_of_Introduction, Name, Potential_Mitigations, Time_of_Introduction</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-09-09</Modification_Date>
+					<Modification_Version>4.18</Modification_Version>
+					<Modification_ReleaseDate>2025-09-09</Modification_ReleaseDate>
+					<Modification_Comment>updated References</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2026-04-30</Modification_Date>
+					<Modification_Version>4.20</Modification_Version>
+					<Modification_ReleaseDate>2026-04-30</Modification_ReleaseDate>
+					<Modification_Comment>updated Observed_Examples, Relationships</Modification_Comment>
+				</Modification>
+			<Previous_Entry_Name Date="2025-04-03">Automated Recognition Mechanism with Inadequate Detection or Handling of Adversarial Input Perturbations</Previous_Entry_Name>
+         </Content_History>
+      </Weakness>
+      

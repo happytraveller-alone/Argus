@@ -1,0 +1,182 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="1069" Name="Empty Exception Block" Abstraction="Variant" Structure="Simple" Status="Incomplete">
+         <Description>An invokable code block contains an exception handling block that does not contain any code, i.e. is empty.</Description>
+         <Related_Weaknesses>
+            <Related_Weakness Nature="ChildOf" CWE_ID="1071" View_ID="1000" Ordinal="Primary" />
+         </Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Indirect</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+         <Applicable_Platforms>
+            <Language Class="Not Language-Specific" Prevalence="Undetermined" />
+         </Applicable_Platforms>
+		 <Modes_Of_Introduction>
+		   <Introduction>
+			 <Phase>Implementation</Phase>
+		   </Introduction>
+		 </Modes_Of_Introduction>
+         <Common_Consequences>
+            <Consequence>
+               <Scope>Other</Scope>
+               <Impact>Reduce Reliability</Impact>
+	       <Note>When an exception handling block (such as a Catch and Finally block) is used, but that block is empty, this can prevent the product from running reliably.  If the relevant code is reachable by an attacker, then this reliability problem might introduce a vulnerability.</Note>
+            </Consequence>
+         </Common_Consequences>
+         <Potential_Mitigations>
+            <Mitigation>
+               <Phase>Implementation</Phase>
+               <Description>For every exception block add code that handles the specific exception in the way intended by the application.</Description>
+            </Mitigation>
+         </Potential_Mitigations>
+         <Demonstrative_Examples>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-213">
+               <Intro_Text>In the following Java example, the code catches an ArithmeticException.</Intro_Text>
+               <Example_Code Nature="Bad" Language="Java">
+                  <xhtml:div>public class Main {<xhtml:br />
+                     <xhtml:div style="margin-left:1em;">public static void main(String[] args) {
+                        <xhtml:div style="margin-left:1em;">int a = 1;
+                        <xhtml:br />int b = 0;
+                        <xhtml:br />int c = 0;<xhtml:br />
+                        <xhtml:br />try {
+                           <xhtml:div style="margin-left:1em;">c = a / b;</xhtml:div>
+                        <xhtml:br />} catch(ArithmeticException ae) {
+                        <xhtml:br />}</xhtml:div>
+                     <xhtml:br />}</xhtml:div>
+                  <xhtml:br />}</xhtml:div>
+               </Example_Code>
+               <Body_Text>Since the exception block is empty, no action is taken.</Body_Text>
+               <Body_Text>In the code below the exception has been logged and the bad execution has been handled in the desired way allowing the program to continue in an expected way.</Body_Text>
+               <Example_Code Nature="Good" Language="Java">
+                  <xhtml:div>public class Main {<xhtml:br />
+                     <xhtml:div style="margin-left:1em;">public static void main(String[] args) {
+                        <xhtml:div style="margin-left:1em;">int a = 1;
+                        <xhtml:br />int b = 0;
+                        <xhtml:br />int c = 0;<xhtml:br />
+                        <xhtml:br />try {
+                           <xhtml:div style="margin-left:1em;">c = a / b;</xhtml:div>
+                        <xhtml:br />} catch(ArithmeticException ae) {
+                           <xhtml:div style="margin-left:1em;">log.error("Divided by zero detected, setting to -1.");
+                           <xhtml:br />c = -1;</xhtml:div>
+                        <xhtml:br />}</xhtml:div>
+                     <xhtml:br />}</xhtml:div>
+                  <xhtml:br />}</xhtml:div>
+               </Example_Code>
+            </Demonstrative_Example>
+         </Demonstrative_Examples>
+         <Taxonomy_Mappings>
+            <Taxonomy_Mapping Taxonomy_Name="OMG ASCRM">
+               <Entry_ID>ASCRM-RLB-1</Entry_ID>
+            </Taxonomy_Mapping>
+         </Taxonomy_Mappings>
+         <References>
+            <Reference External_Reference_ID="REF-961" Section="ASCRM-RLB-1" />
+         </References>
+         <Mapping_Notes>
+           <Usage>Allowed</Usage>
+           <Rationale>This CWE entry is at the Variant level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+           <Comments>Carefully read both the name and description to
+           ensure that this mapping is an appropriate fit. Do not try
+           to 'force' a mapping to a lower-level Base/Variant simply
+           to comply with this preferred level of abstraction. In many
+           cases, the use of an empty exception block may only
+           indicate a quality issue. However, in some cases, it
+           prevents the product from appropriately responding to
+           security-critical events. Consider also mapping to the
+           higher-level weakness that is resultant from this
+           one. Note: this weakness was formerly 'Prohibited' for
+           mapping from CWE 4.14 (2024-02-29) to CWE 4.19.1
+           (2026-01-21).</Comments>
+           <Reasons>
+             <Reason Type="Acceptable-Use" />
+             <Reason Type="Other" />
+           </Reasons>
+         </Mapping_Notes>
+         <Content_History>
+            <Submission>
+               <Submission_Name>CWE Content Team</Submission_Name>
+               <Submission_Organization>MITRE</Submission_Organization>
+               <Submission_Date>2018-07-02</Submission_Date>
+               <Submission_Version>3.2</Submission_Version>
+               <Submission_ReleaseDate>2019-01-03</Submission_ReleaseDate>
+               <Submission_Comment>Entry derived from Common Quality Enumeration (CQE) Draft 0.9.</Submission_Comment>
+            </Submission>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-02-24</Modification_Date>
+					<Modification_Version>4.0</Modification_Version>
+					<Modification_ReleaseDate>2020-02-24</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships, Type</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-10-13</Modification_Date>
+					<Modification_Version>4.9</Modification_Version>
+					<Modification_ReleaseDate>2022-10-13</Modification_ReleaseDate>
+					<Modification_Comment>updated Applicable_Platforms, Demonstrative_Examples, Potential_Mitigations</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-01-31</Modification_Date>
+					<Modification_Version>4.10</Modification_Version>
+					<Modification_ReleaseDate>2023-01-31</Modification_ReleaseDate>
+					<Modification_Comment>updated Description</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships, Type</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2024-02-29</Modification_Date>
+					<Modification_Version>4.14</Modification_Version>
+					<Modification_ReleaseDate>2024-02-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples, Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Common_Consequences, Description, Time_of_Introduction</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2026-04-30</Modification_Date>
+					<Modification_Version>4.20</Modification_Version>
+					<Modification_ReleaseDate>2026-04-30</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+            <Contribution Type="Content">
+               <Contribution_Name>Drew Buttner</Contribution_Name>
+	       <Contribution_Organization>MITRE</Contribution_Organization>
+               <Contribution_Date>2022-08-15</Contribution_Date>
+               <Contribution_Comment>Suggested new demonstrative examples, mitigations, and applicable platforms.</Contribution_Comment>
+            </Contribution>
+            <Contribution Type="Feedback">
+               <Contribution_Name>GitHub user acepace</Contribution_Name>
+               <Contribution_Date>2026-04-07</Contribution_Date>
+               <Contribution_Comment>Reported CWE-391 as suggesting CWE-1069, whose mapping usage was Prohibited at the time, leading to changing CWE-1069's usage to Allowed.</Contribution_Comment>
+            </Contribution>
+         </Content_History>
+      </Weakness>
+      

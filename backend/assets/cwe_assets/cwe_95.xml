@@ -1,0 +1,577 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="95" Name="Improper Neutralization of Directives in Dynamically Evaluated Code ('Eval Injection')" Abstraction="Variant" Structure="Simple" Status="Incomplete" Diagram="/data/images/CWE-95-Diagram.png">
+         <Description>The product receives input from an upstream component, but it does not neutralize or incorrectly neutralizes code syntax before using the input in a dynamic evaluation call (e.g. "eval").</Description>
+         <Related_Weaknesses>
+            <Related_Weakness Nature="ChildOf" CWE_ID="94" View_ID="1000" Ordinal="Primary" />
+         </Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+         <Applicable_Platforms>
+            <Language Name="Java" Prevalence="Undetermined" />
+            <Language Name="JavaScript" Prevalence="Undetermined" />
+            <Language Name="Python" Prevalence="Undetermined" />
+            <Language Name="Perl" Prevalence="Undetermined" />
+            <Language Name="PHP" Prevalence="Undetermined" />
+            <Language Name="Ruby" Prevalence="Undetermined" />
+            <Language Class="Interpreted" Prevalence="Undetermined" />
+			<Technology Name="AI/ML" Prevalence="Often" />
+         </Applicable_Platforms>
+         <Modes_Of_Introduction>
+            <Introduction>
+               <Phase>Implementation</Phase>
+               <Note>REALIZATION: This weakness is caused during implementation of an architectural security tactic.</Note>
+            </Introduction>
+	         <Introduction>
+               <Phase>Implementation</Phase>
+               <Note>This weakness is prevalent in handler/dispatch procedures that might want to invoke a large number of functions, or set a large number of variables.</Note>
+            </Introduction>
+         </Modes_Of_Introduction>
+         <Likelihood_Of_Exploit>Medium</Likelihood_Of_Exploit>
+         <Common_Consequences>
+            <Consequence>
+               <Scope>Confidentiality</Scope>
+               <Impact>Read Files or Directories</Impact>
+               <Impact>Read Application Data</Impact>
+               <Note>The injected code could access restricted data / files.</Note>
+            </Consequence>
+            <Consequence>
+               <Scope>Access Control</Scope>
+               <Impact>Bypass Protection Mechanism</Impact>
+               <Note>In some cases, injectable code controls authentication; this may lead to a remote vulnerability.</Note>
+            </Consequence>
+            <Consequence>
+               <Scope>Access Control</Scope>
+               <Impact>Gain Privileges or Assume Identity</Impact>
+               <Note>Injected code can access resources that the attacker is directly prevented from accessing.</Note>
+            </Consequence>
+            <Consequence>
+               <Scope>Integrity</Scope>
+               <Scope>Confidentiality</Scope>
+               <Scope>Availability</Scope>
+               <Scope>Other</Scope>
+               <Impact>Execute Unauthorized Code or Commands</Impact>
+               <Note>Code injection attacks can lead to loss of data integrity in nearly all cases as the control-plane data injected is always incidental to data recall or writing. Additionally, code injection can often result in the execution of arbitrary code or at least modify what code can be executed.</Note>
+            </Consequence>
+            <Consequence>
+               <Scope>Non-Repudiation</Scope>
+               <Impact>Hide Activities</Impact>
+               <Note>Often the actions performed by injected control code are unlogged.</Note>
+            </Consequence>
+         </Common_Consequences>
+         <Detection_Methods>
+           <Detection_Method Detection_Method_ID="DM-14">
+             <Method>Automated Static Analysis</Method>
+             <Description>Automated static analysis, commonly referred to as Static Application Security Testing (SAST), can find some instances of this weakness by analyzing source code (or binary/compiled code) without having to execute it. Typically, this is done by building a model of data flow and control flow, then searching for potentially-vulnerable patterns that connect "sources" (origins of input) with "sinks" (destinations where the data interacts with external components, a lower layer such as the OS, etc.)</Description>
+             <Effectiveness>High</Effectiveness>
+           </Detection_Method>
+         </Detection_Methods>
+         <Potential_Mitigations>
+            <Mitigation>
+               <Phase>Architecture and Design</Phase>
+               <Phase>Implementation</Phase>
+               <Strategy>Refactoring</Strategy>
+               <Description>If possible, refactor your code so that it does not need to use eval() at all.</Description>
+            </Mitigation>
+            <Mitigation Mitigation_ID="MIT-5">
+               <Phase>Implementation</Phase>
+               <Strategy>Input Validation</Strategy>
+               <Description>
+                  <xhtml:p>Assume all input is malicious. Use an "accept known good" input validation strategy, i.e., use a list of acceptable inputs that strictly conform to specifications. Reject any input that does not strictly conform to specifications, or transform it into something that does.</xhtml:p>
+                  <xhtml:p>When performing input validation, consider all potentially relevant properties, including length, type of input, the full range of acceptable values, missing or extra inputs, syntax, consistency across related fields, and conformance to business rules. As an example of business rule logic, "boat" may be syntactically valid because it only contains alphanumeric characters, but it is not valid if the input is only expected to contain colors such as "red" or "blue."</xhtml:p>
+                  <xhtml:p>Do not rely exclusively on looking for malicious or malformed inputs.  This is likely to miss at least one undesirable input, especially if the code's environment changes. This can give attackers enough room to bypass the intended validation. However, denylists can be useful for detecting potential attacks or determining which inputs are so malformed that they should be rejected outright.</xhtml:p>
+               </Description>
+            </Mitigation>
+            <Mitigation>
+               <Phase>Implementation</Phase>
+               <Description>
+                  <xhtml:p>Inputs should be decoded and canonicalized to the application's current internal representation before being validated (CWE-180, CWE-181). Make sure that your application does not inadvertently decode the same input twice (CWE-174). Such errors could be used to bypass allowlist schemes by introducing dangerous inputs after they have been checked. Use libraries such as the OWASP ESAPI Canonicalization control.</xhtml:p>
+                  <xhtml:p>Consider performing repeated canonicalization until your input does not change any more. This will avoid double-decoding and similar scenarios, but it might inadvertently modify inputs that are allowed to contain properly-encoded dangerous content.</xhtml:p>
+               </Description>
+            </Mitigation>
+            <Mitigation>
+               <Phase>Implementation</Phase>
+               <Description>
+                  <xhtml:p>For Python programs, it is frequently encouraged to use the ast.literal_eval() function instead of eval, since it is intentionally designed to avoid executing code. However, an adversary could still cause excessive memory or stack consumption via deeply nested structures [REF-1372], so the python documentation discourages use of ast.literal_eval() on untrusted data [REF-1373].</xhtml:p>
+               </Description>
+			   <Effectiveness>Discouraged Common Practice</Effectiveness>
+            </Mitigation>
+         </Potential_Mitigations>
+         <Demonstrative_Examples>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-31">
+               <Intro_Text>edit-config.pl: This CGI script is used to modify settings in a configuration file.</Intro_Text>
+               <Example_Code Nature="Bad" Language="Perl">
+                  <xhtml:div>use CGI qw(:standard);<xhtml:br />
+                     <xhtml:br />sub config_file_add_key {<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>my ($fname, $key, $arg) = @_;<xhtml:br />
+                           <xhtml:i># code to add a field/key to a file goes here</xhtml:i><xhtml:br />
+                        </xhtml:div>
+                     </xhtml:div>}<xhtml:br />
+                     <xhtml:br />sub config_file_set_key {<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>my ($fname, $key, $arg) = @_;<xhtml:br />
+                           <xhtml:i># code to set key to a particular file goes here</xhtml:i><xhtml:br />
+                        </xhtml:div>
+                     </xhtml:div>}<xhtml:br />
+                     <xhtml:br />sub config_file_delete_key {<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>my ($fname, $key, $arg) = @_;<xhtml:br />
+                           <xhtml:i># code to delete key from a particular file goes here</xhtml:i><xhtml:br />
+                        </xhtml:div>
+                     </xhtml:div>}<xhtml:br />
+                     <xhtml:br />sub handleConfigAction {<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>my ($fname, $action) = @_;<xhtml:br />my $key = param('key');<xhtml:br />my $val = param('val');<xhtml:br />
+                           <xhtml:i># this is super-efficient code, especially if you have to invoke</xhtml:i><xhtml:br />
+                           <xhtml:i># any one of dozens of different functions!</xhtml:i><xhtml:br />
+                           <xhtml:br />my $code = "config_file_$action_key(\$fname, \$key, \$val);";<xhtml:br />eval($code);</xhtml:div>
+                     </xhtml:div>}<xhtml:br />
+                     <xhtml:br />$configfile = "/home/cwe/config.txt";<xhtml:br />print header;<xhtml:br />if (defined(param('action'))) {<xhtml:div style="margin-left:1em;">handleConfigAction($configfile, param('action'));</xhtml:div>}<xhtml:br />else {<xhtml:div style="margin-left:1em;">print "No action specified!\n";</xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>The script intends to take the 'action' parameter and invoke one of a variety of functions based on the value of that parameter - config_file_add_key(), config_file_set_key(), or config_file_delete_key(). It could set up a conditional to invoke each function separately, but eval() is a powerful way of doing the same thing in fewer lines of code, especially when a large number of functions or variables are involved. Unfortunately, in this case, the attacker can provide other values in the action parameter, such as:</Body_Text>
+               <Example_Code Nature="Attack">
+                  <xhtml:div>add_key(",","); system("/bin/ls");</xhtml:div>
+               </Example_Code>
+               <Body_Text>This would produce the following string in handleConfigAction():</Body_Text>
+               <Example_Code Nature="Result">
+                  <xhtml:div>config_file_add_key(",","); system("/bin/ls");</xhtml:div>
+               </Example_Code>
+               <Body_Text>Any arbitrary Perl code could be added after the attacker has "closed off" the construction of the original function call, in order to prevent parsing errors from causing the malicious eval() to fail before the attacker's payload is activated. This particular manipulation would fail after the system() call, because the "_key(\$fname, \$key, \$val)" portion of the string would cause an error, but this is irrelevant to the attack because the payload has already been activated.</Body_Text>
+            </Demonstrative_Example>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-156">
+              <Intro_Text>This simple python3 script asks a user to supply a comma-separated list of numbers as input and adds them together.</Intro_Text>
+              <Example_Code Nature="Bad" Language="Python">
+                <xhtml:div>
+                  def main():<xhtml:br />
+                  <xhtml:div style="margin-left:1em;">
+                    sum = 0<xhtml:br />
+		    try:<xhtml:br />
+		    <xhtml:div style="margin-left:1em;">
+                      numbers = eval(input("Enter a comma-separated list of numbers: "))<xhtml:br />
+		    </xhtml:div>
+		    except SyntaxError:<xhtml:br />
+		    <xhtml:div style="margin-left:1em;">
+		      print("Error: invalid input")<xhtml:br />
+		      return
+		    </xhtml:div>
+                    for num in numbers:<xhtml:br />
+                    <xhtml:div style="margin-left:1em;">
+                      sum = sum + num<xhtml:br />
+                    </xhtml:div>
+                    print(f"Sum of {numbers} = {sum}")
+                  </xhtml:div>
+                  main()
+                </xhtml:div>
+              </Example_Code>
+              <Body_Text>The eval() function can take the user-supplied list and convert it into a Python list object, therefore allowing the programmer to use list comprehension methods to work with the data. However, if code is supplied to the eval() function, it will execute that code. For example, a malicious user could supply the following string:</Body_Text>
+              <Example_Code Nature="Attack">
+                <xhtml:div>__import__('subprocess').getoutput('rm -r *')</xhtml:div>
+              </Example_Code>
+              <Body_Text>This would delete all the files in the current directory. For this reason, it is not recommended to use eval() with untrusted input.</Body_Text>
+	      <Body_Text>A way to accomplish this without the use of eval() is to apply an integer conversion on the input within a try/except block. If the user-supplied input is not numeric, this will raise a ValueError. By avoiding eval(), there is no opportunity for the input string to be executed as code.</Body_Text>
+              <Example_Code Nature="Good" Language="Python">
+                <xhtml:div>
+                  def main():<xhtml:br />
+                  <xhtml:div style="margin-left:1em;">
+                    sum = 0<xhtml:br />
+                    numbers = input("Enter a comma-separated list of numbers: ").split(",")<xhtml:br />
+                    try:<xhtml:br />
+                    <xhtml:div style="margin-left:1em;">
+                      for num in numbers:<xhtml:br />
+                      <xhtml:div style="margin-left:1em;">
+                        sum = sum + int(num)<xhtml:br />
+                      </xhtml:div>
+                      print(f"Sum of {numbers} = {sum}")
+                    </xhtml:div>
+                    except ValueError:<xhtml:br />
+                    <xhtml:div style="margin-left:1em;">
+                      print("Error: invalid input")<xhtml:br />
+                    </xhtml:div>
+                  </xhtml:div>
+                  main()
+                </xhtml:div>
+              </Example_Code>
+              <Body_Text>An alternative, commonly-cited mitigation for this kind of weakness is to use the ast.literal_eval() function, since it is intentionally designed to avoid executing code. However, an adversary could still cause excessive memory or stack consumption via deeply nested structures [REF-1372], so the python documentation discourages use of ast.literal_eval() on untrusted data [REF-1373].</Body_Text>
+            </Demonstrative_Example>
+         </Demonstrative_Examples>
+         <Observed_Examples>
+            <Observed_Example>
+               <Reference>CVE-2024-4181</Reference>
+               <Description>Framework for LLM applications allows eval injection via a crafted response from a hosting provider.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2024-4181</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2022-2054</Reference>
+               <Description>Python compiler uses eval() to execute malicious strings as Python code.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2022-2054</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2021-22204</Reference>
+               <Description>Chain: regex in EXIF processor code does not correctly determine where a string ends (CWE-625), enabling eval injection (CWE-95), as exploited in the wild per CISA KEV.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2021-22204</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2021-22205</Reference>
+               <Description>Chain: backslash followed by a newline can bypass a validation step (CWE-20), leading to eval injection (CWE-95), as exploited in the wild per CISA KEV.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2021-22205</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2008-5071</Reference>
+               <Description>Eval injection in PHP program.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2008-5071</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2002-1750</Reference>
+               <Description>Eval injection in Perl program.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2002-1750</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2008-5305</Reference>
+               <Description>Eval injection in Perl program using an ID that should only contain hyphens and numbers.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2008-5305</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2002-1752</Reference>
+               <Description>Direct code injection into Perl eval function.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2002-1752</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2002-1753</Reference>
+               <Description>Eval injection in Perl program.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2002-1753</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2005-1527</Reference>
+               <Description>Direct code injection into Perl eval function.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2005-1527</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2005-2837</Reference>
+               <Description>Direct code injection into Perl eval function.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2005-2837</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2005-1921</Reference>
+               <Description>MFV. code injection into PHP eval statement using nested constructs that should not be nested.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2005-1921</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2005-2498</Reference>
+               <Description>MFV. code injection into PHP eval statement using nested constructs that should not be nested.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2005-2498</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2005-3302</Reference>
+               <Description>Code injection into Python eval statement from a field in a formatted file.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2005-3302</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2007-1253</Reference>
+               <Description>Eval injection in Python program.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2007-1253</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2001-1471</Reference>
+               <Description>chain: Resultant eval injection. An invalid value prevents initialization of variables, which can be modified by attacker and later injected into PHP eval statement.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2001-1471</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2007-2713</Reference>
+               <Description>Chain: Execution after redirect triggers eval injection.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2007-2713</Link>
+            </Observed_Example>
+         </Observed_Examples>
+         <Taxonomy_Mappings>
+            <Taxonomy_Mapping Taxonomy_Name="PLOVER">
+               <Entry_Name>Direct Dynamic Code Evaluation ('Eval Injection')</Entry_Name>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="OWASP Top Ten 2007">
+               <Entry_ID>A3</Entry_ID>
+               <Entry_Name>Malicious File Execution</Entry_Name>
+               <Mapping_Fit>CWE More Specific</Mapping_Fit>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="OWASP Top Ten 2004">
+               <Entry_ID>A6</Entry_ID>
+               <Entry_Name>Injection Flaws</Entry_Name>
+               <Mapping_Fit>CWE More Specific</Mapping_Fit>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="Software Fault Patterns">
+               <Entry_ID>SFP24</Entry_ID>
+               <Entry_Name>Tainted input to command</Entry_Name>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="SEI CERT Perl Coding Standard">
+               <Entry_ID>IDS35-PL</Entry_ID>
+               <Entry_Name>Do not invoke the eval form with a string argument</Entry_Name>
+               <Mapping_Fit>Exact</Mapping_Fit>
+            </Taxonomy_Mapping>
+         </Taxonomy_Mappings>
+         <Related_Attack_Patterns>
+            <Related_Attack_Pattern CAPEC_ID="35" />
+         </Related_Attack_Patterns>
+         <References>
+            <Reference External_Reference_ID="REF-62" Section="Chapter 18, &quot;Inline Evaluation&quot;, Page 1095" />
+            <Reference External_Reference_ID="REF-1372" />
+            <Reference External_Reference_ID="REF-1373" Section="ast.literal_eval(node_or_string)" />
+         </References>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Variant level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+         <Notes>
+            <Note Type="Other">Factors: special character errors can play a role in increasing the variety of code that can be injected, although some vulnerabilities do not require special characters at all, e.g. when a single function without arguments can be referenced and a terminator character is not necessary.</Note>
+         </Notes>
+         <Content_History>
+            <Submission>
+               <Submission_Name>PLOVER</Submission_Name>
+               <Submission_Date>2006-07-19</Submission_Date>
+               <Submission_Version>Draft 3</Submission_Version>
+               <Submission_ReleaseDate>2006-07-19</Submission_ReleaseDate>
+            </Submission>
+            <Modification>
+               <Modification_Name>Eric Dalci</Modification_Name>
+               <Modification_Organization>Cigital</Modification_Organization>
+               <Modification_Date>2008-07-01</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>updated Time_of_Introduction</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Organization>Veracode</Modification_Organization>
+               <Modification_Date>2008-08-15</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>Suggested OWASP Top Ten 2004 mapping</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2008-09-08</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>updated Applicable_Platforms, Description, Modes_of_Introduction, Relationships, Other_Notes, Taxonomy_Mappings, Weakness_Ordinalities</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2009-01-12</Modification_Date>
+               <Modification_Version>1.2</Modification_Version>
+               <Modification_ReleaseDate>2009-01-12</Modification_ReleaseDate>
+               <Modification_Comment>updated Description, Observed_Examples, Other_Notes, Research_Gaps</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2009-05-27</Modification_Date>
+               <Modification_Version>1.4</Modification_Version>
+               <Modification_ReleaseDate>2009-05-27</Modification_ReleaseDate>
+               <Modification_Comment>updated Alternate_Terms, Applicable_Platforms, Demonstrative_Examples, Description, Name, References</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2010-02-16</Modification_Date>
+               <Modification_Version>1.8</Modification_Version>
+               <Modification_ReleaseDate>2010-02-16</Modification_ReleaseDate>
+               <Modification_Comment>updated Potential_Mitigations</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2010-06-21</Modification_Date>
+               <Modification_Version>1.9</Modification_Version>
+               <Modification_ReleaseDate>2010-06-21</Modification_ReleaseDate>
+               <Modification_Comment>updated Description, Name</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-06-01</Modification_Date>
+               <Modification_Version>1.13</Modification_Version>
+               <Modification_ReleaseDate>2011-06-01</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2012-05-11</Modification_Date>
+               <Modification_Version>2.2</Modification_Version>
+               <Modification_ReleaseDate>2012-05-15</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences, Demonstrative_Examples, References, Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2012-10-30</Modification_Date>
+               <Modification_Version>2.3</Modification_Version>
+               <Modification_ReleaseDate>2012-10-30</Modification_ReleaseDate>
+               <Modification_Comment>updated Potential_Mitigations</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2013-02-21</Modification_Date>
+               <Modification_Version>2.4</Modification_Version>
+               <Modification_ReleaseDate>2013-02-21</Modification_ReleaseDate>
+               <Modification_Comment>updated Observed_Examples</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2014-07-30</Modification_Date>
+               <Modification_Version>2.8</Modification_Version>
+               <Modification_ReleaseDate>2014-07-31</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2017-11-08</Modification_Date>
+               <Modification_Version>3.0</Modification_Version>
+               <Modification_ReleaseDate>2017-11-08</Modification_ReleaseDate>
+               <Modification_Comment>updated Causal_Nature, Modes_of_Introduction, References, Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2019-01-03</Modification_Date>
+					<Modification_Version>3.2</Modification_Version>
+					<Modification_ReleaseDate>2019-01-03</Modification_ReleaseDate>
+					<Modification_Comment>updated Taxonomy_Mappings</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2019-06-20</Modification_Date>
+					<Modification_Version>3.3</Modification_Version>
+					<Modification_ReleaseDate>2019-06-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Type</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-02-24</Modification_Date>
+					<Modification_Version>4.0</Modification_Version>
+					<Modification_ReleaseDate>2020-02-24</Modification_ReleaseDate>
+					<Modification_Comment>updated Potential_Mitigations, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-06-25</Modification_Date>
+					<Modification_Version>4.1</Modification_Version>
+					<Modification_ReleaseDate>2020-06-25</Modification_ReleaseDate>
+					<Modification_Comment>updated Potential_Mitigations</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-03-15</Modification_Date>
+					<Modification_Version>4.4</Modification_Version>
+					<Modification_ReleaseDate>2021-03-15</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-10-28</Modification_Date>
+					<Modification_Version>4.6</Modification_Version>
+					<Modification_ReleaseDate>2021-10-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-04-28</Modification_Date>
+					<Modification_Version>4.7</Modification_Version>
+					<Modification_ReleaseDate>2022-04-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Research_Gaps</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-06-28</Modification_Date>
+					<Modification_Version>4.8</Modification_Version>
+					<Modification_ReleaseDate>2022-06-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Observed_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-10-13</Modification_Date>
+					<Modification_Version>4.9</Modification_Version>
+					<Modification_ReleaseDate>2022-10-13</Modification_ReleaseDate>
+					<Modification_Comment>updated Observed_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-01-31</Modification_Date>
+					<Modification_Version>4.10</Modification_Version>
+					<Modification_ReleaseDate>2023-01-31</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples, Description</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples, Detection_Factors, Relationships, Time_of_Introduction</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2024-02-29</Modification_Date>
+					<Modification_Version>4.14</Modification_Version>
+					<Modification_ReleaseDate>2024-02-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples, Potential_Mitigations, References</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2024-07-16</Modification_Date>
+					<Modification_Version>4.15</Modification_Version>
+					<Modification_ReleaseDate>2024-07-16</Modification_ReleaseDate>
+					<Modification_Comment>updated Applicable_Platforms, Observed_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-04-03</Modification_Date>
+					<Modification_Version>4.17</Modification_Version>
+					<Modification_ReleaseDate>2025-04-03</Modification_ReleaseDate>
+					<Modification_Comment>updated Common_Consequences, Description, Diagram</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2026-04-30</Modification_Date>
+					<Modification_Version>4.20</Modification_Version>
+					<Modification_ReleaseDate>2026-04-30</Modification_ReleaseDate>
+					<Modification_Comment>updated Applicable_Platforms, Potential_Mitigations, Relationships</Modification_Comment>
+				</Modification>
+            <Previous_Entry_Name Date="2008-04-11">Direct Dynamic Code Evaluation ('Eval Injection')</Previous_Entry_Name>
+            <Previous_Entry_Name Date="2009-05-27">Insufficient Control of Directives in Dynamically Evaluated Code (aka 'Eval Injection')</Previous_Entry_Name>
+            <Previous_Entry_Name Date="2010-06-21">Improper Sanitization of Directives in Dynamically Evaluated Code ('Eval Injection')</Previous_Entry_Name>
+         </Content_History>
+      </Weakness>
+      

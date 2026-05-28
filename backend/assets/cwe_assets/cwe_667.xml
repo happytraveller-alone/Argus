@@ -1,0 +1,532 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="667" Name="Improper Locking" Abstraction="Class" Structure="Simple" Status="Draft">
+         <Description>The product does not properly acquire or release a lock on a resource, leading to unexpected resource state changes and behaviors.</Description>
+	 <Extended_Description>
+	   <xhtml:p>Locking is a type of synchronization behavior that ensures that multiple independently-operating processes or threads do not interfere with each other when accessing the same resource. All processes/threads are expected to follow the same steps for locking. If these steps are not followed precisely - or if no locking is done at all - then another process/thread could modify the shared resource in a way that is not visible or predictable to the original process.  This can lead to data or memory corruption, denial of service, etc.</xhtml:p></Extended_Description>
+         <Related_Weaknesses>
+             <Related_Weakness Nature="ChildOf" CWE_ID="662" View_ID="1000" Ordinal="Primary" />
+             <Related_Weakness Nature="ChildOf" CWE_ID="662" View_ID="1003" Ordinal="Primary" />
+             <Related_Weakness Nature="ChildOf" CWE_ID="662" View_ID="1305" Ordinal="Primary" />
+			 <Related_Weakness Nature="ChildOf" CWE_ID="662" View_ID="1340" Ordinal="Primary" />
+         </Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+         <Applicable_Platforms>
+            <Language Class="Not Language-Specific" Prevalence="Undetermined" />
+	    <Technology Class="Not Technology-Specific" Prevalence="Undetermined" />
+         </Applicable_Platforms>
+         <Modes_Of_Introduction>
+            <Introduction>
+               <Phase>Architecture and Design</Phase>
+            </Introduction>
+            <Introduction>
+               <Phase>Implementation</Phase>
+            </Introduction>
+         </Modes_Of_Introduction>
+         <Common_Consequences>
+            <Consequence>
+               <Scope>Availability</Scope>
+               <Impact>DoS: Resource Consumption (CPU)</Impact>
+               <Note>Inconsistent locking discipline can lead to deadlock.</Note>
+            </Consequence>
+         </Common_Consequences>
+         <Detection_Methods>
+           <Detection_Method Detection_Method_ID="DM-14">
+             <Method>Automated Static Analysis</Method>
+             <Description>Automated static analysis, commonly referred to as Static Application Security Testing (SAST), can find some instances of this weakness by analyzing source code (or binary/compiled code) without having to execute it. Typically, this is done by building a model of data flow and control flow, then searching for potentially-vulnerable patterns that connect "sources" (origins of input) with "sinks" (destinations where the data interacts with external components, a lower layer such as the OS, etc.)</Description>
+             <Effectiveness>High</Effectiveness>
+           </Detection_Method>
+         </Detection_Methods>
+         <Potential_Mitigations>
+            <Mitigation>
+               <Phase>Implementation</Phase>
+               <Strategy>Libraries or Frameworks</Strategy>
+               <Description>Use industry standard APIs to implement locking mechanism.</Description>
+            </Mitigation>
+         </Potential_Mitigations>
+         <Demonstrative_Examples>
+            <Demonstrative_Example>
+               <Intro_Text>In the following Java snippet, methods are defined to get and set a long field in an instance of a class that is shared across multiple threads. Because operations on double and long are nonatomic in Java, concurrent access may cause unexpected behavior. Thus, all operations on long and double fields should be synchronized.</Intro_Text>
+               <Example_Code Nature="Bad" Language="Java">
+                  <xhtml:div>private long someLongValue;<xhtml:br />public long getLongValue() {<xhtml:div style="margin-left:1em;">return someLongValue;</xhtml:div>}<xhtml:br />
+                     <xhtml:br />public void setLongValue(long l) {<xhtml:div style="margin-left:1em;">someLongValue = l;</xhtml:div>}</xhtml:div>
+               </Example_Code>
+            </Demonstrative_Example>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-69">
+               <Intro_Text>This code tries to obtain a lock for a file, then writes to it.</Intro_Text>
+               <Example_Code Nature="Bad" Language="PHP">
+                  <xhtml:div>function writeToLog($message){<xhtml:div style="margin-left:1em;">$logfile = fopen("logFile.log", "a");<xhtml:br />
+                        <xhtml:i>//attempt to get logfile lock</xhtml:i>
+                        <xhtml:br />if (flock($logfile, LOCK_EX)) {<xhtml:div style="margin-left:1em;">fwrite($logfile,$message);<xhtml:br />
+                           <xhtml:i>// unlock logfile</xhtml:i>
+                           <xhtml:br />flock($logfile, LOCK_UN);</xhtml:div>}<xhtml:br />else {<xhtml:div style="margin-left:1em;">print "Could not obtain lock on logFile.log, message not recorded\n";</xhtml:div>}</xhtml:div>}<xhtml:br />fclose($logFile);</xhtml:div>
+               </Example_Code>
+               <Body_Text>PHP by default will wait indefinitely until a file lock is released. If an attacker is able to obtain the file lock, this code will pause execution, possibly leading to denial of service for other users. Note that in this case, if an attacker can perform an flock() on the file, they may already have privileges to destroy the log file. However, this still impacts the execution of other programs that depend on flock().</Body_Text>
+            </Demonstrative_Example>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-24">
+               <Intro_Text>The following function attempts to acquire a lock in order to perform operations on a shared resource.</Intro_Text>
+               <Example_Code Nature="Bad" Language="C">
+                  <xhtml:div>void f(pthread_mutex_t *mutex) {<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>pthread_mutex_lock(mutex);<xhtml:br />
+                           <xhtml:br />
+                           <xhtml:i>/* access shared resource */</xhtml:i>
+                           <xhtml:br />
+                           <xhtml:br />
+                           <xhtml:br />pthread_mutex_unlock(mutex);</xhtml:div>
+                     </xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>However, the code does not check the value returned by pthread_mutex_lock() for errors. If pthread_mutex_lock() cannot acquire the mutex for any reason, the function may introduce a race condition into the program and result in undefined behavior.</Body_Text>
+               <Body_Text>In order to avoid data races, correctly written programs must check the result of thread synchronization functions and appropriately handle all errors, either by attempting to recover from them or reporting them to higher levels.</Body_Text>
+               <Example_Code Nature="Good" Language="C">
+                  <xhtml:div>int f(pthread_mutex_t *mutex) {<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>int result;<xhtml:br />
+                           <xhtml:br />result = pthread_mutex_lock(mutex);<xhtml:br />if (0 != result)<xhtml:div style="margin-left:1em;">return result;</xhtml:div>
+                           <xhtml:br />
+                           <xhtml:br />
+                           <xhtml:i>/* access shared resource */</xhtml:i>
+                           <xhtml:br />
+                           <xhtml:br />
+                           <xhtml:br />return pthread_mutex_unlock(mutex);</xhtml:div>
+                     </xhtml:div>}</xhtml:div>
+               </Example_Code>
+            </Demonstrative_Example>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-70">
+               <Intro_Text>It may seem that the following bit of code achieves thread safety while avoiding unnecessary synchronization...</Intro_Text>
+               <Example_Code Nature="Bad" Language="Java">
+                  <xhtml:div>if (helper == null) {<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>synchronized (this) {<xhtml:div style="margin-left:1em;">if (helper == null) {<xhtml:div style="margin-left:1em;">helper = new Helper();</xhtml:div>}</xhtml:div>}</xhtml:div>
+                     </xhtml:div>}<xhtml:br />return helper;</xhtml:div>
+               </Example_Code>
+               <Body_Text>The programmer wants to guarantee that only one Helper() object is ever allocated, but does not want to pay the cost of synchronization every time this code is called.</Body_Text>
+               <Body_Text>Suppose that helper is not initialized. Then, thread A sees that helper==null and enters the synchronized block and begins to execute:</Body_Text>
+               <Example_Code Nature="Bad" Language="Java">
+                  <xhtml:div>helper = new Helper();</xhtml:div>
+               </Example_Code>
+               <Body_Text>If a second thread, thread B, takes over in the middle of this call and helper has not finished running the constructor, then thread B may make calls on helper while its fields hold incorrect values.</Body_Text>
+            </Demonstrative_Example>
+         </Demonstrative_Examples>
+         <Observed_Examples>
+            <Observed_Example>
+               <Reference>CVE-2021-1782</Reference>
+               <Description>Chain: improper locking (CWE-667) leads to race condition (CWE-362), as exploited in the wild per CISA KEV.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2021-1782</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2009-0935</Reference>
+               <Description>Attacker provides invalid address to a memory-reading function, causing a mutex to be unlocked twice</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2009-0935</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2010-4210</Reference>
+               <Description>function in OS kernel unlocks a mutex that was not previously locked, causing a panic or overwrite of arbitrary memory.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2010-4210</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2008-4302</Reference>
+               <Description>Chain: OS kernel does not properly handle a failure of a function call (CWE-755), leading to an unlock of a resource that was not locked (CWE-832), with resultant crash.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2008-4302</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2009-1243</Reference>
+               <Description>OS kernel performs an unlock in some incorrect circumstances, leading to panic.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2009-1243</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2009-2857</Reference>
+               <Description>OS deadlock</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2009-2857</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2009-1961</Reference>
+               <Description>OS deadlock involving 3 separate functions</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2009-1961</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2009-2699</Reference>
+               <Description>deadlock in library</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2009-2699</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2009-4272</Reference>
+               <Description>deadlock triggered by packets that force collisions in a routing table</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2009-4272</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2002-1850</Reference>
+               <Description>read/write deadlock between web server and script</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2002-1850</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2004-0174</Reference>
+               <Description>web server deadlock involving multiple listening connections</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2004-0174</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2009-1388</Reference>
+               <Description>multiple simultaneous calls to the same function trigger deadlock.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2009-1388</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2006-5158</Reference>
+               <Description>chain: other weakness leads to NULL pointer dereference (CWE-476) or deadlock (CWE-833).</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2006-5158</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2006-4342</Reference>
+               <Description>deadlock when an operation is performed on a resource while it is being removed.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2006-4342</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2006-2374</Reference>
+               <Description>Deadlock in device driver triggered by using file handle of a related device.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2006-2374</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2006-2275</Reference>
+               <Description>Deadlock when large number of small messages cannot be processed quickly enough.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2006-2275</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2005-3847</Reference>
+               <Description>OS kernel has deadlock triggered by a signal during a core dump.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2005-3847</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2005-3106</Reference>
+               <Description>Race condition leads to deadlock.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2005-3106</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2005-2456</Reference>
+               <Description>Chain: array index error (CWE-129) leads to deadlock (CWE-833)</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2005-2456</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2001-0682</Reference>
+               <Description>Program can not execute when attacker obtains a mutex.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2001-0682</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2002-1914</Reference>
+               <Description>Program can not execute when attacker obtains a lock on a critical output file.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2002-1914</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2002-1915</Reference>
+               <Description>Program can not execute when attacker obtains a lock on a critical output file.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2002-1915</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2002-0051</Reference>
+               <Description>Critical file can be opened with exclusive read access by user, preventing application of security policy. Possibly related to improper permissions, large-window race condition.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2002-0051</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2000-0338</Reference>
+               <Description>Chain: predictable file names used for locking, allowing attacker to create the lock beforehand. Resultant from permissions and randomness.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2000-0338</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2000-1198</Reference>
+               <Description>Chain: Lock files with predictable names. Resultant from randomness.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2000-1198</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2002-1869</Reference>
+               <Description>Product does not check if it can write to a log file, allowing attackers to avoid logging by accessing the file using an exclusive lock. Overlaps unchecked error condition. This is not quite CWE-412, but close.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2002-1869</Link>
+            </Observed_Example>
+         </Observed_Examples>
+         <Taxonomy_Mappings>
+            <Taxonomy_Mapping Taxonomy_Name="CERT C Secure Coding">
+               <Entry_ID>CON31-C</Entry_ID>
+               <Entry_Name>Do not destroy a mutex while it is locked</Entry_Name>
+               <Mapping_Fit>CWE More Abstract</Mapping_Fit>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="CERT C Secure Coding">
+               <Entry_ID>POS48-C</Entry_ID>
+               <Entry_Name>Do not unlock or destroy another POSIX thread's mutex</Entry_Name>
+               <Mapping_Fit>CWE More Abstract</Mapping_Fit>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="The CERT Oracle Secure Coding Standard for Java (2011)">
+               <Entry_ID>VNA00-J</Entry_ID>
+               <Entry_Name>Ensure visibility when accessing shared primitive variables</Entry_Name>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="The CERT Oracle Secure Coding Standard for Java (2011)">
+               <Entry_ID>VNA02-J</Entry_ID>
+               <Entry_Name>Ensure that compound operations on shared variables are atomic</Entry_Name>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="The CERT Oracle Secure Coding Standard for Java (2011)">
+               <Entry_ID>VNA05-J</Entry_ID>
+               <Entry_Name>Ensure atomicity when reading and writing 64-bit values</Entry_Name>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="The CERT Oracle Secure Coding Standard for Java (2011)">
+               <Entry_ID>LCK06-J</Entry_ID>
+               <Entry_Name>Do not use an instance lock to protect shared static data</Entry_Name>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="Software Fault Patterns">
+               <Entry_ID>SFP19</Entry_ID>
+               <Entry_Name>Missing Lock</Entry_Name>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="OMG ASCSM">
+                <Entry_ID>ASCSM-CWE-667</Entry_ID>
+            </Taxonomy_Mapping>
+         </Taxonomy_Mappings>
+         <Related_Attack_Patterns>
+            <Related_Attack_Pattern CAPEC_ID="25" />
+            <Related_Attack_Pattern CAPEC_ID="26" />
+            <Related_Attack_Pattern CAPEC_ID="27" />
+         </Related_Attack_Patterns>
+         <References>
+            <Reference External_Reference_ID="REF-962" Section="ASCSM-CWE-667" />
+         </References>
+         <Mapping_Notes>
+            <Usage>Allowed-with-Review</Usage>
+            <Rationale>This CWE entry is a Class and might have Base-level children that would be more appropriate</Rationale>
+            <Comments>Examine children of this entry to see if there is a better fit</Comments>
+            <Reasons>
+               <Reason Type="Abstraction" />
+            </Reasons>
+         </Mapping_Notes>
+	 <Notes>
+	   <Note Type="Maintenance">Deeper research is necessary for synchronization and related mechanisms, including locks, mutexes, semaphores, and other mechanisms. Multiple entries are dependent on this research, which includes relationships to concurrency, race conditions, reentrant functions, etc.  CWE-662 and its children - including CWE-667, CWE-820, CWE-821, and others - may need to be modified significantly, along with their relationships.</Note>
+	 </Notes>
+         <Content_History>
+            <Submission>
+                <Submission_Name>CWE Content Team</Submission_Name>
+				<Submission_Organization>MITRE</Submission_Organization>
+                <Submission_Date>2008-04-11</Submission_Date>
+                <Submission_Version>Draft 9</Submission_Version>
+                <Submission_ReleaseDate>2008-04-11</Submission_ReleaseDate>
+            </Submission>
+            <Modification>
+               <Modification_Name>Sean Eidemiller</Modification_Name>
+               <Modification_Organization>Cigital</Modification_Organization>
+               <Modification_Date>2008-07-01</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>added/updated demonstrative examples</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>Eric Dalci</Modification_Name>
+               <Modification_Organization>Cigital</Modification_Organization>
+               <Modification_Date>2008-07-01</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>updated Potential_Mitigations, Time_of_Introduction</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2008-09-08</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2008-11-24</Modification_Date>
+               <Modification_Version>1.1</Modification_Version>
+               <Modification_ReleaseDate>2008-11-25</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2009-03-10</Modification_Date>
+               <Modification_Version>1.3</Modification_Version>
+               <Modification_ReleaseDate>2009-03-10</Modification_ReleaseDate>
+               <Modification_Comment>updated Related_Attack_Patterns</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2009-05-27</Modification_Date>
+               <Modification_Version>1.4</Modification_Version>
+               <Modification_ReleaseDate>2009-05-27</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2009-07-27</Modification_Date>
+               <Modification_Version>1.5</Modification_Version>
+               <Modification_ReleaseDate>2009-07-27</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2010-09-27</Modification_Date>
+               <Modification_Version>1.10</Modification_Version>
+               <Modification_ReleaseDate>2010-09-27</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2010-12-13</Modification_Date>
+               <Modification_Version>1.11</Modification_Version>
+               <Modification_ReleaseDate>2010-12-13</Modification_ReleaseDate>
+               <Modification_Comment>updated Description, Name, Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-06-01</Modification_Date>
+               <Modification_Version>1.13</Modification_Version>
+               <Modification_ReleaseDate>2011-06-01</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences, Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2012-05-11</Modification_Date>
+               <Modification_Version>2.2</Modification_Version>
+               <Modification_ReleaseDate>2012-05-15</Modification_ReleaseDate>
+               <Modification_Comment>updated Demonstrative_Examples, Observed_Examples, Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2012-10-30</Modification_Date>
+               <Modification_Version>2.3</Modification_Version>
+               <Modification_ReleaseDate>2012-10-30</Modification_ReleaseDate>
+               <Modification_Comment>updated Potential_Mitigations</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2014-07-30</Modification_Date>
+               <Modification_Version>2.8</Modification_Version>
+               <Modification_ReleaseDate>2014-07-31</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2017-05-03</Modification_Date>
+               <Modification_Version>2.11</Modification_Version>
+               <Modification_ReleaseDate>2017-05-05</Modification_ReleaseDate>
+               <Modification_Comment>updated Related_Attack_Patterns</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2017-11-08</Modification_Date>
+               <Modification_Version>3.0</Modification_Version>
+               <Modification_ReleaseDate>2017-11-08</Modification_ReleaseDate>
+               <Modification_Comment>updated Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2019-01-03</Modification_Date>
+					<Modification_Version>3.2</Modification_Version>
+					<Modification_ReleaseDate>2019-01-03</Modification_ReleaseDate>
+					<Modification_Comment>updated References, Relationships, Taxonomy_Mappings</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2019-09-19</Modification_Date>
+					<Modification_Version>3.4</Modification_Version>
+					<Modification_ReleaseDate>2019-09-19</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2019-09-23</Modification_Date>
+					<Modification_Version>3.4.1</Modification_Version>
+					<Modification_ReleaseDate>2019-09-23</Modification_ReleaseDate>
+					<Modification_Comment>updated Description, Maintenance_Notes, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-02-24</Modification_Date>
+					<Modification_Version>4.0</Modification_Version>
+					<Modification_ReleaseDate>2020-02-24</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships, Type</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-08-20</Modification_Date>
+					<Modification_Version>4.2</Modification_Version>
+					<Modification_ReleaseDate>2020-08-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-12-10</Modification_Date>
+					<Modification_Version>4.3</Modification_Version>
+					<Modification_ReleaseDate>2020-12-10</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-03-15</Modification_Date>
+					<Modification_Version>4.4</Modification_Version>
+					<Modification_ReleaseDate>2021-03-15</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-06-28</Modification_Date>
+					<Modification_Version>4.8</Modification_Version>
+					<Modification_ReleaseDate>2022-06-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Observed_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-01-31</Modification_Date>
+					<Modification_Version>4.10</Modification_Version>
+					<Modification_ReleaseDate>2023-01-31</Modification_ReleaseDate>
+					<Modification_Comment>updated Description</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Detection_Factors, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-04-03</Modification_Date>
+					<Modification_Version>4.17</Modification_Version>
+					<Modification_ReleaseDate>2025-04-03</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Applicable_Platforms, Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+            <Previous_Entry_Name Date="2010-12-13">Insufficient Locking</Previous_Entry_Name>
+         </Content_History>
+      </Weakness>
+      

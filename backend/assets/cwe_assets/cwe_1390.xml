@@ -1,0 +1,154 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="1390" Name="Weak Authentication" Abstraction="Class" Structure="Simple" Status="Incomplete">
+      <Description>The product uses an authentication mechanism to restrict access to specific users or identities, but the mechanism does not sufficiently prove that the claimed identity is correct.</Description>
+      <Extended_Description>
+	<xhtml:p>Attackers may be able to bypass weak authentication faster and/or with less effort than expected.</xhtml:p>
+      </Extended_Description>
+      <Related_Weaknesses>
+	<Related_Weakness Nature="ChildOf" CWE_ID="287" View_ID="1000" Ordinal="Primary" />
+      </Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+      <Applicable_Platforms>
+	<Language Class="Not Language-Specific" Prevalence="Undetermined" />
+	<Technology Class="ICS/OT" Prevalence="Undetermined" />
+	<Technology Class="Not Technology-Specific" Prevalence="Undetermined" />
+      </Applicable_Platforms>
+      <Modes_Of_Introduction>
+            <Introduction>
+               <Phase>Architecture and Design</Phase>
+	    </Introduction>
+            <Introduction>
+               <Phase>Implementation</Phase>
+	    </Introduction>
+      </Modes_Of_Introduction>
+      <Common_Consequences>
+        <Consequence>
+          <Scope>Integrity</Scope>
+          <Scope>Confidentiality</Scope>
+          <Scope>Availability</Scope>
+          <Scope>Access Control</Scope>
+          <Impact>Read Application Data</Impact>
+          <Impact>Gain Privileges or Assume Identity</Impact>
+          <Impact>Execute Unauthorized Code or Commands</Impact>
+          <Note>This weakness can lead to the exposure of resources or functionality to unintended actors, possibly providing attackers with sensitive information or even execute arbitrary code.</Note>
+        </Consequence>
+      </Common_Consequences>
+      <Demonstrative_Examples>
+        <Demonstrative_Example Demonstrative_Example_ID="DX-153">
+          <Intro_Text>In 2022, the OT:ICEFALL study examined products by 10 different Operational Technology (OT) vendors. The researchers reported 56 vulnerabilities and said that the products were "insecure by design" [REF-1283]. If exploited, these vulnerabilities often allowed adversaries to change how the products operated, ranging from denial of service to changing the code that the products executed. Since these products were often used in industries such as power, electrical, water, and others, there could even be safety implications.</Intro_Text>
+          <Body_Text>Multiple OT products used weak authentication.</Body_Text>
+        </Demonstrative_Example>
+      </Demonstrative_Examples>
+      <Observed_Examples>
+        <Observed_Example>
+          <Reference>CVE-2024-48445</Reference>
+          <Description>Chain: e-commerce app relies on an easily-guessable timestamp (CWE-341) in a weak authentication algorithm (CWE-1390)</Description>
+          <Link>https://www.cve.org/CVERecord?id=CVE-2024-48445</Link>
+        </Observed_Example>
+        <Observed_Example>
+          <Reference>CVE-2022-30034</Reference>
+          <Description>Chain: Web UI for a Python RPC framework does not use regex anchors to validate user login emails (CWE-777), potentially allowing bypass of OAuth (CWE-1390).</Description>
+          <Link>https://www.cve.org/CVERecord?id=CVE-2022-30034</Link>
+        </Observed_Example>
+		<Observed_Example>
+		  <Reference>CVE-2022-35248</Reference>
+		  <Description>Chat application skips validation when Central Authentication Service
+		  (CAS) is enabled, effectively removing the second factor from
+		  two-factor authentication</Description>
+		  <Link>https://www.cve.org/CVERecord?id=CVE-2022-35248</Link>
+		</Observed_Example>
+        <Observed_Example>
+          <Reference>CVE-2021-3116</Reference>
+          <Description>Chain: Python-based HTTP Proxy server uses the wrong boolean operators (CWE-480) causing an  incorrect comparison (CWE-697) that identifies an authN failure if all three conditions are met instead of only one, allowing bypass of the proxy authentication (CWE-1390)</Description>
+          <Link>https://www.cve.org/CVERecord?id=CVE-2021-3116</Link>
+        </Observed_Example>
+        <Observed_Example>
+          <Reference>CVE-2022-29965</Reference>
+          <Description>Distributed Control System (DCS) uses a deterministic algorithm to generate utility passwords</Description>
+          <Link>https://www.cve.org/CVERecord?id=CVE-2022-29965</Link>
+        </Observed_Example>
+        <Observed_Example>
+          <Reference>CVE-2022-29959</Reference>
+          <Description>Initialization file contains credentials that can be decoded using a "simple string transformation"</Description>
+          <Link>https://www.cve.org/CVERecord?id=CVE-2022-29959</Link>
+        </Observed_Example>
+		<Observed_Example>
+		  <Reference>CVE-2020-8994</Reference>
+		  <Description>UART interface for AI speaker uses empty password for root shell</Description>
+		  <Link>https://www.cve.org/CVERecord?id=CVE-2020-8994</Link>
+		</Observed_Example>
+      </Observed_Examples>
+      <References>
+        <Reference External_Reference_ID="REF-1283" />
+      </References>
+         <Mapping_Notes>
+            <Usage>Allowed-with-Review</Usage>
+            <Rationale>This CWE entry is a Class and might have Base-level children that would be more appropriate</Rationale>
+            <Comments>Examine children of this entry to see if there is a better fit</Comments>
+            <Reasons>
+               <Reason Type="Abstraction" />
+            </Reasons>
+         </Mapping_Notes>
+      <Content_History>
+        <Submission>
+          <Submission_Name>CWE Content Team</Submission_Name>
+          <Submission_Organization>MITRE</Submission_Organization>
+          <Submission_Date>2022-10-05</Submission_Date>
+          <Submission_Version>4.9</Submission_Version>
+          <Submission_ReleaseDate>2022-10-13</Submission_ReleaseDate>
+        </Submission>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-01-31</Modification_Date>
+					<Modification_Version>4.10</Modification_Version>
+					<Modification_ReleaseDate>2023-01-31</Modification_ReleaseDate>
+					<Modification_Comment>updated Applicable_Platforms, Demonstrative_Examples, Observed_Examples, References, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-10-26</Modification_Date>
+					<Modification_Version>4.13</Modification_Version>
+					<Modification_ReleaseDate>2023-10-26</Modification_ReleaseDate>
+					<Modification_Comment>updated Observed_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2024-02-29</Modification_Date>
+					<Modification_Version>4.14</Modification_Version>
+					<Modification_ReleaseDate>2024-02-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Observed_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Observed_Examples, Relationships, Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+      </Content_History>
+    </Weakness>
+      

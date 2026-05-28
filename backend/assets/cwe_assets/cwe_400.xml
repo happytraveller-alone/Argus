@@ -1,0 +1,761 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="400" Name="Uncontrolled Resource Consumption" Abstraction="Class" Structure="Simple" Status="Draft" Diagram="/data/images/CWE-400-Diagram.png">
+         <Description>The product does not properly control the allocation and maintenance of a limited resource.</Description>
+         <Related_Weaknesses>
+            <Related_Weakness Nature="ChildOf" CWE_ID="664" View_ID="1000" Ordinal="Primary" />
+         </Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+            <Weakness_Ordinality>
+               <Ordinality>Resultant</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+         <Applicable_Platforms>
+            <Language Class="Not Language-Specific" Prevalence="Undetermined" />
+	    <Technology Class="Not Technology-Specific" Prevalence="Undetermined" />
+	    <Technology Name="AI/ML" Prevalence="Often" />
+         </Applicable_Platforms>
+         <Alternate_Terms>
+            <Alternate_Term>
+               <Term>Resource Exhaustion</Term>
+            </Alternate_Term>
+         </Alternate_Terms>
+         <Modes_Of_Introduction>
+            <Introduction>
+               <Phase>Operation</Phase>
+	       <Note>The product could be operated in a system or environment with lower resource limits than expected, which might make it easier for attackers to consume all available resources. </Note>
+            </Introduction>
+            <Introduction>
+               <Phase>System Configuration</Phase>
+	       <Note>The product could be configured with lower resource limits than expected, which might make it easier for attackers to consume all available resources. </Note>
+            </Introduction>
+            <Introduction>
+               <Phase>Architecture and Design</Phase>
+	       <Note>The designer might not consider how to handle and throttle excessive resource requests, which typically requires careful planning to handle more gracefully than a crash or exit.</Note>
+            </Introduction>
+            <Introduction>
+               <Phase>Implementation</Phase>
+			   <Note>
+			   <xhtml:p>There are at least three distinct scenarios that can commonly lead to resource exhaustion:</xhtml:p>
+				<xhtml:ul>
+					<xhtml:li>Lack of throttling for the number of allocated resources.</xhtml:li>
+					<xhtml:li>Losing all references to a resource before reaching the shutdown stage.</xhtml:li>
+					<xhtml:li>Not closing/returning a resource after processing.</xhtml:li>
+				</xhtml:ul>
+			   <xhtml:p>Resource exhaustion problems often occur due to an incorrect implementation of the following situations:</xhtml:p>
+				<xhtml:ul>
+					<xhtml:li>Error conditions and other exceptional circumstances.</xhtml:li>
+					<xhtml:li>Confusion over which part of the program is responsible for releasing the resource.</xhtml:li>
+				</xhtml:ul>
+			    </Note>				
+            </Introduction>
+         </Modes_Of_Introduction>
+         <Likelihood_Of_Exploit>High</Likelihood_Of_Exploit>
+         <Common_Consequences>
+            <Consequence>
+               <Scope>Availability</Scope>
+               <Impact>DoS: Crash, Exit, or Restart</Impact>
+               <Impact>DoS: Resource Consumption (CPU)</Impact>
+               <Impact>DoS: Resource Consumption (Memory)</Impact>
+               <Impact>DoS: Resource Consumption (Other)</Impact>
+               <Note>If an attacker can trigger the allocation of the limited resources, but the number or size of the resources is not controlled, then the most common result is denial of service. This would prevent valid users from accessing the product, and it could potentially have an impact on the surrounding environment, i.e., the product may slow down, crash due to unhandled errors, or lock out legitimate users. For example, a memory exhaustion attack against an application could slow down the application as well as its host operating system.</Note>
+            </Consequence>
+            <Consequence>
+               <Scope>Access Control</Scope>
+               <Scope>Other</Scope>
+               <Impact>Bypass Protection Mechanism</Impact>
+               <Impact>Other</Impact>
+               <Note>In some cases it may be possible to force the product to "fail open" in the event of resource exhaustion. The state of the product -- and possibly the security functionality - may then be compromised.</Note>
+            </Consequence>
+         </Common_Consequences>
+         <Detection_Methods>
+            <Detection_Method>
+               <Method>Automated Static Analysis</Method>
+               <Description>
+                  <xhtml:p>Automated static analysis typically has limited utility in recognizing resource exhaustion problems, except for program-independent system resources such as files, sockets, and processes. For system resources, automated static analysis may be able to detect circumstances in which resources are not released after they have expired. Automated analysis of configuration files may be able to detect settings that do not specify a maximum value.</xhtml:p>
+                  <xhtml:p>Automated static analysis tools will not be appropriate for detecting exhaustion of custom resources, such as an intended security policy in which a bulletin board user is only allowed to make a limited number of posts per day.</xhtml:p>
+               </Description>
+               <Effectiveness>Limited</Effectiveness>
+            </Detection_Method>
+            <Detection_Method>
+               <Method>Automated Dynamic Analysis</Method>
+               <Description>Certain automated dynamic analysis techniques may be effective in spotting resource exhaustion problems, especially with resources such as processes, memory, and connections. The technique may involve generating a large number of requests to the product within a short time frame.</Description>
+               <Effectiveness>Moderate</Effectiveness>
+            </Detection_Method>
+            <Detection_Method>
+               <Method>Fuzzing</Method>
+               <Description>While fuzzing is typically geared toward finding low-level implementation bugs, it can inadvertently find resource exhaustion problems. This can occur when the fuzzer generates a large number of test cases but does not restart the targeted product in between test cases. If an individual test case produces a crash, but it does not do so reliably, then an inability to handle resource exhaustion may be the cause.</Description>
+               <Effectiveness>Opportunistic</Effectiveness>
+            </Detection_Method>
+         </Detection_Methods>
+         <Potential_Mitigations>
+            <Mitigation>
+               <Phase>Architecture and Design</Phase>
+               <Description>Design throttling mechanisms into the system architecture. The best protection is to limit the amount of resources that an unauthorized user can cause to be expended. A strong authentication and access control model will help prevent such attacks from occurring in the first place. The login application should be protected against DoS attacks as much as possible. Limiting the database access, perhaps by caching result sets, can help minimize the resources expended. To further limit the potential for a DoS attack, consider tracking the rate of requests received from users and blocking requests that exceed a defined rate threshold.</Description>
+            </Mitigation>
+            <Mitigation>
+               <Phase>Architecture and Design</Phase>
+               <Description>
+                  <xhtml:p>Mitigation of resource exhaustion attacks requires that the target system either:</xhtml:p>
+                     <xhtml:ul>
+                        <xhtml:li>recognizes the attack and denies that user further access for a given amount of time, or</xhtml:li>
+                        <xhtml:li>uniformly throttles all requests in order to make it more difficult to consume resources more quickly than they can again be freed.</xhtml:li>
+                     </xhtml:ul>
+                  <xhtml:p>The first of these solutions is an issue in itself though, since it may allow attackers to prevent the use of the system by a particular valid user. If the attacker impersonates the valid user, they may be able to prevent the user from accessing the server in question.</xhtml:p>
+                  <xhtml:p>The second solution is simply difficult to effectively institute -- and even when properly done, it does not provide a full solution. It simply makes the attack require more resources on the part of the attacker.</xhtml:p>
+               </Description>
+            </Mitigation>
+            <Mitigation>
+               <Phase>Architecture and Design</Phase>
+               <Description>Ensure that protocols have specific limits of scale placed on them.</Description>
+            </Mitigation>
+            <Mitigation>
+               <Phase>Implementation</Phase>
+               <Description>Ensure that all failures in resource allocation place the system into a safe posture.</Description>
+            </Mitigation>
+         </Potential_Mitigations>
+         <Demonstrative_Examples>
+            <Demonstrative_Example>
+               <Intro_Text>The following example demonstrates the weakness.</Intro_Text>
+               <Example_Code Nature="Bad" Language="Java">
+                  <xhtml:div>class Worker implements Executor {<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>...<xhtml:br />public void execute(Runnable r) {<xhtml:div style="margin-left:1em;">
+                              <xhtml:div>
+                                 <xhtml:br />try {<xhtml:div style="margin-left:1em;">...</xhtml:div>}<xhtml:br />catch (InterruptedException ie) {<xhtml:div style="margin-left:1em;">
+                                    <xhtml:div>
+                                       <xhtml:br />
+                                       <xhtml:i>// postpone response</xhtml:i>
+                                       <xhtml:br />Thread.currentThread().interrupt();</xhtml:div>
+                                 </xhtml:div>}</xhtml:div>
+                           </xhtml:div>}<xhtml:br />
+                           <xhtml:br />public Worker(Channel ch, int nworkers) {<xhtml:div style="margin-left:1em;">...</xhtml:div>}<xhtml:br />
+                           <xhtml:br />protected void activate() {<xhtml:div style="margin-left:1em;">
+                              <xhtml:div>
+                                 <xhtml:br />Runnable loop = new Runnable() {<xhtml:div style="margin-left:1em;">
+                                    <xhtml:div>
+                                       <xhtml:br />public void run() {<xhtml:div style="margin-left:1em;">
+                                          <xhtml:div>
+                                             <xhtml:br />try {<xhtml:div style="margin-left:1em;">for (;;) {<xhtml:div style="margin-left:1em;">Runnable r = ...;<xhtml:br />r.run();</xhtml:div>}</xhtml:div>}<xhtml:br />catch (InterruptedException ie) {<xhtml:div style="margin-left:1em;">...</xhtml:div>}</xhtml:div>
+                                       </xhtml:div>}</xhtml:div>
+                                 </xhtml:div>};<xhtml:br />new Thread(loop).start();</xhtml:div>
+                           </xhtml:div>}</xhtml:div>
+                     </xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>There are no limits to runnables. Potentially an attacker could cause resource problems very quickly.</Body_Text>
+            </Demonstrative_Example>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-25">
+               <Intro_Text>This code allocates a socket and forks each time it receives a new connection.</Intro_Text>
+               <Example_Code Nature="Bad" Language="C">
+                  <xhtml:div>sock=socket(AF_INET, SOCK_STREAM, 0);<xhtml:br />while (1) {<xhtml:div style="margin-left:1em;">newsock=accept(sock, ...);<xhtml:br />printf("A connection has been accepted\n");<xhtml:br />pid = fork();</xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>The program does not track how many connections have been made, and it does not limit the number of connections. Because forking is a relatively expensive operation, an attacker would be able to cause the system to run out of CPU, processes, or memory by making a large number of connections. Alternatively, an attacker could consume all available connections, preventing others from accessing the system remotely.</Body_Text>
+            </Demonstrative_Example>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-50">
+               <Intro_Text>In the following example a server socket connection is used to accept a request to store data on the local file system using a specified filename. The method openSocketConnection establishes a server socket to accept requests from a client. When a client establishes a connection to this service the getNextMessage method is first used to retrieve from the socket the name of the file to store the data, the openFileToWrite method will validate the filename and open a file to write to on the local file system. The getNextMessage is then used within a while loop to continuously read data from the socket and output the data to the file until there is no longer any data from the socket.</Intro_Text>
+               <Example_Code Nature="Bad" Language="C">
+                  <xhtml:div>int writeDataFromSocketToFile(char *host, int port)<xhtml:br />{<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>
+                           <xhtml:br />char filename[FILENAME_SIZE];<xhtml:br />char buffer[BUFFER_SIZE];<xhtml:br />int socket = openSocketConnection(host, port);<xhtml:br />
+                           <xhtml:br />if (socket &lt; 0) {<xhtml:div style="margin-left:1em;">printf("Unable to open socket connection");<xhtml:br />return(FAIL);</xhtml:div>}<xhtml:br />if (getNextMessage(socket, filename, FILENAME_SIZE) &gt; 0) {<xhtml:div style="margin-left:1em;">
+                              <xhtml:div>if (openFileToWrite(filename) &gt; 0) {<xhtml:div style="margin-left:1em;">
+                                    <xhtml:div>while (getNextMessage(socket, buffer, BUFFER_SIZE) &gt; 0){<xhtml:div style="margin-left:1em;">if (!(writeToFile(buffer) &gt; 0))<xhtml:div style="margin-left:1em;">break;</xhtml:div>
+                                       </xhtml:div>}</xhtml:div>
+                                 </xhtml:div>}<xhtml:br />closeFile();</xhtml:div>
+                           </xhtml:div>}<xhtml:br />closeSocket(socket);</xhtml:div>
+                     </xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>This example creates a situation where data can be dumped to a file on the local file system without any limits on the size of the file. This could potentially exhaust file or disk resources and/or limit other clients' ability to access the service.</Body_Text>
+            </Demonstrative_Example>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-51">
+               <Intro_Text>In the following example, the processMessage method receives a two dimensional character array containing the message to be processed. The two-dimensional character array contains the length of the message in the first character array and the message body in the second character array. The getMessageLength method retrieves the integer value of the length from the first character array. After validating that the message length is greater than zero, the body character array pointer points to the start of the second character array of the two-dimensional character array and memory is allocated for the new body character array.</Intro_Text>
+               <Example_Code Nature="Bad" Language="C">
+                  <xhtml:div>
+                     <xhtml:br />
+                     <xhtml:i>/* process message accepts a two-dimensional character array of the form [length][body] containing the message to be processed */</xhtml:i>
+                     <xhtml:br />int processMessage(char **message)<xhtml:br />{<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>char *body;<xhtml:br />
+                           <xhtml:br />int length = getMessageLength(message[0]);<xhtml:br />
+                           <xhtml:br />if (length &gt; 0) {<xhtml:div style="margin-left:1em;">body = &amp;message[1][0];<xhtml:br />processMessageBody(body);<xhtml:br />return(SUCCESS);</xhtml:div>}<xhtml:br />else {<xhtml:div style="margin-left:1em;">printf("Unable to process message; invalid message length");<xhtml:br />return(FAIL);</xhtml:div>}</xhtml:div>
+                     </xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>This example creates a situation where the length of the body character array can be very large and will consume excessive memory, exhausting system resources. This can be avoided by restricting the length of the second character array with a maximum length check</Body_Text>
+               <Body_Text>Also, consider changing the type from 'int' to 'unsigned int', so that you are always guaranteed that the number is positive. This might not be possible if the protocol specifically requires allowing negative values, or if you cannot control the return value from getMessageLength(), but it could simplify the check to ensure the input is positive, and eliminate other errors such as signed-to-unsigned conversion errors (CWE-195) that may occur elsewhere in the code.</Body_Text>
+               <Example_Code Nature="Good" Language="C">
+                  <xhtml:div>unsigned int length = getMessageLength(message[0]);<xhtml:br />if ((length &gt; 0) &amp;&amp; (length &lt; MAX_LENGTH)) {...}</xhtml:div>
+               </Example_Code>
+            </Demonstrative_Example>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-52">
+               <Intro_Text>In the following example, a server object creates a server socket and accepts client connections to the socket. For every client connection to the socket a separate thread object is generated using the ClientSocketThread class that handles request made by the client through the socket.</Intro_Text>
+               <Example_Code Nature="Bad" Language="Java">
+                  <xhtml:div>public void acceptConnections() {<xhtml:br />
+                     <xhtml:div style="margin-left:1em;">
+                        <xhtml:div>try {<xhtml:div style="margin-left:1em;">ServerSocket serverSocket = new ServerSocket(SERVER_PORT);<xhtml:br />int counter = 0;<xhtml:br />boolean hasConnections = true;<xhtml:br />while (hasConnections) {<xhtml:div style="margin-left:1em;">Socket client = serverSocket.accept();<xhtml:br />Thread t = new Thread(new ClientSocketThread(client));<xhtml:br />t.setName(client.getInetAddress().getHostName() + ":" + counter++);<xhtml:br />t.start();</xhtml:div>}<xhtml:br />serverSocket.close();</xhtml:div>
+                           <xhtml:br />
+                           <xhtml:br />} catch (IOException ex) {...}</xhtml:div>
+                     </xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>In this example there is no limit to the number of client connections and client threads that are created. Allowing an unlimited number of client connections and threads could potentially overwhelm the system and system resources.</Body_Text>
+               <Body_Text>The server should limit the number of client connections and the client threads that are created. This can be easily done by creating a thread pool object that limits the number of threads that are generated.</Body_Text>
+               <Example_Code Nature="Good" Language="Java">
+                  <xhtml:div>public static final int SERVER_PORT = 4444;<xhtml:br />public static final int MAX_CONNECTIONS = 10;<xhtml:br />...<xhtml:br />
+                     <xhtml:br />public void acceptConnections() {<xhtml:br />
+                     <xhtml:div style="margin-left:1em;">
+                        <xhtml:div>try {<xhtml:div style="margin-left:1em;">ServerSocket serverSocket = new ServerSocket(SERVER_PORT);<xhtml:br />int counter = 0;<xhtml:br />boolean hasConnections = true;<xhtml:br />while (hasConnections) {<xhtml:div style="margin-left:1em;">hasConnections = checkForMoreConnections();<xhtml:br />Socket client = serverSocket.accept();<xhtml:br />Thread t = new Thread(new ClientSocketThread(client));<xhtml:br />t.setName(client.getInetAddress().getHostName() + ":" + counter++);<xhtml:br />ExecutorService pool = Executors.newFixedThreadPool(MAX_CONNECTIONS);<xhtml:br />pool.execute(t);</xhtml:div>}<xhtml:br />serverSocket.close();</xhtml:div>
+                           <xhtml:br />
+                           <xhtml:br />} catch (IOException ex) {...}</xhtml:div>
+                     </xhtml:div>}</xhtml:div>
+               </Example_Code>
+            </Demonstrative_Example>
+            <Demonstrative_Example>
+               <Intro_Text>In the following example, the serve function receives an http request and an http response writer. It reads the entire request body.</Intro_Text>
+               <Example_Code Nature="Bad" Language="Go">
+                  <xhtml:div>func serve(w http.ResponseWriter, r *http.Request) {
+                     <xhtml:div style="margin-left:1em;">
+                        var body []byte<xhtml:br />
+                        if r.Body != nil {<xhtml:br />
+                        <xhtml:div style="margin-left:1em;">
+                           if data, err := io.ReadAll(r.Body); err == nil {<xhtml:br />
+                           <xhtml:div style="margin-left:1em;">
+                              body = data<xhtml:br />
+                           </xhtml:div>
+                           }</xhtml:div>
+                        }</xhtml:div>
+                  }</xhtml:div>
+               </Example_Code>
+               <Body_Text>Because ReadAll is defined to read from src until EOF, it does not treat an EOF from Read as an error to be reported. This example creates a situation where the length of the body supplied can be very large and will consume excessive memory, exhausting system resources. This can be avoided by ensuring the body does not exceed a predetermined length of bytes.</Body_Text>
+               <Body_Text>MaxBytesReader prevents clients from accidentally or maliciously sending a large request and wasting server resources. If possible, the code could be changed to tell ResponseWriter to close the connection after the limit has been reached.</Body_Text>
+               <Example_Code Nature="Good" Language="Go">
+                  <xhtml:div>func serve(w http.ResponseWriter, r *http.Request) {
+                     <xhtml:div style="margin-left:1em;">
+                        var body []byte<xhtml:br />
+                        const MaxRespBodyLength = 1e6<xhtml:br />
+                        if r.Body != nil {<xhtml:br />
+                        <xhtml:div style="margin-left:1em;">
+                           r.Body = http.MaxBytesReader(w, r.Body, MaxRespBodyLength)<xhtml:br />
+                           if data, err := io.ReadAll(r.Body); err == nil {<xhtml:br />
+                           <xhtml:div style="margin-left:1em;">
+                              body = data<xhtml:br />
+                           </xhtml:div>
+                           }</xhtml:div>
+                        }</xhtml:div>
+                  }</xhtml:div>
+               </Example_Code>
+            </Demonstrative_Example>
+         </Demonstrative_Examples>
+         <Observed_Examples>
+            <Observed_Example>
+               <Reference>CVE-2019-19911</Reference>
+               <Description>Chain: Python library does not limit the resources used to process images that specify a very large number of bands (CWE-1284), leading to excessive memory consumption (CWE-789) or an integer overflow (CWE-190).</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2019-19911</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2020-7218</Reference>
+               <Description>Go-based workload orchestrator does not limit resource usage with unauthenticated connections, allowing a DoS by flooding the service</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2020-7218</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2020-3566</Reference>
+               <Description>Resource exhaustion in distributed OS because of "insufficient" IGMP queue management, as exploited in the wild per CISA KEV.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2020-3566</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2009-2874</Reference>
+               <Description>Product allows attackers to cause a crash via a large number of connections.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2009-2874</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2009-1928</Reference>
+               <Description>Malformed request triggers uncontrolled recursion, leading to stack exhaustion.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2009-1928</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2009-2858</Reference>
+               <Description>Chain: memory leak (CWE-404) leads to resource exhaustion.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2009-2858</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2009-2726</Reference>
+               <Description>Driver does not use a maximum width when invoking sscanf style functions, causing stack consumption.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2009-2726</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2009-2540</Reference>
+               <Description>Large integer value for a length property in an object causes a large amount of memory allocation.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2009-2540</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2009-2299</Reference>
+               <Description>Web application firewall consumes excessive memory when an HTTP request contains a large Content-Length value but no POST data.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2009-2299</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2009-2054</Reference>
+               <Description>Product allows exhaustion of file descriptors when processing a large number of TCP packets.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2009-2054</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2008-5180</Reference>
+               <Description>Communication product allows memory consumption with a large number of SIP requests, which cause many sessions to be created.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2008-5180</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2008-2121</Reference>
+               <Description>TCP implementation allows attackers to consume CPU and prevent new connections using a TCP SYN flood attack.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2008-2121</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2008-2122</Reference>
+               <Description>Port scan triggers CPU consumption with processes that attempt to read data from closed sockets.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2008-2122</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2008-1700</Reference>
+               <Description>Product allows attackers to cause a denial of service via a large number of directives, each of which opens a separate window.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2008-1700</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2007-4103</Reference>
+               <Description>Product allows resource exhaustion via a large number of calls that do not complete a 3-way handshake.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2007-4103</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2006-1173</Reference>
+               <Description>Mail server does not properly handle deeply nested multipart MIME messages, leading to stack exhaustion.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2006-1173</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2007-0897</Reference>
+               <Description>Chain: anti-virus product encounters a malformed file but returns from a function without closing a file descriptor (CWE-775) leading to file descriptor consumption (CWE-400) and failed scans.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2007-0897</Link>
+            </Observed_Example>
+         </Observed_Examples>
+         <Taxonomy_Mappings>
+            <Taxonomy_Mapping Taxonomy_Name="CLASP">
+               <Entry_Name>Resource exhaustion (file descriptor, disk space, sockets, ...)</Entry_Name>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="OWASP Top Ten 2004">
+               <Entry_ID>A9</Entry_ID>
+               <Entry_Name>Denial of Service</Entry_Name>
+               <Mapping_Fit>CWE More Specific</Mapping_Fit>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="WASC">
+               <Entry_ID>10</Entry_ID>
+               <Entry_Name>Denial of Service</Entry_Name>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="WASC">
+               <Entry_ID>41</Entry_ID>
+               <Entry_Name>XML Attribute Blowup</Entry_Name>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="The CERT Oracle Secure Coding Standard for Java (2011)">
+               <Entry_ID>SER12-J</Entry_ID>
+               <Entry_Name>Avoid memory and resource leaks during serialization</Entry_Name>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="The CERT Oracle Secure Coding Standard for Java (2011)">
+               <Entry_ID>MSC05-J</Entry_ID>
+               <Entry_Name>Do not exhaust heap space</Entry_Name>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="Software Fault Patterns">
+               <Entry_ID>SFP13</Entry_ID>
+               <Entry_Name>Unrestricted Consumption</Entry_Name>
+            </Taxonomy_Mapping>
+	    <Taxonomy_Mapping Taxonomy_Name="ISA/IEC 62443">
+	      <Entry_ID>Part 3-3</Entry_ID>
+              <Entry_Name>Req SR 7.1</Entry_Name>
+	    </Taxonomy_Mapping>
+	    <Taxonomy_Mapping Taxonomy_Name="ISA/IEC 62443">
+	      <Entry_ID>Part 3-3</Entry_ID>
+              <Entry_Name>Req SR 7.2</Entry_Name>
+	    </Taxonomy_Mapping>
+	    <Taxonomy_Mapping Taxonomy_Name="ISA/IEC 62443">
+	      <Entry_ID>Part 4-1</Entry_ID>
+	      <Entry_Name>Req SI-1</Entry_Name>
+	    </Taxonomy_Mapping>
+	    <Taxonomy_Mapping Taxonomy_Name="ISA/IEC 62443">
+	      <Entry_ID>Part 4-1</Entry_ID>
+	      <Entry_Name>Req SVV-3</Entry_Name>
+	    </Taxonomy_Mapping>
+	    <Taxonomy_Mapping Taxonomy_Name="ISA/IEC 62443">
+	      <Entry_ID>Part 4-2</Entry_ID>
+              <Entry_Name>Req CR 7.1</Entry_Name>
+	    </Taxonomy_Mapping>
+	    <Taxonomy_Mapping Taxonomy_Name="ISA/IEC 62443">
+	      <Entry_ID>Part 4-2</Entry_ID>
+              <Entry_Name>Req CR 7.2</Entry_Name>
+	    </Taxonomy_Mapping>
+         </Taxonomy_Mappings>
+         <Related_Attack_Patterns>
+            <Related_Attack_Pattern CAPEC_ID="147" />
+            <Related_Attack_Pattern CAPEC_ID="227" />
+            <Related_Attack_Pattern CAPEC_ID="492" />
+         </Related_Attack_Patterns>
+         <References>
+            <Reference External_Reference_ID="REF-18" />
+            <Reference External_Reference_ID="REF-386" />
+            <Reference External_Reference_ID="REF-387" />
+            <Reference External_Reference_ID="REF-388" />
+            <Reference External_Reference_ID="REF-7" Section="Chapter 17, &quot;Protecting Against Denial of Service Attacks&quot; Page 517" />
+         </References>
+         <Mapping_Notes>
+            <Usage>Discouraged</Usage>
+            <Rationale>CWE-400 is intended for incorrect behaviors in which the product is expected to track and restrict how many resources it consumes, but CWE-400 is often misused because it is conflated with the "technical impact" of vulnerabilities in which resource consumption occurs. It is sometimes used for low-information vulnerability reports. It is a level-1 Class (i.e., a child of a Pillar).</Rationale>
+            <Comments>Closely analyze the specific mistake that is causing resource consumption, and perform a CWE mapping for that mistake. Consider children/descendants.</Comments>
+            <Reasons>
+               <Reason Type="Frequent Misuse" />
+               <Reason Type="Abstraction" />
+            </Reasons>
+	    <Suggestions>
+	      <Suggestion CWE_ID="770" Comment="Allocation of Resources Without Limits or Throttling (or descendants)" />
+	      <Suggestion CWE_ID="771" Comment="Missing Missing Reference to Active Allocated Resource" />
+	      <Suggestion CWE_ID="772" Comment="Missing Release of Resource after Effective Lifetime" />
+	      <Suggestion CWE_ID="410" Comment="Insufficient Resource Pool" />
+	      <Suggestion CWE_ID="834" Comment="Excessive Iteration" />
+	      <Suggestion CWE_ID="405" Comment="Asymmetric Resource Consumption (Amplification) (or descendants)" />
+	    </Suggestions>
+         </Mapping_Notes>
+         <Notes>
+            <Note Type="Theoretical">Vulnerability theory is largely about how behaviors and resources interact. "Resource exhaustion" can be regarded as either a consequence or an attack, depending on the perspective. This entry is an attempt to reflect the underlying weaknesses that enable these attacks (or consequences) to take place.</Note>
+            <Note Type="Other">
+               <xhtml:p>Database queries that take a long time to process are good DoS targets. An attacker would have to write a few lines of code to generate enough traffic to exceed the site's ability to keep up. This would effectively prevent authorized users from using the site at all. Resources can be exploited simply by ensuring that the target machine must do much more work and consume more resources in order to service a request than the attacker must do to initiate a request.</xhtml:p>
+               <xhtml:p>A prime example of this can be found in old switches that were vulnerable to "macof" attacks (so named for a tool developed by Dugsong). These attacks flooded a switch with random IP and MAC address combinations, therefore exhausting the switch's cache, which held the information of which port corresponded to which MAC addresses. Once this cache was exhausted, the switch would fail in an insecure way and would begin to act simply as a hub, broadcasting all traffic on all ports and allowing for basic sniffing attacks.</xhtml:p>
+	       <xhtml:p>Limited resources include memory, file system storage, database connection pool entries, CPU, and others.</xhtml:p>
+            </Note>
+         </Notes>
+         <Content_History>
+            <Submission>
+               <Submission_Name>CLASP</Submission_Name>
+               <Submission_Date>2006-07-19</Submission_Date>
+               <Submission_Version>Draft 3</Submission_Version>
+               <Submission_ReleaseDate>2006-07-19</Submission_ReleaseDate>
+            </Submission>
+            <Modification>
+               <Modification_Name>Eric Dalci</Modification_Name>
+               <Modification_Organization>Cigital</Modification_Organization>
+               <Modification_Date>2008-07-01</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>updated Time_of_Introduction</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Organization>Veracode</Modification_Organization>
+               <Modification_Date>2008-08-15</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>Suggested OWASP Top Ten 2004 mapping</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2008-09-08</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences, Relationships, Other_Notes, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2008-10-14</Modification_Date>
+               <Modification_Version>1.0.1</Modification_Version>
+               <Modification_ReleaseDate>2008-10-14</Modification_ReleaseDate>
+               <Modification_Comment>updated Description, Name, Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2009-01-12</Modification_Date>
+               <Modification_Version>1.2</Modification_Version>
+               <Modification_ReleaseDate>2009-01-12</Modification_ReleaseDate>
+               <Modification_Comment>updated Description</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2009-05-27</Modification_Date>
+               <Modification_Version>1.4</Modification_Version>
+               <Modification_ReleaseDate>2009-05-27</Modification_ReleaseDate>
+               <Modification_Comment>updated Name, Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2009-07-27</Modification_Date>
+               <Modification_Version>1.5</Modification_Version>
+               <Modification_ReleaseDate>2009-07-27</Modification_ReleaseDate>
+               <Modification_Comment>updated Description, Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2009-10-29</Modification_Date>
+               <Modification_Version>1.6</Modification_Version>
+               <Modification_ReleaseDate>2009-10-29</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2009-12-28</Modification_Date>
+               <Modification_Version>1.7</Modification_Version>
+               <Modification_ReleaseDate>2009-12-28</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences, Demonstrative_Examples, Detection_Factors, Likelihood_of_Exploit, Observed_Examples, Other_Notes, Potential_Mitigations, References</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2010-02-16</Modification_Date>
+               <Modification_Version>1.8</Modification_Version>
+               <Modification_ReleaseDate>2010-02-16</Modification_ReleaseDate>
+               <Modification_Comment>updated Detection_Factors, Potential_Mitigations, References, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2010-04-05</Modification_Date>
+               <Modification_Version>1.8.1</Modification_Version>
+               <Modification_ReleaseDate>2010-04-05</Modification_ReleaseDate>
+               <Modification_Comment>updated Related_Attack_Patterns</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2010-06-21</Modification_Date>
+               <Modification_Version>1.9</Modification_Version>
+               <Modification_ReleaseDate>2010-06-21</Modification_ReleaseDate>
+               <Modification_Comment>updated Description</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2010-09-27</Modification_Date>
+               <Modification_Version>1.10</Modification_Version>
+               <Modification_ReleaseDate>2010-09-27</Modification_ReleaseDate>
+               <Modification_Comment>updated Demonstrative_Examples</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-06-01</Modification_Date>
+               <Modification_Version>1.13</Modification_Version>
+               <Modification_ReleaseDate>2011-06-01</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences, Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2012-05-11</Modification_Date>
+               <Modification_Version>2.2</Modification_Version>
+               <Modification_ReleaseDate>2012-05-15</Modification_ReleaseDate>
+               <Modification_Comment>updated Demonstrative_Examples, Related_Attack_Patterns, Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2013-07-17</Modification_Date>
+               <Modification_Version>2.5</Modification_Version>
+               <Modification_ReleaseDate>2013-07-17</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2014-07-30</Modification_Date>
+               <Modification_Version>2.8</Modification_Version>
+               <Modification_ReleaseDate>2014-07-31</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2015-12-07</Modification_Date>
+               <Modification_Version>2.9</Modification_Version>
+               <Modification_ReleaseDate>2015-12-07</Modification_ReleaseDate>
+               <Modification_Comment>updated Related_Attack_Patterns, Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2017-01-19</Modification_Date>
+               <Modification_Version>2.10</Modification_Version>
+               <Modification_ReleaseDate>2017-01-19</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2017-11-08</Modification_Date>
+               <Modification_Version>3.0</Modification_Version>
+               <Modification_ReleaseDate>2017-11-08</Modification_ReleaseDate>
+               <Modification_Comment>updated Applicable_Platforms, Demonstrative_Examples, Likelihood_of_Exploit, Potential_Mitigations, References, Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2018-03-27</Modification_Date>
+               <Modification_Version>3.1</Modification_Version>
+               <Modification_ReleaseDate>2018-03-27</Modification_ReleaseDate>
+               <Modification_Comment>updated References, Type</Modification_Comment>
+            </Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2019-01-03</Modification_Date>
+					<Modification_Version>3.2</Modification_Version>
+					<Modification_ReleaseDate>2019-01-03</Modification_ReleaseDate>
+					<Modification_Comment>updated Alternate_Terms, Description, Name, Relationships, Taxonomy_Mappings, Theoretical_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2019-06-20</Modification_Date>
+					<Modification_Version>3.3</Modification_Version>
+					<Modification_ReleaseDate>2019-06-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Related_Attack_Patterns, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2019-09-19</Modification_Date>
+					<Modification_Version>3.4</Modification_Version>
+					<Modification_ReleaseDate>2019-09-19</Modification_ReleaseDate>
+					<Modification_Comment>updated Description, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-02-24</Modification_Date>
+					<Modification_Version>4.0</Modification_Version>
+					<Modification_ReleaseDate>2020-02-24</Modification_ReleaseDate>
+					<Modification_Comment>updated Description, References, Related_Attack_Patterns, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-06-25</Modification_Date>
+					<Modification_Version>4.1</Modification_Version>
+					<Modification_ReleaseDate>2020-06-25</Modification_ReleaseDate>
+					<Modification_Comment>updated Description, Maintenance_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-08-20</Modification_Date>
+					<Modification_Version>4.2</Modification_Version>
+					<Modification_ReleaseDate>2020-08-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-04-28</Modification_Date>
+					<Modification_Version>4.7</Modification_Version>
+					<Modification_ReleaseDate>2022-04-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Related_Attack_Patterns</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-06-28</Modification_Date>
+					<Modification_Version>4.8</Modification_Version>
+					<Modification_ReleaseDate>2022-06-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Observed_Examples, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-10-13</Modification_Date>
+					<Modification_Version>4.9</Modification_Version>
+					<Modification_ReleaseDate>2022-10-13</Modification_ReleaseDate>
+					<Modification_Comment>updated Observed_Examples, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-01-31</Modification_Date>
+					<Modification_Version>4.10</Modification_Version>
+					<Modification_ReleaseDate>2023-01-31</Modification_ReleaseDate>
+					<Modification_Comment>updated Common_Consequences, Description, Detection_Factors, Maintenance_Notes, Related_Attack_Patterns, Taxonomy_Mappings</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples, Relationships, Taxonomy_Mappings</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2024-11-19</Modification_Date>
+					<Modification_Version>4.16</Modification_Version>
+					<Modification_ReleaseDate>2024-11-19</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-04-03</Modification_Date>
+					<Modification_Version>4.17</Modification_Version>
+					<Modification_ReleaseDate>2025-04-03</Modification_ReleaseDate>
+					<Modification_Comment>updated Common_Consequences, Description, Diagram, Modes_of_Introduction, Other_Notes, Time_of_Introduction</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-09-09</Modification_Date>
+					<Modification_Version>4.18</Modification_Version>
+					<Modification_ReleaseDate>2025-09-09</Modification_ReleaseDate>
+					<Modification_Comment>updated Observed_Examples, References</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Applicable_Platforms, Maintenance_Notes, Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2026-04-30</Modification_Date>
+					<Modification_Version>4.20</Modification_Version>
+					<Modification_ReleaseDate>2026-04-30</Modification_ReleaseDate>
+					<Modification_Comment>updated Applicable_Platforms, Maintenance_Notes, Mapping_Notes, Other_Notes</Modification_Comment>
+				</Modification>
+            <Contribution Type="Content">
+               <Contribution_Name>"Mapping CWE to 62443" Sub-Working Group</Contribution_Name>
+               <Contribution_Organization>CWE-CAPEC ICS/OT SIG</Contribution_Organization>
+               <Contribution_Date>2023-01-24</Contribution_Date>
+			   <Contribution_Version>4.10</Contribution_Version>
+			   <Contribution_ReleaseDate>2023-01-31</Contribution_ReleaseDate>
+               <Contribution_Comment>Suggested mappings to ISA/IEC 62443.</Contribution_Comment>
+            </Contribution>
+            <Contribution Type="Content">
+               <Contribution_Name>"Mapping CWE to 62443" Sub-Working Group</Contribution_Name>
+               <Contribution_Organization>CWE-CAPEC ICS/OT SIG</Contribution_Organization>
+               <Contribution_Date>2023-04-25</Contribution_Date>
+               <Contribution_Comment>Suggested mappings to ISA/IEC 62443.</Contribution_Comment>
+            </Contribution>
+	    <Contribution Type="Content">
+              <Contribution_Name>Abhi Balakrishnan</Contribution_Name>
+              <Contribution_Date>2025-02-25</Contribution_Date>
+	      <Contribution_Version>4.17</Contribution_Version>
+	      <Contribution_ReleaseDate>2025-04-03</Contribution_ReleaseDate>
+              <Contribution_Comment>Provided diagram to improve CWE usability.</Contribution_Comment>
+            </Contribution>
+            <Previous_Entry_Name Date="2008-10-14">Resource Exhaustion</Previous_Entry_Name>
+            <Previous_Entry_Name Date="2009-05-27">Uncontrolled Resource Consumption (aka 'Resource Exhaustion')</Previous_Entry_Name>
+			<Previous_Entry_Name Date="2019-01-03">Uncontrolled Resource Consumption ('Resource Exhaustion')</Previous_Entry_Name>
+         </Content_History>
+      </Weakness>
+      

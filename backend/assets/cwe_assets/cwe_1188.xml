@@ -1,0 +1,165 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="1188" Name="Initialization of a Resource with an Insecure Default" Abstraction="Base" Structure="Simple" Status="Incomplete">
+         <Description>The product initializes or sets a resource with a default that is intended to be changed by the product's installer, administrator, or maintainer, but the default is not secure.</Description>
+         <Related_Weaknesses>
+            <Related_Weakness Nature="ChildOf" CWE_ID="1419" View_ID="1000" Ordinal="Primary" />
+            <Related_Weakness Nature="ChildOf" CWE_ID="344" View_ID="1000" />
+            <Related_Weakness Nature="ChildOf" CWE_ID="665" View_ID="1003" Ordinal="Primary" />
+         </Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+         <Applicable_Platforms>
+            <Language Class="Not Language-Specific" Prevalence="Undetermined" />
+         </Applicable_Platforms>
+         <Modes_Of_Introduction>
+            <Introduction>
+               <Phase>Implementation</Phase>
+	       <Note>Developers often choose default values that leave the product as open and easy to use as possible out-of-the-box, under the assumption that the administrator can (or should) change the default value.  However, this ease-of-use comes at a cost when the default is insecure and the administrator does not change it.</Note>
+            </Introduction>
+            <Introduction>
+               <Phase>System Configuration</Phase>
+            </Introduction>
+         </Modes_Of_Introduction>
+         <Common_Consequences>
+            <Consequence>
+               <Scope>Other</Scope>
+               <Impact>Varies by Context</Impact>
+	       <Note>The impact of insecure defaults varies widely
+	       depending on the functionality that the product
+	       controls.</Note>
+            </Consequence>
+         </Common_Consequences>
+	 <Detection_Methods>
+	   <Detection_Method Detection_Method_ID="DM-14">
+	     <Method>Automated Static Analysis</Method>
+	     <Description>Automated static analysis, commonly referred to as Static Application Security Testing (SAST), can find some instances of this weakness by analyzing source code (or binary/compiled code) without having to execute it. Typically, this is done by building a model of data flow and control flow, then searching for potentially-vulnerable patterns that connect "sources" (origins of input) with "sinks" (destinations where the data interacts with external components, a lower layer such as the OS, etc.)</Description>
+	   </Detection_Method>
+	 </Detection_Methods>
+         <Demonstrative_Examples>
+              <Demonstrative_Example Demonstrative_Example_ID="DX-163">
+				<Intro_Text>This code attempts to login a user using credentials from a POST request:</Intro_Text>
+				<Example_Code Nature="Bad" Language="PHP">
+                  <xhtml:div>
+                    <xhtml:br />
+                    <xhtml:i>// $user and $pass automatically set from POST request</xhtml:i>
+                    <xhtml:br />if (login_user($user,$pass)) {<xhtml:div style="margin-left:1em;">$authorized = true;</xhtml:div>}<xhtml:br />
+                    <xhtml:i>...</xhtml:i>
+                    <xhtml:br />
+                  <xhtml:br />if ($authorized) {<xhtml:div style="margin-left:1em;">generatePage();</xhtml:div>}</xhtml:div>
+				</Example_Code>
+				<Body_Text>Because the $authorized variable is never initialized, PHP will automatically set $authorized to any value included in the POST request if register_globals is enabled. An attacker can send a POST request with an unexpected third value 'authorized' set to 'true' and gain authorized status without supplying valid credentials.</Body_Text>
+				<Body_Text>Here is a fixed version:</Body_Text>
+				<Example_Code Nature="Good" Language="PHP">
+                  <xhtml:div>$user = $_POST['user'];<xhtml:br />$pass = $_POST['pass'];<xhtml:br />$authorized = false;<xhtml:br />if (login_user($user,$pass)) {<xhtml:div style="margin-left:1em;">$authorized = true;</xhtml:div>}<xhtml:br />
+                  <xhtml:i>...</xhtml:i>
+                  <xhtml:br />
+                  </xhtml:div>
+				</Example_Code>
+				<Body_Text>This code avoids the issue by initializing the $authorized variable to false and explicitly retrieving the login credentials from the $_POST variable. Regardless, register_globals should never be enabled and is disabled by default in current versions of PHP.</Body_Text>
+              </Demonstrative_Example>
+         </Demonstrative_Examples>
+         <Observed_Examples>
+	   <Observed_Example>
+	     <Reference>CVE-2022-36349</Reference>
+	     <Description>insecure default variable initialization in BIOS firmware for a hardware board allows DoS</Description>
+	     <Link>https://www.cve.org/CVERecord?id=CVE-2022-36349</Link>
+	   </Observed_Example>
+	   <Observed_Example>
+             <Reference>CVE-2022-42467</Reference>
+               <Description>A generic database browser interface has a default mode that exposes a web server to the network, allowing queries to the database.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2022-42467</Link>
+	   </Observed_Example>
+	 </Observed_Examples>
+         <Related_Attack_Patterns>
+            <Related_Attack_Pattern CAPEC_ID="665" />
+         </Related_Attack_Patterns>
+         <References>
+	   <Reference External_Reference_ID="REF-1493" />
+	 </References>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Base level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+         <Notes>
+            <Note Type="Maintenance">This entry improves organization of concepts under initialization.  The typical CWE model is to cover "Missing" and "Incorrect" behaviors.  Arguably, this entry could be named as "Incorrect" instead of "Insecure."  This might be changed in the near future.</Note>
+         </Notes>
+         <Content_History>
+            <Submission>
+               <Submission_Name>CWE Content Team</Submission_Name>
+               <Submission_Organization>MITRE</Submission_Organization>
+               <Submission_Date>2019-03-25</Submission_Date>
+               <Submission_Version>3.3</Submission_Version>
+               <Submission_ReleaseDate>2019-06-20</Submission_ReleaseDate>
+            </Submission>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-02-24</Modification_Date>
+					<Modification_Version>4.0</Modification_Version>
+					<Modification_ReleaseDate>2020-02-24</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-07-20</Modification_Date>
+					<Modification_Version>4.5</Modification_Version>
+					<Modification_ReleaseDate>2021-07-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Related_Attack_Patterns</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-01-31</Modification_Date>
+					<Modification_Version>4.10</Modification_Version>
+					<Modification_ReleaseDate>2023-01-31</Modification_ReleaseDate>
+					<Modification_Comment>updated Description</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-10-26</Modification_Date>
+					<Modification_Version>4.13</Modification_Version>
+					<Modification_ReleaseDate>2023-10-26</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples, Name, Observed_Examples, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Applicable_Platforms, Common_Consequences, Description, Detection_Factors, Modes_of_Introduction, References, Relationships, Time_of_Introduction</Modification_Comment>
+				</Modification>
+            <Contribution Type="Content">
+					<Contribution_Name>Anonymous External Contributor</Contribution_Name>
+					<Contribution_Date>2023-10-13</Contribution_Date>
+					<Contribution_Comment>Suggested name change for clarity</Contribution_Comment>
+				</Contribution>
+			<Previous_Entry_Name Date="2023-10-26">Insecure Default Initialization of Resource</Previous_Entry_Name>
+         </Content_History>
+      </Weakness>
+      

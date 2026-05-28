@@ -1,0 +1,213 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="1243" Name="Sensitive Non-Volatile Information Not Protected During Debug" Abstraction="Base" Structure="Simple" Status="Incomplete">
+            <Description>Access to security-sensitive information stored in fuses is not limited during debug.</Description>
+            <Extended_Description>
+                <xhtml:p>Several security-sensitive values are programmed into fuses to be used during early-boot flows or later at runtime. Examples of these security-sensitive values include root keys, encryption keys, manufacturing-specific information, chip-manufacturer-specific information, and original-equipment-manufacturer (OEM) data. After the chip is powered on, these values are sensed from fuses and stored in temporary locations such as registers and local memories. These locations are typically access-control protected from untrusted agents capable of accessing them. Even to trusted agents, only read-access is provided. </xhtml:p>
+            </Extended_Description>
+			<Related_Weaknesses>
+				<Related_Weakness Nature="ChildOf" CWE_ID="1263" View_ID="1000" Ordinal="Primary" />
+			</Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+            <Applicable_Platforms>
+                <Language Class="Not Language-Specific" Prevalence="Undetermined" />
+                <Operating_System Class="Not OS-Specific" Prevalence="Undetermined" />
+                <Architecture Class="Not Architecture-Specific" Prevalence="Undetermined" />
+                <Technology Class="Not Technology-Specific" Prevalence="Undetermined" />
+            </Applicable_Platforms>
+            <Modes_Of_Introduction>
+                <Introduction>
+                    <Phase>Architecture and Design</Phase>
+                </Introduction>
+                <Introduction>
+                    <Phase>Implementation</Phase>
+                </Introduction>
+            </Modes_Of_Introduction>
+            <Common_Consequences>
+                <Consequence>
+                    <Scope>Confidentiality</Scope>
+                    <Scope>Access Control</Scope>
+                    <Impact>Modify Memory</Impact>
+                    <Impact>Read Memory</Impact>
+                    <Impact>Bypass Protection Mechanism</Impact>
+		    <Note>If these locations are not blocked during debug operations, it can allow a user to access this sensitive information.</Note>
+                </Consequence>
+            </Common_Consequences>
+            <Potential_Mitigations>
+                <Mitigation>
+                    <Phase>Architecture and Design</Phase>
+                    <Phase>Implementation</Phase>
+                    <Description>
+                        <xhtml:p>Disable access to security-sensitive information stored in fuses directly and also reflected from temporary storage locations when in debug mode.</xhtml:p>
+                    </Description>
+                </Mitigation>
+            </Potential_Mitigations>
+            <Demonstrative_Examples>
+                <Demonstrative_Example>
+                    <Intro_Text>Sensitive manufacturing data (such as die information) are stored in fuses. When the chip powers on, these values are read from the fuses and stored in microarchitectural registers. These registers are only given read access to trusted software running on the core. Untrusted software running on the core is not allowed to access these registers.</Intro_Text>
+                    <Example_Code Nature="Bad" Language="Other">
+                        <xhtml:div>All microarchitectural registers in this chip can be accessed through the debug interface. As a result, even an untrusted debugger can access this data and retrieve sensitive manufacturing data.</xhtml:div>
+                    </Example_Code>
+                	<Example_Code Nature="Good" Language="Other">
+                  		<xhtml:div>Registers used to store sensitive values read from fuses should be blocked during debug. These registers should be disconnected from the debug interface.</xhtml:div>
+               		</Example_Code>
+            	</Demonstrative_Example>
+                <Demonstrative_Example>
+                    <Intro_Text>The example code below is taken from one of the AES cryptographic accelerators of the HACK@DAC'21 buggy OpenPiton SoC [REF-1366]. The operating system (OS) uses three AES keys to encrypt and decrypt sensitive data using this accelerator. These keys are sensitive data stored in fuses. The security of the OS will be compromised if any of these AES keys are leaked. During system bootup, these AES keys are sensed from fuses and stored in temporary hardware registers of the AES peripheral. Access to these temporary registers is disconnected during the debug state to prevent them from leaking through debug access. In this example (see the vulnerable code source), the registers key0, key1, and key2 are used to store the three AES keys (which are accessed through key_big0, key_big1, and key_big2 signals). The OS selects one of these three keys through the key_big signal, which is used by the AES engine.</Intro_Text>
+                    <Example_Code Nature="Bad" Language="Verilog">
+                        ...<xhtml:br />
+                        assign key_big0    = debug_mode_i ? 192'b0 : {key0[0],<xhtml:br />
+                        key0[1], key0[2], key0[3], key0[4], key0[5]};<xhtml:br />
+                        <xhtml:br />
+                        assign key_big1    = debug_mode_i ? 192'b0 : {key1[0],<xhtml:br />
+                        key1[1], key1[2], key1[3], key1[4], key1[5]};<xhtml:br />
+                        <xhtml:br />
+                        <xhtml:b>assign key_big2    = {key2[0], key2[1], key2[2],</xhtml:b><xhtml:br />
+                        <xhtml:b>key2[3], key2[4], key2[5]};</xhtml:b><xhtml:br />
+                        ...<xhtml:br />
+                        <xhtml:b>assign key_big = key_sel[1] ? key_big2 : ( key_sel[0] ?</xhtml:b><xhtml:br />
+                        <xhtml:b>key_big1 : key_big0 );</xhtml:b><xhtml:br />
+                        ...<xhtml:br />
+                    </Example_Code>
+                    <Body_Text>The above code illustrates an instance of a vulnerable implementation for blocking AES key mechanism when the system is in debug mode (i.e., when debug_mode_i is asserted). During debug mode, key accesses through key_big0 and key_big1 are effectively disconnected, as their values are set to zero. However, the key accessed via the key_big2 signal remains accessible, creating a potential pathway for sensitive fuse data leakage, specifically AES key2, during debug mode. Furthermore, even though it is not strictly necessary to disconnect the key_big signal when entering debug mode (since disconnecting key_big0, key_big1, and key_big2 will inherently disconnect key_big), it is advisable, in line with the defense-in-depth strategy, to also sever the connection to key_big. This additional security measure adds an extra layer of protection and safeguards the AES keys against potential future modifications to the key_big logic.</Body_Text>
+                    <Body_Text>To mitigate this, disconnect access through key_big2 and key_big during debug mode [REF-1367].</Body_Text>
+                    <Example_Code Nature="Good" Language="Verilog">
+                    ...<xhtml:br />
+                    assign key_big0    = debug_mode_i ? 192'b0 : {key0[0],<xhtml:br />
+                    key0[1], key0[2], key0[3], key0[4], key0[5]};<xhtml:br />
+                    <xhtml:br />
+                    assign key_big1    = debug_mode_i ? 192'b0 : {key1[0],<xhtml:br />
+                    key1[1], key1[2], key1[3], key1[4], key1[5]}; <xhtml:br />
+                    <xhtml:br />
+                    assign key_big2    = <xhtml:b>debug_mode_i ? 192'b0 :</xhtml:b> {key2[0],<xhtml:br />
+                    key2[1], key2[2], key2[3], key2[4], key2[5]};<xhtml:br />
+                    ...<xhtml:br />
+                    assign key_big = <xhtml:b>debug_mode_i ? 192'b0 :</xhtml:b> (  key_sel[1] ?<xhtml:br />
+                    key_big2 : ( key_sel[0] ? key_big1 : key_big0 )  );<xhtml:br />
+                    ...<xhtml:br />
+                    </Example_Code>
+                </Demonstrative_Example>
+            </Demonstrative_Examples>
+         <Related_Attack_Patterns>
+            <Related_Attack_Pattern CAPEC_ID="116" />
+            <Related_Attack_Pattern CAPEC_ID="545" />
+         </Related_Attack_Patterns>
+         <References>
+            <Reference External_Reference_ID="REF-1366" />
+            <Reference External_Reference_ID="REF-1367" />
+         </References>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Base level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+         <Content_History>
+                <Submission>
+                    <Submission_Name>Arun Kanuparthi, Hareesh Khattri, Parbati Kumar Manna, Narasimha Kumar V Mangipudi</Submission_Name>
+                    <Submission_Organization>Intel Corporation</Submission_Organization>
+                    <Submission_Date>2020-02-12</Submission_Date>
+                    <Submission_Version>4.0</Submission_Version>
+                    <Submission_ReleaseDate>2020-02-24</Submission_ReleaseDate>
+                </Submission>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-06-25</Modification_Date>
+					<Modification_Version>4.1</Modification_Version>
+					<Modification_ReleaseDate>2020-06-25</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-08-20</Modification_Date>
+					<Modification_Version>4.2</Modification_Version>
+					<Modification_ReleaseDate>2020-08-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Applicable_Platforms, Demonstrative_Examples, Description, Name, Potential_Mitigations, Related_Attack_Patterns</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-03-15</Modification_Date>
+					<Modification_Version>4.4</Modification_Version>
+					<Modification_ReleaseDate>2021-03-15</Modification_ReleaseDate>
+					<Modification_Comment>updated Description</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-07-20</Modification_Date>
+					<Modification_Version>4.5</Modification_Version>
+					<Modification_ReleaseDate>2021-07-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-10-13</Modification_Date>
+					<Modification_Version>4.9</Modification_Version>
+					<Modification_ReleaseDate>2022-10-13</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-10-26</Modification_Date>
+					<Modification_Version>4.13</Modification_Version>
+					<Modification_ReleaseDate>2023-10-26</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples, References</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-04-03</Modification_Date>
+					<Modification_Version>4.17</Modification_Version>
+					<Modification_ReleaseDate>2025-04-03</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Common_Consequences, Description, Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+                <Contribution Type="Content">
+					<Contribution_Name>Chen Chen, Rahul Kande, Jeyavijayan Rajendran</Contribution_Name>
+					<Contribution_Organization>Texas A&amp;M University</Contribution_Organization>
+					<Contribution_Date>2023-06-21</Contribution_Date>
+					<Contribution_Comment>suggested demonstrative example</Contribution_Comment>
+				</Contribution>
+				<Contribution Type="Content">
+					<Contribution_Name>Shaza Zeitouni, Mohamadreza Rostami, Ahmad-Reza Sadeghi</Contribution_Name>
+					<Contribution_Organization>Technical University of Darmstadt</Contribution_Organization>
+					<Contribution_Date>2023-06-21</Contribution_Date>
+					<Contribution_Comment>suggested demonstrative example</Contribution_Comment>
+				</Contribution>
+			<Previous_Entry_Name Date="2020-08-20">Exposure of Security-Sensitive Fuse Values During Debug</Previous_Entry_Name>
+            </Content_History>
+        </Weakness>
+      

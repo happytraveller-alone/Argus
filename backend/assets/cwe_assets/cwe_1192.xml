@@ -1,0 +1,146 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="1192" Name="Improper Identifier for IP Block used in System-On-Chip (SOC)" Abstraction="Base" Structure="Simple" Status="Draft">
+         <Description>The System-on-Chip (SoC) does not have unique, immutable identifiers for each of its components.</Description>
+         <Extended_Description>
+	   <xhtml:p>A System-on-Chip (SoC) comprises several components (IP) with varied
+           trust requirements. It is required that each IP is identified
+           uniquely and should distinguish itself from other entities in
+           the SoC without any ambiguity. The unique secured identity is
+           required for various purposes. Most of the time the identity is used
+           to route a transaction or perform certain actions, including 
+           resetting, retrieving a sensitive information, and acting upon or on
+           behalf of something else.</xhtml:p>
+           <xhtml:p>There are several variants of this weakness:</xhtml:p>
+            <xhtml:ul>
+	      <xhtml:li>A "missing" identifier is when the SoC does not define
+	      any mechanism to uniquely identify the IP.</xhtml:li>
+	      <xhtml:li>An "insufficient" identifier might provide
+	      some defenses - for example, against the most common
+	      attacks - but it does not protect against everything
+	      that is intended.</xhtml:li>
+	      <xhtml:li>A "misconfigured" mechanism occurs when a mechanism
+              is available but not implemented correctly.</xhtml:li>
+	      <xhtml:li>An "ignored" identifier occurs when the SoC/IP has not applied
+	      any policies or does not act upon the identifier securely.</xhtml:li>
+            </xhtml:ul>
+         </Extended_Description>
+          <Related_Weaknesses>
+            <Related_Weakness Nature="ChildOf" CWE_ID="657" View_ID="1000" Ordinal="Primary" />
+         </Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+            <Weakness_Ordinality>
+               <Ordinality>Resultant</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+        <Applicable_Platforms>
+            <Language Class="Not Language-Specific" Prevalence="Undetermined" />
+            <Technology Class="System on Chip" Prevalence="Undetermined" />
+         </Applicable_Platforms>
+         <Modes_Of_Introduction>
+            <Introduction>
+               <Phase>Architecture and Design</Phase>
+            </Introduction>
+            <Introduction>
+               <Phase>Implementation</Phase>
+            </Introduction>
+            <Introduction>
+               <Phase>Operation</Phase>
+            </Introduction>
+         </Modes_Of_Introduction>
+         <Common_Consequences>
+            <Consequence>
+               <Scope>Access Control</Scope>
+               <Impact>Bypass Protection Mechanism</Impact>
+			   <Likelihood>High</Likelihood>
+            </Consequence>
+         </Common_Consequences>
+         <Potential_Mitigations>
+            <Mitigation>
+                <Phase>Architecture and Design</Phase>
+                <Strategy>Separation of Privilege</Strategy>
+                <Description>
+                  <xhtml:p>
+                    Every identity generated in the SoC should be unique and
+                    immutable in hardware. The actions that an IP is trusted or
+                    not trusted should be clearly defined, implemented,
+                    configured, and tested. If the definition is implemented via a
+                    policy, then the policy should be immutable or protected with
+                    clear authentication and authorization.
+                  </xhtml:p>
+                </Description>
+            </Mitigation>
+         </Potential_Mitigations>
+         <Related_Attack_Patterns>
+            <Related_Attack_Pattern CAPEC_ID="113" />
+         </Related_Attack_Patterns>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Base level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+         <Content_History>
+            <Submission>
+               <Submission_Name>Arun Kanuparthi, Hareesh Khattri, Parbati Kumar Manna, Narasimha Kumar V Mangipudi</Submission_Name>
+               <Submission_Organization>Intel Corporation</Submission_Organization>
+               <Submission_Date>2019-10-15</Submission_Date>
+               <Submission_Version>4.0</Submission_Version>
+               <Submission_ReleaseDate>2020-02-24</Submission_ReleaseDate>
+            </Submission>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-08-20</Modification_Date>
+					<Modification_Version>4.2</Modification_Version>
+					<Modification_ReleaseDate>2020-08-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Description</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-12-10</Modification_Date>
+					<Modification_Version>4.3</Modification_Version>
+					<Modification_ReleaseDate>2020-12-10</Modification_ReleaseDate>
+					<Modification_Comment>updated Related_Attack_Patterns</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2024-02-29</Modification_Date>
+					<Modification_Version>4.14</Modification_Version>
+					<Modification_ReleaseDate>2024-02-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Name</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+			<Previous_Entry_Name Date="2024-02-29">System-on-Chip (SoC) Using Components without Unique, Immutable Identifiers</Previous_Entry_Name>
+         </Content_History>
+      </Weakness>
+      

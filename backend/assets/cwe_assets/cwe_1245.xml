@@ -1,0 +1,166 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="1245" Name="Improper Finite State Machines (FSMs) in Hardware Logic" Abstraction="Base" Structure="Simple" Status="Incomplete">
+            <Description>Faulty finite state machines (FSMs) in the hardware logic allow an attacker to put the system in an undefined state, to cause a denial of service (DoS) or gain privileges on the victim's system.</Description>
+            <Extended_Description>
+                <xhtml:p>The functionality and security of the system heavily depend on the implementation of FSMs. FSMs can be used to indicate the current security state of the system. Lots of secure data operations and data transfers rely on the state reported by the FSM.</xhtml:p>
+            </Extended_Description>
+			<Related_Weaknesses>
+				<Related_Weakness Nature="ChildOf" CWE_ID="684" View_ID="1000" Ordinal="Primary" />
+			</Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Resultant</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+            <Applicable_Platforms>
+                <Language Class="Not Language-Specific" Prevalence="Undetermined" />
+                <Operating_System Class="Not OS-Specific" Prevalence="Undetermined" />
+                <Architecture Class="Not Architecture-Specific" Prevalence="Undetermined" />
+                <Technology Class="System on Chip" Prevalence="Undetermined" />
+            </Applicable_Platforms>
+            <Modes_Of_Introduction>
+                <Introduction>
+                    <Phase>Architecture and Design</Phase>
+                </Introduction>
+                <Introduction>
+                    <Phase>Implementation</Phase>
+                </Introduction>
+            </Modes_Of_Introduction>
+            <Common_Consequences>
+                <Consequence>
+                    <Scope>Availability</Scope>
+                    <Scope>Access Control</Scope>
+                    <Impact>Unexpected State</Impact>
+                    <Impact>DoS: Crash, Exit, or Restart</Impact>
+                    <Impact>DoS: Instability</Impact>
+                    <Impact>Gain Privileges or Assume Identity</Impact>
+		    <Note>Faulty FSM designs that do not account for all states, either through undefined states (left as don't cares) or through incorrect implementation, might lead an attacker to drive the system into an unstable state from which the system cannot recover without a reset, thus causing a DoS. Depending on what the FSM is used for, an attacker might also gain additional privileges to launch further attacks and compromise the security guarantees.</Note>
+                </Consequence>
+            </Common_Consequences>
+            <Potential_Mitigations>
+                <Mitigation>
+                    <Phase>Architecture and Design</Phase>
+                    <Phase>Implementation</Phase>
+                    <Description>Define all possible states and handle all unused states through default statements. Ensure that system defaults to a secure state.</Description>
+                    <Effectiveness>High</Effectiveness>
+                </Mitigation>
+            </Potential_Mitigations>
+            <Demonstrative_Examples>
+                <Demonstrative_Example Demonstrative_Example_ID="DX-152">
+                    <Intro_Text>The Finite State Machine (FSM) shown in the "bad" code snippet below assigns the output ("out") based on the value of state, which is determined based on the user provided input ("user_input").</Intro_Text>
+					<Example_Code Nature="Bad" Language="Verilog">
+					  <xhtml:div>module fsm_1(out, user_input, clk, rst_n);
+					  <xhtml:br />input [2:0] user_input; 
+					  <xhtml:br />input clk, rst_n;
+					  <xhtml:br />output reg [2:0] out;
+					  <xhtml:br />reg [1:0] state;
+					  <xhtml:br />always @ (posedge clk or negedge rst_n )
+					  <xhtml:br />
+					  <xhtml:div style="margin-left:1em;">begin
+					  <xhtml:br />
+					  <xhtml:div style="margin-left:1em;">
+						if (!rst_n)<xhtml:br />
+						<xhtml:div style="margin-left:1em;">
+						  state = 3'h0;
+						</xhtml:div>
+						else<xhtml:br />
+						case (user_input)
+						<xhtml:div style="margin-left:1em;">
+						  3'h0:<xhtml:br />
+						  3'h1:<xhtml:br />
+						  3'h2:<xhtml:br />
+						  3'h3: state = 2'h3;<xhtml:br />
+						  3'h4: state = 2'h2;<xhtml:br />
+						  3'h5: state = 2'h1;<xhtml:br />
+						</xhtml:div>
+						endcase
+					  </xhtml:div>
+					  end<xhtml:br />
+					  out &lt;= {1'h1, state};<xhtml:br />
+					  </xhtml:div>
+					  endmodule
+					  </xhtml:div>
+					</Example_Code>
+					<Body_Text>
+					  <xhtml:p>The case statement does not include a default to handle the scenario when the user provides inputs of 3'h6 and 3'h7.  Those inputs push the system to an undefined state and might cause a crash (denial of service) or any other unanticipated outcome.</xhtml:p>
+					  <xhtml:p>Adding a default statement to handle undefined inputs mitigates this issue.  This is shown in the "Good" code snippet below.  The default statement is in bold.</xhtml:p>
+					</Body_Text>
+					<Example_Code Nature="Good" Language="Verilog">
+					  <xhtml:div>case (user_input)
+					  <xhtml:br /><xhtml:div style="margin-left:1em;">3'h0:
+					  <xhtml:br />3'h1:
+					  <xhtml:br />3'h2:
+					  <xhtml:br />3'h3: state = 2'h3;
+					  <xhtml:br />3'h4: state = 2'h2;
+					  <xhtml:br />3'h5: state = 2'h1;
+					  <xhtml:br /><xhtml:b>default: state = 2'h0;</xhtml:b>
+					</xhtml:div>
+					  endcase</xhtml:div>
+					</Example_Code>
+            	</Demonstrative_Example>
+            </Demonstrative_Examples>
+         <Related_Attack_Patterns>
+            <Related_Attack_Pattern CAPEC_ID="74" />
+         </Related_Attack_Patterns>
+         <References>
+                <Reference External_Reference_ID="REF-1060" />
+            </References>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Base level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+            <Content_History>
+                <Submission>
+                    <Submission_Name>Arun Kanuparthi, Hareesh Khattri, Parbati Kumar Manna, Narasimha Kumar V Mangipudi</Submission_Name>
+                    <Submission_Organization>Intel Corporation</Submission_Organization>
+                    <Submission_Date>2020-02-12</Submission_Date>
+                    <Submission_Version>4.0</Submission_Version>
+                    <Submission_ReleaseDate>2020-02-24</Submission_ReleaseDate>
+                </Submission>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-08-20</Modification_Date>
+					<Modification_Version>4.2</Modification_Version>
+					<Modification_ReleaseDate>2020-08-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Related_Attack_Patterns</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-10-13</Modification_Date>
+					<Modification_Version>4.9</Modification_Version>
+					<Modification_ReleaseDate>2022-10-13</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Common_Consequences, Description, Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+            </Content_History>
+        </Weakness>
+      

@@ -1,0 +1,368 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="208" Name="Observable Timing Discrepancy" Abstraction="Base" Structure="Simple" Status="Incomplete">
+         <Description>Two separate operations in a product require different amounts of time to complete, in a way that is observable to an actor and reveals security-relevant information about the state of the product, such as whether a particular operation was successful or not.</Description>
+	 <Extended_Description>
+	   In security-relevant contexts, even small variations in timing can be exploited by attackers to indirectly infer certain details about the product's internal operations.  For example, in some cryptographic algorithms, attackers can use timing differences to infer certain properties about a private key, making the key easier to guess.  Timing discrepancies effectively form a timing side channel.
+	 </Extended_Description>
+         <Related_Weaknesses>
+            <Related_Weakness Nature="ChildOf" CWE_ID="203" View_ID="1000" Ordinal="Primary" />
+            <Related_Weakness Nature="CanPrecede" CWE_ID="385" View_ID="1000" />
+            <Related_Weakness Nature="CanPrecede" CWE_ID="327" View_ID="1000" />
+         </Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+            <Weakness_Ordinality>
+               <Ordinality>Resultant</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+         <Applicable_Platforms>
+            <Language Class="Not Language-Specific" Prevalence="Undetermined" />
+	    <Technology Class="Not Technology-Specific" Prevalence="Undetermined" />
+         </Applicable_Platforms>
+         <Modes_Of_Introduction>
+            <Introduction>
+               <Phase>Architecture and Design</Phase>
+               <Note>COMMISSION: This weakness refers to an incorrect design related to an architectural security tactic.</Note>
+            </Introduction>
+            <Introduction>
+               <Phase>Implementation</Phase>
+            </Introduction>
+            <Introduction>
+               <Phase>Operation</Phase>
+            </Introduction>
+         </Modes_Of_Introduction>
+         <Common_Consequences>
+            <Consequence>
+               <Scope>Confidentiality</Scope>
+               <Scope>Access Control</Scope>
+               <Impact>Read Application Data</Impact>
+               <Impact>Bypass Protection Mechanism</Impact>
+            </Consequence>
+         </Common_Consequences>
+         <Demonstrative_Examples>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-173">
+                <Intro_Text>Consider an example hardware module that checks a user-provided password to grant access to a user. The user-provided password is compared against a golden value in a byte-by-byte manner.</Intro_Text>
+                <Example_Code Nature="Bad" Language="Verilog">
+                    always_comb @ (posedge clk)<xhtml:br />
+                    <xhtml:br />
+                    begin<xhtml:br />
+		    <xhtml:div style="margin-left:1em;">
+                      assign check_pass[3:0] = 4'b0;<xhtml:br />
+                      for (i = 0; i &lt; 4; i++) begin<xhtml:br />
+		      <xhtml:div style="margin-left:1em;">
+                    	if (entered_pass[(i*8 - 1) : i] eq golden_pass([i*8 - 1) : i])<xhtml:br />
+			<xhtml:div style="margin-left:1em;">
+			  assign check_pass[i] = 1;<xhtml:br />
+                    	  continue;<xhtml:br />
+			</xhtml:div>
+                    	else<xhtml:br />
+			<xhtml:div style="margin-left:1em;">
+                    	  assign check_pass[i] = 0;<xhtml:br />
+                    	  break;<xhtml:br />
+			</xhtml:div>
+                    	end<xhtml:br />
+		      </xhtml:div>
+                      assign grant_access = (check_pass == 4'b1111) ? 1'b1: 1'b0;<xhtml:br />
+		    </xhtml:div>
+                    end<xhtml:br />
+		</Example_Code>
+                <Body_Text>Since the code breaks on an incorrect entry of password, an attacker can guess the correct password for that byte-check iteration with few repeat attempts.</Body_Text>
+		<Body_Text>To fix this weakness, either the comparison of the entire string should be done all at once, or the attacker is not given an indication whether pass or fail happened by allowing the comparison to run through all bits before the grant_access signal is set.</Body_Text>
+                <Example_Code Nature="Good" Language="Verilog">
+                  always_comb @ (posedge clk)<xhtml:br />
+		  begin<xhtml:br />
+		  <xhtml:div style="margin-left:1em;">
+                    assign check_pass[3:0] = 4'b0;<xhtml:br />
+               	    for (i = 0; i &lt; 4; i++) begin<xhtml:br />
+		    <xhtml:div style="margin-left:1em;">
+               	      if (entered_pass[(i*8 - 1) : i] eq golden_pass([i*8 -1) : i])<xhtml:br />
+		      <xhtml:div style="margin-left:1em;">
+               		assign check_pass[i] = 1;<xhtml:br />
+               		continue;<xhtml:br />
+		      </xhtml:div>
+               	      else<xhtml:br />
+		      <xhtml:div style="margin-left:1em;">
+               		assign check_pass[i] = 0;<xhtml:br />
+               		continue;<xhtml:br />
+		      </xhtml:div>
+               	      end<xhtml:br />
+		    </xhtml:div>
+               	    assign grant_access = (check_pass == 4'b1111) ? 1'b1: 1'b0;<xhtml:br />
+		  </xhtml:div>
+		  end<xhtml:br />
+		</Example_Code>
+            </Demonstrative_Example>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-193">
+               <Intro_Text>In this example, the attacker observes how long an authentication takes when the user types in the correct password.</Intro_Text>
+               <Body_Text>When the attacker tries their own values, they can first try strings of various length. When they find a string of the right length, the computation will take a bit longer, because the for loop will run at least once. Additionally, with this code, the attacker can possibly learn one character of the password at a time, because when they guess the first character right, the computation will take longer than a wrong guesses. Such an attack can break even the most sophisticated password with a few hundred guesses.</Body_Text>
+               <Example_Code Nature="Bad" Language="Python">
+                 <xhtml:div>def validate_password(actual_pw, typed_pw):
+		 <xhtml:div style="margin-left:1em;">
+                   <xhtml:div>if len(actual_pw) &lt;&gt; len(typed_pw):
+		   <xhtml:div style="margin-left:1em;">return 0</xhtml:div>
+                   <xhtml:br />for i in len(actual_pw):
+		   <xhtml:div style="margin-left:1em;">if actual_pw[i] &lt;&gt; typed_pw[i]:
+		   <xhtml:div style="margin-left:1em;">return 0</xhtml:div>
+                   </xhtml:div>
+                   <xhtml:br />return 1</xhtml:div>
+                 </xhtml:div>
+                 </xhtml:div>
+               </Example_Code>
+               <Body_Text>Note that in this example, the actual password must be handled in constant time as far as the attacker is concerned, even if the actual password is of an unusual length. This is one reason why it is good to use an algorithm that, among other things, stores a seeded cryptographic one-way hash of the password, then compare the hashes, which will always be of the same length.</Body_Text>
+            </Demonstrative_Example>
+        </Demonstrative_Examples>
+         <Observed_Examples>
+		   <Observed_Example>
+			 <Reference>CVE-2019-10071</Reference>
+			 <Description>Java-oriented framework compares HMAC signatures  using  String.equals() instead of a constant-time algorithm, causing timing discrepancies</Description>
+			 <Link>https://www.cve.org/CVERecord?id=CVE-2019-10071</Link>
+		   </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2019-10482</Reference>
+               <Description>Smartphone OS uses comparison functions that are not in constant time, allowing side channels</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2019-10482</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2014-0984</Reference>
+               <Description>Password-checking function in router terminates validation of a password entry when it encounters the first incorrect character, which allows remote attackers to obtain passwords via a brute-force attack that relies on timing differences in responses to incorrect password guesses, aka a timing side-channel attack.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2014-0984</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2003-0078</Reference>
+               <Description>SSL implementation does not perform a MAC computation if an incorrect block cipher padding is used, which causes an information leak (timing discrepancy) that may make it easier to launch cryptographic attacks that rely on distinguishing between padding and MAC verification errors, possibly leading to extraction of the original plaintext, aka the "Vaudenay timing attack."</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2003-0078</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2000-1117</Reference>
+               <Description>Virtual machine allows malicious web site operators to determine the existence of files on the client by measuring delays in the execution of the getSystemResource method.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2000-1117</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2003-0637</Reference>
+               <Description>Product uses a shorter timeout for a non-existent user than a valid user, which makes it easier for remote attackers to guess usernames and conduct brute force password guessing.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2003-0637</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2003-0190</Reference>
+               <Description>Product immediately sends an error message when a user does not exist, which allows remote attackers to determine valid usernames via a timing attack.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2003-0190</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2004-1602</Reference>
+               <Description>FTP server responds in a different amount of time when a given username exists, which allows remote attackers to identify valid usernames by timing the server response.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2004-1602</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2005-0918</Reference>
+               <Description>Browser allows remote attackers to determine the existence of arbitrary files by setting the src property to the target filename and using Javascript to determine if the web page immediately stops loading, which indicates whether the file exists or not.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2005-0918</Link>
+            </Observed_Example>
+         </Observed_Examples>
+         <Functional_Areas>
+            <Functional_Area>Cryptography</Functional_Area>
+            <Functional_Area>Authentication</Functional_Area>
+         </Functional_Areas>
+         <Taxonomy_Mappings>
+            <Taxonomy_Mapping Taxonomy_Name="PLOVER">
+               <Entry_Name>Timing discrepancy infoleak</Entry_Name>
+            </Taxonomy_Mapping>
+         </Taxonomy_Mappings>
+         <Related_Attack_Patterns>
+            <Related_Attack_Pattern CAPEC_ID="462" />
+            <Related_Attack_Pattern CAPEC_ID="541" />
+            <Related_Attack_Pattern CAPEC_ID="580" />
+         </Related_Attack_Patterns>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Base level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+         <Notes>
+            <Note Type="Relationship">Often primary in cryptographic applications and algorithms.</Note>
+            <Note Type="Maintenance">CWE 4.16 removed a demonstrative example for a hardware module because it was inaccurate and unable to be adapted. The CWE team is developing an alternative.</Note>
+         </Notes>
+         <Content_History>
+            <Submission>
+               <Submission_Name>PLOVER</Submission_Name>
+               <Submission_Date>2006-07-19</Submission_Date>
+               <Submission_Version>Draft 3</Submission_Version>
+               <Submission_ReleaseDate>2006-07-19</Submission_ReleaseDate>
+            </Submission>
+            <Modification>
+               <Modification_Name>Eric Dalci</Modification_Name>
+               <Modification_Organization>Cigital</Modification_Organization>
+               <Modification_Date>2008-07-01</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>updated Time_of_Introduction</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2008-09-08</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships, Other_Notes, Relationship_Notes, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2008-10-14</Modification_Date>
+               <Modification_Version>1.0.1</Modification_Version>
+               <Modification_ReleaseDate>2008-10-14</Modification_ReleaseDate>
+               <Modification_Comment>updated Description</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2010-09-27</Modification_Date>
+               <Modification_Version>1.10</Modification_Version>
+               <Modification_ReleaseDate>2010-09-27</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-03-29</Modification_Date>
+               <Modification_Version>1.12</Modification_Version>
+               <Modification_ReleaseDate>2011-03-30</Modification_ReleaseDate>
+               <Modification_Comment>updated Name</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-06-01</Modification_Date>
+               <Modification_Version>1.13</Modification_Version>
+               <Modification_ReleaseDate>2011-06-01</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2012-05-11</Modification_Date>
+               <Modification_Version>2.2</Modification_Version>
+               <Modification_ReleaseDate>2012-05-15</Modification_ReleaseDate>
+               <Modification_Comment>updated Observed_Examples, Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2014-06-23</Modification_Date>
+               <Modification_Version>2.7</Modification_Version>
+               <Modification_ReleaseDate>2014-06-23</Modification_ReleaseDate>
+               <Modification_Comment>updated Other_Notes, Related_Attack_Patterns</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2014-07-30</Modification_Date>
+               <Modification_Version>2.8</Modification_Version>
+               <Modification_ReleaseDate>2014-07-31</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2017-05-03</Modification_Date>
+               <Modification_Version>2.11</Modification_Version>
+               <Modification_ReleaseDate>2017-05-05</Modification_ReleaseDate>
+               <Modification_Comment>updated Related_Attack_Patterns</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2017-11-08</Modification_Date>
+               <Modification_Version>3.0</Modification_Version>
+               <Modification_ReleaseDate>2017-11-08</Modification_ReleaseDate>
+               <Modification_Comment>updated Applicable_Platforms, Modes_of_Introduction, Relationships</Modification_Comment>
+            </Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-02-24</Modification_Date>
+					<Modification_Version>4.0</Modification_Version>
+					<Modification_ReleaseDate>2020-02-24</Modification_ReleaseDate>
+					<Modification_Comment>updated Description, Name, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-06-25</Modification_Date>
+					<Modification_Version>4.1</Modification_Version>
+					<Modification_ReleaseDate>2020-06-25</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-01-31</Modification_Date>
+					<Modification_Version>4.10</Modification_Version>
+					<Modification_ReleaseDate>2023-01-31</Modification_ReleaseDate>
+					<Modification_Comment>updated Related_Attack_Patterns</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Observed_Examples, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-10-26</Modification_Date>
+					<Modification_Version>4.13</Modification_Version>
+					<Modification_ReleaseDate>2023-10-26</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples, Observed_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2024-02-29</Modification_Date>
+					<Modification_Version>4.14</Modification_Version>
+					<Modification_ReleaseDate>2024-02-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2024-11-19</Modification_Date>
+					<Modification_Version>4.16</Modification_Version>
+					<Modification_ReleaseDate>2024-11-19</Modification_ReleaseDate>
+					<Modification_Comment>updated Maintenance_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-04-03</Modification_Date>
+					<Modification_Version>4.17</Modification_Version>
+					<Modification_ReleaseDate>2025-04-03</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Applicable_Platforms, Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+            <Previous_Entry_Name Date="2011-03-29">Timing Discrepancy Information Leak</Previous_Entry_Name>
+			<Previous_Entry_Name Date="2020-02-24">Information Exposure Through Timing Discrepancy</Previous_Entry_Name>
+         </Content_History>
+      </Weakness>
+      

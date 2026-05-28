@@ -1,0 +1,272 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="263" Name="Password Aging with Long Expiration" Abstraction="Base" Structure="Simple" Status="Draft">
+         <Description>The product supports password aging, but the expiration period is too long.</Description>
+         <Extended_Description>
+	   <xhtml:p>Password aging (or password rotation) is a policy that forces users to change their passwords after a defined time period passes, such as every 30 or 90 days. A long expiration provides more time for attackers to conduct password cracking before users are forced to change to a new password.</xhtml:p>
+	   <xhtml:p>Note that while password aging was once considered an important security feature, it has since fallen out of favor by many, because it is not as effective against modern threats compared to other mechanisms such as slow hashes. In addition, forcing frequent changes can unintentionally encourage users to select less-secure passwords. However, password aging is still in use due to factors such as compliance requirements, e.g., Payment Card Industry Data Security Standard (PCI DSS).</xhtml:p>
+	 </Extended_Description>
+         <Related_Weaknesses>
+            <Related_Weakness Nature="ChildOf" CWE_ID="1390" View_ID="1000" Ordinal="Primary" />
+         </Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+         <Applicable_Platforms>
+            <Language Class="Not Language-Specific" Prevalence="Undetermined" />
+         </Applicable_Platforms>
+         <Modes_Of_Introduction>
+            <Introduction>
+               <Phase>Architecture and Design</Phase>
+               <Note>COMMISSION: This weakness refers to an incorrect design related to an architectural security tactic.</Note>
+            </Introduction>
+         </Modes_Of_Introduction>
+         <Likelihood_Of_Exploit>Low</Likelihood_Of_Exploit>
+         <Common_Consequences>
+            <Consequence>
+               <Scope>Access Control</Scope>
+               <Impact>Gain Privileges or Assume Identity</Impact>
+               <Note>As passwords age, the probability that they are compromised grows.</Note>
+            </Consequence>
+         </Common_Consequences>
+         <Potential_Mitigations>
+            <Mitigation>
+               <Phase>Implementation</Phase>
+			   <Description>Previously, "password expiration" was
+			   widely advocated as a defense-in-depth approach to
+			   minimize the risk of weak passwords, and it has become
+			   a common practice.  Password expiration requires a
+			   password to be changed within a fixed time window (such
+			   as every 90 days).  However, this approach has
+			   significant limitations in the current threat
+			   landscape, and its utility has been reduced in light of
+			   the adoption of related protection mechanisms (such as
+			   password complexity and computational effort), along
+			   with the recognition that regular password changes
+			   often caused users to generate more predictable
+			   passwords. As a result, this is now a Discouraged
+			   Common Practice [REF-1488] [REF-1489], especially as
+			   the sole factor in protecting passwords. It is still
+			   strongly encouraged to force password changes in case
+			   of evidence of compromise, but this is not the same as
+			   a forced "expiration" on an arbitrary time
+			   frame.</Description>
+			</Mitigation>
+            <Mitigation>
+               <Phase>Architecture and Design</Phase>
+               <Description>Ensure that password aging is limited so that there is a defined maximum age for passwords. Note that if the expiration window is too short, it can cause users to generate poor or predictable passwords.</Description>
+            </Mitigation>
+            <Mitigation>
+               <Phase>Architecture and Design</Phase>
+               <Description>Ensure that the user is notified several times leading up to the password expiration.</Description>
+            </Mitigation>
+            <Mitigation>
+               <Phase>Architecture and Design</Phase>
+               <Description>Create mechanisms to prevent users from reusing passwords or creating similar passwords.</Description>
+            </Mitigation>
+            <Mitigation>
+               <Phase>Implementation</Phase>
+               <Description>Developers might disable clipboard paste operations into password fields as a way to discourage users from pasting a password into a clipboard. However, this might encourage users to choose less-secure passwords that are easier to type, and it can reduce the usability of password managers [REF-1294].</Description>
+	       <Effectiveness>Discouraged Common Practice</Effectiveness>
+            </Mitigation>
+         </Potential_Mitigations>
+         <Demonstrative_Examples>
+            <Demonstrative_Example>
+               <Intro_Text>A system requires the changing of passwords every five years.</Intro_Text>
+            </Demonstrative_Example>
+         </Demonstrative_Examples>
+         <Taxonomy_Mappings>
+            <Taxonomy_Mapping Taxonomy_Name="CLASP">
+               <Entry_Name>Allowing password aging</Entry_Name>
+            </Taxonomy_Mapping>
+         </Taxonomy_Mappings>
+         <Related_Attack_Patterns>
+            <Related_Attack_Pattern CAPEC_ID="16" />
+            <Related_Attack_Pattern CAPEC_ID="49" />
+            <Related_Attack_Pattern CAPEC_ID="509" />
+            <Related_Attack_Pattern CAPEC_ID="55" />
+            <Related_Attack_Pattern CAPEC_ID="555" />
+            <Related_Attack_Pattern CAPEC_ID="560" />
+            <Related_Attack_Pattern CAPEC_ID="561" />
+            <Related_Attack_Pattern CAPEC_ID="565" />
+            <Related_Attack_Pattern CAPEC_ID="600" />
+            <Related_Attack_Pattern CAPEC_ID="652" />
+            <Related_Attack_Pattern CAPEC_ID="653" />
+            <Related_Attack_Pattern CAPEC_ID="70" />
+         </Related_Attack_Patterns>
+         <References>
+            <Reference External_Reference_ID="REF-1488" />
+            <Reference External_Reference_ID="REF-1489" />
+            <Reference External_Reference_ID="REF-44" Section="&quot;Sin 19: Use of Weak Password-Based Systems.&quot; Page 279" />
+            <Reference External_Reference_ID="REF-18" />
+            <Reference External_Reference_ID="REF-1305" />
+            <Reference External_Reference_ID="REF-1289" />
+            <Reference External_Reference_ID="REF-1290" />
+            <Reference External_Reference_ID="REF-1291" />
+            <Reference External_Reference_ID="REF-1292" />
+            <Reference External_Reference_ID="REF-1293" />
+            <Reference External_Reference_ID="REF-1294" />
+         </References>
+         <Mapping_Notes>
+            <Usage>Discouraged</Usage>
+            <Rationale>This CWE entry is closely related to the
+            absence of a practice (password expiration) that is no
+            longer widely supported as an effective protection
+            mechanism. In addition, it might be deprecated in the
+            future.</Rationale>
+            <Comments>Consider CWEs related to the reliance on
+            passwords or single-factor authentication, or other CWEs
+            involving weak passwords.</Comments>
+            <Reasons>
+               <Reason Type="Potential Deprecation" />
+            </Reasons>
+         </Mapping_Notes>
+		 <Notes>
+		   <Note Type="Maintenance">Password expiration was once
+		   widely advocated (see Mitigations), but it is no longer
+		   actively supported. It might be appropriate to Deprecate
+		   this entry, or at least change it significantly so that
+		   readers can consider alternate mechanisms to protect
+		   passwords (and/or avoid passwords entirely). However, older
+		   software - and even modern software - might still need to
+		   be mapped to this weakness if the software is obsolete or
+		   not actively maintained, and expiration remains the only
+		   option.</Note>
+		 </Notes>
+         <Content_History>
+            <Submission>
+               <Submission_Name>CLASP</Submission_Name>
+               <Submission_Date>2006-07-19</Submission_Date>
+               <Submission_Version>Draft 3</Submission_Version>
+               <Submission_ReleaseDate>2006-07-19</Submission_ReleaseDate>
+            </Submission>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2008-09-08</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences, Relationships, Other_Notes, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-03-29</Modification_Date>
+               <Modification_Version>1.12</Modification_Version>
+               <Modification_ReleaseDate>2011-03-30</Modification_ReleaseDate>
+               <Modification_Comment>updated Description, Other_Notes, Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-06-01</Modification_Date>
+               <Modification_Version>1.13</Modification_Version>
+               <Modification_ReleaseDate>2011-06-01</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-06-27</Modification_Date>
+               <Modification_Version>2.0</Modification_Version>
+               <Modification_ReleaseDate>2011-06-27</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2012-05-11</Modification_Date>
+               <Modification_Version>2.2</Modification_Version>
+               <Modification_ReleaseDate>2012-05-15</Modification_ReleaseDate>
+               <Modification_Comment>updated References, Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2014-07-30</Modification_Date>
+               <Modification_Version>2.8</Modification_Version>
+               <Modification_ReleaseDate>2014-07-31</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2017-11-08</Modification_Date>
+               <Modification_Version>3.0</Modification_Version>
+               <Modification_ReleaseDate>2017-11-08</Modification_ReleaseDate>
+               <Modification_Comment>updated Applicable_Platforms, Likelihood_of_Exploit, Modes_of_Introduction, Relationships</Modification_Comment>
+            </Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-02-24</Modification_Date>
+					<Modification_Version>4.0</Modification_Version>
+					<Modification_ReleaseDate>2020-02-24</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples, References</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-08-20</Modification_Date>
+					<Modification_Version>4.2</Modification_Version>
+					<Modification_ReleaseDate>2020-08-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Related_Attack_Patterns</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-10-13</Modification_Date>
+					<Modification_Version>4.9</Modification_Version>
+					<Modification_ReleaseDate>2022-10-13</Modification_ReleaseDate>
+					<Modification_Comment>updated Description, Potential_Mitigations, References, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated References, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-09-09</Modification_Date>
+					<Modification_Version>4.18</Modification_Version>
+					<Modification_ReleaseDate>2025-09-09</Modification_ReleaseDate>
+					<Modification_Comment>updated Maintenance_Notes, Mapping_Notes, Potential_Mitigations, References</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+	    <Contribution Type="Feedback">
+	      <Contribution_Name>Kurt Seifried, Chris Eng, G. Ann Campbell, Larry Shields, Jeffrey Walton, Jason Dryhurst-Smith, and other members of the CWE Community</Contribution_Name>
+	      <Contribution_Date>2021-12-03</Contribution_Date>
+	      <Contribution_Comment>Gave feedback on how to update CWE-262 and CWE-263 due to changing password management practices</Contribution_Comment>
+	    </Contribution>
+		<Contribution Type="Feedback">
+		  <Contribution_Name>Camille Gouttebroze</Contribution_Name>
+		  <Contribution_Organization>CAST Software</Contribution_Organization>
+		  <Contribution_Date>2025-03-17</Contribution_Date>
+		  <Contribution_Version>4.18</Contribution_Version>
+		  <Contribution_ReleaseDate>2025-09-09</Contribution_ReleaseDate>
+		  <Contribution_Comment>suggested removal of password expiration as an acceptable mitigation in CWE-521 and provided references</Contribution_Comment>
+		</Contribution>
+            <Previous_Entry_Name Date="2008-04-11">Allowing Unchecked Password Aging</Previous_Entry_Name>
+         </Content_History>
+      </Weakness>
+      

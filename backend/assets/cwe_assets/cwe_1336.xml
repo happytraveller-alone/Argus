@@ -1,0 +1,205 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="1336" Name="Improper Neutralization of Special Elements Used in a Template Engine" Abstraction="Base" Structure="Simple" Status="Incomplete">
+			<Description>The product uses a template engine to insert or process externally-influenced input, but it does not neutralize or incorrectly neutralizes special elements or syntax that can be interpreted as template expressions or other code directives when processed by the engine.</Description>
+			<Extended_Description>
+				<xhtml:p>Many web applications use template engines that allow developers to insert externally-influenced values into free text or messages in order to generate a full web page, document, message, etc. Such engines include Twig, Jinja2, Pug, Java Server Pages, FreeMarker, Velocity, ColdFusion, Smarty, and many others - including PHP itself. Some CMS (Content Management Systems) also use templates.</xhtml:p>
+				<xhtml:p>Template engines often have their own custom command or expression language. If an attacker can influence input into a template before it is processed, then the attacker can invoke arbitrary expressions, i.e. perform injection attacks. For example, in some template languages, an attacker could inject the expression "{{7*7}}" and determine if the output returns "49" instead. The syntax varies depending on the language.</xhtml:p>
+				<xhtml:p>In some cases, XSS-style attacks can work, which can obscure the root cause if the developer does not closely investigate the root cause of the error.</xhtml:p>
+				<xhtml:p>Template engines can be used on the server or client, so both "sides" could be affected by injection. The mechanisms of attack or the affected technologies might be different, but the mistake is fundamentally the same.</xhtml:p>
+			</Extended_Description>
+			<Related_Weaknesses>
+				<Related_Weakness Nature="ChildOf" CWE_ID="94" View_ID="1000" Ordinal="Primary" />
+			</Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+			<Applicable_Platforms>
+				<Language Name="Java" Prevalence="Undetermined" />
+				<Language Name="PHP" Prevalence="Undetermined" />
+				<Language Name="Python" Prevalence="Undetermined" />
+				<Language Name="JavaScript" Prevalence="Undetermined" />
+				<Language Class="Interpreted" Prevalence="Undetermined" />
+				<Operating_System Class="Not OS-Specific" Prevalence="Undetermined" />
+				<Technology Class="Not Technology-Specific" Prevalence="Undetermined" />
+				<Technology Name="AI/ML" Prevalence="Undetermined" />
+				<Technology Class="Client Server" Prevalence="Undetermined" />
+				</Applicable_Platforms>
+			<Alternate_Terms>
+			  <Alternate_Term>
+			    <Term>Server-Side Template Injection / SSTI</Term>
+			    <Description>This term is used for injection into template engines being used by a server.</Description>
+			  </Alternate_Term>
+			  <Alternate_Term>
+			    <Term>Client-Side Template Injection / CSTI</Term>
+			    <Description>This term is used for injection into template engines being used by a client.</Description>
+			  </Alternate_Term>
+			</Alternate_Terms>
+			<Modes_Of_Introduction>
+				<Introduction>
+					<Phase>Architecture and Design</Phase>
+					<Note>The developer might choose a template engine that makes it easier for programmers to write vulnerable code.</Note>
+				</Introduction>
+				<Introduction>
+					<Phase>Implementation</Phase>
+					<Note>The programmer might not use engine's built-in sandboxes or other capabilities to escape or otherwise prevent template injection from untrusted input.</Note>
+				</Introduction>
+			</Modes_Of_Introduction>
+			<Common_Consequences>
+				<Consequence>
+				  <Scope>Integrity</Scope>
+				  <Impact>Execute Unauthorized Code or Commands</Impact>
+				</Consequence>
+			</Common_Consequences>
+			<Detection_Methods>
+			  <Detection_Method Detection_Method_ID="DM-14">
+			    <Method>Automated Static Analysis</Method>
+			    <Description>Automated static analysis, commonly referred to as Static Application Security Testing (SAST), can find some instances of this weakness by analyzing source code (or binary/compiled code) without having to execute it. Typically, this is done by building a model of data flow and control flow, then searching for potentially-vulnerable patterns that connect "sources" (origins of input) with "sinks" (destinations where the data interacts with external components, a lower layer such as the OS, etc.)</Description>
+			    <Effectiveness>High</Effectiveness>
+			  </Detection_Method>
+			</Detection_Methods>
+			<Potential_Mitigations>
+				<Mitigation>
+					<Phase>Architecture and Design</Phase>
+					<Description>Choose a template engine that offers a sandbox or restricted mode, or at least limits the power of any available expressions, function calls, or commands.</Description>
+				</Mitigation>
+				<Mitigation>
+					<Phase>Implementation</Phase>
+					<Description>Use the template engine's sandbox or restricted mode, if available.</Description>
+				</Mitigation>
+			</Potential_Mitigations>
+			<Observed_Examples>
+				<Observed_Example>
+					<Reference>CVE-2024-34359</Reference>
+					<Description>Chain: Python bindings for LLM
+					library do not use a sandboxed environment when
+					parsing a template and constructing a prompt,
+					allowing jinja2 Server Side Template Injection and
+					code execution - one variant of a "prompt
+					injection" attack.</Description>
+					<Link>https://www.cve.org/CVERecord?id=CVE-2024-34359</Link>
+				</Observed_Example>
+				<Observed_Example>
+					<Reference>CVE-2017-16783</Reference>
+					<Description>server-side template injection in content management server</Description>
+					<Link>https://www.cve.org/CVERecord?id=CVE-2017-16783</Link>
+				</Observed_Example>
+				<Observed_Example>
+					<Reference>CVE-2020-9437</Reference>
+					<Description>authentication / identity management product has client-side template injection</Description>
+					<Link>https://www.cve.org/CVERecord?id=CVE-2020-9437</Link>
+				</Observed_Example>
+				<Observed_Example>
+					<Reference>CVE-2020-12790</Reference>
+					<Description>Server-Side Template Injection using a Twig template</Description>
+					<Link>https://www.cve.org/CVERecord?id=CVE-2020-12790</Link>
+				</Observed_Example>
+				<Observed_Example>
+					<Reference>CVE-2021-21244</Reference>
+					<Description>devops platform allows SSTI</Description>
+					<Link>https://www.cve.org/CVERecord?id=CVE-2021-21244</Link>
+				</Observed_Example>
+				<Observed_Example>
+					<Reference>CVE-2020-4027</Reference>
+					<Description>bypass of Server-Side Template Injection protection mechanism with macros in Velocity templates</Description>
+					<Link>https://www.cve.org/CVERecord?id=CVE-2020-4027</Link>
+				</Observed_Example>
+				<Observed_Example>
+					<Reference>CVE-2020-26282</Reference>
+					<Description>web browser proxy server allows Java EL expressions from Server-Side Template Injection</Description>
+					<Link>https://www.cve.org/CVERecord?id=CVE-2020-26282</Link>
+				</Observed_Example>
+				<Observed_Example>
+					<Reference>CVE-2020-1961</Reference>
+					<Description>SSTI involving mail templates and JEXL expressions</Description>
+					<Link>https://www.cve.org/CVERecord?id=CVE-2020-1961</Link>
+				</Observed_Example>
+				<Observed_Example>
+					<Reference>CVE-2019-19999</Reference>
+					<Description>product does not use a "safe" setting for a FreeMarker configuration, allowing SSTI</Description>
+					<Link>https://www.cve.org/CVERecord?id=CVE-2019-19999</Link>
+				</Observed_Example>
+				<Observed_Example>
+					<Reference>CVE-2018-20465</Reference>
+					<Description>product allows read of sensitive database username/password variables using server-side template injection</Description>
+					<Link>https://www.cve.org/CVERecord?id=CVE-2018-20465</Link>
+				</Observed_Example>
+			</Observed_Examples>
+			<References>
+				<Reference External_Reference_ID="REF-1193" />
+				<Reference External_Reference_ID="REF-1194" />
+			</References>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Base level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+			<Notes>
+			  <Note Type="Relationship">
+			    Since expression languages are often used in templating languages, there may be some overlap with CWE-917 (Expression Language Injection). XSS (CWE-79) is also co-located with template injection.
+			  </Note>
+			  <Note Type="Maintenance">The interrelationships and differences between CWE-917 and CWE-1336 need to be further clarified.</Note>
+			</Notes>
+			<Content_History>
+				<Submission>
+					<Submission_Name>CWE Content Team</Submission_Name>
+					<Submission_Organization>MITRE</Submission_Organization>
+					<Submission_Date>2021-07-19</Submission_Date>
+					<Submission_Version>4.5</Submission_Version>
+					<Submission_ReleaseDate>2021-07-20</Submission_ReleaseDate>
+				</Submission>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-06-28</Modification_Date>
+					<Modification_Version>4.8</Modification_Version>
+					<Modification_ReleaseDate>2022-06-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Maintenance_Notes, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2024-07-16</Modification_Date>
+					<Modification_Version>4.15</Modification_Version>
+					<Modification_ReleaseDate>2024-07-16</Modification_ReleaseDate>
+					<Modification_Comment>updated Applicable_Platforms, Observed_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Applicable_Platforms, Detection_Factors, Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2026-04-30</Modification_Date>
+					<Modification_Version>4.20</Modification_Version>
+					<Modification_ReleaseDate>2026-04-30</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+			</Content_History>
+		</Weakness>
+      

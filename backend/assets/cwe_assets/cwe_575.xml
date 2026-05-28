@@ -1,0 +1,225 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="575" Name="EJB Bad Practices: Use of AWT Swing" Abstraction="Variant" Structure="Simple" Status="Draft">
+         <Description>The product violates the Enterprise JavaBeans (EJB) specification by using AWT/Swing.</Description>
+         <Extended_Description>The Enterprise JavaBeans specification requires that every bean provider follow a set of programming guidelines designed to ensure that the bean will be portable and behave consistently in any EJB container. In this case, the product violates the following EJB guideline: "An enterprise bean must not use the AWT functionality to attempt to output information to a display, or to input information from a keyboard." The specification justifies this requirement in the following way: "Most servers do not allow direct interaction between an application program and a keyboard/display attached to the server system."</Extended_Description>
+         <Related_Weaknesses>
+            <Related_Weakness Nature="ChildOf" CWE_ID="695" View_ID="1000" Ordinal="Primary" />
+         </Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+         <Applicable_Platforms>
+            <Language Name="Java" Prevalence="Undetermined" />
+         </Applicable_Platforms>
+         <Modes_Of_Introduction>
+            <Introduction>
+               <Phase>Implementation</Phase>
+            </Introduction>
+         </Modes_Of_Introduction>
+         <Common_Consequences>
+            <Consequence>
+               <Scope>Other</Scope>
+               <Impact>Quality Degradation</Impact>
+            </Consequence>
+         </Common_Consequences>
+         <Potential_Mitigations>
+            <Mitigation>
+               <Phase>Architecture and Design</Phase>
+               <Description>Do not use AWT/Swing when writing EJBs.</Description>
+            </Mitigation>
+         </Potential_Mitigations>
+         <Demonstrative_Examples>
+            <Demonstrative_Example>
+               <Intro_Text>The following Java example is a simple converter class for converting US dollars to Yen. This converter class demonstrates the improper practice of using a stateless session Enterprise JavaBean that implements an AWT Component and AWT keyboard event listener to retrieve keyboard input from the user for the amount of the US dollars to convert to Yen.</Intro_Text>
+               <Example_Code Nature="Bad" Language="Java">
+                  <xhtml:div>@Stateless<xhtml:br />public class ConverterSessionBean extends Component implements KeyListener, ConverterSessionRemote {<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>
+                           <xhtml:br />
+                           <xhtml:i>/* member variables for receiving keyboard input using AWT API */</xhtml:i>
+                           <xhtml:br />
+                           <xhtml:br />...<xhtml:br />private StringBuffer enteredText = new StringBuffer();<xhtml:br />
+                           <xhtml:br />
+                           <xhtml:i>/* conversion rate on US dollars to Yen */</xhtml:i>
+                           <xhtml:br />
+                           <xhtml:br />private BigDecimal yenRate = new BigDecimal("115.3100");<xhtml:br />
+                           <xhtml:br />public ConverterSessionBean() {<xhtml:div style="margin-left:1em;">
+                              <xhtml:div>super();<xhtml:br />
+                                 <xhtml:i>/* method calls for setting up AWT Component for receiving keyboard input */</xhtml:i>
+                                 <xhtml:br />
+                                 <xhtml:br />...<xhtml:br />addKeyListener(this);</xhtml:div>
+                           </xhtml:div>}<xhtml:br />
+                           <xhtml:br />public BigDecimal dollarToYen(BigDecimal dollars) {<xhtml:div style="margin-left:1em;">BigDecimal result = dollars.multiply(yenRate);<xhtml:br />return result.setScale(2, BigDecimal.ROUND_DOWN);</xhtml:div>}<xhtml:br />
+                           <xhtml:br />
+                           <xhtml:i>/* member functions for implementing AWT KeyListener interface */</xhtml:i>
+                           <xhtml:br />
+                           <xhtml:br />public void keyTyped(KeyEvent event) {<xhtml:div style="margin-left:1em;">...</xhtml:div>}<xhtml:br />
+                           <xhtml:br />public void keyPressed(KeyEvent e) {<xhtml:br />}<xhtml:br />
+                           <xhtml:br />public void keyReleased(KeyEvent e) {<xhtml:br />}<xhtml:br />
+                           <xhtml:br />
+                           <xhtml:i>/* member functions for receiving keyboard input and displaying output */</xhtml:i>
+                           <xhtml:br />
+                           <xhtml:br />public void paint(Graphics g) {...}<xhtml:br />
+                           <xhtml:br />...</xhtml:div>
+                     </xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>This use of the AWT and Swing APIs within any kind of Enterprise JavaBean not only violates the restriction of the EJB specification against using AWT or Swing within an EJB but also violates the intended use of Enterprise JavaBeans to separate business logic from presentation logic.</Body_Text>
+               <Body_Text>The Stateless Session Enterprise JavaBean should contain only business logic. Presentation logic should be provided by some other mechanism such as Servlets or Java Server Pages (JSP) as in the following Java/JSP example.</Body_Text>
+               <Example_Code Nature="Good" Language="Java">
+                  <xhtml:div>@Stateless<xhtml:br />public class ConverterSessionBean implements ConverterSessionRemoteInterface {<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>
+                           <xhtml:br />
+                           <xhtml:i>/* conversion rate on US dollars to Yen */</xhtml:i>
+                           <xhtml:br />private BigDecimal yenRate = new BigDecimal("115.3100");<xhtml:br />
+                           <xhtml:br />public ConverterSessionBean() {<xhtml:br />}<xhtml:br />
+                           <xhtml:br />
+                           <xhtml:i>/* remote method to convert US dollars to Yen */</xhtml:i>
+                           <xhtml:br />
+                           <xhtml:br />public BigDecimal dollarToYen(BigDecimal dollars) {<xhtml:div style="margin-left:1em;">BigDecimal result = dollars.multiply(yenRate);<xhtml:br />return result.setScale(2, BigDecimal.ROUND_DOWN);</xhtml:div>}</xhtml:div>
+                     </xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Example_Code Nature="Good" Language="JSP">
+                  <xhtml:div>&lt;%@ page import="converter.ejb.Converter, java.math.*, javax.naming.*"%&gt;<xhtml:br />&lt;%!<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>private Converter converter = null;<xhtml:br />public void jspInit() {<xhtml:div style="margin-left:1em;">try {<xhtml:div style="margin-left:1em;">InitialContext ic = new InitialContext();<xhtml:br />converter = (Converter) ic.lookup(Converter.class.getName());</xhtml:div>} catch (Exception ex) {<xhtml:div style="margin-left:1em;">System.out.println("Couldn't create converter bean."+ ex.getMessage());</xhtml:div>}</xhtml:div>}<xhtml:br />public void jspDestroy() {<xhtml:div style="margin-left:1em;">converter = null;</xhtml:div>}</xhtml:div>
+                     </xhtml:div>
+                     <xhtml:br />%&gt;<xhtml:br />&lt;html&gt;<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>&lt;head&gt;&lt;title&gt;Converter&lt;/title&gt;&lt;/head&gt;<xhtml:br />&lt;body bgcolor="white"&gt;<xhtml:div style="margin-left:1em;">
+                              <xhtml:div>&lt;h1&gt;Converter&lt;/h1&gt;<xhtml:br />&lt;hr&gt;<xhtml:br />&lt;p&gt;Enter an amount to convert:&lt;/p&gt;<xhtml:br />&lt;form method="get"&gt;<xhtml:div style="margin-left:1em;">&lt;input type="text" name="amount" size="25"&gt;&lt;br&gt;<xhtml:br />&lt;p&gt;<xhtml:br />&lt;input type="submit" value="Submit"&gt;<xhtml:br />&lt;input type="reset" value="Reset"&gt;</xhtml:div>&lt;/form&gt;<xhtml:br />&lt;%<xhtml:div style="margin-left:1em;">String amount = request.getParameter("amount");<xhtml:br />if ( amount != null &amp;&amp; amount.length() &gt; 0 ) {<xhtml:div style="margin-left:1em;">BigDecimal d = new BigDecimal(amount);<xhtml:br />BigDecimal yenAmount = converter.dollarToYen(d);</xhtml:div>
+                                 </xhtml:div>
+                                 <xhtml:br />%&gt;<xhtml:br />&lt;p&gt;<xhtml:br />&lt;%= amount %&gt; dollars are &lt;%= yenAmount %&gt; Yen.<xhtml:br />&lt;p&gt;<xhtml:br />&lt;%<xhtml:div style="margin-left:1em;">}</xhtml:div>
+                                 <xhtml:br />%&gt;</xhtml:div>
+                           </xhtml:div>&lt;/body&gt;</xhtml:div>
+                     </xhtml:div>&lt;/html&gt;</xhtml:div>
+               </Example_Code>
+            </Demonstrative_Example>
+         </Demonstrative_Examples>
+         <Taxonomy_Mappings>
+            <Taxonomy_Mapping Taxonomy_Name="Software Fault Patterns">
+               <Entry_ID>SFP3</Entry_ID>
+               <Entry_Name>Use of an improper API</Entry_Name>
+            </Taxonomy_Mapping>
+         </Taxonomy_Mappings>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Variant level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+         <Content_History>
+            <Submission>
+                <Submission_Name>CWE Community</Submission_Name>
+                <Submission_Date>2006-12-15</Submission_Date>
+                <Submission_Version>Draft 5</Submission_Version>
+                <Submission_ReleaseDate>2006-12-15</Submission_ReleaseDate>
+				<Submission_Comment>Submitted by members of the CWE community to extend early CWE versions</Submission_Comment>
+            </Submission>
+            <Modification>
+               <Modification_Name>Eric Dalci</Modification_Name>
+               <Modification_Organization>Cigital</Modification_Organization>
+               <Modification_Date>2008-07-01</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>updated Potential_Mitigations, Time_of_Introduction</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2008-09-08</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships, Other_Notes</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2009-10-29</Modification_Date>
+               <Modification_Version>1.6</Modification_Version>
+               <Modification_ReleaseDate>2009-10-29</Modification_ReleaseDate>
+               <Modification_Comment>updated Description, Other_Notes</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2009-12-28</Modification_Date>
+               <Modification_Version>1.7</Modification_Version>
+               <Modification_ReleaseDate>2009-12-28</Modification_ReleaseDate>
+               <Modification_Comment>updated Demonstrative_Examples, Potential_Mitigations</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-06-01</Modification_Date>
+               <Modification_Version>1.13</Modification_Version>
+               <Modification_ReleaseDate>2011-06-01</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-06-27</Modification_Date>
+               <Modification_Version>2.0</Modification_Version>
+               <Modification_ReleaseDate>2011-06-27</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2012-05-11</Modification_Date>
+               <Modification_Version>2.2</Modification_Version>
+               <Modification_ReleaseDate>2012-05-15</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2014-07-30</Modification_Date>
+               <Modification_Version>2.8</Modification_Version>
+               <Modification_ReleaseDate>2014-07-31</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-02-24</Modification_Date>
+					<Modification_Version>4.0</Modification_Version>
+					<Modification_ReleaseDate>2020-02-24</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-01-31</Modification_Date>
+					<Modification_Version>4.10</Modification_Version>
+					<Modification_ReleaseDate>2023-01-31</Modification_ReleaseDate>
+					<Modification_Comment>updated Description</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships, Time_of_Introduction</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+         </Content_History>
+      </Weakness>
+      

@@ -1,0 +1,155 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="1323" Name="Improper Management of Sensitive Trace Data" Abstraction="Base" Structure="Simple" Status="Draft">
+            <Description>Trace data collected from several sources on the
+                System-on-Chip (SoC) is stored in unprotected locations or
+                transported to untrusted agents.</Description>
+			<Extended_Description>
+                <xhtml:p>To facilitate verification of complex System-on-Chip
+                    (SoC) designs, SoC integrators add specific IP blocks that
+                    trace the SoC's internal signals in real-time. This
+                    infrastructure enables observability of the SoC's internal
+                    behavior, validation of its functional design,
+                    and detection of hardware and software bugs. Such tracing
+                    IP blocks collect traces from several sources on the SoC
+                    including the CPU, crypto coprocessors, and on-chip fabrics. Traces collected from these sources are then
+                    aggregated inside trace IP block and forwarded to trace
+                    sinks, such as debug-trace ports that facilitate debugging by
+                    external hardware and software debuggers.</xhtml:p>
+					<xhtml:p>Since
+                    these traces are collected from several security-sensitive
+                    sources, they must be protected against untrusted
+                    debuggers. If they are stored in unprotected memory, an
+                    untrusted software debugger can access these traces and
+                    extract secret information. Additionally, if
+                    security-sensitive traces are not tagged as secure, an
+                    untrusted hardware debugger might access them to extract
+                    confidential information.</xhtml:p>
+			</Extended_Description>
+			<Related_Weaknesses>
+				<Related_Weakness Nature="ChildOf" CWE_ID="284" View_ID="1000" Ordinal="Primary" />
+			</Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+            <Weakness_Ordinality>
+               <Ordinality>Resultant</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+			<Applicable_Platforms>
+				<Language Class="Not Language-Specific" Prevalence="Undetermined" />
+				<Operating_System Class="Not OS-Specific" Prevalence="Undetermined" />
+				<Architecture Class="Not Architecture-Specific" Prevalence="Undetermined" />
+                <Technology Class="System on Chip" Prevalence="Undetermined" />
+				</Applicable_Platforms>
+			<Modes_Of_Introduction>
+				<Introduction>
+					<Phase>Architecture and Design</Phase>
+				</Introduction>
+				<Introduction>
+					<Phase>Implementation</Phase>
+				</Introduction>
+			</Modes_Of_Introduction>
+			<Common_Consequences>
+				<Consequence>
+					<Scope>Confidentiality</Scope>
+					<Impact>Read Memory</Impact>
+					<Note>An adversary can read secret values if they are captured in debug traces and stored unsafely.</Note>
+				</Consequence>
+			</Common_Consequences>
+			<Potential_Mitigations>
+				<Mitigation>
+					<Phase>Implementation</Phase>
+					<Description>Tag traces to indicate owner and debugging privilege level (designer, OEM, or end user) needed to access that trace.</Description>
+				</Mitigation>
+			</Potential_Mitigations>
+			<Demonstrative_Examples>
+				<Demonstrative_Example>
+                    <Intro_Text>In a SoC, traces generated from sources
+                        include security-sensitive IP blocks such as CPU (with
+                        tracing information such as instructions executed and
+                        memory operands), on-chip fabric (e.g., memory-transfer
+                        signals, transaction type and destination, and
+                        on-chip-firewall-error signals), power-management
+                        IP blocks (e.g., clock- and power-gating signals), and
+                        cryptographic coprocessors (e.g., cryptographic keys and
+                        intermediate values of crypto operations), among
+                        other non-security-sensitive IP blocks including timers
+                        and other functional blocks. The collected traces are
+                        then forwarded to the debug and trace interface used by
+                        the external hardware debugger.</Intro_Text>
+                    <Example_Code Nature="Bad" Language="Other">The traces do
+                        not have any privilege level attached to them. All
+                        collected traces can be viewed by any debugger (i.e., SoC
+                        designer, OEM debugger, or end user).</Example_Code>
+                    <Example_Code Nature="Good" Language="Other">Some of the
+                        traces are SoC-design-house secrets, while some are OEM
+                        secrets. Few are end-user secrets and the rest are
+                        not security-sensitive. Tag all traces with the
+                        appropriate, privilege level at the source. The bits
+                        indicating the privilege level must be immutable in
+                        their transit from trace source to the final, trace
+                        sink. Debugger privilege level must be checked before
+                        providing access to traces. </Example_Code>
+				</Demonstrative_Example>
+			</Demonstrative_Examples>
+         <Related_Attack_Patterns>
+            <Related_Attack_Pattern CAPEC_ID="150" />
+            <Related_Attack_Pattern CAPEC_ID="167" />
+            <Related_Attack_Pattern CAPEC_ID="545" />
+         </Related_Attack_Patterns>
+         <References>
+				<Reference External_Reference_ID="REF-1150" />
+				<Reference External_Reference_ID="REF-1151" />
+			</References>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Base level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+			<Content_History>
+				<Submission>
+					<Submission_Name>Hareesh Khattri, Parbati K. Manna, and Arun Kanuparthi</Submission_Name>
+					<Submission_Organization>Intel Corporation</Submission_Organization>
+					<Submission_Date>2020-07-20</Submission_Date>
+					<Submission_Version>4.3</Submission_Version>
+					<Submission_ReleaseDate>2020-12-10</Submission_ReleaseDate>
+				</Submission>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-10-28</Modification_Date>
+					<Modification_Version>4.6</Modification_Version>
+					<Modification_ReleaseDate>2021-10-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Common_Consequences</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+			</Content_History>
+		</Weakness>
+      

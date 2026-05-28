@@ -1,0 +1,335 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="697" Name="Incorrect Comparison" Abstraction="Pillar" Structure="Simple" Status="Incomplete" Diagram="/data/images/CWE-697-Diagram.png">
+         <Description>The product compares two entities in a security-relevant context, but the comparison is incorrect.</Description>
+         <Extended_Description>
+            <xhtml:p>This Pillar covers several possibilities:</xhtml:p>
+               <xhtml:ul>
+                  <xhtml:li>the comparison checks one factor incorrectly;</xhtml:li>
+                  <xhtml:li>the comparison should consider multiple factors, but it does not check at least one of those factors at all;</xhtml:li>
+                  <xhtml:li>the comparison checks the wrong factor.</xhtml:li>
+               </xhtml:ul>
+         </Extended_Description>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+         <Applicable_Platforms>
+            <Language Class="Not Language-Specific" Prevalence="Undetermined" />
+            <Technology Class="Not Technology-Specific" Prevalence="Undetermined" />
+         </Applicable_Platforms>
+         <Modes_Of_Introduction>
+            <Introduction>
+               <Phase>Implementation</Phase>
+            </Introduction>
+         </Modes_Of_Introduction>
+         <Common_Consequences>
+            <Consequence>
+               <Scope>Other</Scope>
+               <Impact>Varies by Context</Impact>
+			   <Note>When the comparison is incorrect, it may lead to resultant weaknesses.</Note>
+            </Consequence>
+         </Common_Consequences>
+         <Detection_Methods>
+	   <Detection_Method Detection_Method_ID="DM-14">
+	     <Method>Automated Static Analysis</Method>
+	     <Description>Automated static analysis, commonly referred to as Static Application Security Testing (SAST), can find some instances of this weakness by analyzing source code (or binary/compiled code) without having to execute it. Typically, this is done by building a model of data flow and control flow, then searching for potentially-vulnerable patterns that connect "sources" (origins of input) with "sinks" (destinations where the data interacts with external components, a lower layer such as the OS, etc.)</Description>
+	   </Detection_Method>
+         </Detection_Methods>
+         <Demonstrative_Examples>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-115">
+               <Intro_Text>Consider an application in which Truck objects are defined to be the same if they have the same make, the same model, and were manufactured in the same year.</Intro_Text>
+               <Example_Code Nature="Bad" Language="Java">
+                  <xhtml:div>public class Truck {<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>private String make;<xhtml:br />private String model;<xhtml:br />private int year;<xhtml:br />
+                           <xhtml:br />public boolean equals(Object o) {<xhtml:div style="margin-left:1em;">
+                              <xhtml:div>if (o == null) return false;<xhtml:br />if (o == this) return true;<xhtml:br />if (!(o instanceof Truck)) return false;<xhtml:br />
+                                 <xhtml:br />Truck t = (Truck) o;<xhtml:br />
+                                 <xhtml:br />return (this.make.equals(t.getMake()) &amp;&amp; this.model.equals(t.getModel()));</xhtml:div>
+                           </xhtml:div>}</xhtml:div>
+                     </xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>Here, the equals() method only checks the make and model of the Truck objects, but the year of manufacture is not included.</Body_Text>
+            </Demonstrative_Example>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-116">
+               <Intro_Text>This example defines a fixed username and password. The AuthenticateUser() function is intended to accept a username and a password from an untrusted user, and check to ensure that it matches the username and password. If the username and password match, AuthenticateUser() is intended to indicate that authentication succeeded.</Intro_Text>
+               <Example_Code Nature="Bad" Language="C">
+                  <xhtml:div>
+                     <xhtml:i>/* Ignore CWE-259 (hard-coded password) and CWE-309 (use of password system for authentication) for this example. */</xhtml:i>
+                     <xhtml:br />
+                     <xhtml:br />char *username = "admin";<xhtml:br />char *pass = "password";<xhtml:br />
+                     <xhtml:br />int AuthenticateUser(char *inUser, char *inPass) {<xhtml:div style="margin-left:1em;">if (strncmp(username, inUser, strlen(inUser))) {<xhtml:div style="margin-left:1em;">logEvent("Auth failure of username using strlen of inUser");<xhtml:br />return(AUTH_FAIL);</xhtml:div>}<xhtml:br />if (! strncmp(pass, inPass, strlen(inPass))) {<xhtml:div style="margin-left:1em;">logEvent("Auth success of password using strlen of inUser");<xhtml:br />return(AUTH_SUCCESS);</xhtml:div>}<xhtml:br />else {<xhtml:div style="margin-left:1em;">logEvent("Auth fail of password using sizeof");<xhtml:br />return(AUTH_FAIL);</xhtml:div>}</xhtml:div>}<xhtml:br />
+                     <xhtml:br />int main (int argc, char **argv) {<xhtml:div style="margin-left:1em;">
+                     int authResult;<xhtml:br /><xhtml:br />if (argc &lt; 3) {<xhtml:div style="margin-left:1em;">ExitError("Usage: Provide a username and password");</xhtml:div>}<xhtml:br />authResult = AuthenticateUser(argv[1], argv[2]);<xhtml:br />if (authResult == AUTH_SUCCESS) {<xhtml:div style="margin-left:1em;">DoAuthenticatedTask(argv[1]);</xhtml:div>}<xhtml:br />else {<xhtml:div style="margin-left:1em;">ExitError("Authentication failed");</xhtml:div>}</xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>In AuthenticateUser(), the strncmp() call uses the string length of an attacker-provided inPass parameter in order to determine how many characters to check in the password. So, if the attacker only provides a password of length 1, the check will only examine the first byte of the application's password before determining success.</Body_Text>
+               <Body_Text>As a result, this partial comparison leads to improper authentication (CWE-287).</Body_Text>
+               <Body_Text>Any of these passwords would still cause authentication to succeed for the "admin" user:</Body_Text>
+               <Example_Code Nature="Attack">
+                  <xhtml:div>p<xhtml:br />pa<xhtml:br />pas<xhtml:br />pass</xhtml:div>
+               </Example_Code>
+               <Body_Text>This significantly reduces the search space for an attacker, making brute force attacks more feasible.</Body_Text>
+               <Body_Text>The same problem also applies to the username, so values such as "a" and "adm" will succeed for the username.</Body_Text>
+               <Body_Text>While this demonstrative example may not seem realistic, see the Observed Examples for CVE entries that effectively reflect this same weakness.</Body_Text>
+            </Demonstrative_Example>
+         </Demonstrative_Examples>
+         <Observed_Examples>
+            <Observed_Example>
+               <Reference>CVE-2021-3116</Reference>
+               <Description>Chain: Python-based HTTP Proxy server uses the wrong boolean operators (CWE-480) causing an  incorrect comparison (CWE-697) that identifies an authN failure if all three conditions are met instead of only one, allowing bypass of the proxy authentication (CWE-1390)</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2021-3116</Link>
+            </Observed_Example>
+	   <Observed_Example>
+               <Reference>CVE-2020-15811</Reference>
+               <Description>Chain: Proxy uses a substring search instead of parsing the Transfer-Encoding header (CWE-697), allowing request splitting (CWE-113) and cache poisoning</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2020-15811</Link>
+	   </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2016-10003</Reference>
+               <Description>Proxy performs incorrect comparison of request headers, leading to infoleak</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2016-10003</Link>
+            </Observed_Example>
+         </Observed_Examples>
+         <Related_Attack_Patterns>
+            <Related_Attack_Pattern CAPEC_ID="10" />
+            <Related_Attack_Pattern CAPEC_ID="120" />
+            <Related_Attack_Pattern CAPEC_ID="14" />
+            <Related_Attack_Pattern CAPEC_ID="15" />
+            <Related_Attack_Pattern CAPEC_ID="182" />
+            <Related_Attack_Pattern CAPEC_ID="24" />
+            <Related_Attack_Pattern CAPEC_ID="267" />
+            <Related_Attack_Pattern CAPEC_ID="3" />
+            <Related_Attack_Pattern CAPEC_ID="41" />
+            <Related_Attack_Pattern CAPEC_ID="43" />
+            <Related_Attack_Pattern CAPEC_ID="44" />
+            <Related_Attack_Pattern CAPEC_ID="45" />
+            <Related_Attack_Pattern CAPEC_ID="46" />
+            <Related_Attack_Pattern CAPEC_ID="47" />
+            <Related_Attack_Pattern CAPEC_ID="52" />
+            <Related_Attack_Pattern CAPEC_ID="53" />
+            <Related_Attack_Pattern CAPEC_ID="6" />
+            <Related_Attack_Pattern CAPEC_ID="64" />
+            <Related_Attack_Pattern CAPEC_ID="67" />
+            <Related_Attack_Pattern CAPEC_ID="7" />
+            <Related_Attack_Pattern CAPEC_ID="71" />
+            <Related_Attack_Pattern CAPEC_ID="73" />
+            <Related_Attack_Pattern CAPEC_ID="78" />
+            <Related_Attack_Pattern CAPEC_ID="79" />
+            <Related_Attack_Pattern CAPEC_ID="8" />
+            <Related_Attack_Pattern CAPEC_ID="80" />
+            <Related_Attack_Pattern CAPEC_ID="88" />
+            <Related_Attack_Pattern CAPEC_ID="9" />
+            <Related_Attack_Pattern CAPEC_ID="92" />
+         </Related_Attack_Patterns>
+         <Mapping_Notes>
+            <Usage>Discouraged</Usage>
+            <Rationale>This CWE entry is extremely high-level, a Pillar. However, sometimes this weakness is forced to be used due to the lack of in-depth weakness research. See Research Gaps.</Rationale>
+            <Comments>Where feasible, consider children or descendants of this entry instead.</Comments>
+            <Reasons>
+               <Reason Type="Abstraction" />
+            </Reasons>
+         </Mapping_Notes>
+         <Notes>
+            <Note Type="Research Gap">
+			  <xhtml:p>Weaknesses related to this Pillar appear to be under-studied, especially with respect to classification schemes. Input from academic and other communities could help identify and resolve gaps or organizational difficulties within CWE.</xhtml:p>
+			</Note>
+            <Note Type="Maintenance">
+      			This entry likely has some relationships with case sensitivity (CWE-178), but case sensitivity is a factor in other types of weaknesses besides comparison.  Also, in cryptography, certain attacks are possible when certain comparison operations do not take place in constant time, causing a timing-related information leak (CWE-208).  
+      		</Note>
+         </Notes>
+         <Content_History>
+            <Submission>
+                <Submission_Name>CWE Content Team</Submission_Name>
+				<Submission_Organization>MITRE</Submission_Organization>
+                <Submission_Date>2008-09-09</Submission_Date>
+                <Submission_Version>1.0</Submission_Version>
+                <Submission_ReleaseDate>2008-09-09</Submission_ReleaseDate>
+            </Submission>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2008-11-24</Modification_Date>
+               <Modification_Version>1.1</Modification_Version>
+               <Modification_ReleaseDate>2008-11-25</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2009-03-10</Modification_Date>
+               <Modification_Version>1.3</Modification_Version>
+               <Modification_ReleaseDate>2009-03-10</Modification_ReleaseDate>
+               <Modification_Comment>updated Related_Attack_Patterns</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2009-05-27</Modification_Date>
+               <Modification_Version>1.4</Modification_Version>
+               <Modification_ReleaseDate>2009-05-27</Modification_ReleaseDate>
+               <Modification_Comment>updated Description</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-03-29</Modification_Date>
+               <Modification_Version>1.12</Modification_Version>
+               <Modification_ReleaseDate>2011-03-30</Modification_ReleaseDate>
+               <Modification_Comment>updated Description</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-06-01</Modification_Date>
+               <Modification_Version>1.13</Modification_Version>
+               <Modification_ReleaseDate>2011-06-01</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-09-13</Modification_Date>
+               <Modification_Version>2.1</Modification_Version>
+               <Modification_ReleaseDate>2011-09-13</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2012-05-11</Modification_Date>
+               <Modification_Version>2.2</Modification_Version>
+               <Modification_ReleaseDate>2012-05-15</Modification_ReleaseDate>
+               <Modification_Comment>updated Related_Attack_Patterns, Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2014-07-30</Modification_Date>
+               <Modification_Version>2.8</Modification_Version>
+               <Modification_ReleaseDate>2014-07-31</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2017-05-03</Modification_Date>
+               <Modification_Version>2.11</Modification_Version>
+               <Modification_ReleaseDate>2017-05-05</Modification_ReleaseDate>
+               <Modification_Comment>updated Related_Attack_Patterns</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2017-11-08</Modification_Date>
+               <Modification_Version>3.0</Modification_Version>
+               <Modification_ReleaseDate>2017-11-08</Modification_ReleaseDate>
+               <Modification_Comment>updated Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2018-03-27</Modification_Date>
+               <Modification_Version>3.1</Modification_Version>
+               <Modification_ReleaseDate>2018-03-27</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences, Demonstrative_Examples, Description, Maintenance_Notes, Name, Observed_Examples, Relationships</Modification_Comment>
+            </Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2019-01-03</Modification_Date>
+					<Modification_Version>3.2</Modification_Version>
+					<Modification_ReleaseDate>2019-01-03</Modification_ReleaseDate>
+					<Modification_Comment>updated Related_Attack_Patterns, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2019-06-20</Modification_Date>
+					<Modification_Version>3.3</Modification_Version>
+					<Modification_ReleaseDate>2019-06-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Related_Attack_Patterns</Modification_Comment>
+				</Modification>
+		<Modification>
+		<Modification_Name>CWE Content Team</Modification_Name>
+		<Modification_Organization>MITRE</Modification_Organization>
+		<Modification_Date>2019-09-19</Modification_Date>
+		<Modification_Version>3.4</Modification_Version>
+		<Modification_ReleaseDate>2019-09-19</Modification_ReleaseDate>
+		<Modification_Comment>updated Relationships</Modification_Comment>
+		</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-02-24</Modification_Date>
+					<Modification_Version>4.0</Modification_Version>
+					<Modification_ReleaseDate>2020-02-24</Modification_ReleaseDate>
+					<Modification_Comment>updated Applicable_Platforms, Relationships, Type</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-06-25</Modification_Date>
+					<Modification_Version>4.1</Modification_Version>
+					<Modification_ReleaseDate>2020-06-25</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-08-20</Modification_Date>
+					<Modification_Version>4.2</Modification_Version>
+					<Modification_ReleaseDate>2020-08-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Related_Attack_Patterns</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-04-28</Modification_Date>
+					<Modification_Version>4.7</Modification_Version>
+					<Modification_ReleaseDate>2022-04-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Related_Attack_Patterns</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-06-28</Modification_Date>
+					<Modification_Version>4.8</Modification_Version>
+					<Modification_ReleaseDate>2022-06-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Observed_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-01-31</Modification_Date>
+					<Modification_Version>4.10</Modification_Version>
+					<Modification_ReleaseDate>2023-01-31</Modification_ReleaseDate>
+					<Modification_Comment>updated Description, Observed_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes, Research_Gaps</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Common_Consequences, Description, Detection_Factors, Diagram</Modification_Comment>
+				</Modification>
+            <Previous_Entry_Name Date="2018-03-27">Insufficient Comparison</Previous_Entry_Name>
+         </Content_History>
+      </Weakness>
+      

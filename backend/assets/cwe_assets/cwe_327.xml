@@ -1,0 +1,690 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="327" Name="Use of a Broken or Risky Cryptographic Algorithm" Abstraction="Class" Structure="Simple" Status="Draft">
+         <Description>The product uses a broken or risky cryptographic algorithm or protocol.</Description>
+         <Extended_Description>
+	   <xhtml:p>Cryptographic algorithms are the methods by which data is scrambled to prevent observation or influence by unauthorized actors. Insecure cryptography can be exploited to expose sensitive information, modify data in unexpected ways, spoof identities of other users or devices, or other impacts.</xhtml:p>
+           <xhtml:p>It is very difficult to produce a secure algorithm, and even high-profile algorithms by accomplished cryptographic experts have been broken. Well-known techniques exist to break or weaken various kinds of cryptography. Accordingly, there are a small number of well-understood and heavily studied algorithms that should be used by most products. Using a non-standard or known-insecure algorithm is dangerous because a determined adversary may be able to break the algorithm and compromise whatever data has been protected.</xhtml:p>
+           <xhtml:p>Since the state of cryptography advances so rapidly, it is common for an algorithm to be considered "unsafe" even if it was once thought to be strong. This can happen when new attacks are discovered, or if computing power increases so much that the cryptographic algorithm no longer provides the amount of protection that was originally thought.</xhtml:p>
+	   <xhtml:p>For a number of reasons, this weakness is even more challenging to manage with hardware deployment of cryptographic algorithms as opposed to software implementation. First, if a flaw is discovered with hardware-implemented cryptography, the flaw cannot be fixed in most cases without a recall of the product, because hardware is not easily replaceable like software. Second, because the hardware product is expected to work for years, the adversary's computing power will only increase over time.</xhtml:p>
+	 </Extended_Description>
+         <Related_Weaknesses>
+            <Related_Weakness Nature="ChildOf" CWE_ID="693" View_ID="1000" Ordinal="Primary" />
+            <Related_Weakness Nature="PeerOf" CWE_ID="311" View_ID="1000" />
+         </Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+         <Applicable_Platforms>
+           <Language Class="Not Language-Specific" Prevalence="Undetermined" />
+	   <Language Name="Verilog" Prevalence="Undetermined" />
+           <Language Name="VHDL" Prevalence="Undetermined" />
+           <Technology Class="Not Technology-Specific" Prevalence="Undetermined" />
+	   <Technology Class="ICS/OT" Prevalence="Undetermined" />
+         </Applicable_Platforms>
+         <Modes_Of_Introduction>
+            <Introduction>
+               <Phase>Architecture and Design</Phase>
+               <Note>COMMISSION: This weakness refers to an incorrect design related to an architectural security tactic.</Note>
+            </Introduction>
+            <Introduction>
+               <Phase>Implementation</Phase>
+               <Note>With hardware, the Architecture or Design Phase might start with compliant cryptography, but it is replaced with a non-compliant crypto during the later Implementation phase due to implementation constraints (e.g., not enough entropy to make it function properly, or not enough silicon real estate available to implement). Or, in rare cases (especially for long projects that span over years), the Architecture specifications might start with cryptography that was originally compliant at the time the Architectural specs were written, but over the time it became non-compliant due to progress made in attacking the crypto.</Note>
+            </Introduction>
+         </Modes_Of_Introduction>
+         <Likelihood_Of_Exploit>High</Likelihood_Of_Exploit>
+         <Common_Consequences>
+            <Consequence>
+               <Scope>Confidentiality</Scope>
+               <Impact>Read Application Data</Impact>
+               <Note>The confidentiality of sensitive data may be compromised by the use of a broken or risky cryptographic algorithm.</Note>
+            </Consequence>
+            <Consequence>
+               <Scope>Integrity</Scope>
+               <Impact>Modify Application Data</Impact>
+               <Note>The integrity of sensitive data may be compromised by the use of a broken or risky cryptographic algorithm.</Note>
+            </Consequence>
+            <Consequence>
+               <Scope>Accountability</Scope>
+               <Scope>Non-Repudiation</Scope>
+               <Impact>Hide Activities</Impact>
+               <Note>If the cryptographic algorithm is used to ensure the identity of the source of the data (such as digital signatures), then a broken algorithm will compromise this scheme and the source of the data cannot be proven.</Note>
+            </Consequence>
+         </Common_Consequences>
+         <Detection_Methods>
+            <Detection_Method>
+               <Method>Automated Analysis</Method>
+               <Description>Automated methods may be useful for recognizing commonly-used libraries or features that have become obsolete.</Description>
+               <Effectiveness>Moderate</Effectiveness>
+               <Effectiveness_Notes>False negatives may occur if the tool is not aware of the cryptographic libraries in use, or if custom cryptography is being used.</Effectiveness_Notes>
+            </Detection_Method>
+            <Detection_Method Detection_Method_ID="DM-7">
+               <Method>Manual Analysis</Method>
+               <Description>This weakness can be detected using tools and techniques that require manual (human) analysis, such as penetration testing, threat modeling, and interactive tools that allow the tester to record and modify an active session.</Description>
+               <Effectiveness_Notes>These may be more effective than strictly automated techniques. This is especially the case with weaknesses that are related to design and business rules.</Effectiveness_Notes>
+            </Detection_Method>
+            <Detection_Method>
+               <Method>Automated Static Analysis - Binary or Bytecode</Method>
+               <Description>
+                  <xhtml:p>According to SOAR [REF-1479], the following detection techniques may be useful:</xhtml:p>
+                  <xhtml:div style="margin-left:1em;">
+                     <xhtml:div>Cost effective for partial coverage:</xhtml:div>
+                        <xhtml:ul>
+                           <xhtml:li>Bytecode Weakness Analysis - including disassembler + source code weakness analysis</xhtml:li>
+                           <xhtml:li>Binary Weakness Analysis - including disassembler + source code weakness analysis</xhtml:li>
+                           <xhtml:li>Binary / Bytecode simple extractor - strings, ELF readers, etc.</xhtml:li>
+                        </xhtml:ul>
+                  </xhtml:div>
+               </Description>
+               <Effectiveness>SOAR Partial</Effectiveness>
+            </Detection_Method>
+            <Detection_Method>
+               <Method>Manual Static Analysis - Binary or Bytecode</Method>
+               <Description>
+                  <xhtml:p>According to SOAR [REF-1479], the following detection techniques may be useful:</xhtml:p>
+                  <xhtml:div style="margin-left:1em;">
+                     <xhtml:div>Cost effective for partial coverage:</xhtml:div>
+                        <xhtml:ul>
+                           <xhtml:li>Binary / Bytecode disassembler - then use manual analysis for vulnerabilities &amp; anomalies</xhtml:li>
+                        </xhtml:ul>
+                  </xhtml:div>
+               </Description>
+               <Effectiveness>SOAR Partial</Effectiveness>
+            </Detection_Method>
+            <Detection_Method>
+               <Method>Dynamic Analysis with Automated Results Interpretation</Method>
+               <Description>
+                  <xhtml:p>According to SOAR [REF-1479], the following detection techniques may be useful:</xhtml:p>
+                  <xhtml:div style="margin-left:1em;">
+                     <xhtml:div>Cost effective for partial coverage:</xhtml:div>
+                        <xhtml:ul>
+                           <xhtml:li>Web Application Scanner</xhtml:li>
+                           <xhtml:li>Web Services Scanner</xhtml:li>
+                           <xhtml:li>Database Scanners</xhtml:li>
+                        </xhtml:ul>
+                  </xhtml:div>
+               </Description>
+               <Effectiveness>SOAR Partial</Effectiveness>
+            </Detection_Method>
+            <Detection_Method>
+               <Method>Dynamic Analysis with Manual Results Interpretation</Method>
+               <Description>
+                  <xhtml:p>According to SOAR [REF-1479], the following detection techniques may be useful:</xhtml:p>
+                  <xhtml:div style="margin-left:1em;">
+                     <xhtml:div>Highly cost effective:</xhtml:div>
+                        <xhtml:ul>
+                           <xhtml:li>Man-in-the-middle attack tool</xhtml:li>
+                        </xhtml:ul>
+                     <xhtml:div>Cost effective for partial coverage:</xhtml:div>
+                        <xhtml:ul>
+                           <xhtml:li>Framework-based Fuzzer</xhtml:li>
+                           <xhtml:li>Automated Monitored Execution</xhtml:li>
+                           <xhtml:li>Monitored Virtual Environment - run potentially malicious code in sandbox / wrapper / virtual machine, see if it does anything suspicious</xhtml:li>
+                        </xhtml:ul>
+                  </xhtml:div>
+               </Description>
+               <Effectiveness>High</Effectiveness>
+            </Detection_Method>
+            <Detection_Method>
+               <Method>Manual Static Analysis - Source Code</Method>
+               <Description>
+                  <xhtml:p>According to SOAR [REF-1479], the following detection techniques may be useful:</xhtml:p>
+                  <xhtml:div style="margin-left:1em;">
+                     <xhtml:div>Highly cost effective:</xhtml:div>
+                        <xhtml:ul>
+                           <xhtml:li>Manual Source Code Review (not inspections)</xhtml:li>
+                        </xhtml:ul>
+                     <xhtml:div>Cost effective for partial coverage:</xhtml:div>
+                        <xhtml:ul>
+                           <xhtml:li>Focused Manual Spotcheck - Focused manual analysis of source</xhtml:li>
+                        </xhtml:ul>
+                  </xhtml:div>
+               </Description>
+               <Effectiveness>High</Effectiveness>
+            </Detection_Method>
+            <Detection_Method>
+               <Method>Automated Static Analysis - Source Code</Method>
+               <Description>
+                  <xhtml:p>According to SOAR [REF-1479], the following detection techniques may be useful:</xhtml:p>
+                  <xhtml:div style="margin-left:1em;">
+                     <xhtml:div>Highly cost effective:</xhtml:div>
+                        <xhtml:ul>
+                           <xhtml:li>Source code Weakness Analyzer</xhtml:li>
+                           <xhtml:li>Context-configured Source Code Weakness Analyzer</xhtml:li>
+                        </xhtml:ul>
+                  </xhtml:div>
+               </Description>
+               <Effectiveness>High</Effectiveness>
+            </Detection_Method>
+            <Detection_Method>
+               <Method>Automated Static Analysis</Method>
+               <Description>
+                  <xhtml:p>According to SOAR [REF-1479], the following detection techniques may be useful:</xhtml:p>
+                  <xhtml:div style="margin-left:1em;">
+                     <xhtml:div>Cost effective for partial coverage:</xhtml:div>
+                        <xhtml:ul>
+                           <xhtml:li>Configuration Checker</xhtml:li>
+                        </xhtml:ul>
+                  </xhtml:div>
+               </Description>
+               <Effectiveness>SOAR Partial</Effectiveness>
+            </Detection_Method>
+            <Detection_Method>
+               <Method>Architecture or Design Review</Method>
+               <Description>
+                  <xhtml:p>According to SOAR [REF-1479], the following detection techniques may be useful:</xhtml:p>
+                  <xhtml:div style="margin-left:1em;">
+                     <xhtml:div>Highly cost effective:</xhtml:div>
+                        <xhtml:ul>
+                           <xhtml:li>Formal Methods / Correct-By-Construction</xhtml:li>
+                        </xhtml:ul>
+                     <xhtml:div>Cost effective for partial coverage:</xhtml:div>
+                        <xhtml:ul>
+                           <xhtml:li>Inspection (IEEE 1028 standard) (can apply to requirements, design, source code, etc.)</xhtml:li>
+                        </xhtml:ul>
+                  </xhtml:div>
+               </Description>
+               <Effectiveness>High</Effectiveness>
+            </Detection_Method>
+         </Detection_Methods>
+         <Potential_Mitigations>
+            <Mitigation Mitigation_ID="MIT-24">
+               <Phase>Architecture and Design</Phase>
+               <Strategy>Libraries or Frameworks</Strategy>
+               <Description>
+                  <xhtml:p>When there is a need to store or transmit sensitive data, use strong, up-to-date cryptographic algorithms to encrypt that data. Select a well-vetted algorithm that is currently considered to be strong by experts in the field, and use well-tested implementations. As with all cryptographic mechanisms, the source code should be available for analysis.</xhtml:p>
+                  <xhtml:p>For example, US government systems require FIPS 140-2 certification [REF-1192].</xhtml:p>
+                  <xhtml:p>Do not develop custom or private cryptographic algorithms. They will likely be exposed to attacks that are well-understood by cryptographers. Reverse engineering techniques are mature. If the algorithm can be compromised if attackers find out how it works, then it is especially weak.</xhtml:p>
+                  <xhtml:p>Periodically ensure that the cryptography has not become obsolete. Some older algorithms, once thought to require a billion years of computing time, can now be broken in days or hours. This includes MD4, MD5, SHA1, DES, and other algorithms that were once regarded as strong. [REF-267]</xhtml:p>
+               </Description>
+            </Mitigation>
+        <Mitigation Mitigation_ID="MIT-52">
+          <Phase>Architecture and Design</Phase>
+          <Description>Ensure that the design allows one cryptographic algorithm to be replaced with another in the next generation or version. Where possible, use wrappers to make the interfaces uniform. This will make it easier to upgrade to stronger algorithms. With hardware, design the product at the Intellectual Property (IP) level so that one cryptographic algorithm can be replaced with another in the next generation of the hardware product.</Description>
+	  <Effectiveness>Defense in Depth</Effectiveness>
+        </Mitigation>
+            <Mitigation>
+               <Phase>Architecture and Design</Phase>
+               <Description>Carefully manage and protect cryptographic keys (see CWE-320). If the keys can be guessed or stolen, then the strength of the cryptography itself is irrelevant.</Description>
+            </Mitigation>
+            <Mitigation Mitigation_ID="MIT-4">
+               <Phase>Architecture and Design</Phase>
+               <Strategy>Libraries or Frameworks</Strategy>
+               <Description>
+                  <xhtml:p>Use a vetted library or framework that does not allow this weakness to occur or provides constructs that make this weakness easier to avoid [REF-1482].</xhtml:p>
+                  <xhtml:p>Industry-standard implementations will save development time and may be more likely to avoid errors that can occur during implementation of cryptographic algorithms. Consider the ESAPI Encryption feature.</xhtml:p>
+               </Description>
+            </Mitigation>
+            <Mitigation Mitigation_ID="MIT-25">
+               <Phase>Implementation</Phase>
+               <Phase>Architecture and Design</Phase>
+               <Description>When using industry-approved techniques, use them correctly. Don't cut corners by skipping resource-intensive steps (CWE-325). These steps are often essential for preventing common attacks.</Description>
+            </Mitigation>
+         </Potential_Mitigations>
+         <Demonstrative_Examples>
+            <Demonstrative_Example>
+               <Intro_Text>These code examples use the Data Encryption Standard (DES).</Intro_Text>
+               <Example_Code Nature="Bad" Language="C">
+                  <xhtml:div>EVP_des_ecb();</xhtml:div>
+               </Example_Code>
+               <Example_Code Nature="Bad" Language="Java">
+                  <xhtml:div>Cipher des=Cipher.getInstance("DES...");<xhtml:br />des.initEncrypt(key2);</xhtml:div>
+               </Example_Code>
+               <Example_Code Nature="Bad" Language="PHP">
+                  <xhtml:div>function encryptPassword($password){<xhtml:div style="margin-left:1em;">$iv_size = mcrypt_get_iv_size(MCRYPT_DES, MCRYPT_MODE_ECB);<xhtml:br />$iv = mcrypt_create_iv($iv_size, MCRYPT_RAND);<xhtml:br />$key = "This is a password encryption key";<xhtml:br />$encryptedPassword = mcrypt_encrypt(MCRYPT_DES, $key, $password, MCRYPT_MODE_ECB, $iv);<xhtml:br />return $encryptedPassword;</xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>Once considered a strong algorithm, DES now regarded as insufficient for many applications. It has been replaced by Advanced Encryption Standard (AES).</Body_Text>
+            </Demonstrative_Example>
+	    <Demonstrative_Example>
+	      <Intro_Text>Suppose a chip manufacturer decides to implement a hashing scheme for verifying integrity property of certain bitstream, and it chooses to implement a SHA1 hardware accelerator for to implement the scheme.</Intro_Text>
+	      <Example_Code Nature="Bad" Language="Other">
+		<xhtml:div>The manufacturer chooses a SHA1 hardware accelerator for to implement the scheme because it already has a working SHA1 Intellectual Property (IP) that the manufacturer had created and used earlier, so this reuse of IP saves design cost.</xhtml:div>
+	      </Example_Code>
+	      <Body_Text>However, SHA1 was theoretically broken in 2005 and practically broken in 2017 at a cost of $110K. This means an attacker with access to cloud-rented computing power will now be able to provide a malicious bitstream with the same hash value, thereby defeating the purpose for which the hash was used.</Body_Text>
+	      <Body_Text>This issue could have been avoided with better design.</Body_Text>
+	      <Example_Code Nature="Good" Language="Other">
+		<xhtml:div>The manufacturer could have chosen a cryptographic solution that is recommended by the wide security community (including standard-setting bodies like NIST) and is not expected to be broken (or even better, weakened) within the reasonable life expectancy of the hardware product. In this case, the architects could have used SHA-2 or SHA-3, even if it meant that such choice would cost extra.</xhtml:div>
+	      </Example_Code>
+	    </Demonstrative_Example>
+		<Demonstrative_Example Demonstrative_Example_ID="DX-153">
+			<Intro_Text>In 2022, the OT:ICEFALL study examined products by 10 different Operational Technology (OT) vendors. The researchers reported 56 vulnerabilities and said that the products were "insecure by design" [REF-1283]. If exploited, these vulnerabilities often allowed adversaries to change how the products operated, ranging from denial of service to changing the code that the products executed. Since these products were often used in industries such as power, electrical, water, and others, there could even be safety implications.</Intro_Text>
+			<Body_Text>Multiple OT products used weak cryptography.</Body_Text>
+		 </Demonstrative_Example>
+         </Demonstrative_Examples>
+         <Observed_Examples>
+            <Observed_Example>
+               <Reference>CVE-2022-30273</Reference>
+               <Description>SCADA-based protocol supports a legacy encryption mode that uses Tiny Encryption Algorithm (TEA) in ECB mode, which leaks patterns in messages and cannot protect integrity</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2022-30273</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2022-30320</Reference>
+               <Description>Programmable Logic Controller (PLC) uses a protocol with a cryptographically insecure hashing algorithm for passwords.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2022-30320</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2008-3775</Reference>
+               <Description>Product uses "ROT-25" to obfuscate the password in the registry.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2008-3775</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2007-4150</Reference>
+               <Description>product only uses "XOR" to obfuscate sensitive data</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2007-4150</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2007-5460</Reference>
+               <Description>product only uses "XOR" and a fixed key to obfuscate sensitive data</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2007-5460</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2005-4860</Reference>
+               <Description>Product substitutes characters with other characters in a fixed way, and also leaves certain input characters unchanged.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2005-4860</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2002-2058</Reference>
+               <Description>Attackers can infer private IP addresses by dividing each octet by the MD5 hash of '20'.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2002-2058</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2008-3188</Reference>
+               <Description>Product uses DES when MD5 has been specified in the configuration, resulting in weaker-than-expected password hashes.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2008-3188</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2005-2946</Reference>
+               <Description>Default configuration of product uses MD5 instead of stronger algorithms that are available, simplifying forgery of certificates.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2005-2946</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2007-6013</Reference>
+               <Description>Product uses the hash of a hash for authentication, allowing attackers to gain privileges if they can obtain the original hash.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2007-6013</Link>
+            </Observed_Example>
+         </Observed_Examples>
+         <Taxonomy_Mappings>
+            <Taxonomy_Mapping Taxonomy_Name="CLASP">
+               <Entry_Name>Using a broken or risky cryptographic algorithm</Entry_Name>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="OWASP Top Ten 2004">
+               <Entry_ID>A8</Entry_ID>
+               <Entry_Name>Insecure Storage</Entry_Name>
+               <Mapping_Fit>CWE More Specific</Mapping_Fit>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="CERT C Secure Coding">
+               <Entry_ID>MSC30-C</Entry_ID>
+               <Entry_Name>Do not use the rand() function for generating pseudorandom numbers</Entry_Name>
+               <Mapping_Fit>CWE More Abstract</Mapping_Fit>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="CERT C Secure Coding">
+               <Entry_ID>MSC32-C</Entry_ID>
+               <Entry_Name>Properly seed pseudorandom number generators</Entry_Name>
+               <Mapping_Fit>CWE More Abstract</Mapping_Fit>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="The CERT Oracle Secure Coding Standard for Java (2011)">
+               <Entry_ID>MSC02-J</Entry_ID>
+               <Entry_Name>Generate strong random numbers</Entry_Name>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="OMG ASCSM">
+                <Entry_ID>ASCSM-CWE-327</Entry_ID>
+            </Taxonomy_Mapping>
+			<Taxonomy_Mapping Taxonomy_Name="ISA/IEC 62443">
+			  <Entry_ID>Part 3-3</Entry_ID>
+              <Entry_Name>Req SR 4.3</Entry_Name>
+			</Taxonomy_Mapping>
+			<Taxonomy_Mapping Taxonomy_Name="ISA/IEC 62443">
+			  <Entry_ID>Part 4-2</Entry_ID>
+              <Entry_Name>Req CR 4.3</Entry_Name>
+			</Taxonomy_Mapping>
+         </Taxonomy_Mappings>
+         <Related_Attack_Patterns>
+            <Related_Attack_Pattern CAPEC_ID="20" />
+            <Related_Attack_Pattern CAPEC_ID="459" />
+            <Related_Attack_Pattern CAPEC_ID="473" />
+            <Related_Attack_Pattern CAPEC_ID="475" />
+            <Related_Attack_Pattern CAPEC_ID="608" />
+            <Related_Attack_Pattern CAPEC_ID="614" />
+            <Related_Attack_Pattern CAPEC_ID="97" />
+         </Related_Attack_Patterns>
+         <References>
+            <Reference External_Reference_ID="REF-280" />
+            <Reference External_Reference_ID="REF-281" />
+            <Reference External_Reference_ID="REF-282" />
+            <Reference External_Reference_ID="REF-267" />
+            <Reference External_Reference_ID="REF-284" />
+            <Reference External_Reference_ID="REF-7" Section="Chapter 8, &quot;Cryptographic Foibles&quot; Page 259" />
+            <Reference External_Reference_ID="REF-44" Section="&quot;Sin 21: Using the Wrong Cryptography.&quot; Page 315" />
+            <Reference External_Reference_ID="REF-287" />
+            <Reference External_Reference_ID="REF-62" Section="Chapter 2, &quot;Insufficient or Obsolete Encryption&quot;, Page 44" />
+            <Reference External_Reference_ID="REF-962" Section="ASCSM-CWE-327" />
+            <Reference External_Reference_ID="REF-18" />
+            <Reference External_Reference_ID="REF-1192" />
+            <Reference External_Reference_ID="REF-1283" />
+            <Reference External_Reference_ID="REF-1479" />
+	    <Reference External_Reference_ID="REF-1482" />
+         </References>
+         <Mapping_Notes>
+            <Usage>Allowed-with-Review</Usage>
+            <Rationale>This CWE entry is a Class and might have Base-level children that would be more appropriate</Rationale>
+            <Comments>Examine children of this entry to see if there is a better fit</Comments>
+            <Reasons>
+               <Reason Type="Abstraction" />
+            </Reasons>
+         </Mapping_Notes>
+         <Notes>
+           <Note Type="Maintenance">Since CWE 4.4, various cryptography-related entries, including CWE-327 and CWE-1240, have been slated for extensive research, analysis, and community consultation to define consistent terminology, improve relationships, and reduce overlap or duplication. As of CWE 4.6, this work is still ongoing.</Note>
+         </Notes>
+         <Content_History>
+            <Submission>
+               <Submission_Name>CLASP</Submission_Name>
+               <Submission_Date>2006-07-19</Submission_Date>
+               <Submission_Version>Draft 3</Submission_Version>
+               <Submission_ReleaseDate>2006-07-19</Submission_ReleaseDate>
+            </Submission>
+            <Modification>
+               <Modification_Organization>Veracode</Modification_Organization>
+               <Modification_Date>2008-08-15</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>Suggested OWASP Top Ten 2004 mapping</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2008-09-08</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>updated Background_Details, Common_Consequences, Description, Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2009-01-12</Modification_Date>
+               <Modification_Version>1.2</Modification_Version>
+               <Modification_ReleaseDate>2009-01-12</Modification_ReleaseDate>
+               <Modification_Comment>updated Demonstrative_Examples, Description, Observed_Examples, Potential_Mitigations, References, Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2009-03-10</Modification_Date>
+               <Modification_Version>1.3</Modification_Version>
+               <Modification_ReleaseDate>2009-03-10</Modification_ReleaseDate>
+               <Modification_Comment>updated Potential_Mitigations</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2009-07-27</Modification_Date>
+               <Modification_Version>1.5</Modification_Version>
+               <Modification_ReleaseDate>2009-07-27</Modification_ReleaseDate>
+               <Modification_Comment>updated Maintenance_Notes, Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2009-10-29</Modification_Date>
+               <Modification_Version>1.6</Modification_Version>
+               <Modification_ReleaseDate>2009-10-29</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2009-12-28</Modification_Date>
+               <Modification_Version>1.7</Modification_Version>
+               <Modification_ReleaseDate>2009-12-28</Modification_ReleaseDate>
+               <Modification_Comment>updated References</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2010-02-16</Modification_Date>
+               <Modification_Version>1.8</Modification_Version>
+               <Modification_ReleaseDate>2010-02-16</Modification_ReleaseDate>
+               <Modification_Comment>updated Detection_Factors, References, Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2010-04-05</Modification_Date>
+               <Modification_Version>1.8.1</Modification_Version>
+               <Modification_ReleaseDate>2010-04-05</Modification_ReleaseDate>
+               <Modification_Comment>updated Applicable_Platforms, Potential_Mitigations, Related_Attack_Patterns</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2010-06-21</Modification_Date>
+               <Modification_Version>1.9</Modification_Version>
+               <Modification_ReleaseDate>2010-06-21</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences, Detection_Factors, Potential_Mitigations, References, Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2010-09-27</Modification_Date>
+               <Modification_Version>1.10</Modification_Version>
+               <Modification_ReleaseDate>2010-09-27</Modification_ReleaseDate>
+               <Modification_Comment>updated Potential_Mitigations, Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-03-29</Modification_Date>
+               <Modification_Version>1.12</Modification_Version>
+               <Modification_ReleaseDate>2011-03-30</Modification_ReleaseDate>
+               <Modification_Comment>updated Demonstrative_Examples, Description</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-06-01</Modification_Date>
+               <Modification_Version>1.13</Modification_Version>
+               <Modification_ReleaseDate>2011-06-01</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-06-27</Modification_Date>
+               <Modification_Version>2.0</Modification_Version>
+               <Modification_ReleaseDate>2011-06-27</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-09-13</Modification_Date>
+               <Modification_Version>2.1</Modification_Version>
+               <Modification_ReleaseDate>2011-09-13</Modification_ReleaseDate>
+               <Modification_Comment>updated Potential_Mitigations, Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2012-05-11</Modification_Date>
+               <Modification_Version>2.2</Modification_Version>
+               <Modification_ReleaseDate>2012-05-15</Modification_ReleaseDate>
+               <Modification_Comment>updated References, Related_Attack_Patterns, Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2012-10-30</Modification_Date>
+               <Modification_Version>2.3</Modification_Version>
+               <Modification_ReleaseDate>2012-10-30</Modification_ReleaseDate>
+               <Modification_Comment>updated Potential_Mitigations</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2013-02-21</Modification_Date>
+               <Modification_Version>2.4</Modification_Version>
+               <Modification_ReleaseDate>2013-02-21</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2014-02-18</Modification_Date>
+               <Modification_Version>2.6</Modification_Version>
+               <Modification_ReleaseDate>2014-02-19</Modification_ReleaseDate>
+               <Modification_Comment>updated Related_Attack_Patterns</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2014-06-23</Modification_Date>
+               <Modification_Version>2.7</Modification_Version>
+               <Modification_ReleaseDate>2014-06-23</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2014-07-30</Modification_Date>
+               <Modification_Version>2.8</Modification_Version>
+               <Modification_ReleaseDate>2014-07-31</Modification_ReleaseDate>
+               <Modification_Comment>updated Demonstrative_Examples, Detection_Factors, Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2015-12-07</Modification_Date>
+               <Modification_Version>2.9</Modification_Version>
+               <Modification_ReleaseDate>2015-12-07</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2017-01-19</Modification_Date>
+               <Modification_Version>2.10</Modification_Version>
+               <Modification_ReleaseDate>2017-01-19</Modification_ReleaseDate>
+               <Modification_Comment>updated Related_Attack_Patterns</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2017-11-08</Modification_Date>
+               <Modification_Version>3.0</Modification_Version>
+               <Modification_ReleaseDate>2017-11-08</Modification_ReleaseDate>
+               <Modification_Comment>updated Demonstrative_Examples, Likelihood_of_Exploit, Modes_of_Introduction, References, Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2018-03-27</Modification_Date>
+               <Modification_Version>3.1</Modification_Version>
+               <Modification_ReleaseDate>2018-03-27</Modification_ReleaseDate>
+               <Modification_Comment>updated References, Relationships</Modification_Comment>
+            </Modification>
+	    <Modification>
+	      <Modification_Name>CWE Content Team</Modification_Name>
+	      <Modification_Organization>MITRE</Modification_Organization>
+	      <Modification_Date>2019-01-03</Modification_Date>
+	      <Modification_Version>3.2</Modification_Version>
+	      <Modification_ReleaseDate>2019-01-03</Modification_ReleaseDate>
+	      <Modification_Comment>updated References, Relationships, Taxonomy_Mappings</Modification_Comment>
+	    </Modification>
+	    <Modification>
+	      <Modification_Name>CWE Content Team</Modification_Name>
+	      <Modification_Organization>MITRE</Modification_Organization>
+	      <Modification_Date>2019-06-20</Modification_Date>
+	      <Modification_Version>3.3</Modification_Version>
+	      <Modification_ReleaseDate>2019-06-20</Modification_ReleaseDate>
+	      <Modification_Comment>updated Related_Attack_Patterns, Relationships, Type</Modification_Comment>
+	    </Modification>
+	    <Modification>
+	      <Modification_Name>CWE Content Team</Modification_Name>
+	      <Modification_Organization>MITRE</Modification_Organization>
+	      <Modification_Date>2020-02-24</Modification_Date>
+	      <Modification_Version>4.0</Modification_Version>
+	      <Modification_ReleaseDate>2020-02-24</Modification_ReleaseDate>
+	      <Modification_Comment>updated Applicable_Platforms, Detection_Factors, Maintenance_Notes, Relationships</Modification_Comment>
+	    </Modification>
+	    <Modification>
+	      <Modification_Name>CWE Content Team</Modification_Name>
+	      <Modification_Organization>MITRE</Modification_Organization>
+	      <Modification_Date>2021-03-15</Modification_Date>
+	      <Modification_Version>4.4</Modification_Version>
+	      <Modification_ReleaseDate>2021-03-15</Modification_ReleaseDate>
+	      <Modification_Comment>updated References</Modification_Comment>
+	    </Modification>
+	    <Modification>
+	      <Modification_Name>CWE Content Team</Modification_Name>
+	      <Modification_Organization>MITRE</Modification_Organization>
+	      <Modification_Date>2021-10-28</Modification_Date>
+	      <Modification_Version>4.6</Modification_Version>
+	      <Modification_ReleaseDate>2021-10-28</Modification_ReleaseDate>
+	      <Modification_Comment>updated Maintenance_Notes, Potential_Mitigations, Relationships</Modification_Comment>
+	    </Modification>
+	    <Modification>
+	      <Modification_Name>CWE Content Team</Modification_Name>
+	      <Modification_Organization>MITRE</Modification_Organization>
+	      <Modification_Date>2022-04-28</Modification_Date>
+	      <Modification_Version>4.7</Modification_Version>
+	      <Modification_ReleaseDate>2022-04-28</Modification_ReleaseDate>
+	      <Modification_Comment>updated Relationships</Modification_Comment>
+	    </Modification>
+	    <Modification>
+	      <Modification_Name>CWE Content Team</Modification_Name>
+	      <Modification_Organization>MITRE</Modification_Organization>
+	      <Modification_Date>2022-10-13</Modification_Date>
+	      <Modification_Version>4.9</Modification_Version>
+	      <Modification_ReleaseDate>2022-10-13</Modification_ReleaseDate>
+	      <Modification_Comment>updated Demonstrative_Examples, Observed_Examples, References</Modification_Comment>
+	    </Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-01-31</Modification_Date>
+					<Modification_Version>4.10</Modification_Version>
+					<Modification_ReleaseDate>2023-01-31</Modification_ReleaseDate>
+					<Modification_Comment>updated Applicable_Platforms, Background_Details, Demonstrative_Examples, Description, Maintenance_Notes, Modes_of_Introduction, Observed_Examples, Potential_Mitigations, References, Taxonomy_Mappings, Time_of_Introduction</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated References, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-09-09</Modification_Date>
+					<Modification_Version>4.18</Modification_Version>
+					<Modification_ReleaseDate>2025-09-09</Modification_ReleaseDate>
+					<Modification_Comment>updated Detection_Factors, Potential_Mitigations, References</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Maintenance_Notes, Relationships, Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+	    <Contribution Type="Content">
+	      <Contribution_Name>Parbati K. Manna</Contribution_Name>
+	      <Contribution_Organization>Intel Corporation</Contribution_Organization>
+	      <Contribution_Date>2019-12-10</Contribution_Date>
+	      <Contribution_Comment>Provide a hardware-specific submission whose contents were integrated into this entry, affecting extended description, applicable platforms, demonstrative examples, and mitigations</Contribution_Comment>
+	    </Contribution>
+            <Previous_Entry_Name Date="2008-04-11">Using a Broken or Risky Cryptographic Algorithm</Previous_Entry_Name>
+         </Content_History>
+      </Weakness>
+      

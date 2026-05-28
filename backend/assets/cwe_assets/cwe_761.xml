@@ -1,0 +1,338 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="761" Name="Free of Pointer not at Start of Buffer" Abstraction="Variant" Structure="Simple" Status="Incomplete">
+         <Description>The product calls free() on a pointer to a memory resource that was allocated on the heap, but the pointer is not at the start of the buffer.</Description>
+         <Extended_Description>
+            <xhtml:p>This can cause the product to crash, or in some cases, modify critical program variables or execute code.</xhtml:p>
+            <xhtml:p>This weakness often occurs when the memory is allocated explicitly on the heap with one of the malloc() family functions and free() is called, but pointer arithmetic has caused the pointer to be in the interior or end of the buffer.</xhtml:p>
+         </Extended_Description>
+         <Related_Weaknesses>
+            <Related_Weakness Nature="ChildOf" CWE_ID="763" View_ID="1000" Ordinal="Primary" />
+			<Related_Weakness Nature="ChildOf" CWE_ID="404" View_ID="1340" Ordinal="Primary" />
+         </Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Resultant</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+         <Applicable_Platforms>
+            <Language Class="Memory-Unsafe" Prevalence="Often" />
+            <Language Name="C" Prevalence="Undetermined" />
+         </Applicable_Platforms>
+         <Modes_Of_Introduction>
+            <Introduction>
+               <Phase>Implementation</Phase>
+            </Introduction>
+         </Modes_Of_Introduction>
+         <Common_Consequences>
+            <Consequence>
+               <Scope>Integrity</Scope>
+               <Scope>Availability</Scope>
+               <Scope>Confidentiality</Scope>
+               <Impact>Modify Memory</Impact>
+               <Impact>DoS: Crash, Exit, or Restart</Impact>
+               <Impact>Execute Unauthorized Code or Commands</Impact>
+            </Consequence>
+         </Common_Consequences>
+	 <Detection_Methods>
+	   <Detection_Method Detection_Method_ID="DM-15">
+	     <Method>Automated Dynamic Analysis</Method>
+	     <Description>Use tools that are integrated during
+	     compilation to insert runtime error-checking mechanisms
+	     related to memory safety errors, such as AddressSanitizer
+	     (ASan) for C/C++ [REF-1518] or valgrind [REF-480].</Description>
+	     <Effectiveness>Moderate</Effectiveness>
+	     <Effectiveness_Notes>Crafted inputs are necessary to
+	     reach the code containing the error, such as generated
+	     by fuzzers.  Also, these tools may reduce performance,
+	     and they only report the error condition - not the
+	     original mistake that led to the
+	     error.</Effectiveness_Notes>
+	   </Detection_Method>
+	 </Detection_Methods>
+         <Potential_Mitigations>
+            <Mitigation>
+               <Phase>Implementation</Phase>
+               <Description>When utilizing pointer arithmetic to traverse a buffer, use a separate variable to track progress through memory and preserve the originally allocated address for later freeing.</Description>
+            </Mitigation>
+            <Mitigation>
+               <Phase>Implementation</Phase>
+               <Description>When programming in C++, consider using smart pointers provided by the boost library to help correctly and consistently manage memory.</Description>
+            </Mitigation>
+            <Mitigation Mitigation_ID="MIT-4.6">
+               <Phase>Architecture and Design</Phase>
+               <Strategy>Libraries or Frameworks</Strategy>
+               <Description>
+                  <xhtml:p>Use a vetted library or framework that does not allow this weakness to occur or provides constructs that make this weakness easier to avoid.</xhtml:p>
+                  <xhtml:p>For example, glibc in Linux provides protection against free of invalid pointers.</xhtml:p>
+               </Description>
+            </Mitigation>
+            <Mitigation>
+               <Phase>Architecture and Design</Phase>
+               <Description>Use a language that provides abstractions for memory allocation and deallocation.</Description>
+            </Mitigation>
+         </Potential_Mitigations>
+         <Demonstrative_Examples>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-77">
+               <Intro_Text>In this example, the programmer dynamically allocates a buffer to hold a string and then searches for a specific character. After completing the search, the programmer attempts to release the allocated memory and return SUCCESS or FAILURE to the caller. Note: for simplification, this example uses a hard-coded "Search Me!" string and a constant string length of 20.</Intro_Text>
+               <Example_Code Nature="Bad" Language="C">
+                  <xhtml:div>#define SUCCESS (1)<xhtml:br />#define FAILURE (0)<xhtml:br />
+                     <xhtml:br />int contains_char(char c){<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>char *str;<xhtml:br />str = (char*)malloc(20*sizeof(char));<xhtml:br />strcpy(str, "Search Me!");<xhtml:br />while( *str != NULL){<xhtml:div style="margin-left:1em;">
+                              <xhtml:div>if( *str == c ){<xhtml:div style="margin-left:1em;">
+                                    <xhtml:div>
+                                       <xhtml:br />
+                                       <xhtml:i>/* matched char, free string and return success */</xhtml:i>
+                                       <xhtml:br />free(str);<xhtml:br />return SUCCESS;</xhtml:div>
+                                 </xhtml:div>}<xhtml:br />
+                                 <xhtml:i>/* didn't match yet, increment pointer and try next char */</xhtml:i>
+                                 <xhtml:br />
+                                 <xhtml:br />str = str + 1;</xhtml:div>
+                           </xhtml:div>}<xhtml:br />
+                           <xhtml:i>/* we did not match the char in the string, free mem and return failure */</xhtml:i>
+                           <xhtml:br />
+                           <xhtml:br />free(str);<xhtml:br />return FAILURE;</xhtml:div>
+                     </xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>However, if the character is not at the beginning of the string, or if it is not in the string at all, then the pointer will not be at the start of the buffer when the programmer frees it.</Body_Text>
+               <Body_Text>Instead of freeing the pointer in the middle of the buffer, the programmer can use an indexing pointer to step through the memory or abstract the memory calculations by using array indexing.</Body_Text>
+               <Example_Code Nature="Good" Language="C">
+                  <xhtml:div>#define SUCCESS (1)<xhtml:br />#define FAILURE (0)<xhtml:br />
+                     <xhtml:br />int cointains_char(char c){<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>char *str;<xhtml:br />int i = 0;<xhtml:br />str = (char*)malloc(20*sizeof(char));<xhtml:br />strcpy(str, "Search Me!");<xhtml:br />while( i &lt; strlen(str) ){<xhtml:div style="margin-left:1em;">
+                              <xhtml:div>if( str[i] == c ){<xhtml:div style="margin-left:1em;">
+                                    <xhtml:div>
+                                       <xhtml:br />
+                                       <xhtml:i>/* matched char, free string and return success */</xhtml:i>
+                                       <xhtml:br />free(str);<xhtml:br />return SUCCESS;</xhtml:div>
+                                 </xhtml:div>}<xhtml:br />
+                                 <xhtml:i>/* didn't match yet, increment pointer and try next char */</xhtml:i>
+                                 <xhtml:br />
+                                 <xhtml:br />i = i + 1;</xhtml:div>
+                           </xhtml:div>}<xhtml:br />
+                           <xhtml:i>/* we did not match the char in the string, free mem and return failure */</xhtml:i>
+                           <xhtml:br />
+                           <xhtml:br />free(str);<xhtml:br />return FAILURE;</xhtml:div>
+                     </xhtml:div>}</xhtml:div>
+               </Example_Code>
+            </Demonstrative_Example>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-78">
+               <Intro_Text>This code attempts to tokenize a string and place it into an array using the strsep function, which inserts a \0 byte in place of whitespace or a tab character. After finishing the loop, each string in the AP array points to a location within the input string.</Intro_Text>
+               <Example_Code Nature="Bad" Language="C">
+                  <xhtml:div>char **ap, *argv[10], *inputstring;<xhtml:br />for (ap = argv; (*ap = strsep(&amp;inputstring, " \t")) != NULL;)<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>if (**ap != '\0')<xhtml:div style="margin-left:1em;">if (++ap &gt;= &amp;argv[10])<xhtml:div style="margin-left:1em;">break;</xhtml:div>
+                           </xhtml:div>
+                        </xhtml:div>
+                     </xhtml:div>
+                     <xhtml:br />/.../<xhtml:br />free(ap[4]);</xhtml:div>
+               </Example_Code>
+               <Body_Text>Since strsep is not allocating any new memory, freeing an element in the middle of the array is equivalent to free a pointer in the middle of inputstring.</Body_Text>
+            </Demonstrative_Example>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-79">
+               <Intro_Text>Consider the following code in the context of a parsing application to extract commands out of user data. The intent is to parse each command and add it to a queue of commands to be executed, discarding each malformed entry.</Intro_Text>
+               <Example_Code Nature="Bad" Language="C">
+                  <xhtml:div>
+                     <xhtml:br />
+                     <xhtml:i>//hardcode input length for simplicity</xhtml:i>
+                     <xhtml:br />char* input = (char*) malloc(40*sizeof(char));<xhtml:br />char *tok;<xhtml:br />char* sep = " \t";<xhtml:br />
+                     <xhtml:br />get_user_input( input );<xhtml:br />
+                     <xhtml:br />
+                     <xhtml:i>/* The following loop will parse and process each token in the input string */</xhtml:i>
+                     <xhtml:br />
+                     <xhtml:br />tok = strtok( input, sep);<xhtml:br />while( NULL != tok ){<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>if( isMalformed( tok ) ){<xhtml:div style="margin-left:1em;">
+                              <xhtml:div>
+                                 <xhtml:br />
+                                 <xhtml:i>/* ignore and discard bad data */</xhtml:i>
+                                 <xhtml:br />free( tok );</xhtml:div>
+                           </xhtml:div>}<xhtml:br />else{<xhtml:div style="margin-left:1em;">add_to_command_queue( tok );</xhtml:div>}<xhtml:br />tok = strtok( NULL, sep));</xhtml:div>
+                     </xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>While the above code attempts to free memory associated with bad commands, since the memory was all allocated in one chunk, it must all be freed together.</Body_Text>
+               <Body_Text>One way to fix this problem would be to copy the commands into a new memory location before placing them in the queue. Then, after all commands have been processed, the memory can safely be freed.</Body_Text>
+               <Example_Code Nature="Good" Language="C">
+                  <xhtml:div>
+                     <xhtml:br />
+                     <xhtml:i>//hardcode input length for simplicity</xhtml:i>
+                     <xhtml:br />char* input = (char*) malloc(40*sizeof(char));<xhtml:br />char *tok, *command;<xhtml:br />char* sep = " \t";<xhtml:br />
+                     <xhtml:br />get_user_input( input );<xhtml:br />
+                     <xhtml:br />
+                     <xhtml:i>/* The following loop will parse and process each token in the input string */</xhtml:i>
+                     <xhtml:br />
+                     <xhtml:br />tok = strtok( input, sep);<xhtml:br />while( NULL != tok ){<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>if( !isMalformed( command ) ){<xhtml:div style="margin-left:1em;">
+                              <xhtml:div>
+                                 <xhtml:br />
+                                 <xhtml:i>/* copy and enqueue good data */</xhtml:i>
+                                 <xhtml:br />command = (char*) malloc( (strlen(tok) + 1) * sizeof(char) );<xhtml:br />strcpy( command, tok );<xhtml:br />add_to_command_queue( command );</xhtml:div>
+                           </xhtml:div>}<xhtml:br />tok = strtok( NULL, sep));</xhtml:div>
+                     </xhtml:div>}<xhtml:br />
+                     <xhtml:br />free( input )</xhtml:div>
+               </Example_Code>
+            </Demonstrative_Example>
+         </Demonstrative_Examples>
+	 <Observed_Examples>
+            <Observed_Example>
+               <Reference>CVE-2019-11930</Reference>
+               <Description>function "internally calls 'calloc' and returns a pointer at an index... inside the allocated buffer. This led to freeing invalid memory."</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2019-11930</Link>
+            </Observed_Example>
+	 </Observed_Examples>
+         <Functional_Areas>
+            <Functional_Area>Memory Management</Functional_Area>
+         </Functional_Areas>
+         <Affected_Resources>
+            <Affected_Resource>Memory</Affected_Resource>
+         </Affected_Resources>
+         <Taxonomy_Mappings>
+            <Taxonomy_Mapping Taxonomy_Name="Software Fault Patterns">
+               <Entry_ID>SFP12</Entry_ID>
+               <Entry_Name>Faulty Memory Release</Entry_Name>
+            </Taxonomy_Mapping>
+         </Taxonomy_Mappings>
+         <References>
+            <Reference External_Reference_ID="REF-657" />
+            <Reference External_Reference_ID="REF-480" />
+	    <Reference External_Reference_ID="REF-1518" />
+         </References>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Variant level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+         <Notes>
+            <Note Type="Maintenance">Currently, CWE-763 is the parent, however it may be desirable to have an intermediate parent which is not function-specific, similar to how CWE-762 is an intermediate parent between CWE-763 and CWE-590.</Note>
+         </Notes>
+         <Content_History>
+            <Submission>
+               <Submission_Name>CWE Content Team</Submission_Name>
+               <Submission_Organization>MITRE</Submission_Organization>
+               <Submission_Date>2009-05-08</Submission_Date>
+               <Submission_Version>1.4</Submission_Version>
+               <Submission_ReleaseDate>2009-05-27</Submission_ReleaseDate>
+            </Submission>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2010-09-27</Modification_Date>
+               <Modification_Version>1.10</Modification_Version>
+               <Modification_ReleaseDate>2010-09-27</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-06-01</Modification_Date>
+               <Modification_Version>1.13</Modification_Version>
+               <Modification_ReleaseDate>2011-06-01</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2012-05-11</Modification_Date>
+               <Modification_Version>2.2</Modification_Version>
+               <Modification_ReleaseDate>2012-05-15</Modification_ReleaseDate>
+               <Modification_Comment>updated Demonstrative_Examples, Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2012-10-30</Modification_Date>
+               <Modification_Version>2.3</Modification_Version>
+               <Modification_ReleaseDate>2012-10-30</Modification_ReleaseDate>
+               <Modification_Comment>updated Potential_Mitigations</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2014-02-18</Modification_Date>
+               <Modification_Version>2.6</Modification_Version>
+               <Modification_ReleaseDate>2014-02-19</Modification_ReleaseDate>
+               <Modification_Comment>updated Potential_Mitigations</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2014-07-30</Modification_Date>
+               <Modification_Version>2.8</Modification_Version>
+               <Modification_ReleaseDate>2014-07-31</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-02-24</Modification_Date>
+					<Modification_Version>4.0</Modification_Version>
+					<Modification_ReleaseDate>2020-02-24</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-12-10</Modification_Date>
+					<Modification_Version>4.3</Modification_Version>
+					<Modification_ReleaseDate>2020-12-10</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-03-15</Modification_Date>
+					<Modification_Version>4.4</Modification_Version>
+					<Modification_ReleaseDate>2021-03-15</Modification_ReleaseDate>
+					<Modification_Comment>updated Observed_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-01-31</Modification_Date>
+					<Modification_Version>4.10</Modification_Version>
+					<Modification_ReleaseDate>2023-01-31</Modification_ReleaseDate>
+					<Modification_Comment>updated Description</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated References, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-09-09</Modification_Date>
+					<Modification_Version>4.18</Modification_Version>
+					<Modification_ReleaseDate>2025-09-09</Modification_ReleaseDate>
+					<Modification_Comment>updated Functional_Areas, References</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Applicable_Platforms, Detection_Factors, Potential_Mitigations, References, Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2026-04-30</Modification_Date>
+					<Modification_Version>4.20</Modification_Version>
+					<Modification_ReleaseDate>2026-04-30</Modification_ReleaseDate>
+					<Modification_Comment>updated Detection_Factors</Modification_Comment>
+				</Modification>
+         </Content_History>
+      </Weakness>
+      

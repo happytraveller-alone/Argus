@@ -1,0 +1,396 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="492" Name="Use of Inner Class Containing Sensitive Data" Abstraction="Variant" Structure="Simple" Status="Draft">
+         <Description>Inner classes are translated into classes that are accessible at package scope and may expose code that the programmer intended to keep private to attackers.</Description>
+         <Extended_Description>Inner classes quietly introduce several security concerns because of the way they are translated into Java bytecode. In Java source code, it appears that an inner class can be declared to be accessible only by the enclosing class, but Java bytecode has no concept of an inner class, so the compiler must transform an inner class declaration into a peer class with package level access to the original outer class. More insidiously, since an inner class can access private fields in its enclosing class, once an inner class becomes a peer class in bytecode, the compiler converts private fields accessed by the inner class into protected fields.</Extended_Description>
+         <Related_Weaknesses>
+            <Related_Weakness Nature="ChildOf" CWE_ID="668" View_ID="1000" Ordinal="Primary" />
+         </Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+         <Applicable_Platforms>
+            <Language Name="Java" Prevalence="Undetermined" />
+         </Applicable_Platforms>
+         <Modes_Of_Introduction>
+            <Introduction>
+               <Phase>Implementation</Phase>
+            </Introduction>
+         </Modes_Of_Introduction>
+         <Likelihood_Of_Exploit>Medium</Likelihood_Of_Exploit>
+         <Common_Consequences>
+            <Consequence>
+               <Scope>Confidentiality</Scope>
+               <Impact>Read Application Data</Impact>
+               <Note>"Inner Classes" data confidentiality aspects can often be overcome.</Note>
+            </Consequence>
+         </Common_Consequences>
+         <Detection_Methods>
+           <Detection_Method Detection_Method_ID="DM-14">
+             <Method>Automated Static Analysis</Method>
+             <Description>Automated static analysis, commonly referred to as Static Application Security Testing (SAST), can find some instances of this weakness by analyzing source code (or binary/compiled code) without having to execute it. Typically, this is done by building a model of data flow and control flow, then searching for potentially-vulnerable patterns that connect "sources" (origins of input) with "sinks" (destinations where the data interacts with external components, a lower layer such as the OS, etc.)</Description>
+             <Effectiveness>High</Effectiveness>
+           </Detection_Method>
+         </Detection_Methods>
+         <Potential_Mitigations>
+            <Mitigation>
+               <Phase>Implementation</Phase>
+               <Description>Using sealed classes protects object-oriented encapsulation paradigms and therefore protects code from being extended in unforeseen ways.</Description>
+            </Mitigation>
+            <Mitigation>
+               <Phase>Implementation</Phase>
+               <Description>Inner Classes do not provide security. Warning: Never reduce the security of the object from an outer class, going to an inner class. If an outer class is final or private, ensure that its inner class is private as well.</Description>
+            </Mitigation>
+         </Potential_Mitigations>
+         <Demonstrative_Examples>
+            <Demonstrative_Example>
+               <Intro_Text>The following Java Applet code mistakenly makes use of an inner class.</Intro_Text>
+               <Example_Code Nature="Bad" Language="Java">
+                  <xhtml:div>public final class urlTool extends Applet {<xhtml:div style="margin-left:1em;">private final class urlHelper {<xhtml:div style="margin-left:1em;">...</xhtml:div>}<xhtml:br />...</xhtml:div>}</xhtml:div>
+               </Example_Code>
+            </Demonstrative_Example>
+            <Demonstrative_Example>
+               <Intro_Text>The following example shows a basic use of inner classes. The class OuterClass contains the private member inner class InnerClass. The private inner class InnerClass includes the method concat that accesses the private member variables of the class OuterClass to output the value of one of the private member variables of the class OuterClass and returns a string that is a concatenation of one of the private member variables of the class OuterClass, the separator input parameter of the method and the private member variable of the class InnerClass.</Intro_Text>
+               <Example_Code Nature="Bad" Language="Java">
+                  <xhtml:div>public class OuterClass {<xhtml:div style="margin-left:1em;">
+                        <xhtml:i>// private member variables of OuterClass</xhtml:i>
+                        <xhtml:br />private String memberOne;<xhtml:br />private String memberTwo;<xhtml:br />
+                        <xhtml:br />
+                        <xhtml:i>// constructor of OuterClass</xhtml:i>
+                        <xhtml:br />public OuterClass(String varOne, String varTwo) {<xhtml:div style="margin-left:1em;">this.memberOne = varOne;<xhtml:br />this.memberTwo = varTwo;</xhtml:div>}<xhtml:br />
+                        <xhtml:br />
+                        <xhtml:i>// InnerClass is a member inner class of OuterClass</xhtml:i>
+                        <xhtml:br />private class InnerClass {<xhtml:div style="margin-left:1em;">private String innerMemberOne;<xhtml:br />
+                           <xhtml:br />public InnerClass(String innerVarOne) {<xhtml:div style="margin-left:1em;">this.innerMemberOne = innerVarOne;</xhtml:div>}<xhtml:br />
+                           <xhtml:br />public String concat(String separator) {<xhtml:div style="margin-left:1em;">
+                              <xhtml:i>// InnerClass has access to private member variables of OuterClass</xhtml:i>
+                              <xhtml:br />System.out.println("Value of memberOne is: " + memberOne);<xhtml:br />return OuterClass.this.memberTwo + separator + this.innerMemberOne;</xhtml:div>}</xhtml:div>}</xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>Although this is an acceptable use of inner classes it demonstrates one of the weaknesses of inner classes that inner classes have complete access to all member variables and methods of the enclosing class even those that are declared private and protected. When inner classes are compiled and translated into Java bytecode the JVM treats the inner class as a peer class with package level access to the enclosing class.</Body_Text>
+               <Body_Text>To avoid this weakness of inner classes, consider using either static inner classes, local inner classes, or anonymous inner classes.</Body_Text>
+               <Body_Text>The following Java example demonstrates the use of static inner classes using the previous example. The inner class InnerClass is declared using the static modifier that signifies that InnerClass is a static member of the enclosing class OuterClass. By declaring an inner class as a static member of the enclosing class, the inner class can only access other static members and methods of the enclosing class and prevents the inner class from accessing nonstatic member variables and methods of the enclosing class. In this case the inner class InnerClass can only access the static member variable memberTwo of the enclosing class OuterClass but cannot access the nonstatic member variable memberOne.</Body_Text>
+               <Example_Code Nature="Good" Language="Java">
+                  <xhtml:div>public class OuterClass {<xhtml:br />
+                     <xhtml:div style="margin-left:1em;">
+                        <xhtml:div>
+                           <xhtml:br />
+                           <xhtml:i>// private member variables of OuterClass</xhtml:i>
+                           <xhtml:br />private String memberOne;<xhtml:br />private static String memberTwo;<xhtml:br />
+                           <xhtml:br />
+                           <xhtml:i>// constructor of OuterClass</xhtml:i>
+                           <xhtml:br />public OuterClass(String varOne, String varTwo) {<xhtml:br />
+                           <xhtml:div style="margin-left:1em;">this.memberOne = varOne;<xhtml:br />this.memberTwo = varTwo;</xhtml:div>}<xhtml:br />
+                           <xhtml:br />
+                           <xhtml:i>// InnerClass is a static inner class of OuterClass</xhtml:i>
+                           <xhtml:br />private static class InnerClass {<xhtml:div style="margin-left:1em;">
+                              <xhtml:div>
+                                 <xhtml:br />private String innerMemberOne;<xhtml:br />
+                                 <xhtml:br />public InnerClass(String innerVarOne) {<xhtml:div style="margin-left:1em;">this.innerMemberOne = innerVarOne;</xhtml:div>}<xhtml:br />public String concat(String separator) {<xhtml:div style="margin-left:1em;">
+                                    <xhtml:div>
+                                       <xhtml:i>// InnerClass only has access to static member variables of OuterClass</xhtml:i>
+                                       <xhtml:br />return memberTwo + separator + this.innerMemberOne;</xhtml:div>
+                                 </xhtml:div>}</xhtml:div>
+                           </xhtml:div>}</xhtml:div>
+                     </xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>The only limitation with using a static inner class is that as a static member of the enclosing class the inner class does not have a reference to instances of the enclosing class. For many situations this may not be ideal. An alternative is to use a local inner class or an anonymous inner class as shown in the next examples.</Body_Text>
+            </Demonstrative_Example>
+            <Demonstrative_Example>
+               <Intro_Text>In the following example the BankAccount class contains the private member inner class InterestAdder that adds interest to the bank account balance. The start method of the BankAccount class creates an object of the inner class InterestAdder, the InterestAdder inner class implements the ActionListener interface with the method actionPerformed. A Timer object created within the start method of the BankAccount class invokes the actionPerformed method of the InterestAdder class every 30 days to add the interest to the bank account balance based on the interest rate passed to the start method as an input parameter. The inner class InterestAdder needs access to the private member variable balance of the BankAccount class in order to add the interest to the bank account balance.</Intro_Text>
+               <Body_Text>However as demonstrated in the previous example, because InterestAdder is a non-static member inner class of the BankAccount class, InterestAdder also has access to the private member variables of the BankAccount class - including the sensitive data contained in the private member variables for the bank account owner's name, Social Security number, and the bank account number.</Body_Text>
+               <Example_Code Nature="Bad" Language="Java">
+                  <xhtml:div>public class BankAccount {<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>
+                           <xhtml:br />
+                           <xhtml:i>// private member variables of BankAccount class</xhtml:i>
+                           <xhtml:br />private String accountOwnerName;<xhtml:br />private String accountOwnerSSN;<xhtml:br />private int accountNumber;<xhtml:br />private double balance;<xhtml:br />
+                           <xhtml:br />
+                           <xhtml:i>// constructor for BankAccount class</xhtml:i>
+                           <xhtml:br />public BankAccount(String accountOwnerName, String accountOwnerSSN,<xhtml:br />int accountNumber, double initialBalance, int initialRate)<xhtml:br />{<xhtml:div style="margin-left:1em;">this.accountOwnerName = accountOwnerName;<xhtml:br />this.accountOwnerSSN = accountOwnerSSN;<xhtml:br />this.accountNumber = accountNumber;<xhtml:br />this.balance = initialBalance;<xhtml:br />this.start(initialRate);</xhtml:div>}<xhtml:br />
+                           <xhtml:br />
+                           <xhtml:i>// start method will add interest to balance every 30 days</xhtml:i>
+                           <xhtml:br />
+                           <xhtml:br />
+                           <xhtml:i>// creates timer object and interest adding action listener object</xhtml:i>
+                           <xhtml:br />public void start(double rate)<xhtml:br />{<xhtml:div style="margin-left:1em;">ActionListener adder = new InterestAdder(rate);<xhtml:br />Timer t = new Timer(1000 * 3600 * 24 * 30, adder);<xhtml:br />t.start();</xhtml:div>}<xhtml:br />
+                           <xhtml:br />
+                           <xhtml:i>// InterestAdder is an inner class of BankAccount class</xhtml:i>
+                           <xhtml:br />
+                           <xhtml:br />
+                           <xhtml:i>// that implements the ActionListener interface</xhtml:i>
+                           <xhtml:br />private class InterestAdder implements ActionListener<xhtml:br />{<xhtml:div style="margin-left:1em;">
+                              <xhtml:div>private double rate;<xhtml:br />
+                                 <xhtml:br />public InterestAdder(double aRate)<xhtml:br />{<xhtml:div style="margin-left:1em;">this.rate = aRate;</xhtml:div>}<xhtml:br />
+                                 <xhtml:br />public void actionPerformed(ActionEvent event)<xhtml:br />{<xhtml:div style="margin-left:1em;">
+                                    <xhtml:div>
+                                       <xhtml:i>// update interest</xhtml:i>
+                                       <xhtml:br />double interest = BankAccount.this.balance * rate / 100;<xhtml:br />BankAccount.this.balance += interest;</xhtml:div>
+                                 </xhtml:div>}<xhtml:br />
+                              </xhtml:div>
+                           </xhtml:div>}</xhtml:div>
+                     </xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>In the following example the InterestAdder class from the above example is declared locally within the start method of the BankAccount class. As a local inner class InterestAdder has its scope restricted to the method (or enclosing block) where it is declared, in this case only the start method has access to the inner class InterestAdder, no other classes including the enclosing class has knowledge of the inner class outside of the start method. This allows the inner class to access private member variables of the enclosing class but only within the scope of the enclosing method or block.</Body_Text>
+               <Example_Code Nature="Good" Language="Java">
+                  <xhtml:div>public class BankAccount {<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>
+                           <xhtml:br />
+                           <xhtml:i>// private member variables of BankAccount class</xhtml:i>
+                           <xhtml:br />private String accountOwnerName;<xhtml:br />private String accountOwnerSSN;<xhtml:br />private int accountNumber;<xhtml:br />private double balance;<xhtml:br />
+                           <xhtml:br />
+                           <xhtml:i>// constructor for BankAccount class</xhtml:i>
+                           <xhtml:br />public BankAccount(String accountOwnerName, String accountOwnerSSN,<xhtml:br />int accountNumber, double initialBalance, int initialRate)<xhtml:br />{<xhtml:div style="margin-left:1em;">this.accountOwnerName = accountOwnerName;<xhtml:br />this.accountOwnerSSN = accountOwnerSSN;<xhtml:br />this.accountNumber = accountNumber;<xhtml:br />this.balance = initialBalance;<xhtml:br />this.start(initialRate);</xhtml:div>}<xhtml:br />
+                           <xhtml:br />
+                           <xhtml:i>// start method will add interest to balance every 30 days</xhtml:i>
+                           <xhtml:br />
+                           <xhtml:br />
+                           <xhtml:i>// creates timer object and interest adding action listener object</xhtml:i>
+                           <xhtml:br />public void start(final double rate)<xhtml:br />{<xhtml:div style="margin-left:1em;">
+                              <xhtml:div>
+                                 <xhtml:br />
+                                 <xhtml:i>// InterestAdder is a local inner class</xhtml:i>
+                                 <xhtml:br />
+                                 <xhtml:br />
+                                 <xhtml:i>// that implements the ActionListener interface</xhtml:i>
+                                 <xhtml:br />class InterestAdder implements ActionListener<xhtml:br />{<xhtml:div style="margin-left:1em;">
+                                    <xhtml:div>public void actionPerformed(ActionEvent event)<xhtml:br />{<xhtml:div style="margin-left:1em;">
+                                          <xhtml:div>
+                                             <xhtml:i>// update interest</xhtml:i>
+                                             <xhtml:br />double interest = BankAccount.this.balance * rate / 100;<xhtml:br />BankAccount.this.balance += interest;</xhtml:div>
+                                       </xhtml:div>}</xhtml:div>
+                                 </xhtml:div>}<xhtml:br />ActionListener adder = new InterestAdder();<xhtml:br />Timer t = new Timer(1000 * 3600 * 24 * 30, adder);<xhtml:br />t.start();</xhtml:div>
+                           </xhtml:div>}</xhtml:div>
+                     </xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>A similar approach would be to use an anonymous inner class as demonstrated in the next example. An anonymous inner class is declared without a name and creates only a single instance of the inner class object. As in the previous example the anonymous inner class has its scope restricted to the start method of the BankAccount class.</Body_Text>
+               <Example_Code Nature="Good" Language="Java">
+                  <xhtml:div>public class BankAccount {<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>
+                           <xhtml:br />
+                           <xhtml:i>// private member variables of BankAccount class</xhtml:i>
+                           <xhtml:br />private String accountOwnerName;<xhtml:br />private String accountOwnerSSN;<xhtml:br />private int accountNumber;<xhtml:br />private double balance;<xhtml:br />
+                           <xhtml:br />
+                           <xhtml:i>// constructor for BankAccount class</xhtml:i>
+                           <xhtml:br />public BankAccount(String accountOwnerName, String accountOwnerSSN,<xhtml:br />int accountNumber, double initialBalance, int initialRate)<xhtml:br />{<xhtml:div style="margin-left:1em;">this.accountOwnerName = accountOwnerName;<xhtml:br />this.accountOwnerSSN = accountOwnerSSN;<xhtml:br />this.accountNumber = accountNumber;<xhtml:br />this.balance = initialBalance;<xhtml:br />this.start(initialRate);</xhtml:div>}<xhtml:br />
+                           <xhtml:br />
+                           <xhtml:i>// start method will add interest to balance every 30 days</xhtml:i>
+                           <xhtml:br />
+                           <xhtml:br />
+                           <xhtml:i>// creates timer object and interest adding action listener object</xhtml:i>
+                           <xhtml:br />public void start(final double rate)<xhtml:br />{<xhtml:div style="margin-left:1em;">
+                              <xhtml:div>
+                                 <xhtml:br />
+                                 <xhtml:i>// anonymous inner class that implements the ActionListener interface</xhtml:i>
+                                 <xhtml:br />ActionListener adder = new ActionListener()<xhtml:br />{<xhtml:div style="margin-left:1em;">
+                                    <xhtml:div>public void actionPerformed(ActionEvent event)<xhtml:br />{<xhtml:div style="margin-left:1em;">
+                                          <xhtml:div>
+                                             <xhtml:br />
+                                             double interest = BankAccount.this.balance * rate / 100;
+                                             <xhtml:br />BankAccount.this.balance += interest;</xhtml:div>
+                                       </xhtml:div>}</xhtml:div>
+                                 </xhtml:div>};<xhtml:br />
+                                 <xhtml:br />Timer t = new Timer(1000 * 3600 * 24 * 30, adder);<xhtml:br />t.start();</xhtml:div>
+                           </xhtml:div>}</xhtml:div>
+                     </xhtml:div>}</xhtml:div>
+               </Example_Code>
+            </Demonstrative_Example>
+            <Demonstrative_Example>
+               <Intro_Text>In the following Java example a simple applet provides the capability for a user to input a URL into a text field and have the URL opened in a new browser window. The applet contains an inner class that is an action listener for the submit button, when the user clicks the submit button the inner class action listener's actionPerformed method will open the URL entered into the text field in a new browser window. As with the previous examples using inner classes in this manner creates a security risk by exposing private variables and methods. Inner classes create an additional security risk with applets as applets are executed on a remote machine through a web browser within the same JVM and therefore may run side-by-side with other potentially malicious code.</Intro_Text>
+               <Example_Code Nature="Bad" Language="Java">
+                  <xhtml:div>public class UrlToolApplet extends Applet {<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>
+                           <xhtml:br />
+                           <xhtml:i>// private member variables for applet components</xhtml:i>
+                           <xhtml:br />private Label enterUrlLabel;<xhtml:br />private TextField enterUrlTextField;<xhtml:br />private Button submitButton;<xhtml:br />
+                           <xhtml:br />
+                           <xhtml:i>// init method that adds components to applet</xhtml:i>
+                           <xhtml:br />
+                           <xhtml:br />
+                           <xhtml:i>// and creates button listener object</xhtml:i>
+                           <xhtml:br />public void init() {<xhtml:div style="margin-left:1em;">setLayout(new FlowLayout());<xhtml:br />enterUrlLabel = new Label("Enter URL: ");<xhtml:br />enterUrlTextField = new TextField("", 20);<xhtml:br />submitButton = new Button("Submit");<xhtml:br />add(enterUrlLabel);<xhtml:br />add(enterUrlTextField);<xhtml:br />add(submitButton);<xhtml:br />ActionListener submitButtonListener = new SubmitButtonListener();<xhtml:br />submitButton.addActionListener(submitButtonListener);</xhtml:div>}<xhtml:br />
+                           <xhtml:br />
+                           <xhtml:i>// button listener inner class for UrlToolApplet class</xhtml:i>
+                           <xhtml:br />private class SubmitButtonListener implements ActionListener {<xhtml:div style="margin-left:1em;">
+                              <xhtml:div>public void actionPerformed(ActionEvent evt) {<xhtml:div style="margin-left:1em;">
+                                    <xhtml:div>if (evt.getSource() == submitButton) {<xhtml:div style="margin-left:1em;">String urlString = enterUrlTextField.getText();<xhtml:br />URL url = null;<xhtml:br />try {<xhtml:div style="margin-left:1em;">url = new URL(urlString);</xhtml:div>} catch (MalformedURLException e) {<xhtml:div style="margin-left:1em;">System.err.println("Malformed URL: " + urlString);</xhtml:div>}<xhtml:br />if (url != null) {<xhtml:div style="margin-left:1em;">getAppletContext().showDocument(url);</xhtml:div>}</xhtml:div>}</xhtml:div>
+                                 </xhtml:div>}</xhtml:div>
+                           </xhtml:div>}</xhtml:div>
+                     </xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>As with the previous examples a solution to this problem would be to use a static inner class, a local inner class or an anonymous inner class. An alternative solution would be to have the applet implement the action listener rather than using it as an inner class as shown in the following example.</Body_Text>
+               <Example_Code Nature="Good" Language="Java">
+                  <xhtml:div>public class UrlToolApplet extends Applet implements ActionListener {<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>
+                           <xhtml:br />
+                           <xhtml:i>// private member variables for applet components</xhtml:i>
+                           <xhtml:br />private Label enterUrlLabel;<xhtml:br />private TextField enterUrlTextField;<xhtml:br />private Button submitButton;<xhtml:br />
+                           <xhtml:br />
+                           <xhtml:i>// init method that adds components to applet</xhtml:i>
+                           <xhtml:br />public void init() {<xhtml:div style="margin-left:1em;">setLayout(new FlowLayout());<xhtml:br />enterUrlLabel = new Label("Enter URL: ");<xhtml:br />enterUrlTextField = new TextField("", 20);<xhtml:br />submitButton = new Button("Submit");<xhtml:br />add(enterUrlLabel);<xhtml:br />add(enterUrlTextField);<xhtml:br />add(submitButton);<xhtml:br />submitButton.addActionListener(this);</xhtml:div>}<xhtml:br />
+                           <xhtml:br />
+                           <xhtml:i>// implementation of actionPerformed method of ActionListener interface</xhtml:i>
+                           <xhtml:br />public void actionPerformed(ActionEvent evt) {<xhtml:div style="margin-left:1em;">
+                              <xhtml:div>if (evt.getSource() == submitButton) {<xhtml:div style="margin-left:1em;">String urlString = enterUrlTextField.getText();<xhtml:br />URL url = null;<xhtml:br />try {<xhtml:div style="margin-left:1em;">url = new URL(urlString);</xhtml:div>} catch (MalformedURLException e) {<xhtml:div style="margin-left:1em;">System.err.println("Malformed URL: " + urlString);</xhtml:div>}<xhtml:br />if (url != null) {<xhtml:div style="margin-left:1em;">getAppletContext().showDocument(url);</xhtml:div>}</xhtml:div>}</xhtml:div>
+                           </xhtml:div>}</xhtml:div>
+                     </xhtml:div>}</xhtml:div>
+               </Example_Code>
+            </Demonstrative_Example>
+         </Demonstrative_Examples>
+         <Taxonomy_Mappings>
+            <Taxonomy_Mapping Taxonomy_Name="7 Pernicious Kingdoms">
+               <Entry_Name>Mobile Code: Use of Inner Class</Entry_Name>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="CLASP">
+               <Entry_Name>Publicizing of private data when using inner classes</Entry_Name>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="The CERT Oracle Secure Coding Standard for Java (2011)">
+               <Entry_ID>OBJ08-J</Entry_ID>
+               <Entry_Name>Do not expose private members of an outer class from within a nested class</Entry_Name>
+            </Taxonomy_Mapping>
+         </Taxonomy_Mappings>
+         <References>
+            <Reference External_Reference_ID="REF-6" />
+         </References>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Variant level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+         <Notes>
+            <Note Type="Other">Mobile code, in this case a Java Applet, is code that is transmitted across a network and executed on a remote machine. Because mobile code developers have little if any control of the environment in which their code will execute, special security concerns become relevant. One of the biggest environmental threats results from the risk that the mobile code will run side-by-side with other, potentially malicious, mobile code. Because all of the popular web browsers execute code from multiple sources together in the same JVM, many of the security guidelines for mobile code are focused on preventing manipulation of your objects' state and behavior by adversaries who have access to the same virtual machine where your program is running.</Note>
+         </Notes>
+         <Content_History>
+            <Submission>
+               <Submission_Name>7 Pernicious Kingdoms</Submission_Name>
+               <Submission_Date>2006-07-19</Submission_Date>
+               <Submission_Version>Draft 3</Submission_Version>
+               <Submission_ReleaseDate>2006-07-19</Submission_ReleaseDate>
+            </Submission>
+            <Modification>
+               <Modification_Name>Eric Dalci</Modification_Name>
+               <Modification_Organization>Cigital</Modification_Organization>
+               <Modification_Date>2008-07-01</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>updated Time_of_Introduction</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2008-09-08</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences, Relationships, Other_Notes, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2009-03-10</Modification_Date>
+               <Modification_Version>1.3</Modification_Version>
+               <Modification_ReleaseDate>2009-03-10</Modification_ReleaseDate>
+               <Modification_Comment>updated Demonstrative_Examples</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2009-12-28</Modification_Date>
+               <Modification_Version>1.7</Modification_Version>
+               <Modification_ReleaseDate>2009-12-28</Modification_ReleaseDate>
+               <Modification_Comment>updated Demonstrative_Examples, Potential_Mitigations</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-06-01</Modification_Date>
+               <Modification_Version>1.13</Modification_Version>
+               <Modification_ReleaseDate>2011-06-01</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences, Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2012-05-11</Modification_Date>
+               <Modification_Version>2.2</Modification_Version>
+               <Modification_ReleaseDate>2012-05-15</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2014-06-23</Modification_Date>
+               <Modification_Version>2.7</Modification_Version>
+               <Modification_ReleaseDate>2014-06-23</Modification_ReleaseDate>
+               <Modification_Comment>updated Description, Other_Notes</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2014-07-30</Modification_Date>
+               <Modification_Version>2.8</Modification_Version>
+               <Modification_ReleaseDate>2014-07-31</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships</Modification_Comment>
+            </Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2019-01-03</Modification_Date>
+					<Modification_Version>3.2</Modification_Version>
+					<Modification_ReleaseDate>2019-01-03</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships, Taxonomy_Mappings</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-02-24</Modification_Date>
+					<Modification_Version>4.0</Modification_Version>
+					<Modification_ReleaseDate>2020-02-24</Modification_ReleaseDate>
+					<Modification_Comment>updated Description, References, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-10-13</Modification_Date>
+					<Modification_Version>4.9</Modification_Version>
+					<Modification_ReleaseDate>2022-10-13</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Detection_Factors, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-04-03</Modification_Date>
+					<Modification_Version>4.17</Modification_Version>
+					<Modification_ReleaseDate>2025-04-03</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+            <Previous_Entry_Name Date="2008-04-11">Mobile Code: Use of Inner Class</Previous_Entry_Name>
+         </Content_History>
+      </Weakness>
+      

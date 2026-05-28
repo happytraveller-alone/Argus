@@ -1,0 +1,530 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="269" Name="Improper Privilege Management" Abstraction="Class" Structure="Simple" Status="Draft" Diagram="/data/images/CWE-269-Diagram.png">
+         <Description>The product does not properly assign, modify, track, or check privileges for an actor, creating an unintended sphere of control for that actor.</Description>
+         <Related_Weaknesses>
+            <Related_Weakness Nature="ChildOf" CWE_ID="284" View_ID="1000" Ordinal="Primary" />
+         </Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+         <Applicable_Platforms>
+            <Language Class="Not Language-Specific" Prevalence="Undetermined" />
+         </Applicable_Platforms>
+         <Modes_Of_Introduction>
+            <Introduction>
+               <Phase>Architecture and Design</Phase>
+            </Introduction>
+            <Introduction>
+               <Phase>Implementation</Phase>
+               <Note>REALIZATION: This weakness is caused during implementation of an architectural security tactic.</Note>
+            </Introduction>
+            <Introduction>
+               <Phase>Operation</Phase>
+            </Introduction>
+         </Modes_Of_Introduction>
+         <Likelihood_Of_Exploit>Medium</Likelihood_Of_Exploit>
+         <Common_Consequences>
+            <Consequence>
+               <Scope>Access Control</Scope>
+               <Impact>Gain Privileges or Assume Identity</Impact>
+            </Consequence>
+         </Common_Consequences>
+         <Detection_Methods>
+           <Detection_Method Detection_Method_ID="DM-14">
+             <Method>Automated Static Analysis</Method>
+             <Description>Automated static analysis, commonly referred to as Static Application Security Testing (SAST), can find some instances of this weakness by analyzing source code (or binary/compiled code) without having to execute it. Typically, this is done by building a model of data flow and control flow, then searching for potentially-vulnerable patterns that connect "sources" (origins of input) with "sinks" (destinations where the data interacts with external components, a lower layer such as the OS, etc.)</Description>
+             <Effectiveness>High</Effectiveness>
+           </Detection_Method>
+         </Detection_Methods>
+         <Potential_Mitigations>
+            <Mitigation Mitigation_ID="MIT-1">
+               <Phase>Architecture and Design</Phase>
+               <Phase>Operation</Phase>
+               <Description>Very carefully manage the setting, management, and handling of privileges. Explicitly manage trust zones in the software.</Description>
+            </Mitigation>
+            <Mitigation Mitigation_ID="MIT-48">
+               <Phase>Architecture and Design</Phase>
+               <Strategy>Separation of Privilege</Strategy>
+               <Description>Follow the principle of least privilege when assigning access rights to entities in a software system.</Description>
+            </Mitigation>
+            <Mitigation Mitigation_ID="MIT-49">
+               <Phase>Architecture and Design</Phase>
+               <Strategy>Separation of Privilege</Strategy>
+               <Description>Consider following the principle of separation of privilege. Require multiple conditions to be met before permitting access to a system resource.</Description>
+            </Mitigation>
+         </Potential_Mitigations>
+         <Demonstrative_Examples>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-126">
+               <Intro_Text>This code temporarily raises the program's privileges to allow creation of a new user folder.</Intro_Text>
+               <Example_Code Nature="Bad" Language="Python">
+                  <xhtml:div>def makeNewUserDir(username):<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>if invalidUsername(username):<xhtml:div style="margin-left:1em;">
+                              <xhtml:div>
+                                 <xhtml:br />
+                                 <xhtml:i>#avoid CWE-22 and CWE-78</xhtml:i>
+                                 <xhtml:br />print('Usernames cannot contain invalid characters')<xhtml:br />return False</xhtml:div>
+                           </xhtml:div>
+                           <xhtml:br />try:<xhtml:div style="margin-left:1em;">raisePrivileges()<xhtml:br />os.mkdir('/home/' + username)<xhtml:br />lowerPrivileges()</xhtml:div>
+                           <xhtml:br />except OSError:<xhtml:div style="margin-left:1em;">print('Unable to create new user directory for user:' + username)<xhtml:br />return False</xhtml:div>
+                           <xhtml:br />return True</xhtml:div>
+                     </xhtml:div>
+                  </xhtml:div>
+               </Example_Code>
+               <Body_Text>While the program only raises its privilege level to create the folder and immediately lowers it again, if the call to os.mkdir() throws an exception, the call to lowerPrivileges() will not occur. As a result, the program is indefinitely operating in a raised privilege state, possibly allowing further exploitation to occur.</Body_Text>
+            </Demonstrative_Example>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-97">
+               <Intro_Text>The following example demonstrates the weakness.</Intro_Text>
+               <Example_Code Nature="Bad" Language="C">
+                  <xhtml:div>seteuid(0);<xhtml:br />
+                     <xhtml:i>/* do some stuff */</xhtml:i>
+                     <xhtml:br />
+                     <xhtml:br />seteuid(getuid());</xhtml:div>
+               </Example_Code>
+            </Demonstrative_Example>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-142">
+               <Intro_Text>The following example demonstrates the weakness.</Intro_Text>
+               <Example_Code Nature="Bad" Language="Java">
+                  <xhtml:div>AccessController.doPrivileged(new PrivilegedAction() {<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>public Object run() {<xhtml:div style="margin-left:1em;">
+                                 <xhtml:i>// privileged code goes here, for example:</xhtml:i>
+                                 <xhtml:br />System.loadLibrary("awt");<xhtml:br />return null;<xhtml:br />
+                                 <xhtml:i>// nothing to return</xhtml:i>
+                                 <xhtml:br />
+                           </xhtml:div>}</xhtml:div>
+                     </xhtml:div>
+                  </xhtml:div>
+               </Example_Code>
+            </Demonstrative_Example>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-127">
+               <Intro_Text>This code intends to allow only Administrators to print debug information about a system.</Intro_Text>
+               <Example_Code Nature="Bad" Language="Java">
+                  <xhtml:div>public enum Roles {<xhtml:div style="margin-left:1em;">ADMIN,USER,GUEST</xhtml:div>}<xhtml:br />
+                     <xhtml:br />public void printDebugInfo(User requestingUser){<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>if(isAuthenticated(requestingUser)){<xhtml:div style="margin-left:1em;">
+                              <xhtml:div>switch(requestingUser.role){<xhtml:div style="margin-left:1em;">
+                                    <xhtml:div>case GUEST:<xhtml:div style="margin-left:1em;">System.out.println("You are not authorized to perform this command");<xhtml:br />break;</xhtml:div>
+                                       <xhtml:br />default:<xhtml:div style="margin-left:1em;">System.out.println(currentDebugState());<xhtml:br />break;</xhtml:div>
+                                    </xhtml:div>
+                                 </xhtml:div>}</xhtml:div>
+                           </xhtml:div>}<xhtml:br />else{<xhtml:div style="margin-left:1em;">System.out.println("You must be logged in to perform this command");</xhtml:div>}</xhtml:div>
+                     </xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>While the intention was to only allow Administrators to print the debug information, the code as written only excludes those with the role of "GUEST". Someone with the role of "ADMIN" or "USER" will be allowed access, which goes against the original intent. An attacker may be able to use this debug information to craft an attack on the system.</Body_Text>
+            </Demonstrative_Example>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-128">
+               <Intro_Text>This code allows someone with the role of "ADMIN" or "OPERATOR" to reset a user's password. The role of "OPERATOR" is intended to have less privileges than an "ADMIN", but still be able to help users with small issues such as forgotten passwords.</Intro_Text>
+               <Example_Code Nature="Bad" Language="Java">
+                  <xhtml:div>public enum Roles {<xhtml:div style="margin-left:1em;">ADMIN,OPERATOR,USER,GUEST</xhtml:div>}<xhtml:br />
+                     <xhtml:br />public void resetPassword(User requestingUser, User user, String password ){<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>if(isAuthenticated(requestingUser)){<xhtml:div style="margin-left:1em;">
+                              <xhtml:div>switch(requestingUser.role){<xhtml:div style="margin-left:1em;">
+                                    <xhtml:div>case GUEST:<xhtml:div style="margin-left:1em;">System.out.println("You are not authorized to perform this command");<xhtml:br />break;</xhtml:div>
+                                       <xhtml:br />case USER:<xhtml:div style="margin-left:1em;">System.out.println("You are not authorized to perform this command");<xhtml:br />break;</xhtml:div>
+                                       <xhtml:br />default:<xhtml:div style="margin-left:1em;">setPassword(user,password);<xhtml:br />break;</xhtml:div>}</xhtml:div>
+                                 </xhtml:div>}</xhtml:div>
+                           </xhtml:div>
+                           <xhtml:br />else{<xhtml:div style="margin-left:1em;">System.out.println("You must be logged in to perform this command");</xhtml:div>}</xhtml:div>
+                     </xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>This code does not check the role of the user whose password is being reset. It is possible for an Operator to gain Admin privileges by resetting the password of an Admin account and taking control of that account.</Body_Text>
+            </Demonstrative_Example>
+         </Demonstrative_Examples>
+         <Observed_Examples>
+            <Observed_Example>
+               <Reference>CVE-2001-1555</Reference>
+               <Description>Terminal privileges are not reset when a user logs out.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2001-1555</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2001-1514</Reference>
+               <Description>Does not properly pass security context to child processes in certain cases, allows privilege escalation.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2001-1514</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2001-0128</Reference>
+               <Description>Does not properly compute roles.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2001-0128</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-1999-1193</Reference>
+               <Description>untrusted user placed in unix "wheel" group</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-1999-1193</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2005-2741</Reference>
+               <Description>Product allows users to grant themselves certain rights that can be used to escalate privileges.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2005-2741</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2005-2496</Reference>
+               <Description>Product uses group ID of a user instead of the group, causing it to run with different privileges. This is resultant from some other unknown issue.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2005-2496</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2004-0274</Reference>
+               <Description>Product mistakenly assigns a particular status to an entity, leading to increased privileges.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2004-0274</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2007-4217</Reference>
+               <Description>FTP client program on a certain OS runs with setuid privileges and has a buffer overflow. Most clients do not need extra privileges, so an overflow is not a vulnerability for those clients.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2007-4217</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2007-5159</Reference>
+               <Description>OS incorrectly installs a program with setuid privileges, allowing users to gain privileges.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2007-5159</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2008-4638</Reference>
+               <Description>Composite: application running with high privileges (CWE-250) allows user to specify a restricted file to process, which generates a parsing error that leaks the contents of the file (CWE-209).</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2008-4638</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2007-3931</Reference>
+               <Description>Installation script installs some programs as setuid when they shouldn't be.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2007-3931</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2002-1981</Reference>
+               <Description>Roles have access to dangerous procedures (Accessible entities).</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2002-1981</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2002-1671</Reference>
+               <Description>Untrusted object/method gets access to clipboard (Accessible entities).</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2002-1671</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2000-0315</Reference>
+               <Description>Traceroute program allows unprivileged users to modify source address of packet (Accessible entities).</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2000-0315</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2000-0506</Reference>
+               <Description>User with capability can prevent setuid program from dropping privileges (Unsafe privileged actions).</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2000-0506</Link>
+            </Observed_Example>
+         </Observed_Examples>
+         <Taxonomy_Mappings>
+            <Taxonomy_Mapping Taxonomy_Name="PLOVER">
+               <Entry_Name>Privilege Management Error</Entry_Name>
+            </Taxonomy_Mapping>
+			<Taxonomy_Mapping Taxonomy_Name="ISA/IEC 62443">
+			  <Entry_ID>Part 2-4</Entry_ID>
+			  <Entry_Name>Req SP.03.08 BR</Entry_Name>
+			</Taxonomy_Mapping>
+			<Taxonomy_Mapping Taxonomy_Name="ISA/IEC 62443">
+			  <Entry_ID>Part 3-2</Entry_ID>
+			  <Entry_Name>Req CR 3.1</Entry_Name>
+			</Taxonomy_Mapping>
+			<Taxonomy_Mapping Taxonomy_Name="ISA/IEC 62443">
+			  <Entry_ID>Part 3-3</Entry_ID>
+			  <Entry_Name>Req SR 1.2</Entry_Name>
+			</Taxonomy_Mapping>
+			<Taxonomy_Mapping Taxonomy_Name="ISA/IEC 62443">
+			  <Entry_ID>Part 3-3</Entry_ID>
+			  <Entry_Name>Req SR 2.1</Entry_Name>
+			</Taxonomy_Mapping>
+			<Taxonomy_Mapping Taxonomy_Name="ISA/IEC 62443">
+			  <Entry_ID>Part 4-1</Entry_ID>
+			  <Entry_Name>Req SD-3</Entry_Name>
+			</Taxonomy_Mapping>
+			<Taxonomy_Mapping Taxonomy_Name="ISA/IEC 62443">
+			  <Entry_ID>Part 4-1</Entry_ID>
+			  <Entry_Name>Req SD-4</Entry_Name>
+			</Taxonomy_Mapping>
+			<Taxonomy_Mapping Taxonomy_Name="ISA/IEC 62443">
+			  <Entry_ID>Part 4-1</Entry_ID>
+			  <Entry_Name>Req SI-1</Entry_Name>
+			</Taxonomy_Mapping>
+			<Taxonomy_Mapping Taxonomy_Name="ISA/IEC 62443">
+			  <Entry_ID>Part 4-2</Entry_ID>
+			  <Entry_Name>Req CR 1.1</Entry_Name>
+			</Taxonomy_Mapping>
+			<Taxonomy_Mapping Taxonomy_Name="ISA/IEC 62443">
+			  <Entry_ID>Part 4-2</Entry_ID>
+			  <Entry_Name>Req CR 2.1</Entry_Name>
+			</Taxonomy_Mapping>
+         </Taxonomy_Mappings>
+         <Related_Attack_Patterns>
+            <Related_Attack_Pattern CAPEC_ID="122" />
+            <Related_Attack_Pattern CAPEC_ID="233" />
+            <Related_Attack_Pattern CAPEC_ID="58" />
+         </Related_Attack_Patterns>
+         <References>
+            <Reference External_Reference_ID="REF-44" Section="&quot;Sin 16: Executing Code With Too Much Privilege.&quot; Page 243" />
+            <Reference External_Reference_ID="REF-62" Section="Chapter 9, &quot;Dropping Privileges Permanently&quot;, Page 479" />
+            <Reference External_Reference_ID="REF-1287" Section="Details of Problematic Mappings" />
+         </References>
+         <Mapping_Notes>
+            <Usage>Discouraged</Usage>
+            <Rationale>CWE-269 is commonly misused. It can be conflated with "privilege escalation," which is a technical impact that is listed in many low-information vulnerability reports [REF-1287]. It is not useful for trend analysis.</Rationale>
+            <Comments>If an error or mistake allows privilege escalation, then use the CWE ID for that mistake. Avoid using CWE-269 when only phrases such as "privilege escalation" or "gain privileges" are available, as these indicate technical impact of the vulnerability - not the root cause weakness. If the root cause seems to be directly related to privileges, then examine the children of CWE-269 for additional hints.</Comments>
+            <Reasons>
+               <Reason Type="Frequent Misuse" />
+               <Reason Type="Frequent Misinterpretation" />
+               <Reason Type="Abstraction" />
+            </Reasons>
+	    <Suggestions>
+	      <Suggestion CWE_ID="250" Comment="Execution with Unnecessary Privileges" />
+	      <Suggestion CWE_ID="266" Comment="assigning incorrect privilege" />
+	      <Suggestion CWE_ID="267" Comment="Privilege Defined With Unsafe Actions" />
+	      <Suggestion CWE_ID="271" Comment="dropping/lowering privileges incorrectly" />
+	    </Suggestions>
+         </Mapping_Notes>
+         <Notes>
+            <Note Type="Maintenance">The relationships between privileges, permissions, and actors (e.g. users and groups) need further refinement within the Research view. One complication is that these concepts apply to two different pillars, related to control of resources (CWE-664) and protection mechanism failures (CWE-693).</Note>
+         </Notes>
+         <Content_History>
+            <Submission>
+               <Submission_Name>PLOVER</Submission_Name>
+               <Submission_Date>2006-07-19</Submission_Date>
+               <Submission_Version>Draft 3</Submission_Version>
+               <Submission_ReleaseDate>2006-07-19</Submission_ReleaseDate>
+            </Submission>
+            <Modification>
+               <Modification_Name>Eric Dalci</Modification_Name>
+               <Modification_Organization>Cigital</Modification_Organization>
+               <Modification_Date>2008-07-01</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>updated Time_of_Introduction</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Organization>CWE Team</Modification_Organization>
+               <Modification_Date>2008-09-08</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>Moved this entry higher up in the Research view.</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2008-09-08</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>updated Description, Maintenance_Notes, Name, Relationships, Taxonomy_Mappings, Weakness_Ordinalities</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2009-05-27</Modification_Date>
+               <Modification_Version>1.4</Modification_Version>
+               <Modification_ReleaseDate>2009-05-27</Modification_ReleaseDate>
+               <Modification_Comment>updated Name</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2009-12-28</Modification_Date>
+               <Modification_Version>1.7</Modification_Version>
+               <Modification_ReleaseDate>2009-12-28</Modification_ReleaseDate>
+               <Modification_Comment>updated Potential_Mitigations</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2010-06-21</Modification_Date>
+               <Modification_Version>1.9</Modification_Version>
+               <Modification_ReleaseDate>2010-06-21</Modification_ReleaseDate>
+               <Modification_Comment>updated Potential_Mitigations</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-03-29</Modification_Date>
+               <Modification_Version>1.12</Modification_Version>
+               <Modification_ReleaseDate>2011-03-30</Modification_ReleaseDate>
+               <Modification_Comment>updated Description, Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-06-01</Modification_Date>
+               <Modification_Version>1.13</Modification_Version>
+               <Modification_ReleaseDate>2011-06-01</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2012-05-11</Modification_Date>
+               <Modification_Version>2.2</Modification_Version>
+               <Modification_ReleaseDate>2012-05-15</Modification_ReleaseDate>
+               <Modification_Comment>updated References, Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2012-10-30</Modification_Date>
+               <Modification_Version>2.3</Modification_Version>
+               <Modification_ReleaseDate>2012-10-30</Modification_ReleaseDate>
+               <Modification_Comment>updated Potential_Mitigations</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2013-02-21</Modification_Date>
+               <Modification_Version>2.4</Modification_Version>
+               <Modification_ReleaseDate>2013-02-21</Modification_ReleaseDate>
+               <Modification_Comment>updated Potential_Mitigations</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2017-11-08</Modification_Date>
+               <Modification_Version>3.0</Modification_Version>
+               <Modification_ReleaseDate>2017-11-08</Modification_ReleaseDate>
+               <Modification_Comment>updated Applicable_Platforms, Causal_Nature, Modes_of_Introduction, Relationships, Type</Modification_Comment>
+            </Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2019-06-20</Modification_Date>
+					<Modification_Version>3.3</Modification_Version>
+					<Modification_ReleaseDate>2019-06-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Related_Attack_Patterns, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2019-09-19</Modification_Date>
+					<Modification_Version>3.4</Modification_Version>
+					<Modification_ReleaseDate>2019-09-19</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples, Maintenance_Notes, Observed_Examples, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-02-24</Modification_Date>
+					<Modification_Version>4.0</Modification_Version>
+					<Modification_ReleaseDate>2020-02-24</Modification_ReleaseDate>
+					<Modification_Comment>updated Observed_Examples, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-08-20</Modification_Date>
+					<Modification_Version>4.2</Modification_Version>
+					<Modification_ReleaseDate>2020-08-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-03-15</Modification_Date>
+					<Modification_Version>4.4</Modification_Version>
+					<Modification_ReleaseDate>2021-03-15</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-10-28</Modification_Date>
+					<Modification_Version>4.6</Modification_Version>
+					<Modification_ReleaseDate>2021-10-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-04-28</Modification_Date>
+					<Modification_Version>4.7</Modification_Version>
+					<Modification_ReleaseDate>2022-04-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-10-13</Modification_Date>
+					<Modification_Version>4.9</Modification_Version>
+					<Modification_ReleaseDate>2022-10-13</Modification_ReleaseDate>
+					<Modification_Comment>updated References</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-01-31</Modification_Date>
+					<Modification_Version>4.10</Modification_Version>
+					<Modification_ReleaseDate>2023-01-31</Modification_ReleaseDate>
+					<Modification_Comment>updated Description</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Detection_Factors, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes, Relationships, Taxonomy_Mappings</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2024-07-16</Modification_Date>
+					<Modification_Version>4.15</Modification_Version>
+					<Modification_ReleaseDate>2024-07-16</Modification_ReleaseDate>
+					<Modification_Comment>updated Diagram</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2024-11-19</Modification_Date>
+					<Modification_Version>4.16</Modification_Version>
+					<Modification_ReleaseDate>2024-11-19</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2026-01-21</Modification_Date>
+					<Modification_Version>4.19.1</Modification_Version>
+					<Modification_ReleaseDate>2026-01-21</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2026-04-30</Modification_Date>
+					<Modification_Version>4.20</Modification_Version>
+					<Modification_ReleaseDate>2026-04-30</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Contribution Type="Content">
+				  <Contribution_Name>"Mapping CWE to 62443" Sub-Working Group</Contribution_Name>
+				  <Contribution_Organization>CWE-CAPEC ICS/OT SIG</Contribution_Organization>
+				  <Contribution_Date>2023-06-29</Contribution_Date>
+				  <Contribution_Version>4.12</Contribution_Version>
+				  <Contribution_ReleaseDate>2023-06-29</Contribution_ReleaseDate>
+				  <Contribution_Comment>Suggested mappings to ISA/IEC 62443.</Contribution_Comment>
+				</Contribution>
+	    <Contribution Type="Content">
+	      <Contribution_Name>Abhi Balakrishnan</Contribution_Name>
+	      <Contribution_Date>2024-02-29</Contribution_Date>
+	      <Contribution_Version>4.15</Contribution_Version>
+	      <Contribution_ReleaseDate>2024-07-16</Contribution_ReleaseDate>
+	      <Contribution_Comment>Provided diagram to improve CWE usability</Contribution_Comment>
+	    </Contribution>
+            <Previous_Entry_Name Date="2008-09-09">Privilege Management Error</Previous_Entry_Name>
+            <Previous_Entry_Name Date="2009-05-27">Insecure Privilege Management</Previous_Entry_Name>
+         </Content_History>
+      </Weakness>
+      

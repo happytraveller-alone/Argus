@@ -1,0 +1,410 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="478" Name="Missing Default Case in Multiple Condition Expression" Abstraction="Base" Structure="Simple" Status="Draft">
+         <Description>The code does not have a default case in an expression with multiple conditions, such as a switch statement.</Description>
+         <Extended_Description>If a multiple-condition expression (such as a switch in C) omits the default case but does not consider or handle all possible values that could occur, then this might lead to complex logical errors and resultant weaknesses. Because of this, further decisions are made based on poor information, and cascading failure results. This cascading failure may result in any number of security issues, and constitutes a significant failure in the system.</Extended_Description>
+         <Related_Weaknesses>
+            <Related_Weakness Nature="ChildOf" CWE_ID="1023" View_ID="1000" Ordinal="Primary" />
+         </Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+         <Applicable_Platforms>
+            <Language Name="C" Prevalence="Undetermined" />
+            <Language Name="C++" Prevalence="Undetermined" />
+            <Language Name="Java" Prevalence="Undetermined" />
+            <Language Name="C#" Prevalence="Undetermined" />
+            <Language Name="Python" Prevalence="Undetermined" />
+            <Language Name="JavaScript" Prevalence="Undetermined" />
+         </Applicable_Platforms>
+         <Modes_Of_Introduction>
+            <Introduction>
+               <Phase>Implementation</Phase>
+            </Introduction>
+         </Modes_Of_Introduction>
+         <Common_Consequences>
+            <Consequence>
+               <Scope>Integrity</Scope>
+               <Impact>Varies by Context</Impact>
+               <Impact>Alter Execution Logic</Impact>
+               <Note>Depending on the logical circumstances involved, any consequences may result: e.g., issues of confidentiality, authentication, authorization, availability, integrity, accountability, or non-repudiation.</Note>
+            </Consequence>
+         </Common_Consequences>
+         <Detection_Methods>
+           <Detection_Method Detection_Method_ID="DM-14">
+             <Method>Automated Static Analysis</Method>
+             <Description>Automated static analysis, commonly referred to as Static Application Security Testing (SAST), can find some instances of this weakness by analyzing source code (or binary/compiled code) without having to execute it. Typically, this is done by building a model of data flow and control flow, then searching for potentially-vulnerable patterns that connect "sources" (origins of input) with "sinks" (destinations where the data interacts with external components, a lower layer such as the OS, etc.)</Description>
+             <Effectiveness>High</Effectiveness>
+           </Detection_Method>
+         </Detection_Methods>
+         <Potential_Mitigations>
+            <Mitigation>
+               <Phase>Implementation</Phase>
+               <Description>Ensure that there are no cases unaccounted for when adjusting program flow or values based on the value of a given variable. In the case of switch style statements, the very simple act of creating a default case can, if done correctly, mitigate this situation. Often however, the default case is used simply to represent an assumed option, as opposed to working as a check for invalid input. This is poor practice and in some cases is as bad as omitting a default case entirely.</Description>
+            </Mitigation>
+         </Potential_Mitigations>
+         <Demonstrative_Examples>
+            <Demonstrative_Example>
+               <Intro_Text>The following does not properly check the return code in the case where the security_check function returns a -1 value when an error occurs. If an attacker can supply data that will invoke an error, the attacker can bypass the security check:</Intro_Text>
+               <Example_Code Nature="Bad" Language="C">
+                  <xhtml:div>#define FAILED 0<xhtml:br />#define PASSED 1<xhtml:br />int result;<xhtml:br />...<xhtml:br />result = security_check(data);<xhtml:br />switch (result) {<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>case FAILED:<xhtml:div style="margin-left:1em;">printf("Security check failed!\n");<xhtml:br />exit(-1);<xhtml:br />
+                              <xhtml:i>//Break never reached because of exit()</xhtml:i>
+                              <xhtml:br />break;</xhtml:div>
+                           <xhtml:br />case PASSED:<xhtml:div style="margin-left:1em;">printf("Security check passed.\n");<xhtml:br />break;</xhtml:div>
+                        </xhtml:div>
+                     </xhtml:div>}<xhtml:br />
+                     <xhtml:i>// program execution continues...</xhtml:i>
+                     <xhtml:br />...</xhtml:div>
+               </Example_Code>
+               <Body_Text>Instead a default label should be used for unaccounted conditions:</Body_Text>
+               <Example_Code Nature="Good" Language="C">
+                  <xhtml:div>#define FAILED 0<xhtml:br />#define PASSED 1<xhtml:br />int result;<xhtml:br />...<xhtml:br />result = security_check(data);<xhtml:br />switch (result) {<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>case FAILED:<xhtml:div style="margin-left:1em;">printf("Security check failed!\n");<xhtml:br />exit(-1);<xhtml:br />
+                              <xhtml:i>//Break never reached because of exit()</xhtml:i>
+                              <xhtml:br />break;</xhtml:div>
+                           <xhtml:br />case PASSED:<xhtml:div style="margin-left:1em;">printf("Security check passed.\n");<xhtml:br />break;</xhtml:div>
+                           <xhtml:br />default:<xhtml:div style="margin-left:1em;">printf("Unknown error (%d), exiting...\n",result);<xhtml:br />exit(-1);</xhtml:div>
+                        </xhtml:div>
+                     </xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>This label is used because the assumption cannot be made that all possible cases are accounted for. A good practice is to reserve the default case for error handling.</Body_Text>
+            </Demonstrative_Example>
+            <Demonstrative_Example>
+               <Intro_Text>In the following Java example the method getInterestRate retrieves the interest rate for the number of points for a mortgage. The number of points is provided within the input parameter and a switch statement will set the interest rate value to be returned based on the number of points.</Intro_Text>
+               <Example_Code Nature="Bad" Language="Java">
+                  <xhtml:div>public static final String INTEREST_RATE_AT_ZERO_POINTS = "5.00";<xhtml:br />public static final String INTEREST_RATE_AT_ONE_POINTS = "4.75";<xhtml:br />public static final String INTEREST_RATE_AT_TWO_POINTS = "4.50";<xhtml:br />...<xhtml:br />public BigDecimal getInterestRate(int points) {<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>BigDecimal result = new BigDecimal(INTEREST_RATE_AT_ZERO_POINTS);<xhtml:br />
+                           <xhtml:br />switch (points) {<xhtml:div style="margin-left:1em;">
+                              <xhtml:div>case 0:<xhtml:div style="margin-left:1em;">result = new BigDecimal(INTEREST_RATE_AT_ZERO_POINTS);<xhtml:br />break;</xhtml:div>
+                                 <xhtml:br />case 1:<xhtml:div style="margin-left:1em;">result = new BigDecimal(INTEREST_RATE_AT_ONE_POINTS);<xhtml:br />break;</xhtml:div>
+                                 <xhtml:br />case 2:<xhtml:div style="margin-left:1em;">result = new BigDecimal(INTEREST_RATE_AT_TWO_POINTS);<xhtml:br />break;</xhtml:div>
+                              </xhtml:div>
+                           </xhtml:div>}<xhtml:br />return result;</xhtml:div>
+                     </xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>However, this code assumes that the value of the points input parameter will always be 0, 1 or 2 and does not check for other incorrect values passed to the method. This can be easily accomplished by providing a default label in the switch statement that outputs an error message indicating an invalid value for the points input parameter and returning a null value.</Body_Text>
+               <Example_Code Nature="Good" Language="Java">
+                  <xhtml:div>public static final String INTEREST_RATE_AT_ZERO_POINTS = "5.00";<xhtml:br />public static final String INTEREST_RATE_AT_ONE_POINTS = "4.75";<xhtml:br />public static final String INTEREST_RATE_AT_TWO_POINTS = "4.50";<xhtml:br />...<xhtml:br />public BigDecimal getInterestRate(int points) {<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>BigDecimal result = new BigDecimal(INTEREST_RATE_AT_ZERO_POINTS);<xhtml:br />
+                           <xhtml:br />switch (points) {<xhtml:div style="margin-left:1em;">
+                              <xhtml:div>case 0:<xhtml:div style="margin-left:1em;">result = new BigDecimal(INTEREST_RATE_AT_ZERO_POINTS);<xhtml:br />break;</xhtml:div>
+                                 <xhtml:br />case 1:<xhtml:div style="margin-left:1em;">result = new BigDecimal(INTEREST_RATE_AT_ONE_POINTS);<xhtml:br />break;</xhtml:div>
+                                 <xhtml:br />case 2:<xhtml:div style="margin-left:1em;">result = new BigDecimal(INTEREST_RATE_AT_TWO_POINTS);<xhtml:br />break;</xhtml:div>
+                                 <xhtml:br />default:<xhtml:div style="margin-left:1em;">System.err.println("Invalid value for points, must be 0, 1 or 2");<xhtml:br />System.err.println("Returning null value for interest rate");<xhtml:br />result = null;</xhtml:div>
+                              </xhtml:div>
+                           </xhtml:div>}<xhtml:br />
+                           <xhtml:br />return result;</xhtml:div>
+                     </xhtml:div>}</xhtml:div>
+               </Example_Code>
+            </Demonstrative_Example>
+            <Demonstrative_Example>
+               <Intro_Text>In the following Python example the match-case statements (available in Python version 3.10 and later) perform actions based on the result of the process_data() function. The expected return is either 0 or 1. However, if an unexpected result (e.g., -1 or 2) is obtained then no actions will be taken potentially leading to an unexpected program state.</Intro_Text>
+               <Example_Code Nature="Bad" Language="Python">
+                  <xhtml:div>result = process_data(data)
+                  <xhtml:br />match result:
+                  <xhtml:div style="margin-left:1em;">case 0:
+                     <xhtml:div style="margin-left:1em;">print("Properly handle zero case.")</xhtml:div>
+                  <xhtml:br />case 1:
+                     <xhtml:div style="margin-left:1em;">print("Properly handle one case.")</xhtml:div>
+                  </xhtml:div>
+                  <xhtml:br /># program execution continues...</xhtml:div>
+               </Example_Code>
+               <Body_Text>The recommended approach is to add a default case that captures any unexpected result conditions, regardless of how improbable these unexpected conditions might be, and properly handles them.</Body_Text>
+               <Example_Code Nature="Good" Language="Python">
+                  <xhtml:div>result = process_data(data)
+                  <xhtml:br />match result:
+                  <xhtml:div style="margin-left:1em;">case 0:
+                     <xhtml:div style="margin-left:1em;">print("Properly handle zero case.")</xhtml:div>
+                  <xhtml:br />case 1:
+                     <xhtml:div style="margin-left:1em;">print("Properly handle one case.")</xhtml:div>
+                  <xhtml:br />case _:
+                     <xhtml:div style="margin-left:1em;">print("Properly handle unexpected condition.")</xhtml:div>
+                  </xhtml:div>
+                  <xhtml:br /># program execution continues...</xhtml:div>
+               </Example_Code>
+            </Demonstrative_Example>
+            <Demonstrative_Example>
+               <Intro_Text>In the following JavaScript example the switch-case statements (available in JavaScript version 1.2 and later) are used to process a given step based on the result of a calcuation involving two inputs. The expected return is either 1, 2, or 3. However, if an unexpected result (e.g., 4) is obtained then no action will be taken potentially leading to an unexpected program state.</Intro_Text>
+               <Example_Code Nature="Bad" Language="JavaScript">
+                  <xhtml:div>let step = input1 + input2;
+                  <xhtml:br />switch(step) {
+                  <xhtml:div style="margin-left:1em;">case 1:
+                     <xhtml:div style="margin-left:1em;">alert("Process step 1.");
+                     <xhtml:br />break;</xhtml:div>
+                  <xhtml:br />case 2:
+                     <xhtml:div style="margin-left:1em;">alert("Process step 2.");
+                     <xhtml:br />break;</xhtml:div>
+                  <xhtml:br />case 3:
+                     <xhtml:div style="margin-left:1em;">alert("Process step 3.");
+                     <xhtml:br />break;</xhtml:div>
+                  </xhtml:div>
+                  <xhtml:br />}
+                  <xhtml:br />// program execution continues...</xhtml:div>
+               </Example_Code>
+               <Body_Text>The recommended approach is to add a default case that captures any unexpected result conditions and properly handles them.</Body_Text>
+               <Example_Code Nature="Good" Language="JavaScript">
+                  <xhtml:div>let step = input1 + input2;
+                  <xhtml:br />switch(step) {
+                  <xhtml:div style="margin-left:1em;">case 1:
+                     <xhtml:div style="margin-left:1em;">alert("Process step 1.");
+                     <xhtml:br />break;</xhtml:div>
+                  <xhtml:br />case 2:
+                     <xhtml:div style="margin-left:1em;">alert("Process step 2.");
+                     <xhtml:br />break;</xhtml:div>
+                  <xhtml:br />case 3:
+                     <xhtml:div style="margin-left:1em;">alert("Process step 3.");
+                     <xhtml:br />break;</xhtml:div>
+                  <xhtml:br />default:
+                     <xhtml:div style="margin-left:1em;">alert("Unexpected step encountered.");</xhtml:div>
+                  </xhtml:div>
+                  <xhtml:br />}
+                  <xhtml:br />// program execution continues...</xhtml:div>
+               </Example_Code>
+            </Demonstrative_Example>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-152">
+              <Intro_Text>The Finite State Machine (FSM) shown in the "bad" code snippet below assigns the output ("out") based on the value of state, which is determined based on the user provided input ("user_input").</Intro_Text>
+              <Example_Code Nature="Bad" Language="Verilog">
+                <xhtml:div>module fsm_1(out, user_input, clk, rst_n);
+                <xhtml:br />input [2:0] user_input; 
+                <xhtml:br />input clk, rst_n;
+                <xhtml:br />output reg [2:0] out;
+                <xhtml:br />reg [1:0] state;
+                <xhtml:br />always @ (posedge clk or negedge rst_n )
+                <xhtml:br />
+                <xhtml:div style="margin-left:1em;">begin
+                <xhtml:br />
+                <xhtml:div style="margin-left:1em;">
+				  if (!rst_n)<xhtml:br />
+				  <xhtml:div style="margin-left:1em;">
+					state = 3'h0;
+				  </xhtml:div>
+                  else<xhtml:br />
+				  case (user_input)
+                  <xhtml:div style="margin-left:1em;">
+					3'h0:<xhtml:br />
+					3'h1:<xhtml:br />
+					3'h2:<xhtml:br />
+					3'h3: state = 2'h3;<xhtml:br />
+					3'h4: state = 2'h2;<xhtml:br />
+					3'h5: state = 2'h1;<xhtml:br />
+                  </xhtml:div>
+                endcase
+                </xhtml:div>
+                end<xhtml:br />
+                out &lt;= {1'h1, state};<xhtml:br />
+                </xhtml:div>
+                endmodule
+                </xhtml:div>
+              </Example_Code>
+              <Body_Text>
+                <xhtml:p>The case statement does not include a default to handle the scenario when the user provides inputs of 3'h6 and 3'h7.  Those inputs push the system to an undefined state and might cause a crash (denial of service) or any other unanticipated outcome.</xhtml:p>
+                <xhtml:p>Adding a default statement to handle undefined inputs mitigates this issue.  This is shown in the "Good" code snippet below.  The default statement is in bold.</xhtml:p>
+              </Body_Text>
+              <Example_Code Nature="Good" Language="Verilog">
+                <xhtml:div>case (user_input)
+                <xhtml:br /><xhtml:div style="margin-left:1em;">3'h0:
+                <xhtml:br />3'h1:
+                <xhtml:br />3'h2:
+                <xhtml:br />3'h3: state = 2'h3;
+                <xhtml:br />3'h4: state = 2'h2;
+                <xhtml:br />3'h5: state = 2'h1;
+                <xhtml:br /><xhtml:b>default: state = 2'h0;</xhtml:b>
+              </xhtml:div>
+                endcase</xhtml:div>
+              </Example_Code>
+            </Demonstrative_Example>
+         </Demonstrative_Examples>
+         <Taxonomy_Mappings>
+            <Taxonomy_Mapping Taxonomy_Name="CLASP">
+               <Entry_Name>Failure to account for default case in switch</Entry_Name>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="Software Fault Patterns">
+               <Entry_ID>SFP4</Entry_ID>
+               <Entry_Name>Unchecked Status Condition</Entry_Name>
+            </Taxonomy_Mapping>
+         </Taxonomy_Mappings>
+         <References>
+            <Reference External_Reference_ID="REF-18" />
+            <Reference External_Reference_ID="REF-62" Section="Chapter 7, &quot;Switch Statements&quot;, Page 337" />
+         </References>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Base level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+         <Content_History>
+            <Submission>
+               <Submission_Name>CLASP</Submission_Name>
+               <Submission_Date>2006-07-19</Submission_Date>
+               <Submission_Version>Draft 3</Submission_Version>
+               <Submission_ReleaseDate>2006-07-19</Submission_ReleaseDate>
+            </Submission>
+            <Modification>
+               <Modification_Name>Eric Dalci</Modification_Name>
+               <Modification_Organization>Cigital</Modification_Organization>
+               <Modification_Date>2008-07-01</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>updated Time_of_Introduction</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2008-09-08</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>updated Applicable_Platforms, Common_Consequences, Description, Relationships, Other_Notes, Taxonomy_Mappings, Weakness_Ordinalities</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2009-05-27</Modification_Date>
+               <Modification_Version>1.4</Modification_Version>
+               <Modification_ReleaseDate>2009-05-27</Modification_ReleaseDate>
+               <Modification_Comment>updated Description, Name</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2010-06-21</Modification_Date>
+               <Modification_Version>1.9</Modification_Version>
+               <Modification_ReleaseDate>2010-06-21</Modification_ReleaseDate>
+               <Modification_Comment>updated Demonstrative_Examples</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-03-29</Modification_Date>
+               <Modification_Version>1.12</Modification_Version>
+               <Modification_ReleaseDate>2011-03-30</Modification_ReleaseDate>
+               <Modification_Comment>updated Demonstrative_Examples</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-06-01</Modification_Date>
+               <Modification_Version>1.13</Modification_Version>
+               <Modification_ReleaseDate>2011-06-01</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-06-27</Modification_Date>
+               <Modification_Version>2.0</Modification_Version>
+               <Modification_ReleaseDate>2011-06-27</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2012-05-11</Modification_Date>
+               <Modification_Version>2.2</Modification_Version>
+               <Modification_ReleaseDate>2012-05-15</Modification_ReleaseDate>
+               <Modification_Comment>updated References, Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2014-06-23</Modification_Date>
+               <Modification_Version>2.7</Modification_Version>
+               <Modification_ReleaseDate>2014-06-23</Modification_ReleaseDate>
+               <Modification_Comment>updated Description, Other_Notes, Potential_Mitigations</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2014-07-30</Modification_Date>
+               <Modification_Version>2.8</Modification_Version>
+               <Modification_ReleaseDate>2014-07-31</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2017-11-08</Modification_Date>
+               <Modification_Version>3.0</Modification_Version>
+               <Modification_ReleaseDate>2017-11-08</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2018-03-27</Modification_Date>
+               <Modification_Version>3.1</Modification_Version>
+               <Modification_ReleaseDate>2018-03-27</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships</Modification_Comment>
+            </Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2019-01-03</Modification_Date>
+					<Modification_Version>3.2</Modification_Version>
+					<Modification_ReleaseDate>2019-01-03</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-02-24</Modification_Date>
+					<Modification_Version>4.0</Modification_Version>
+					<Modification_ReleaseDate>2020-02-24</Modification_ReleaseDate>
+					<Modification_Comment>updated References, Relationships, Type</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-08-20</Modification_Date>
+					<Modification_Version>4.2</Modification_Version>
+					<Modification_ReleaseDate>2020-08-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-10-13</Modification_Date>
+					<Modification_Version>4.9</Modification_Version>
+					<Modification_ReleaseDate>2022-10-13</Modification_ReleaseDate>
+					<Modification_Comment>updated Applicable_Platforms, Demonstrative_Examples, Description, Name, Potential_Mitigations</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Detection_Factors, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+            <Contribution Type="Content">
+               <Contribution_Name>Drew Buttner</Contribution_Name>
+	       <Contribution_Organization>MITRE</Contribution_Organization>
+               <Contribution_Date>2022-08-15</Contribution_Date>
+               <Contribution_Comment>Suggested name change and other modifications, including a new demonstrative example.</Contribution_Comment>
+            </Contribution>
+            <Previous_Entry_Name Date="2008-04-11">Failure to Account for Default Case in Switch</Previous_Entry_Name>
+            <Previous_Entry_Name Date="2009-05-27">Failure to Use Default Case in Switch</Previous_Entry_Name>
+			<Previous_Entry_Name Date="2022-10-13">Missing Default Case in Switch Statement</Previous_Entry_Name>
+         </Content_History>
+      </Weakness>
+      

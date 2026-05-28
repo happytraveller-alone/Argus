@@ -1,0 +1,226 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="923" Name="Improper Restriction of Communication Channel to Intended Endpoints" Abstraction="Class" Structure="Simple" Status="Incomplete">
+         <Description>The product establishes a communication channel to (or from) an endpoint for privileged or protected operations, but it does not properly ensure that it is communicating with the correct endpoint.</Description>
+         <Extended_Description>
+            <xhtml:p>Attackers might be able to spoof the intended endpoint from a different system or process, thus gaining the same level of access as the intended endpoint.</xhtml:p>
+            <xhtml:p>While this issue frequently involves authentication between network-based clients and servers, other types of communication channels and endpoints can have this weakness.</xhtml:p>
+         </Extended_Description>
+         <Related_Weaknesses>
+            <Related_Weakness Nature="ChildOf" CWE_ID="284" View_ID="1000" Ordinal="Primary" />
+         </Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+            <Weakness_Ordinality>
+               <Ordinality>Resultant</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+         <Applicable_Platforms>
+            <Language Class="Not Language-Specific" Prevalence="Undetermined" />
+	    <Technology Class="Not Technology-Specific" Prevalence="Undetermined" />
+            <Technology Class="Web Based" Prevalence="Undetermined" />
+	    <Technology Name="Web Server" Prevalence="Undetermined" />
+         </Applicable_Platforms>
+         <Modes_Of_Introduction>
+            <Introduction>
+               <Phase>Architecture and Design</Phase>
+               <Note>REALIZATION: This weakness is caused during implementation of an architectural security tactic.</Note>
+            </Introduction>
+         </Modes_Of_Introduction>
+         <Common_Consequences>
+            <Consequence>
+               <Scope>Integrity</Scope>
+               <Scope>Confidentiality</Scope>
+               <Impact>Gain Privileges or Assume Identity</Impact>
+               <Note>If an attacker can spoof the endpoint, the attacker gains all the privileges that were intended for the original endpoint.</Note>
+            </Consequence>
+         </Common_Consequences>
+         <Detection_Methods>
+           <Detection_Method Detection_Method_ID="DM-14">
+             <Method>Automated Static Analysis</Method>
+             <Description>Automated static analysis, commonly referred to as Static Application Security Testing (SAST), can find some instances of this weakness by analyzing source code (or binary/compiled code) without having to execute it. Typically, this is done by building a model of data flow and control flow, then searching for potentially-vulnerable patterns that connect "sources" (origins of input) with "sinks" (destinations where the data interacts with external components, a lower layer such as the OS, etc.)</Description>
+             <Effectiveness>High</Effectiveness>
+           </Detection_Method>
+         </Detection_Methods>
+         <Demonstrative_Examples>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-208">
+               <Intro_Text>These cross-domain policy files mean to allow Flash and Silverlight applications hosted on other domains to access its data:</Intro_Text>
+               <Body_Text>Flash crossdomain.xml :</Body_Text>
+               <Example_Code Nature="Bad" Language="XML">
+                  <xhtml:div>&lt;cross-domain-policy xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"<xhtml:br />xsi:noNamespaceSchemaLocation="http://www.adobe.com/xml/schemas/PolicyFile.xsd"&gt;<xhtml:br />&lt;allow-access-from domain="*.example.com"/&gt;<xhtml:br />&lt;allow-access-from domain="*"/&gt;<xhtml:br />&lt;/cross-domain-policy&gt;</xhtml:div>
+               </Example_Code>
+               <Body_Text>Silverlight clientaccesspolicy.xml :</Body_Text>
+               <Example_Code Nature="Bad" Language="XML">
+                  <xhtml:div>&lt;?xml version="1.0" encoding="utf-8"?&gt;<xhtml:br />&lt;access-policy&gt;<xhtml:br />&lt;cross-domain-access&gt;<xhtml:br />&lt;policy&gt;<xhtml:br />&lt;allow-from http-request-headers="SOAPAction"&gt;<xhtml:br />&lt;domain uri="*"/&gt;<xhtml:br />&lt;/allow-from&gt;<xhtml:br />&lt;grant-to&gt;<xhtml:br />&lt;resource path="/" include-subpaths="true"/&gt;<xhtml:br />&lt;/grant-to&gt;<xhtml:br />&lt;/policy&gt;<xhtml:br />&lt;/cross-domain-access&gt;<xhtml:br />&lt;/access-policy&gt;</xhtml:div>
+               </Example_Code>
+               <Body_Text>These entries are far too permissive, allowing any Flash or Silverlight application to send requests. A malicious application hosted on any other web site will be able to send requests on behalf of any user tricked into executing it.</Body_Text>
+            </Demonstrative_Example>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-112">
+               <Intro_Text>This Android application will remove a user account when it receives an intent to do so:</Intro_Text>
+               <Example_Code Nature="Bad" Language="Java">
+                  <xhtml:div>IntentFilter filter = new IntentFilter("com.example.RemoveUser");<xhtml:br />MyReceiver receiver = new MyReceiver();<xhtml:br />registerReceiver(receiver, filter);<xhtml:br />
+                     <xhtml:br />public class DeleteReceiver extends BroadcastReceiver {<xhtml:div style="margin-left:1em;">@Override<xhtml:br />public void onReceive(Context context, Intent intent) {<xhtml:div style="margin-left:1em;">int userID = intent.getIntExtra("userID");<xhtml:br />destroyUserData(userID);</xhtml:div>}</xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>This application does not check the origin of the intent, thus allowing any malicious application to remove a user. Always check the origin of an intent, or create an allowlist of trusted applications using the manifest.xml file.</Body_Text>
+            </Demonstrative_Example>
+         </Demonstrative_Examples>
+	 <Observed_Examples>
+	   <Observed_Example>
+              <Reference>CVE-2022-30319</Reference>
+               <Description>S-bus functionality in a home automation product performs access control using an IP allowlist, which can be bypassed by a forged IP address.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2022-30319</Link>
+	   </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2022-22547</Reference>
+               <Description>A troubleshooting tool exposes a web server on a random port between 9000-65535 that could be used for information gathering</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2022-22547</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2022-4390</Reference>
+               <Description>A WAN interface on a router has firewall restrictions enabled for IPv4, but it does not for IPv6, which is enabled by default</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2022-4390</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2012-2292</Reference>
+               <Description>Product has a Silverlight cross-domain policy that does not restrict access to another application, which allows remote attackers to bypass the Same Origin Policy.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2012-2292</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2012-5810</Reference>
+               <Description>Mobile banking application does not verify hostname, leading to financial loss.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2012-5810</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2014-1266</Reference>
+               <Description>Chain: incorrect "goto" in Apple SSL product bypasses certificate validation, allowing Adversary-in-the-Middle (AITM) attack (Apple "goto fail" bug). CWE-705 (Incorrect Control Flow Scoping) -&gt; CWE-561 (Dead Code) -&gt; CWE-295 (Improper Certificate Validation) -&gt; CWE-393 (Return of Wrong Status Code) -&gt; CWE-300 (Channel Accessible by Non-Endpoint). The code's whitespace indentation did not reflect the actual control flow (CWE-1114) and did not explicitly delimit the block (CWE-483), which could have made it more difficult for human code auditors to detect the vulnerability.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2014-1266</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2000-1218</Reference>
+               <Description>DNS server can accept DNS updates from hosts that it did not query, leading to cache poisoning</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2000-1218</Link>
+            </Observed_Example>
+         </Observed_Examples>
+         <Related_Attack_Patterns>
+            <Related_Attack_Pattern CAPEC_ID="161" />
+            <Related_Attack_Pattern CAPEC_ID="481" />
+            <Related_Attack_Pattern CAPEC_ID="501" />
+            <Related_Attack_Pattern CAPEC_ID="697" />
+         </Related_Attack_Patterns>
+         <Mapping_Notes>
+            <Usage>Allowed-with-Review</Usage>
+            <Rationale>This CWE entry is a Class and might have Base-level children that would be more appropriate</Rationale>
+            <Comments>Examine children of this entry to see if there is a better fit</Comments>
+            <Reasons>
+               <Reason Type="Abstraction" />
+            </Reasons>
+         </Mapping_Notes>
+         <Content_History>
+            <Submission>
+               <Submission_Name>CWE Content Team</Submission_Name>
+               <Submission_Organization>MITRE</Submission_Organization>
+               <Submission_Date>2013-06-23</Submission_Date>
+               <Submission_Version>2.5</Submission_Version>
+               <Submission_ReleaseDate>2013-07-17</Submission_ReleaseDate>
+            </Submission>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2014-02-18</Modification_Date>
+               <Modification_Version>2.6</Modification_Version>
+               <Modification_ReleaseDate>2014-02-19</Modification_ReleaseDate>
+               <Modification_Comment>updated Description, Name, Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2017-11-08</Modification_Date>
+               <Modification_Version>3.0</Modification_Version>
+               <Modification_ReleaseDate>2017-11-08</Modification_ReleaseDate>
+               <Modification_Comment>updated Modes_of_Introduction, Relationships</Modification_Comment>
+            </Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2019-01-03</Modification_Date>
+					<Modification_Version>3.2</Modification_Version>
+					<Modification_ReleaseDate>2019-01-03</Modification_ReleaseDate>
+					<Modification_Comment>updated Related_Attack_Patterns</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-02-24</Modification_Date>
+					<Modification_Version>4.0</Modification_Version>
+					<Modification_ReleaseDate>2020-02-24</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-03-15</Modification_Date>
+					<Modification_Version>4.4</Modification_Version>
+					<Modification_ReleaseDate>2021-03-15</Modification_ReleaseDate>
+					<Modification_Comment>updated Maintenance_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-10-13</Modification_Date>
+					<Modification_Version>4.9</Modification_Version>
+					<Modification_ReleaseDate>2022-10-13</Modification_ReleaseDate>
+					<Modification_Comment>updated Related_Attack_Patterns, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-01-31</Modification_Date>
+					<Modification_Version>4.10</Modification_Version>
+					<Modification_ReleaseDate>2023-01-31</Modification_ReleaseDate>
+					<Modification_Comment>updated Description, Related_Attack_Patterns, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Detection_Factors, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-10-26</Modification_Date>
+					<Modification_Version>4.13</Modification_Version>
+					<Modification_ReleaseDate>2023-10-26</Modification_ReleaseDate>
+					<Modification_Comment>updated Observed_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2024-02-29</Modification_Date>
+					<Modification_Version>4.14</Modification_Version>
+					<Modification_ReleaseDate>2024-02-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Applicable_Platforms, Observed_Examples, Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+            <Previous_Entry_Name Date="2014-02-18">Improper Authentication of Endpoint in a Communication Channel</Previous_Entry_Name>
+         </Content_History>
+      </Weakness>
+      

@@ -1,0 +1,271 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="841" Name="Improper Enforcement of Behavioral Workflow" Abstraction="Class" Structure="Simple" Status="Incomplete">
+         <Description>The product supports a session in which more than one behavior must be performed by an actor, but it does not properly ensure that the actor performs the behaviors in the required sequence.</Description>
+         <Extended_Description>
+            <xhtml:p>By performing actions in an unexpected order, or by omitting steps, an attacker could manipulate the business logic of the product or cause it to enter an invalid state. In some cases, this can also expose resultant weaknesses.</xhtml:p>
+            <xhtml:p>For example, a file-sharing protocol might require that an actor perform separate steps to provide a username, then a password, before being able to transfer files. If the file-sharing server accepts a password command followed by a transfer command, without any username being provided, the product might still perform the transfer.</xhtml:p>
+            <xhtml:p>Note that this is different than CWE-696, which focuses on when the product performs actions in the wrong sequence; this entry is closely related, but it is focused on ensuring that the actor performs actions in the correct sequence.</xhtml:p>
+            <xhtml:p>Workflow-related behaviors include:</xhtml:p>
+               <xhtml:ul>
+                  <xhtml:li>Steps are performed in the expected order.</xhtml:li>
+                  <xhtml:li>Required steps are not omitted.</xhtml:li>
+                  <xhtml:li>Steps are not interrupted.</xhtml:li>
+                  <xhtml:li>Steps are performed in a timely fashion.</xhtml:li>
+               </xhtml:ul>
+         </Extended_Description>
+         <Related_Weaknesses>
+            <Related_Weakness Nature="ChildOf" CWE_ID="691" View_ID="1000" Ordinal="Primary" />
+         </Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+            <Weakness_Ordinality>
+               <Ordinality>Resultant</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+         <Applicable_Platforms>
+            <Language Class="Not Language-Specific" Prevalence="Undetermined" />
+         </Applicable_Platforms>
+         <Modes_Of_Introduction>
+            <Introduction>
+               <Phase>Implementation</Phase>
+               <Note>REALIZATION: This weakness is caused during implementation of an architectural security tactic.</Note>
+            </Introduction>
+         </Modes_Of_Introduction>
+         <Common_Consequences>
+            <Consequence>
+               <Scope>Other</Scope>
+               <Impact>Alter Execution Logic</Impact>
+               <Note>An attacker could cause the product to skip critical steps or perform them in the wrong order, bypassing its intended business logic. This can sometimes have security implications.</Note>
+            </Consequence>
+         </Common_Consequences>
+         <Detection_Methods>
+	   <Detection_Method Detection_Method_ID="DM-14">
+	     <Method>Automated Static Analysis</Method>
+	     <Description>Automated static analysis, commonly referred to as Static Application Security Testing (SAST), can find some instances of this weakness by analyzing source code (or binary/compiled code) without having to execute it. Typically, this is done by building a model of data flow and control flow, then searching for potentially-vulnerable patterns that connect "sources" (origins of input) with "sinks" (destinations where the data interacts with external components, a lower layer such as the OS, etc.)</Description>
+	   </Detection_Method>
+         </Detection_Methods>
+         <Demonstrative_Examples>
+            <Demonstrative_Example>
+               <Intro_Text>This code is part of an FTP server and deals with various commands that could be sent by a user. It is intended that a user must successfully login before performing any other action such as retrieving or listing files.</Intro_Text>
+               <Example_Code Nature="Bad" Language="Python">
+                  <xhtml:div>def dispatchCommand(command, user, args):<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>if command == 'Login':<xhtml:div style="margin-left:1em;">loginUser(args)<xhtml:br />return</xhtml:div>
+                           <xhtml:br />
+                           <xhtml:br />
+                           <xhtml:i># user has requested a file</xhtml:i>
+                           <xhtml:br />if command == 'Retrieve_file':
+			   <xhtml:div style="margin-left:1em;">
+			   if authenticated(user) and ownsFile(user,args):
+			   <xhtml:br />
+			   <xhtml:div style="margin-left:1em;">sendFile(args)<xhtml:br />return</xhtml:div>
+			   </xhtml:div>
+                           <xhtml:br />if command == 'List_files':<xhtml:div style="margin-left:1em;">listFiles(args)<xhtml:br />return</xhtml:div>
+                           <xhtml:br />
+                           <xhtml:i>...</xhtml:i>
+                           <xhtml:br />
+                        </xhtml:div>
+                     </xhtml:div>
+                  </xhtml:div>
+               </Example_Code>
+               <Body_Text>The server correctly avoids sending files to a user that isn't logged in and doesn't own the file. However, the server will incorrectly list the files in any directory without confirming the command came from an authenticated user, and that the user is authorized to see the directory's contents.</Body_Text>
+               <Body_Text>Here is a fixed version of the above example:</Body_Text>
+               <Example_Code Nature="Good" Language="Python">
+                  <xhtml:div>def dispatchCommand(command, user, args):<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>
+                           <xhtml:br />
+                           <xhtml:i>...</xhtml:i>
+                           <xhtml:br />if command == 'List_files':<xhtml:div style="margin-left:1em;">if authenticated(user) and ownsDirectory(user,args):<xhtml:div style="margin-left:1em;">listFiles(args)<xhtml:br />return</xhtml:div>
+                           </xhtml:div>
+                           <xhtml:br />
+                           <xhtml:i>...</xhtml:i>
+                           <xhtml:br />
+                        </xhtml:div>
+                     </xhtml:div>
+                  </xhtml:div>
+               </Example_Code>
+            </Demonstrative_Example>
+         </Demonstrative_Examples>
+         <Observed_Examples>
+            <Observed_Example>
+               <Reference>CVE-2011-0348</Reference>
+               <Description>Bypass of access/billing restrictions by sending traffic to an unrestricted destination before sending to a restricted destination.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2011-0348</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2007-3012</Reference>
+               <Description>Attacker can access portions of a restricted page by canceling out of a dialog.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2007-3012</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2009-5056</Reference>
+               <Description>Ticket-tracking system does not enforce a permission setting.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2009-5056</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2004-2164</Reference>
+               <Description>Shopping cart does not close a database connection when user restores a previous order, leading to connection exhaustion.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2004-2164</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2003-0777</Reference>
+               <Description>Chain: product does not properly handle dropped connections, leading to missing NULL terminator (CWE-170) and segmentation fault.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2003-0777</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2005-3327</Reference>
+               <Description>Chain: Authentication bypass by skipping the first startup step as required by the protocol.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2005-3327</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2004-0829</Reference>
+               <Description>Chain: File server crashes when sent a "find next" request without an initial "find first."</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2004-0829</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2010-2620</Reference>
+               <Description>FTP server allows remote attackers to bypass authentication by sending (1) LIST, (2) RETR, (3) STOR, or other commands without performing the required login steps first.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2010-2620</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2005-3296</Reference>
+               <Description>FTP server allows remote attackers to list arbitrary directories as root by running the LIST command before logging in.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2005-3296</Link>
+            </Observed_Example>
+         </Observed_Examples>
+         <Taxonomy_Mappings>
+            <Taxonomy_Mapping Taxonomy_Name="WASC">
+               <Entry_ID>40</Entry_ID>
+               <Entry_Name>Insufficient Process Validation</Entry_Name>
+            </Taxonomy_Mapping>
+         </Taxonomy_Mappings>
+         <References>
+            <Reference External_Reference_ID="REF-795" />
+            <Reference External_Reference_ID="REF-796" />
+            <Reference External_Reference_ID="REF-797" />
+            <Reference External_Reference_ID="REF-806" />
+            <Reference External_Reference_ID="REF-799" />
+            <Reference External_Reference_ID="REF-667" />
+            <Reference External_Reference_ID="REF-801" />
+            <Reference External_Reference_ID="REF-802" Section="pages 29 - 41" />
+         </References>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Base level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+         <Notes>
+            <Note Type="Research Gap">
+               <xhtml:p>This weakness is typically associated with business logic flaws, except when it produces resultant weaknesses.</xhtml:p>
+               <xhtml:p>The classification of business logic flaws has been under-studied, although exploitation of business flaws frequently happens in real-world systems, and many applied vulnerability researchers investigate them. The greatest focus is in web applications. There is debate within the community about whether these problems represent particularly new concepts, or if they are variations of well-known principles.</xhtml:p>
+               <xhtml:p>Many business logic flaws appear to be oriented toward business processes, application flows, and sequences of behaviors, which are not as well-represented in CWE as weaknesses related to input validation, memory management, etc.</xhtml:p>
+            </Note>
+         </Notes>
+         <Content_History>
+            <Submission>
+               <Submission_Name>CWE Content Team</Submission_Name>
+               <Submission_Organization>MITRE</Submission_Organization>
+               <Submission_Date>2011-03-24</Submission_Date>
+               <Submission_Version>1.12</Submission_Version>
+               <Submission_ReleaseDate>2011-03-30</Submission_ReleaseDate>
+            </Submission>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-06-01</Modification_Date>
+               <Modification_Version>1.13</Modification_Version>
+               <Modification_ReleaseDate>2011-06-01</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-06-27</Modification_Date>
+               <Modification_Version>2.0</Modification_Version>
+               <Modification_ReleaseDate>2011-06-27</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences, Observed_Examples, Related_Attack_Patterns, Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2012-05-11</Modification_Date>
+               <Modification_Version>2.2</Modification_Version>
+               <Modification_ReleaseDate>2012-05-15</Modification_ReleaseDate>
+               <Modification_Comment>updated Demonstrative_Examples, Observed_Examples, Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2017-11-08</Modification_Date>
+               <Modification_Version>3.0</Modification_Version>
+               <Modification_ReleaseDate>2017-11-08</Modification_ReleaseDate>
+               <Modification_Comment>updated Modes_of_Introduction, References, Relationships</Modification_Comment>
+            </Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-02-24</Modification_Date>
+					<Modification_Version>4.0</Modification_Version>
+					<Modification_ReleaseDate>2020-02-24</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-10-28</Modification_Date>
+					<Modification_Version>4.6</Modification_Version>
+					<Modification_ReleaseDate>2021-10-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-04-28</Modification_Date>
+					<Modification_Version>4.7</Modification_Version>
+					<Modification_ReleaseDate>2022-04-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-01-31</Modification_Date>
+					<Modification_Version>4.10</Modification_Version>
+					<Modification_ReleaseDate>2023-01-31</Modification_ReleaseDate>
+					<Modification_Comment>updated Common_Consequences, Description</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated References, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Applicable_Platforms, Detection_Factors, Relationships, Type, Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+		<Contribution Type="Feedback">
+		  <Contribution_Name>Anonymous External Contributor</Contribution_Name>
+		  <Contribution_Date>2021-11-11</Contribution_Date>
+		  <Contribution_Comment>Reported an error in a demonstrative example</Contribution_Comment>
+		</Contribution>
+         </Content_History>
+      </Weakness>
+      

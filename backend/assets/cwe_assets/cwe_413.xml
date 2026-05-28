@@ -1,0 +1,362 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="413" Name="Improper Resource Locking" Abstraction="Base" Structure="Simple" Status="Draft">
+         <Description>The product does not lock or does not correctly lock a resource when the product must have exclusive access to the resource.</Description>
+         <Extended_Description>When a resource is not properly locked, an attacker could modify the resource while it is being operated on by the product. This might violate the product's assumption that the resource will not change, potentially leading to unexpected behaviors.</Extended_Description>
+         <Related_Weaknesses>
+            <Related_Weakness Nature="ChildOf" CWE_ID="667" View_ID="1000" Ordinal="Primary" />
+         </Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+         <Applicable_Platforms>
+            <Language Class="Not Language-Specific" Prevalence="Undetermined" />
+         </Applicable_Platforms>
+         <Modes_Of_Introduction>
+            <Introduction>
+               <Phase>Architecture and Design</Phase>
+            </Introduction>
+            <Introduction>
+               <Phase>Implementation</Phase>
+            </Introduction>
+         </Modes_Of_Introduction>
+         <Common_Consequences>
+            <Consequence>
+               <Scope>Integrity</Scope>
+               <Scope>Availability</Scope>
+               <Impact>Modify Application Data</Impact>
+               <Impact>DoS: Instability</Impact>
+               <Impact>DoS: Crash, Exit, or Restart</Impact>
+            </Consequence>
+         </Common_Consequences>
+         <Detection_Methods>
+           <Detection_Method Detection_Method_ID="DM-14">
+             <Method>Automated Static Analysis</Method>
+             <Description>Automated static analysis, commonly referred to as Static Application Security Testing (SAST), can find some instances of this weakness by analyzing source code (or binary/compiled code) without having to execute it. Typically, this is done by building a model of data flow and control flow, then searching for potentially-vulnerable patterns that connect "sources" (origins of input) with "sinks" (destinations where the data interacts with external components, a lower layer such as the OS, etc.)</Description>
+             <Effectiveness>High</Effectiveness>
+           </Detection_Method>
+         </Detection_Methods>
+         <Potential_Mitigations>
+            <Mitigation>
+               <Phase>Architecture and Design</Phase>
+               <Description>Use a non-conflicting privilege scheme.</Description>
+            </Mitigation>
+            <Mitigation>
+               <Phase>Architecture and Design</Phase>
+               <Phase>Implementation</Phase>
+               <Description>Use synchronization when locking a resource.</Description>
+            </Mitigation>
+         </Potential_Mitigations>
+         <Demonstrative_Examples>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-24">
+               <Intro_Text>The following function attempts to acquire a lock in order to perform operations on a shared resource.</Intro_Text>
+               <Example_Code Nature="Bad" Language="C">
+                  <xhtml:div>void f(pthread_mutex_t *mutex) {<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>pthread_mutex_lock(mutex);<xhtml:br />
+                           <xhtml:br />
+                           <xhtml:i>/* access shared resource */</xhtml:i>
+                           <xhtml:br />
+                           <xhtml:br />
+                           <xhtml:br />pthread_mutex_unlock(mutex);</xhtml:div>
+                     </xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>However, the code does not check the value returned by pthread_mutex_lock() for errors. If pthread_mutex_lock() cannot acquire the mutex for any reason, the function may introduce a race condition into the program and result in undefined behavior.</Body_Text>
+               <Body_Text>In order to avoid data races, correctly written programs must check the result of thread synchronization functions and appropriately handle all errors, either by attempting to recover from them or reporting them to higher levels.</Body_Text>
+               <Example_Code Nature="Good" Language="C">
+                  <xhtml:div>int f(pthread_mutex_t *mutex) {<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>int result;<xhtml:br />
+                           <xhtml:br />result = pthread_mutex_lock(mutex);<xhtml:br />if (0 != result)<xhtml:div style="margin-left:1em;">return result;</xhtml:div>
+                           <xhtml:br />
+                           <xhtml:br />
+                           <xhtml:i>/* access shared resource */</xhtml:i>
+                           <xhtml:br />
+                           <xhtml:br />
+                           <xhtml:br />return pthread_mutex_unlock(mutex);</xhtml:div>
+                     </xhtml:div>}</xhtml:div>
+               </Example_Code>
+            </Demonstrative_Example>
+            <Demonstrative_Example>
+               <Intro_Text>This Java example shows a simple BankAccount class with deposit and withdraw methods.</Intro_Text>
+               <Example_Code Nature="Bad" Language="Java">
+                  <xhtml:div>public class BankAccount {<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>
+                           <xhtml:br />
+                           <xhtml:i>// variable for bank account balance</xhtml:i>
+                           <xhtml:br />private double accountBalance;<xhtml:br />
+                           <xhtml:br />
+                           <xhtml:i>// constructor for BankAccount</xhtml:i>
+                           <xhtml:br />public BankAccount() {<xhtml:div style="margin-left:1em;">accountBalance = 0;</xhtml:div>}<xhtml:br />
+                           <xhtml:br />
+                           <xhtml:i>// method to deposit amount into BankAccount</xhtml:i>
+                           <xhtml:br />public void deposit(double depositAmount) {<xhtml:div style="margin-left:1em;">
+                              <xhtml:div>
+                                 <xhtml:br />double newBalance = accountBalance + depositAmount;<xhtml:br />accountBalance = newBalance;</xhtml:div>
+                           </xhtml:div>}<xhtml:br />
+                           <xhtml:br />
+                           <xhtml:i>// method to withdraw amount from BankAccount</xhtml:i>
+                           <xhtml:br />public void withdraw(double withdrawAmount) {<xhtml:div style="margin-left:1em;">
+                              <xhtml:div>
+                                 <xhtml:br />double newBalance = accountBalance - withdrawAmount;<xhtml:br />accountBalance = newBalance;</xhtml:div>
+                           </xhtml:div>}<xhtml:br />
+                           <xhtml:br />
+                           <xhtml:i>// other methods for accessing the BankAccount object</xhtml:i>
+                           <xhtml:br />...</xhtml:div>
+                     </xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>However, the deposit and withdraw methods have shared access to the account balance private class variable. This can result in a race condition if multiple threads attempt to call the deposit and withdraw methods simultaneously where the account balance is modified by one thread before another thread has completed modifying the account balance. For example, if a thread attempts to withdraw funds using the withdraw method before another thread that is depositing funds using the deposit method completes the deposit then there may not be sufficient funds for the withdraw transaction.</Body_Text>
+               <Body_Text>To prevent multiple threads from having simultaneous access to the account balance variable the deposit and withdraw methods should be synchronized using the synchronized modifier.</Body_Text>
+               <Example_Code Nature="Good" Language="Java">
+                  <xhtml:div>public class BankAccount {<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>...<xhtml:br />
+                           <xhtml:i>// synchronized method to deposit amount into BankAccount</xhtml:i>
+                           <xhtml:br />public synchronized void deposit(double depositAmount) {<xhtml:div style="margin-left:1em;">...</xhtml:div>}<xhtml:br />
+                           <xhtml:br />
+                           <xhtml:i>// synchronized method to withdraw amount from BankAccount</xhtml:i>
+                           <xhtml:br />public synchronized void withdraw(double withdrawAmount) {<xhtml:div style="margin-left:1em;">...</xhtml:div>}<xhtml:br />
+                           <xhtml:br />...</xhtml:div>
+                     </xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>An alternative solution is to use a lock object to ensure exclusive access to the bank account balance variable. As shown below, the deposit and withdraw methods use the lock object to set a lock to block access to the BankAccount object from other threads until the method has completed updating the bank account balance variable.</Body_Text>
+               <Example_Code Nature="Good" Language="Java">
+                  <xhtml:div>public class BankAccount {<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>...<xhtml:br />
+                           <xhtml:i>// lock object for thread access to methods</xhtml:i>
+                           <xhtml:br />private ReentrantLock balanceChangeLock;<xhtml:br />
+                           <xhtml:br />
+                           <xhtml:i>// condition object to temporarily release lock to other threads</xhtml:i>
+                           <xhtml:br />private Condition sufficientFundsCondition;<xhtml:br />
+                           <xhtml:br />
+                           <xhtml:i>// method to deposit amount into BankAccount</xhtml:i>
+                           <xhtml:br />public void deposit(double amount) {<xhtml:div style="margin-left:1em;">
+                              <xhtml:div>
+                                 <xhtml:br />
+                                 <xhtml:i>// set lock to block access to BankAccount from other threads</xhtml:i>
+                                 <xhtml:br />balanceChangeLock.lock();<xhtml:br />try {<xhtml:div style="margin-left:1em;">
+                                    <xhtml:div>double newBalance = balance + amount;<xhtml:br />balance = newBalance;<xhtml:br />
+                                       <xhtml:br />
+                                       <xhtml:i>// inform other threads that funds are available</xhtml:i>
+                                       <xhtml:br />sufficientFundsCondition.signalAll();<xhtml:br />
+                                    </xhtml:div>
+                                 </xhtml:div>} catch (Exception e) {...}<xhtml:br />finally {<xhtml:div style="margin-left:1em;">// unlock lock object<xhtml:br />balanceChangeLock.unlock();</xhtml:div>}</xhtml:div>
+                           </xhtml:div>}<xhtml:br />
+                           <xhtml:br />
+                           <xhtml:i>// method to withdraw amount from bank account</xhtml:i>
+                           <xhtml:br />public void withdraw(double amount) {<xhtml:div style="margin-left:1em;">
+                              <xhtml:div>
+                                 <xhtml:br />
+                                 <xhtml:i>// set lock to block access to BankAccount from other threads</xhtml:i>
+                                 <xhtml:br />balanceChangeLock.lock();<xhtml:br />try {<xhtml:div style="margin-left:1em;">
+                                    <xhtml:div>while (balance &lt; amount) {<xhtml:div style="margin-left:1em;">
+                                          <xhtml:div>
+                                             <xhtml:br />
+                                             <xhtml:i>// temporarily unblock access</xhtml:i>
+                                             <xhtml:br />
+                                             <xhtml:br />
+                                             <xhtml:i>// until sufficient funds are available</xhtml:i>
+                                             <xhtml:br />sufficientFundsCondition.await();</xhtml:div>
+                                       </xhtml:div>}<xhtml:br />double newBalance = balance - amount;<xhtml:br />balance = newBalance;<xhtml:br />
+                                    </xhtml:div>
+                                 </xhtml:div>} catch (Exception e) {...}<xhtml:br />finally {<xhtml:div style="margin-left:1em;">// unlock lock object<xhtml:br />balanceChangeLock.unlock();</xhtml:div>}</xhtml:div>
+                           </xhtml:div>}<xhtml:br />...</xhtml:div>
+                     </xhtml:div>}</xhtml:div>
+               </Example_Code>
+            </Demonstrative_Example>
+          </Demonstrative_Examples>
+	 <Observed_Examples>
+            <Observed_Example>
+               <Reference>CVE-2022-20141</Reference>
+               <Description>Chain: an operating system kernel has insufficent resource locking (CWE-413) leading to a use after free (CWE-416).</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2022-20141</Link>
+            </Observed_Example>
+	 </Observed_Examples>
+         <Taxonomy_Mappings>
+            <Taxonomy_Mapping Taxonomy_Name="PLOVER">
+               <Entry_Name>Insufficient Resource Locking</Entry_Name>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="The CERT Oracle Secure Coding Standard for Java (2011)">
+               <Entry_ID>VNA00-J</Entry_ID>
+               <Entry_Name>Ensure visibility when accessing shared primitive variables</Entry_Name>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="The CERT Oracle Secure Coding Standard for Java (2011)">
+               <Entry_ID>VNA02-J</Entry_ID>
+               <Entry_Name>Ensure that compound operations on shared variables are atomic</Entry_Name>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="The CERT Oracle Secure Coding Standard for Java (2011)">
+               <Entry_ID>LCK00-J</Entry_ID>
+               <Entry_Name>Use private final lock objects to synchronize classes that may interact with untrusted code</Entry_Name>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="Software Fault Patterns">
+               <Entry_ID>SFP19</Entry_ID>
+               <Entry_Name>Missing Lock</Entry_Name>
+            </Taxonomy_Mapping>
+         </Taxonomy_Mappings>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Base level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+         <Content_History>
+            <Submission>
+               <Submission_Name>PLOVER</Submission_Name>
+               <Submission_Date>2006-07-19</Submission_Date>
+               <Submission_Version>Draft 3</Submission_Version>
+               <Submission_ReleaseDate>2006-07-19</Submission_ReleaseDate>
+            </Submission>
+            <Modification>
+               <Modification_Name>Eric Dalci</Modification_Name>
+               <Modification_Organization>Cigital</Modification_Organization>
+               <Modification_Date>2008-07-01</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>updated Potential_Mitigations, Time_of_Introduction</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2008-09-08</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2010-06-21</Modification_Date>
+               <Modification_Version>1.9</Modification_Version>
+               <Modification_ReleaseDate>2010-06-21</Modification_ReleaseDate>
+               <Modification_Comment>updated Demonstrative_Examples</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2010-09-27</Modification_Date>
+               <Modification_Version>1.10</Modification_Version>
+               <Modification_ReleaseDate>2010-09-27</Modification_ReleaseDate>
+               <Modification_Comment>updated Description, Name</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2010-12-13</Modification_Date>
+               <Modification_Version>1.11</Modification_Version>
+               <Modification_ReleaseDate>2010-12-13</Modification_ReleaseDate>
+               <Modification_Comment>updated Demonstrative_Examples</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-06-01</Modification_Date>
+               <Modification_Version>1.13</Modification_Version>
+               <Modification_ReleaseDate>2011-06-01</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences, Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2012-05-11</Modification_Date>
+               <Modification_Version>2.2</Modification_Version>
+               <Modification_ReleaseDate>2012-05-15</Modification_ReleaseDate>
+               <Modification_Comment>updated Demonstrative_Examples, Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2012-10-30</Modification_Date>
+               <Modification_Version>2.3</Modification_Version>
+               <Modification_ReleaseDate>2012-10-30</Modification_ReleaseDate>
+               <Modification_Comment>updated Potential_Mitigations</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2014-07-30</Modification_Date>
+               <Modification_Version>2.8</Modification_Version>
+               <Modification_ReleaseDate>2014-07-31</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2017-11-08</Modification_Date>
+               <Modification_Version>3.0</Modification_Version>
+               <Modification_ReleaseDate>2017-11-08</Modification_ReleaseDate>
+               <Modification_Comment>updated Applicable_Platforms</Modification_Comment>
+            </Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2019-01-03</Modification_Date>
+					<Modification_Version>3.2</Modification_Version>
+					<Modification_ReleaseDate>2019-01-03</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships, Taxonomy_Mappings</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-02-24</Modification_Date>
+					<Modification_Version>4.0</Modification_Version>
+					<Modification_ReleaseDate>2020-02-24</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-03-15</Modification_Date>
+					<Modification_Version>4.4</Modification_Version>
+					<Modification_ReleaseDate>2021-03-15</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-01-31</Modification_Date>
+					<Modification_Version>4.10</Modification_Version>
+					<Modification_ReleaseDate>2023-01-31</Modification_ReleaseDate>
+					<Modification_Comment>updated Description</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Detection_Factors, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-10-26</Modification_Date>
+					<Modification_Version>4.13</Modification_Version>
+					<Modification_ReleaseDate>2023-10-26</Modification_ReleaseDate>
+					<Modification_Comment>updated Observed_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+            <Contribution Type="Content">
+               <Contribution_Name>Martin Sebor</Contribution_Name>
+               <Contribution_Organization>Cisco Systems, Inc.</Contribution_Organization>
+               <Contribution_Date>2010-04-30</Contribution_Date>
+               <Contribution_Comment>Provided Demonstrative Example</Contribution_Comment>
+            </Contribution>
+            <Previous_Entry_Name Date="2010-09-27">Insufficient Resource Locking</Previous_Entry_Name>
+         </Content_History>
+      </Weakness>
+      

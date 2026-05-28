@@ -1,0 +1,644 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="41" Name="Improper Resolution of Path Equivalence" Abstraction="Base" Structure="Simple" Status="Incomplete">
+         <Description>The product is vulnerable to file system contents disclosure through path equivalence. Path equivalence involves the use of special characters in file and directory names. The associated manipulations are intended to generate multiple names for the same object.</Description>
+         <Extended_Description>Path equivalence is usually employed in order to circumvent access controls expressed using an incomplete set of file name or file path representations. This is different from path traversal, wherein the manipulations are performed to generate a name for a different object.</Extended_Description>
+         <Related_Weaknesses>
+            <Related_Weakness Nature="ChildOf" CWE_ID="706" View_ID="1000" Ordinal="Primary" />
+            <Related_Weakness Nature="ChildOf" CWE_ID="863" View_ID="1000" />
+            <Related_Weakness Nature="ChildOf" CWE_ID="1390" View_ID="1000" />
+         </Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+         <Applicable_Platforms>
+            <Language Class="Not Language-Specific" Prevalence="Undetermined" />
+         </Applicable_Platforms>
+         <Modes_Of_Introduction>
+            <Introduction>
+               <Phase>Implementation</Phase>
+            </Introduction>
+         </Modes_Of_Introduction>
+         <Common_Consequences>
+            <Consequence>
+               <Scope>Confidentiality</Scope>
+               <Scope>Integrity</Scope>
+               <Scope>Access Control</Scope>
+               <Impact>Read Files or Directories</Impact>
+               <Impact>Modify Files or Directories</Impact>
+               <Impact>Bypass Protection Mechanism</Impact>
+               <Note>An attacker may be able to traverse the file system to unintended locations and read or overwrite the contents of unexpected files. If the files are used for a security mechanism than an attacker may be able to bypass the mechanism.</Note>
+            </Consequence>
+         </Common_Consequences>
+         <Detection_Methods>
+            <Detection_Method>
+               <Method>Automated Static Analysis - Binary or Bytecode</Method>
+               <Description>
+                  <xhtml:p>According to SOAR [REF-1479], the following detection techniques may be useful:</xhtml:p>
+                  <xhtml:div style="margin-left:1em;">
+                     <xhtml:div>Cost effective for partial coverage:</xhtml:div>
+                        <xhtml:ul>
+                           <xhtml:li>Bytecode Weakness Analysis - including disassembler + source code weakness analysis</xhtml:li>
+                        </xhtml:ul>
+                  </xhtml:div>
+               </Description>
+               <Effectiveness>SOAR Partial</Effectiveness>
+            </Detection_Method>
+            <Detection_Method>
+               <Method>Manual Static Analysis - Binary or Bytecode</Method>
+               <Description>
+                  <xhtml:p>According to SOAR [REF-1479], the following detection techniques may be useful:</xhtml:p>
+                  <xhtml:div style="margin-left:1em;">
+                     <xhtml:div>Cost effective for partial coverage:</xhtml:div>
+                        <xhtml:ul>
+                           <xhtml:li>Binary / Bytecode disassembler - then use manual analysis for vulnerabilities &amp; anomalies</xhtml:li>
+                        </xhtml:ul>
+                  </xhtml:div>
+               </Description>
+               <Effectiveness>SOAR Partial</Effectiveness>
+            </Detection_Method>
+            <Detection_Method>
+               <Method>Dynamic Analysis with Automated Results Interpretation</Method>
+               <Description>
+                  <xhtml:p>According to SOAR [REF-1479], the following detection techniques may be useful:</xhtml:p>
+                  <xhtml:div style="margin-left:1em;">
+                     <xhtml:div>Cost effective for partial coverage:</xhtml:div>
+                        <xhtml:ul>
+                           <xhtml:li>Web Application Scanner</xhtml:li>
+                           <xhtml:li>Web Services Scanner</xhtml:li>
+                           <xhtml:li>Database Scanners</xhtml:li>
+                        </xhtml:ul>
+                  </xhtml:div>
+               </Description>
+               <Effectiveness>SOAR Partial</Effectiveness>
+            </Detection_Method>
+            <Detection_Method>
+               <Method>Dynamic Analysis with Manual Results Interpretation</Method>
+               <Description>
+                  <xhtml:p>According to SOAR [REF-1479], the following detection techniques may be useful:</xhtml:p>
+                  <xhtml:div style="margin-left:1em;">
+                     <xhtml:div>Cost effective for partial coverage:</xhtml:div>
+                        <xhtml:ul>
+                           <xhtml:li>Fuzz Tester</xhtml:li>
+                           <xhtml:li>Framework-based Fuzzer</xhtml:li>
+                        </xhtml:ul>
+                  </xhtml:div>
+               </Description>
+               <Effectiveness>SOAR Partial</Effectiveness>
+            </Detection_Method>
+            <Detection_Method>
+               <Method>Manual Static Analysis - Source Code</Method>
+               <Description>
+                  <xhtml:p>According to SOAR [REF-1479], the following detection techniques may be useful:</xhtml:p>
+                  <xhtml:div style="margin-left:1em;">
+                     <xhtml:div>Highly cost effective:</xhtml:div>
+                        <xhtml:ul>
+                           <xhtml:li>Focused Manual Spotcheck - Focused manual analysis of source</xhtml:li>
+                           <xhtml:li>Manual Source Code Review (not inspections)</xhtml:li>
+                        </xhtml:ul>
+                  </xhtml:div>
+               </Description>
+               <Effectiveness>High</Effectiveness>
+            </Detection_Method>
+            <Detection_Method>
+               <Method>Automated Static Analysis - Source Code</Method>
+               <Description>
+                  <xhtml:p>According to SOAR [REF-1479], the following detection techniques may be useful:</xhtml:p>
+                  <xhtml:div style="margin-left:1em;">
+                     <xhtml:div>Cost effective for partial coverage:</xhtml:div>
+                        <xhtml:ul>
+                           <xhtml:li>Source code Weakness Analyzer</xhtml:li>
+                           <xhtml:li>Context-configured Source Code Weakness Analyzer</xhtml:li>
+                        </xhtml:ul>
+                  </xhtml:div>
+               </Description>
+               <Effectiveness>SOAR Partial</Effectiveness>
+            </Detection_Method>
+            <Detection_Method>
+               <Method>Architecture or Design Review</Method>
+               <Description>
+                  <xhtml:p>According to SOAR [REF-1479], the following detection techniques may be useful:</xhtml:p>
+                  <xhtml:div style="margin-left:1em;">
+                     <xhtml:div>Highly cost effective:</xhtml:div>
+                        <xhtml:ul>
+                           <xhtml:li>Formal Methods / Correct-By-Construction</xhtml:li>
+                        </xhtml:ul>
+                     <xhtml:div>Cost effective for partial coverage:</xhtml:div>
+                        <xhtml:ul>
+                           <xhtml:li>Inspection (IEEE 1028 standard) (can apply to requirements, design, source code, etc.)</xhtml:li>
+                        </xhtml:ul>
+                  </xhtml:div>
+               </Description>
+               <Effectiveness>High</Effectiveness>
+            </Detection_Method>
+         </Detection_Methods>
+         <Potential_Mitigations>
+            <Mitigation Mitigation_ID="MIT-5">
+               <Phase>Implementation</Phase>
+               <Strategy>Input Validation</Strategy>
+               <Description>
+                  <xhtml:p>Assume all input is malicious. Use an "accept known good" input validation strategy, i.e., use a list of acceptable inputs that strictly conform to specifications. Reject any input that does not strictly conform to specifications, or transform it into something that does.</xhtml:p>
+                  <xhtml:p>When performing input validation, consider all potentially relevant properties, including length, type of input, the full range of acceptable values, missing or extra inputs, syntax, consistency across related fields, and conformance to business rules. As an example of business rule logic, "boat" may be syntactically valid because it only contains alphanumeric characters, but it is not valid if the input is only expected to contain colors such as "red" or "blue."</xhtml:p>
+                  <xhtml:p>Do not rely exclusively on looking for malicious or malformed inputs.  This is likely to miss at least one undesirable input, especially if the code's environment changes. This can give attackers enough room to bypass the intended validation. However, denylists can be useful for detecting potential attacks or determining which inputs are so malformed that they should be rejected outright.</xhtml:p>
+               </Description>
+            </Mitigation>
+            <Mitigation Mitigation_ID="MIT-30">
+               <Phase>Implementation</Phase>
+               <Strategy>Output Encoding</Strategy>
+               <Description>Use and specify an output encoding that can be handled by the downstream component that is reading the output. Common encodings include ISO-8859-1, UTF-7, and UTF-8. When an encoding is not specified, a downstream component may choose a different encoding, either by assuming a default encoding or automatically inferring which encoding is being used, which can be erroneous. When the encodings are inconsistent, the downstream component might treat some character or byte sequences as special, even if they are not special in the original encoding. Attackers might then be able to exploit this discrepancy and conduct injection attacks; they even might be able to bypass protection mechanisms that assume the original encoding is also being used by the downstream component.</Description>
+            </Mitigation>
+            <Mitigation Mitigation_ID="MIT-20">
+               <Phase>Implementation</Phase>
+               <Strategy>Input Validation</Strategy>
+               <Description>Inputs should be decoded and canonicalized to the application's current internal representation before being validated (CWE-180). Make sure that the application does not decode the same input twice (CWE-174). Such errors could be used to bypass allowlist validation schemes by introducing dangerous inputs after they have been checked.</Description>
+            </Mitigation>
+         </Potential_Mitigations>
+         <Observed_Examples>
+            <Observed_Example>
+               <Reference>CVE-2000-1114</Reference>
+               <Description>Source code disclosure using trailing dot</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2000-1114</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2002-1986</Reference>
+               <Description>Source code disclosure using trailing dot</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2002-1986</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2004-2213</Reference>
+               <Description>Source code disclosure using trailing dot or trailing encoding space "%20"</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2004-2213</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2005-3293</Reference>
+               <Description>Source code disclosure using trailing dot</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2005-3293</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2004-0061</Reference>
+               <Description>Bypass directory access restrictions using trailing dot in URL</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2004-0061</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2000-1133</Reference>
+               <Description>Bypass directory access restrictions using trailing dot in URL</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2000-1133</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2001-1386</Reference>
+               <Description>Bypass check for ".lnk" extension using ".lnk."</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2001-1386</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2001-0693</Reference>
+               <Description>Source disclosure via trailing encoded space "%20"</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2001-0693</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2001-0778</Reference>
+               <Description>Source disclosure via trailing encoded space "%20"</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2001-0778</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2001-1248</Reference>
+               <Description>Source disclosure via trailing encoded space "%20"</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2001-1248</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2004-0280</Reference>
+               <Description>Source disclosure via trailing encoded space "%20"</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2004-0280</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2005-0622</Reference>
+               <Description>Source disclosure via trailing encoded space "%20"</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2005-0622</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2005-1656</Reference>
+               <Description>Source disclosure via trailing encoded space "%20"</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2005-1656</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2002-1603</Reference>
+               <Description>Source disclosure via trailing encoded space "%20"</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2002-1603</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2001-0054</Reference>
+               <Description>Multi-Factor Vulnerability (MFV). directory traversal and other issues in FTP server using Web encodings such as "%20"; certain manipulations have unusual side effects.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2001-0054</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2002-1451</Reference>
+               <Description>Trailing space ("+" in query string) leads to source code disclosure.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2002-1451</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2000-0293</Reference>
+               <Description>Filenames with spaces allow arbitrary file deletion when the product does not properly quote them; some overlap with path traversal.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2000-0293</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2001-1567</Reference>
+               <Description>"+" characters in query string converted to spaces before sensitive file/extension (internal space), leading to bypass of access restrictions to the file.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2001-1567</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2002-0253</Reference>
+               <Description>Overlaps infoleak</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2002-0253</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2001-0446</Reference>
+               <Description>Application server allows remote attackers to read source code for .jsp files by appending a / to the requested URL.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2001-0446</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2004-0334</Reference>
+               <Description>Bypass Basic Authentication for files using trailing "/"</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2004-0334</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2001-0893</Reference>
+               <Description>Read sensitive files with trailing "/"</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2001-0893</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2001-0892</Reference>
+               <Description>Web server allows remote attackers to view sensitive files under the document root (such as .htpasswd) via a GET request with a trailing /.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2001-0892</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2004-1814</Reference>
+               <Description>Directory traversal vulnerability in server allows remote attackers to read protected files via .. (dot dot) sequences in an HTTP request.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2004-1814</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2002-1483</Reference>
+               <Description>Read files with full pathname using multiple internal slash.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2002-1483</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-1999-1456</Reference>
+               <Description>Server allows remote attackers to read arbitrary files via a GET request with more than one leading / (slash) character in the filename.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-1999-1456</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2004-0578</Reference>
+               <Description>Server allows remote attackers to read arbitrary files via leading slash (//) characters in a URL request.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2004-0578</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2002-0275</Reference>
+               <Description>Server allows remote attackers to bypass authentication and read restricted files via an extra / (slash) in the requested URL.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2002-0275</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2004-1032</Reference>
+               <Description>Product allows local users to delete arbitrary files or create arbitrary empty files via a target filename with a large number of leading slash (/) characters.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2004-1032</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2002-1238</Reference>
+               <Description>Server allows remote attackers to bypass access restrictions for files via an HTTP request with a sequence of multiple / (slash) characters such as http://www.example.com///file/.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2002-1238</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2004-1878</Reference>
+               <Description>Product allows remote attackers to bypass authentication, obtain sensitive information, or gain access via a direct request to admin/user.pl preceded by // (double leading slash).</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2004-1878</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2005-1365</Reference>
+               <Description>Server allows remote attackers to execute arbitrary commands via a URL with multiple leading "/" (slash) characters and ".." sequences.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2005-1365</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2000-1050</Reference>
+               <Description>Access directory using multiple leading slash.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2000-1050</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2001-1072</Reference>
+               <Description>Bypass access restrictions via multiple leading slash, which causes a regular expression to fail.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2001-1072</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2004-0235</Reference>
+               <Description>Archive extracts to arbitrary files using multiple leading slash in filenames in the archive.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2004-0235</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2002-1078</Reference>
+               <Description>Directory listings in web server using multiple trailing slash</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2002-1078</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2004-0847</Reference>
+               <Description>web framework for .NET allows remote attackers to bypass authentication for .aspx files in restricted directories via a request containing a (1) "\" (backslash) or (2) "%5C" (encoded backslash)</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2004-0847</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2000-0004</Reference>
+               <Description>Server allows remote attackers to read source code for executable files by inserting a . (dot) into the URL.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2000-0004</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2002-0304</Reference>
+               <Description>Server allows remote attackers to read password-protected files via a /./ in the HTTP request.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2002-0304</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-1999-1083</Reference>
+               <Description>Possibly (could be a cleansing error)</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-1999-1083</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2004-0815</Reference>
+               <Description>"/./////etc" cleansed to ".///etc" then "/etc"</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2004-0815</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2002-0112</Reference>
+               <Description>Server allows remote attackers to view password protected files via /./ in the URL.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2002-0112</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2004-0696</Reference>
+               <Description>List directories using desired path and "*"</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2004-0696</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2002-0433</Reference>
+               <Description>List files in web server using "*.ext"</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2002-0433</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2001-1152</Reference>
+               <Description>Proxy allows remote attackers to bypass denylist restrictions and connect to unauthorized web servers by modifying the requested URL, including (1) a // (double slash), (2) a /SUBDIR/.. where the desired file is in the parentdir, (3) a /./, or (4) URL-encoded characters.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2001-1152</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2000-0191</Reference>
+               <Description>application check access for restricted URL before canonicalization</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2000-0191</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2005-1366</Reference>
+               <Description>CGI source disclosure using "dirname/../cgi-bin"</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2005-1366</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-1999-0012</Reference>
+               <Description>Multiple web servers allow restriction bypass using 8.3 names instead of long names</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-1999-0012</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2001-0795</Reference>
+               <Description>Source code disclosure using 8.3 file name.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2001-0795</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2005-0471</Reference>
+               <Description>Multi-Factor Vulnerability. Product generates temporary filenames using long filenames, which become predictable in 8.3 format.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2005-0471</Link>
+            </Observed_Example>
+         </Observed_Examples>
+         <Functional_Areas>
+            <Functional_Area>File Processing</Functional_Area>
+         </Functional_Areas>
+         <Affected_Resources>
+            <Affected_Resource>File or Directory</Affected_Resource>
+         </Affected_Resources>
+         <Taxonomy_Mappings>
+            <Taxonomy_Mapping Taxonomy_Name="PLOVER">
+               <Entry_Name>Path Equivalence</Entry_Name>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="CERT C Secure Coding">
+               <Entry_ID>FIO02-C</Entry_ID>
+               <Entry_Name>Canonicalize path names originating from untrusted sources</Entry_Name>
+            </Taxonomy_Mapping>
+         </Taxonomy_Mappings>
+         <Related_Attack_Patterns>
+            <Related_Attack_Pattern CAPEC_ID="3" />
+         </Related_Attack_Patterns>
+         <References>
+            <Reference External_Reference_ID="REF-1479" />
+         </References>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Base level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+         <Notes>
+            <Note Type="Relationship">Some of these manipulations could be effective in path traversal issues, too.</Note>
+         </Notes>
+         <Content_History>
+            <Submission>
+               <Submission_Name>PLOVER</Submission_Name>
+               <Submission_Date>2006-07-19</Submission_Date>
+               <Submission_Version>Draft 3</Submission_Version>
+               <Submission_ReleaseDate>2006-07-19</Submission_ReleaseDate>
+            </Submission>
+            <Modification>
+               <Modification_Name>Eric Dalci</Modification_Name>
+               <Modification_Organization>Cigital</Modification_Organization>
+               <Modification_Date>2008-07-01</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>updated Potential_Mitigations, Time_of_Introduction</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2008-09-08</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships, Other_Notes, Taxonomy_Mappings, Type</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2008-10-14</Modification_Date>
+               <Modification_Version>1.0.1</Modification_Version>
+               <Modification_ReleaseDate>2008-10-14</Modification_ReleaseDate>
+               <Modification_Comment>updated Description</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2008-11-24</Modification_Date>
+               <Modification_Version>1.1</Modification_Version>
+               <Modification_ReleaseDate>2008-11-25</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2009-03-10</Modification_Date>
+               <Modification_Version>1.3</Modification_Version>
+               <Modification_ReleaseDate>2009-03-10</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2009-05-27</Modification_Date>
+               <Modification_Version>1.4</Modification_Version>
+               <Modification_ReleaseDate>2009-05-27</Modification_ReleaseDate>
+               <Modification_Comment>updated Name</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2009-07-27</Modification_Date>
+               <Modification_Version>1.5</Modification_Version>
+               <Modification_ReleaseDate>2009-07-27</Modification_ReleaseDate>
+               <Modification_Comment>updated Potential_Mitigations</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-03-29</Modification_Date>
+               <Modification_Version>1.12</Modification_Version>
+               <Modification_ReleaseDate>2011-03-30</Modification_ReleaseDate>
+               <Modification_Comment>updated Other_Notes, Potential_Mitigations, Relationship_Notes</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-06-01</Modification_Date>
+               <Modification_Version>1.13</Modification_Version>
+               <Modification_ReleaseDate>2011-06-01</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-09-13</Modification_Date>
+               <Modification_Version>2.1</Modification_Version>
+               <Modification_ReleaseDate>2011-09-13</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2012-05-11</Modification_Date>
+               <Modification_Version>2.2</Modification_Version>
+               <Modification_ReleaseDate>2012-05-15</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences, Observed_Examples, Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2012-10-30</Modification_Date>
+               <Modification_Version>2.3</Modification_Version>
+               <Modification_ReleaseDate>2012-10-30</Modification_ReleaseDate>
+               <Modification_Comment>updated Potential_Mitigations</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2014-07-30</Modification_Date>
+               <Modification_Version>2.8</Modification_Version>
+               <Modification_ReleaseDate>2014-07-31</Modification_ReleaseDate>
+               <Modification_Comment>updated Detection_Factors, Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2017-11-08</Modification_Date>
+               <Modification_Version>3.0</Modification_Version>
+               <Modification_ReleaseDate>2017-11-08</Modification_ReleaseDate>
+               <Modification_Comment>updated Affected_Resources, Applicable_Platforms, Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2019-06-20</Modification_Date>
+					<Modification_Version>3.3</Modification_Version>
+					<Modification_ReleaseDate>2019-06-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Related_Attack_Patterns</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-02-24</Modification_Date>
+					<Modification_Version>4.0</Modification_Version>
+					<Modification_ReleaseDate>2020-02-24</Modification_ReleaseDate>
+					<Modification_Comment>updated Potential_Mitigations, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-06-25</Modification_Date>
+					<Modification_Version>4.1</Modification_Version>
+					<Modification_ReleaseDate>2020-06-25</Modification_ReleaseDate>
+					<Modification_Comment>updated Observed_Examples, Potential_Mitigations, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-01-31</Modification_Date>
+					<Modification_Version>4.10</Modification_Version>
+					<Modification_ReleaseDate>2023-01-31</Modification_ReleaseDate>
+					<Modification_Comment>updated Description</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-10-26</Modification_Date>
+					<Modification_Version>4.13</Modification_Version>
+					<Modification_ReleaseDate>2023-10-26</Modification_ReleaseDate>
+					<Modification_Comment>updated Observed_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2024-02-29</Modification_Date>
+					<Modification_Version>4.14</Modification_Version>
+					<Modification_ReleaseDate>2024-02-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Observed_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-09-09</Modification_Date>
+					<Modification_Version>4.18</Modification_Version>
+					<Modification_ReleaseDate>2025-09-09</Modification_ReleaseDate>
+					<Modification_Comment>updated Detection_Factors, Functional_Areas, References</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Observed_Examples, Relationships, Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+            <Previous_Entry_Name Date="2008-04-11">Path Equivalence</Previous_Entry_Name>
+            <Previous_Entry_Name Date="2009-05-27">Failure to Resolve Path Equivalence</Previous_Entry_Name>
+         </Content_History>
+      </Weakness>
+      

@@ -1,0 +1,192 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="1274" Name="Improper Access Control for Volatile Memory Containing Boot Code" Abstraction="Base" Structure="Simple" Status="Stable">
+			<Description>The product conducts a secure-boot process that transfers bootloader code from Non-Volatile Memory (NVM) into Volatile Memory (VM), but it does not have sufficient access control or other protections for the Volatile Memory.</Description>
+			<Extended_Description>
+			  <xhtml:p>Adversaries could bypass the secure-boot process and execute their own untrusted, malicious boot code.</xhtml:p>
+			  <xhtml:p>As a part of a secure-boot process, the read-only-memory (ROM) code for a System-on-Chip (SoC) or other system fetches bootloader code from Non-Volatile Memory (NVM) and stores the code in Volatile Memory (VM), such as dynamic, random-access memory (DRAM) or static, random-access memory (SRAM). The NVM is usually external to the SoC, while the VM is internal to the SoC. As the code is transferred from NVM to VM, it is authenticated by the SoC's ROM code.</xhtml:p>
+			</Extended_Description>
+			<Related_Weaknesses>
+			  <Related_Weakness Nature="ChildOf" CWE_ID="284" View_ID="1000" Ordinal="Primary" />
+			</Related_Weaknesses>
+		 <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+		 </Weakness_Ordinalities>
+			<Applicable_Platforms>
+				<Language Class="Not Language-Specific" Prevalence="Undetermined" />
+				<Operating_System Class="Not OS-Specific" Prevalence="Undetermined" />
+				<Architecture Class="Not Architecture-Specific" Prevalence="Undetermined" />
+				<Technology Class="Not Technology-Specific" Prevalence="Undetermined" />
+				</Applicable_Platforms>
+			<Modes_Of_Introduction>
+				<Introduction>
+					<Phase>Architecture and Design</Phase>
+					<Note>This weakness can be introduced during hardware architecture or design but can be identified later during testing.</Note>
+				</Introduction>
+			</Modes_Of_Introduction>
+			<Common_Consequences>
+				<Consequence>
+					<Scope>Access Control</Scope>
+					<Scope>Integrity</Scope>
+					<Impact>Modify Memory</Impact>
+					<Impact>Execute Unauthorized Code or Commands</Impact>
+					<Impact>Gain Privileges or Assume Identity</Impact>
+					<Likelihood>High</Likelihood>
+					<Note>If the volatile-memory-region protections or access controls are insufficient to prevent modifications from an adversary or untrusted agent, the secure boot may be bypassed or replaced with the execution of an adversary's code.</Note>
+				</Consequence>
+			</Common_Consequences>
+			<Detection_Methods>
+			  <Detection_Method>
+			    <Method>Manual Analysis</Method>
+			    <Description>Ensure the volatile memory is lockable or has locks. Ensure the volatile memory is locked for writes from untrusted agents or adversaries. Try modifying the volatile memory from an untrusted agent, and ensure these writes are dropped.
+			     </Description>
+			    <Effectiveness>High</Effectiveness>
+			  </Detection_Method>
+			  <Detection_Method>
+			    <Method>Manual Analysis</Method>
+			    <Description>
+			      <xhtml:p>Analyze the device using the following steps:</xhtml:p>
+			      <xhtml:ol>
+				<xhtml:li>Identify all fabric master agents that are active during system Boot Flow when initial code is loaded from Non-volatile storage to volatile memory.</xhtml:li>
+				<xhtml:li>Identify the volatile memory regions that are used for storing loaded system executable program.</xhtml:li>
+				<xhtml:li>During system boot, test programming the identified memory regions in step 2 from all the masters identified in step 1.</xhtml:li>
+			      </xhtml:ol>
+			      <xhtml:p>Only trusted masters should be allowed to write to the memory regions. For example, pluggable device peripherals should not have write access to program load memory regions.</xhtml:p>
+			    </Description>
+			    <Effectiveness>Moderate</Effectiveness>
+			  </Detection_Method>
+			</Detection_Methods>
+			<Potential_Mitigations>
+				<Mitigation>
+					<Phase>Architecture and Design</Phase>
+					<Description>Ensure that the design of volatile-memory protections is enough to prevent modification from an adversary or untrusted code.</Description>
+				</Mitigation>
+				<Mitigation>
+					<Phase>Testing</Phase>
+					<Description>Test the volatile-memory protections to ensure they are safe from modification or untrusted code.</Description>
+				</Mitigation>
+			</Potential_Mitigations>
+			<Demonstrative_Examples>
+				<Demonstrative_Example>
+					<Intro_Text>A typical SoC secure boot's flow includes fetching the next piece of code (i.e., the boot loader) from NVM (e.g., serial, peripheral interface (SPI) flash), and transferring it to DRAM/SRAM volatile, internal memory, which is more efficient.</Intro_Text>
+					<Example_Code Nature="Bad" Language="Other">The volatile-memory protections or access controls are insufficient.</Example_Code>
+					<Body_Text>The memory from where the boot loader executes can be modified by an adversary.</Body_Text>
+					<Example_Code Nature="Good" Language="Other">A good architecture should define appropriate protections or access controls to prevent modification by an adversary or untrusted agent, once the bootloader is authenticated.</Example_Code>
+				</Demonstrative_Example>
+			</Demonstrative_Examples>
+			<Observed_Examples>
+				<Observed_Example>
+					<Reference>CVE-2019-2267</Reference>
+					<Description>Locked memory regions may be modified through other interfaces in a secure-boot-loader image due to improper access control.</Description>
+					<Link>https://www.cve.org/CVERecord?id=CVE-2019-2267</Link>
+				</Observed_Example>
+			</Observed_Examples>
+         <Related_Attack_Patterns>
+            <Related_Attack_Pattern CAPEC_ID="456" />
+            <Related_Attack_Pattern CAPEC_ID="679" />
+         </Related_Attack_Patterns>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Base level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+         <Content_History>
+				<Submission>
+					<Submission_Name>Arun Kanuparthi, Hareesh Khattri, Parbati Kumar Manna, Narasimha Kumar V Mangipudi</Submission_Name>
+					<Submission_Organization>Intel Corporation</Submission_Organization>
+					<Submission_Date>2020-04-25</Submission_Date>
+					<Submission_Version>4.1</Submission_Version>
+					<Submission_ReleaseDate>2020-02-24</Submission_ReleaseDate>
+				</Submission>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-08-20</Modification_Date>
+					<Modification_Version>4.2</Modification_Version>
+					<Modification_ReleaseDate>2020-08-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples, Description, Related_Attack_Patterns</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-10-28</Modification_Date>
+					<Modification_Version>4.6</Modification_Version>
+					<Modification_ReleaseDate>2021-10-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Common_Consequences, Demonstrative_Examples, Description, Detection_Factors, Maintenance_Notes, Name, Observed_Examples, Potential_Mitigations, Relationships, Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-04-28</Modification_Date>
+					<Modification_Version>4.7</Modification_Version>
+					<Modification_ReleaseDate>2022-04-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Related_Attack_Patterns</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-01-31</Modification_Date>
+					<Modification_Version>4.10</Modification_Version>
+					<Modification_ReleaseDate>2023-01-31</Modification_ReleaseDate>
+					<Modification_Comment>updated Related_Attack_Patterns</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2024-02-29</Modification_Date>
+					<Modification_Version>4.14</Modification_Version>
+					<Modification_ReleaseDate>2024-02-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Detection_Factors</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-04-03</Modification_Date>
+					<Modification_Version>4.17</Modification_Version>
+					<Modification_ReleaseDate>2025-04-03</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Common_Consequences, Description</Modification_Comment>
+				</Modification>
+				<Contribution Type="Feedback">
+				  <Contribution_Name>Narasimha Kumar V Mangipudi</Contribution_Name>
+				  <Contribution_Organization>Lattice Semiconductor</Contribution_Organization>
+				  <Contribution_Date>2021-10-20</Contribution_Date>
+				  <Contribution_Comment>suggested content improvements</Contribution_Comment>
+				</Contribution>
+				<Contribution Type="Content">
+				  <Contribution_Name>Hareesh Khattri</Contribution_Name>
+				  <Contribution_Organization>Intel Corporation</Contribution_Organization>
+				  <Contribution_Date>2021-10-22</Contribution_Date>
+				  <Contribution_Comment>provided detection method</Contribution_Comment>
+				</Contribution>
+			<Previous_Entry_Name Date="2021-10-28">Insufficient Protections on the Volatile Memory Containing Boot Code</Previous_Entry_Name>
+			</Content_History>
+		</Weakness>
+      

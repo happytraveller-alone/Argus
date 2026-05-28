@@ -1,0 +1,295 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="1284" Name="Improper Validation of Specified Quantity in Input" Abstraction="Base" Structure="Simple" Status="Incomplete">
+			<Description>The product receives input that is expected to specify a quantity (such as size or length), but it does not validate or incorrectly validates that the quantity has the required properties.</Description>
+			<Extended_Description>
+				<xhtml:p>Specified quantities include size, length, frequency, price, rate, number of operations, time, and others. Code may rely on specified quantities to allocate resources, perform calculations, control iteration, etc. </xhtml:p>
+			</Extended_Description>
+			<Related_Weaknesses>
+            <Related_Weakness Nature="ChildOf" CWE_ID="20" View_ID="1000" Ordinal="Primary" />
+				<Related_Weakness Nature="ChildOf" CWE_ID="20" View_ID="1003" Ordinal="Primary" />
+            <Related_Weakness Nature="CanPrecede" CWE_ID="789" View_ID="1000" />
+			</Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+			<Applicable_Platforms>
+				<Language Class="Not Language-Specific" Prevalence="Often" />
+			</Applicable_Platforms>
+			<Modes_Of_Introduction>
+				<Introduction>
+					<Phase>Implementation</Phase>
+					<Note>Since quantities are often used to affect resource allocation or process financial data, they are often present in many places in the code.</Note>
+				</Introduction>
+			</Modes_Of_Introduction>
+			<Common_Consequences>
+				<Consequence>
+					<Scope>Other</Scope>
+					<Scope>Integrity</Scope>
+					<Scope>Availability</Scope>
+					<Impact>Varies by Context</Impact>
+					<Impact>DoS: Resource Consumption (CPU)</Impact>
+					<Impact>Modify Memory</Impact>
+					<Impact>Read Memory</Impact>
+					<Note>When the quantity is not properly validated, then attackers can specify malicious quantities to cause excessive resource allocation, trigger unexpected failures, enable buffer overflows, etc.</Note>
+				</Consequence>
+			</Common_Consequences>
+			<Detection_Methods>
+			  <Detection_Method Detection_Method_ID="DM-14">
+			    <Method>Automated Static Analysis</Method>
+			    <Description>Automated static analysis, commonly referred to as Static Application Security Testing (SAST), can find some instances of this weakness by analyzing source code (or binary/compiled code) without having to execute it. Typically, this is done by building a model of data flow and control flow, then searching for potentially-vulnerable patterns that connect "sources" (origins of input) with "sinks" (destinations where the data interacts with external components, a lower layer such as the OS, etc.)</Description>
+			  </Detection_Method>
+			</Detection_Methods>
+			<Potential_Mitigations>
+            <Mitigation Mitigation_ID="MIT-5">
+               <Phase>Implementation</Phase>
+               <Strategy>Input Validation</Strategy>
+               <Description>
+                  <xhtml:p>Assume all input is malicious. Use an "accept known good" input validation strategy, i.e., use a list of acceptable inputs that strictly conform to specifications. Reject any input that does not strictly conform to specifications, or transform it into something that does.</xhtml:p>
+                  <xhtml:p>When performing input validation, consider all potentially relevant properties, including length, type of input, the full range of acceptable values, missing or extra inputs, syntax, consistency across related fields, and conformance to business rules. As an example of business rule logic, "boat" may be syntactically valid because it only contains alphanumeric characters, but it is not valid if the input is only expected to contain colors such as "red" or "blue."</xhtml:p>
+                  <xhtml:p>Do not rely exclusively on looking for malicious or malformed inputs.  This is likely to miss at least one undesirable input, especially if the code's environment changes. This can give attackers enough room to bypass the intended validation. However, denylists can be useful for detecting potential attacks or determining which inputs are so malformed that they should be rejected outright.</xhtml:p>
+               </Description>
+	       <Effectiveness>High</Effectiveness>
+            </Mitigation>
+			</Potential_Mitigations>
+         <Demonstrative_Examples>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-135">
+               <Intro_Text>This example demonstrates a shopping interaction in which the user is free to specify the quantity of items to be purchased and a total is calculated.</Intro_Text>
+               <Example_Code Nature="Bad" Language="Java">
+                  <xhtml:div>...<xhtml:br />public static final double price = 20.00;<xhtml:br />int quantity = currentUser.getAttribute("quantity");<xhtml:br />double total = price * quantity;<xhtml:br />chargeUser(total);<xhtml:br />...</xhtml:div>
+               </Example_Code>
+               <Body_Text>The user has no control over the price variable, however the code does not prevent a negative value from being specified for quantity. If an attacker were to provide a negative value, then the user would have their account credited instead of debited.</Body_Text>
+            </Demonstrative_Example>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-136">
+               <Intro_Text>This example asks the user for a height and width of an m X n game board with a maximum dimension of 100 squares.</Intro_Text>
+               <Example_Code Nature="Bad" Language="C">
+                  <xhtml:div>...<xhtml:br />#define MAX_DIM 100<xhtml:br />...<xhtml:br />
+                     <xhtml:i>/* board dimensions */</xhtml:i>
+                     <xhtml:br />
+                     <xhtml:br />int m,n, error;<xhtml:br />board_square_t *board;<xhtml:br />printf("Please specify the board height: \n");<xhtml:br />error = scanf("%d", &amp;m);<xhtml:br />if ( EOF == error ){<xhtml:div style="margin-left:1em;">die("No integer passed: Die evil hacker!\n");</xhtml:div>}<xhtml:br />printf("Please specify the board width: \n");<xhtml:br />error = scanf("%d", &amp;n);<xhtml:br />if ( EOF == error ){<xhtml:div style="margin-left:1em;">die("No integer passed: Die evil hacker!\n");</xhtml:div>}<xhtml:br />if ( m &gt; MAX_DIM || n &gt; MAX_DIM ) {<xhtml:div style="margin-left:1em;">die("Value too large: Die evil hacker!\n");</xhtml:div>}<xhtml:br />board = (board_square_t*) malloc( m * n * sizeof(board_square_t));<xhtml:br />...</xhtml:div>
+               </Example_Code>
+               <Body_Text>While this code checks to make sure the user cannot specify large, positive integers and consume too much memory, it does not check for negative values supplied by the user. As a result, an attacker can perform a resource consumption (CWE-400) attack against this program by specifying two, large negative values that will not overflow, resulting in a very large memory allocation (CWE-789) and possibly a system crash. Alternatively, an attacker can provide very large negative values which will cause an integer overflow (CWE-190) and unexpected behavior will follow depending on how the values are treated in the remainder of the program.</Body_Text>
+            </Demonstrative_Example>
+	    <Demonstrative_Example Demonstrative_Example_ID="DX-236">
+	      <Intro_Text>The following code is a workflow job written
+	      using YAML. The code attempts to download pull request
+	      artifacts, unzip from the artifact called pr.zip and
+	      extract the value of the file NR into a variable
+	      "pr_number" that will be used later in another job.  It
+	      attempts to create a github workflow environment
+	      variable, writing to $GITHUB_ENV. The environment
+	      variable value is retrieved from an external
+	      resource.</Intro_Text>
+	      <Example_Code Nature="Bad" Language="Other">
+		name: Deploy Preview<xhtml:br />
+		jobs:<xhtml:br />
+		<xhtml:div style="margin-left:1em;">
+		  deploy:<xhtml:br />
+		  <xhtml:div style="margin-left:1em;">
+		    runs-on: ubuntu-latest<xhtml:br />
+		    steps:<xhtml:br />
+		    <xhtml:div style="margin-left:1em;">
+		      - name: 'Download artifact'<xhtml:br />
+		      uses: actions/github-script<xhtml:br />
+		      with:<xhtml:br />
+		      <xhtml:div style="margin-left:1em;">
+			script: |<xhtml:br />
+			<xhtml:div style="margin-left:1em;">
+			  var artifacts = await github.actions.listWorkflowRunArtifacts({<xhtml:br />
+			  <xhtml:div style="margin-left:1em;">
+			    owner: context.repo.owner,<xhtml:br />
+			    repo: context.repo.repo,<xhtml:br />
+			    run_id: ${{ github.event.workflow_run.id }},<xhtml:br />
+			  </xhtml:div>
+			  });<xhtml:br />
+			  var matchPrArtifact = artifacts.data.artifacts.filter((artifact) =&gt; {<xhtml:br />
+			  <xhtml:div style="margin-left:1em;">
+			    return artifact.name == "pr"<xhtml:br />
+			  </xhtml:div>
+			  })[0];<xhtml:br />
+			  var downloadPr = await github.actions.downloadArtifact({<xhtml:br />
+			  <xhtml:div style="margin-left:1em;">
+			    owner: context.repo.owner,<xhtml:br />
+			    repo: context.repo.repo,<xhtml:br />
+			    artifact_id: matchPrArtifact.id,<xhtml:br />
+			    archive_format: 'zip',<xhtml:br />
+			  </xhtml:div>
+			  });<xhtml:br />
+			  var fs = require('fs');<xhtml:br />
+			  fs.writeFileSync('${{github.workspace}}/pr.zip', Buffer.from(downloadPr.data));<xhtml:br />
+			</xhtml:div>
+		      </xhtml:div>
+		      - run: |<xhtml:br />
+		      <xhtml:div style="margin-left:1em;">
+			unzip pr.zip<xhtml:br />
+			echo "pr_number=$(cat NR)" &gt;&gt; $GITHUB_ENV
+		      </xhtml:div>
+		    </xhtml:div>
+		  </xhtml:div>
+		</xhtml:div>
+	      </Example_Code>
+	      <Body_Text>
+		<xhtml:p>The code does not neutralize the value of the
+		file NR, e.g. by validating that NR only contains a
+		number (CWE-1284). The NR file is attacker controlled
+		because it originates from a pull request that produced
+		pr.zip.</xhtml:p>
+		<xhtml:p>The attacker could escape the existing
+		pr_number and create a new variable using a "\n"
+		(CWE-93) followed by any environment variable to be
+		added such as:</xhtml:p>
+	      </Body_Text>
+	      <Example_Code Nature="Attack">
+		\nNODE_OPTIONS="--experimental-modules --experiments-loader=data:text/javascript,console.log('injected code');//"
+	      </Example_Code>
+	      <Body_Text>
+		<xhtml:p>This would result in injecting and running
+		javascript code (CWE-94) on the workflow runner with
+		elevated privileges.</xhtml:p>
+	      </Body_Text>
+	      <Example_Code Nature="Good" Language="Other">
+		The code could be modified to validate that the NR
+		file only contains a numeric value, or the code could
+		retrieve the PR number from a more trusted source.
+	      </Example_Code>
+	    </Demonstrative_Example>
+	    <Demonstrative_Example>
+	      <Intro_Text>The following PHP code could be from a shopping cart application. It allows users to apply a discount to an item.</Intro_Text>
+              <Example_Code Nature="Bad" Language="PHP">
+		<xhtml:div>
+		  $discount = $_POST['discount'];<xhtml:br />
+		  $originalPrice = 100.00;<xhtml:br />
+		  $finalPrice = $originalPrice - ($originalPrice * $discount / 100);<xhtml:br />
+		  processPayment($finalPrice);<xhtml:br />
+		</xhtml:div>
+              </Example_Code>
+              <Body_Text>This code does not validate or restrict the discount percentage. An attacker could submit a discount value of 100, making the final price zero, or a value greater than 100, making the final price negative. Depending on how processPayment() handles zero or negative amounts, this could result in unauthorized free purchases or other payment logic flaws, such as getting money credited instead of paying.</Body_Text>
+	      <Example_Code Nature="Good" Language="PHP">
+		<xhtml:div>
+		  $original_price = 100.00;<xhtml:br />
+		  $allowed_discounts = [0, 10, 20, 50]; <xhtml:i>// only these discounts are valid</xhtml:i><xhtml:br />
+		  $discount = (int) ($_POST['discount'] ?? 0);<xhtml:br />
+		  if (!in_array($discount, $allowed_discounts, true)) {<xhtml:br />
+                  <xhtml:div style="margin-left:1em;">
+		    http_response_code(400);<xhtml:br />
+                    exit('Invalid discount.');<xhtml:br />
+		  </xhtml:div>
+		  }<xhtml:br />
+		  $final_price = $original_price - ($original_price * $discount / 100);<xhtml:br />
+		  if ($final_price &lt;= 0) {<xhtml:br />
+		  <xhtml:div style="margin-left:1em;">
+		    http_response_code(400);<xhtml:br />
+		    exit('Invalid final price.');<xhtml:br />
+		  </xhtml:div>
+		  }<xhtml:br />
+		  processPayment($final_price);<xhtml:br />
+		</xhtml:div>
+	      </Example_Code>
+              <Body_Text>Notice that this new code still allows the attacker to choose the highest discount, which might be against the business logic of the application. It would be better to store the discounts in a database where they cannot be directly influenced by users, but that is outside the scope of CWE-1284.</Body_Text>
+            </Demonstrative_Example>
+        </Demonstrative_Examples>
+            <Observed_Examples>
+            <Observed_Example>
+               <Reference>CVE-2025-4037</Reference>
+               <Description>ATM simulator does not check for negative values with deposits or withdrawals, allowing attackers to increase their balance</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2025-4037</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2025-46687</Reference>
+               <Description>Chain: Javascript engine code does not perform a length check (CWE-1284) leading to integer overflow (CWE-190) causing allocation of smaller buffer than expected (CWE-131) resulting in a heap-based buffer overflow (CWE-122)</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2025-46687</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2019-19911</Reference>
+               <Description>Chain: Python library does not limit the resources used to process images that specify a very large number of bands (CWE-1284), leading to excessive memory consumption (CWE-789) or an integer overflow (CWE-190).</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2019-19911</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2008-1440</Reference>
+               <Description>lack of validation of length field leads to infinite loop</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2008-1440</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2008-2374</Reference>
+               <Description>lack of validation of string length fields allows memory consumption or buffer over-read</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2008-2374</Link>
+            </Observed_Example>
+            </Observed_Examples>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Base level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+            <Notes>
+			    <Note Type="Maintenance">This entry is still under development and will continue to see updates and content improvements.</Note>
+			</Notes>
+			<Content_History>
+				<Submission>
+					<Submission_Name>CWE Content Team</Submission_Name>
+					<Submission_Organization>MITRE</Submission_Organization>
+					<Submission_Date>2020-06-24</Submission_Date>
+					<Submission_Version>4.1</Submission_Version>
+					<Submission_ReleaseDate>2020-02-24</Submission_ReleaseDate>
+				</Submission>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-10-13</Modification_Date>
+					<Modification_Version>4.9</Modification_Version>
+					<Modification_ReleaseDate>2022-10-13</Modification_ReleaseDate>
+					<Modification_Comment>updated Observed_Examples, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-09-09</Modification_Date>
+					<Modification_Version>4.18</Modification_Version>
+					<Modification_ReleaseDate>2025-09-09</Modification_ReleaseDate>
+					<Modification_Comment>updated Observed_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Common_Consequences, Demonstrative_Examples, Description, Detection_Factors, Modes_of_Introduction, Observed_Examples, Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2026-04-30</Modification_Date>
+					<Modification_Version>4.20</Modification_Version>
+					<Modification_ReleaseDate>2026-04-30</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples, Observed_Examples</Modification_Comment>
+				</Modification>
+				<Contribution Type="Content">
+				  <Contribution_Name>Affan Ahmed</Contribution_Name>
+				  <Contribution_Date>2025-02-28</Contribution_Date>
+				  <Contribution_Version>4.20</Contribution_Version>
+				  <Contribution_ReleaseDate>2026-04-30</Contribution_ReleaseDate>
+				  <Contribution_Comment>Provided a demonstrative example in PHP</Contribution_Comment>
+				</Contribution>
+			</Content_History>
+		</Weakness>
+      

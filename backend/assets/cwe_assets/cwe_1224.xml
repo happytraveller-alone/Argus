@@ -1,0 +1,206 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="1224" Name="Improper Restriction of Write-Once Bit Fields" Abstraction="Base" Structure="Simple" Status="Incomplete">
+            <Description>The hardware design control register "sticky bits" or write-once bit fields are improperly implemented, such that they can be reprogrammed by software.</Description>
+            <Extended_Description>
+                <xhtml:p>Integrated circuits and hardware IP software programmable controls and settings are commonly stored in register circuits. These register contents have to be initialized at hardware reset to define default values that are hard coded in the hardware description language (HDL) code of the hardware unit. A common security protection method used to protect register settings from modification by software is to make the settings write-once or "sticky." This allows writing to such registers only once, whereupon they become read-only. This is useful to allow initial boot software to configure systems settings to secure values while blocking runtime software from modifying such hardware settings.</xhtml:p>
+                <xhtml:p>Failure to implement write-once restrictions in hardware design can expose such registers to being re-programmed by software and written multiple times. For example, write-once fields could be implemented to only be write-protected if they have been set to value "1", wherein they would work as "write-1-once" and not "write-once".</xhtml:p>
+            </Extended_Description>
+			<Related_Weaknesses>
+				<Related_Weakness Nature="ChildOf" CWE_ID="284" View_ID="1000" Ordinal="Primary" />
+			</Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+            <Applicable_Platforms>
+                <Language Name="Verilog" Prevalence="Undetermined" />
+                <Language Name="VHDL" Prevalence="Undetermined" />
+                <Technology Class="System on Chip" Prevalence="Undetermined" />
+            </Applicable_Platforms>
+            <Modes_Of_Introduction>
+                <Introduction>
+                    <Phase>Architecture and Design</Phase>
+                </Introduction>
+                <Introduction>
+                    <Phase>Implementation</Phase>
+                    <Note>Such issues could be introduced during implementation of hardware design, since IP parameters and defaults are defined in HDL code and identified later during Testing or System Configuration phases.</Note>
+                </Introduction>
+            </Modes_Of_Introduction>
+            <Common_Consequences>
+                <Consequence>
+                    <Scope>Confidentiality</Scope>
+                    <Scope>Integrity</Scope>
+                    <Scope>Availability</Scope>
+                    <Scope>Access Control</Scope>
+                    <Impact>Varies by Context</Impact>
+                    <Note>System configuration cannot be programmed in a secure way.</Note>
+                </Consequence>
+            </Common_Consequences>
+	    <Detection_Methods>
+	      <Detection_Method>
+		<Method>Automated Analysis</Method>
+		<Description>Use automated tools to test that values are not reprogrammable and that write-once fields lock on writing zeros.</Description>
+	      </Detection_Method>
+	    </Detection_Methods>
+            <Potential_Mitigations>
+                <Mitigation>
+                    <Phase>Architecture and Design</Phase>
+                    <Description>During hardware design, all register write-once or sticky fields must be evaluated for proper configuration.</Description>
+                </Mitigation>
+            </Potential_Mitigations>
+            <Demonstrative_Examples>
+                <Demonstrative_Example>
+                    <Intro_Text>Consider the example design module system verilog code shown below. register_write_once_example module is an example of register that has a write-once field defined. Bit 0 field captures the write_once_status value. This implementation can be for a register that is defined by specification to be a write-once register, since the write_once_status field gets written by input data bit 0 on first write. </Intro_Text>
+                    <Example_Code Nature="Bad" Language="Verilog">
+                      module register_write_once_example<xhtml:br />
+		      ( <xhtml:br />
+		      input [15:0] Data_in, <xhtml:br />
+		      input Clk, <xhtml:br />
+		      input ip_resetn, <xhtml:br />
+		      input global_resetn,<xhtml:br />
+		      input write,<xhtml:br />
+		      output reg [15:0] Data_out <xhtml:br />
+		      );<xhtml:br />
+		      <xhtml:br />
+		      reg Write_once_status; <xhtml:br />
+                      <xhtml:br />
+		      always @(posedge Clk or negedge ip_resetn)<xhtml:br />
+		      <xhtml:div style="margin-left:1em;">
+			if (~ip_resetn)<xhtml:br />
+			begin<xhtml:br />
+			<xhtml:div style="margin-left:1em;">
+			  Data_out &lt;= 16'h0000;<xhtml:br />
+			  Write_once_status &lt;= 1'b0; <xhtml:br />
+			</xhtml:div>
+			end <xhtml:br />
+			else if (write &amp; ~Write_once_status)<xhtml:br />
+			begin<xhtml:br />
+			<xhtml:div style="margin-left:1em;">
+			  Data_out &lt;= Data_in &amp; 16'hFFFE;<xhtml:br />
+			  Write_once_status &lt;= Data_in[0]; // Input bit 0 sets Write_once_status<xhtml:br />
+			</xhtml:div>
+			end<xhtml:br />
+			else if (~write)<xhtml:br />
+			begin <xhtml:br />
+			<xhtml:div style="margin-left:1em;">
+			  Data_out[15:1] &lt;= Data_out[15:1]; <xhtml:br />
+			  Data_out[0] &lt;= Write_once_status; <xhtml:br />
+			</xhtml:div>
+			end <xhtml:br />
+			</xhtml:div>
+			endmodule<xhtml:br />
+                    </Example_Code>
+                    <Body_Text>The above example only locks further writes if write_once_status bit is written to one. So it acts as write_1-Once instead of the write-once attribute.</Body_Text>
+                    <Example_Code Nature="Good" Language="Verilog">
+                        module register_write_once_example <xhtml:br />
+			( <xhtml:br />
+			input [15:0] Data_in, <xhtml:br />
+			input Clk, <xhtml:br />
+			input ip_resetn, <xhtml:br />
+			input global_resetn, <xhtml:br />
+			input write, <xhtml:br />
+			output reg [15:0] Data_out <xhtml:br />
+			); <xhtml:br />
+			<xhtml:br />
+			reg Write_once_status; <xhtml:br />
+                        <xhtml:br />
+			always @(posedge Clk or negedge ip_resetn) <xhtml:br />
+			<xhtml:div style="margin-left:1em;">
+			  if (~ip_resetn) <xhtml:br />
+			  begin <xhtml:br />
+			  <xhtml:div style="margin-left:1em;">
+			    Data_out &lt;= 16'h0000; <xhtml:br />
+			    Write_once_status &lt;= 1'b0; <xhtml:br />
+			  </xhtml:div>
+			  end <xhtml:br />
+			  else if (write &amp; ~Write_once_status) <xhtml:br />
+			  begin <xhtml:br />
+			  <xhtml:div style="margin-left:1em;">
+			    Data_out &lt;= Data_in &amp; 16'hFFFE; <xhtml:br />
+			    Write_once_status &lt;= 1'b1; // Write once status set on first write, independent of input <xhtml:br />
+			  </xhtml:div>
+			  end <xhtml:br />
+			  else if (~write) <xhtml:br />
+			  begin <xhtml:br />
+			  <xhtml:div style="margin-left:1em;">
+			    Data_out[15:1] &lt;= Data_out[15:1]; <xhtml:br />
+			    Data_out[0] &lt;= Write_once_status; <xhtml:br />
+			  </xhtml:div>
+			  end <xhtml:br />
+			</xhtml:div>
+			<xhtml:br />
+			endmodule<xhtml:br />
+                    </Example_Code>
+                </Demonstrative_Example>
+            </Demonstrative_Examples>
+         <Related_Attack_Patterns>
+            <Related_Attack_Pattern CAPEC_ID="680" />
+         </Related_Attack_Patterns>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Base level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+         <Content_History>
+                <Submission>
+                    <Submission_Name>Arun Kanuparthi, Hareesh Khattri, Parbati Kumar Manna, Narasimha Kumar V Mangipudi</Submission_Name>
+                    <Submission_Organization>Intel Corporation</Submission_Organization>
+					<Submission_Date>2019-12-12</Submission_Date>
+					<Submission_Version>4.0</Submission_Version>
+					<Submission_ReleaseDate>2020-02-24</Submission_ReleaseDate>
+                </Submission>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-08-20</Modification_Date>
+					<Modification_Version>4.2</Modification_Version>
+					<Modification_ReleaseDate>2020-08-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Related_Attack_Patterns</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-04-28</Modification_Date>
+					<Modification_Version>4.7</Modification_Version>
+					<Modification_ReleaseDate>2022-04-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Related_Attack_Patterns</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-10-13</Modification_Date>
+					<Modification_Version>4.9</Modification_Version>
+					<Modification_ReleaseDate>2022-10-13</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Detection_Factors, Potential_Mitigations, Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+            </Content_History>
+        </Weakness>
+      

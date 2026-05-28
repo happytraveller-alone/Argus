@@ -1,0 +1,199 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="1241" Name="Use of Predictable Algorithm in Random Number Generator" Abstraction="Base" Structure="Simple" Status="Draft">
+            <Description>The device uses an algorithm that is predictable and generates a pseudo-random number.</Description>
+			<Extended_Description>
+				<xhtml:p>Pseudo-random number generator algorithms are predictable because their registers have a finite number of possible states, which eventually lead to repeating patterns. As a result, pseudo-random number generators (PRNGs) can compromise their randomness or expose their internal state to various attacks, such as reverse engineering or tampering. </xhtml:p>
+			</Extended_Description>
+            <Related_Weaknesses>
+              <Related_Weakness Nature="ChildOf" CWE_ID="330" View_ID="1000" Ordinal="Primary" />
+            </Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+            <Applicable_Platforms>
+                <Technology Class="System on Chip" Prevalence="Undetermined" />
+            </Applicable_Platforms>
+			<Modes_Of_Introduction>
+				<Introduction>
+					<Phase>Architecture and Design</Phase>
+				</Introduction>
+				<Introduction>
+					<Phase>Implementation</Phase>
+					<Note>In many cases, the design originally defines a cryptographically secure random number generator, but is then changed during implementation due to unforeseen constraints.</Note>
+				</Introduction>
+			</Modes_Of_Introduction>
+			<Common_Consequences>
+				<Consequence>
+					<Scope>Confidentiality</Scope>
+					<Impact>Read Application Data</Impact>
+					<Likelihood>High</Likelihood>
+				</Consequence>
+			</Common_Consequences>
+			<Potential_Mitigations>
+				<Mitigation>
+					<Phase>Architecture and Design</Phase>
+					<Description>It is highly recommended to use a true random number generator (TRNG) to ensure the security of encryption schemes. Hardware-based TRNGs generate unpredictable, unbiased, and independent random numbers because they employ physical phenomena, e.g., electrical noise, as sources to generate random numbers. </Description>
+				</Mitigation>
+				<Mitigation>
+					<Phase>Implementation</Phase>
+					<Description>It is highly recommended to use a true random number generator (TRNG) to ensure the security of encryption schemes. Hardware-based TRNGs generate unpredictable, unbiased, and independent random numbers because they employ physical phenomena, e.g., electrical noise, as sources to generate random numbers. </Description>
+				</Mitigation>
+			</Potential_Mitigations>
+			<Demonstrative_Examples>
+				<Demonstrative_Example>
+					<Intro_Text>Suppose a cryptographic function expects random value to be supplied for the crypto algorithm.</Intro_Text>
+					<Body_Text>During the implementation phase, due to space constraint, a cryptographically secure random-number-generator could not be used, and instead  of using a TRNG (True Random Number Generator), a LFSR (Linear Feedback Shift Register) is used to generate a random value. While an LFSR will provide a pseudo-random number, its entropy (measure of randomness) is insufficient for a cryptographic algorithm.</Body_Text>
+				</Demonstrative_Example>
+				<Demonstrative_Example>
+					<Intro_Text>The example code is taken from the PRNG inside the buggy OpenPiton SoC of HACK@DAC'21 [REF-1370]. The SoC implements a pseudo-random number generator using a Linear Feedback Shift Register (LFSR). </Intro_Text>
+					<Body_Text>
+						<xhtml:img src="/data/images/LSFR-based-PRNG-CWE-1241.png" alt="LSFR-based Pseudo-Random Number Generator" />
+					</Body_Text>
+					<Body_Text>An example of LFSR with the polynomial function P(x) = x<xhtml:sup>6</xhtml:sup>+x<xhtml:sup>4</xhtml:sup>+x<xhtml:sup>3</xhtml:sup>+1 is shown in the figure.</Body_Text>
+					<Example_Code Nature="Bad" Language="Verilog">
+						<xhtml:b>reg in_sr, entropy16_valid;</xhtml:b><xhtml:br />
+						<xhtml:b>reg [15:0] entropy16;</xhtml:b><xhtml:br />
+						<xhtml:br />
+						<xhtml:b>assign entropy16_o = entropy16;</xhtml:b><xhtml:br />
+						<xhtml:b>assign entropy16_valid_o = entropy16_valid;</xhtml:b><xhtml:br />
+						<xhtml:br />
+						<xhtml:b>always @ (*)</xhtml:b><xhtml:br />
+						<xhtml:b>begin</xhtml:b><xhtml:br />
+						<xhtml:div style="margin-left:1em;">
+							<xhtml:b>in_sr = ^ (poly_i [15:0] &amp; entropy16 [15:0]);</xhtml:b><xhtml:br />
+						</xhtml:div>
+						<xhtml:b>end</xhtml:b><xhtml:br />
+					</Example_Code>
+					<Body_Text>A LFSR's input bit is determined by the output of a linear function of two or more of its previous states. Therefore, given a long cycle, a LFSR-based PRNG will enter a repeating cycle, which is predictable.</Body_Text>
+				</Demonstrative_Example>
+			</Demonstrative_Examples>
+			<Observed_Examples>
+			  <Observed_Example>
+				<Reference>CVE-2021-3692</Reference>
+				<Description>PHP framework uses mt_rand() function (Marsenne Twister) when generating tokens</Description>
+				<Link>https://www.cve.org/CVERecord?id=CVE-2021-3692</Link>
+			  </Observed_Example>
+			</Observed_Examples>
+         <Related_Attack_Patterns>
+            <Related_Attack_Pattern CAPEC_ID="97" />
+         </Related_Attack_Patterns>
+         <References>
+		 	<Reference External_Reference_ID="REF-1370" />
+		 </References>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Base level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+         <Notes>
+	   <Note Type="Maintenance">As of CWE 4.5, terminology related to randomness, entropy, and
+	   predictability can vary widely. Within the developer and other
+	   communities, "randomness" is used heavily. However, within
+	   cryptography, "entropy" is distinct, typically implied as a
+	   measurement. There are no commonly-used definitions, even within
+	   standards documents and cryptography papers. Future versions of
+	   CWE will attempt to define these terms and, if necessary,
+	   distinguish between them in ways that are appropriate for
+	   different communities but do not reduce the usability of CWE for
+	   mapping, understanding, or other scenarios.</Note>
+	 </Notes>
+         <Content_History>
+                <Submission>
+                    <Submission_Name>Arun Kanuparthi, Hareesh Khattri, Parbati Kumar Manna, Narasimha Kumar V Mangipudi</Submission_Name>
+                    <Submission_Organization>Intel Corporation</Submission_Organization>
+					<Submission_Date>2020-02-10</Submission_Date>
+					<Submission_Version>4.0</Submission_Version>
+					<Submission_ReleaseDate>2020-02-24</Submission_ReleaseDate>
+                </Submission>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-06-25</Modification_Date>
+					<Modification_Version>4.1</Modification_Version>
+					<Modification_ReleaseDate>2020-06-25</Modification_ReleaseDate>
+					<Modification_Comment>updated Common_Consequences, Demonstrative_Examples, Modes_of_Introduction</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-08-20</Modification_Date>
+					<Modification_Version>4.2</Modification_Version>
+					<Modification_ReleaseDate>2020-08-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Common_Consequences, Demonstrative_Examples, Description, Maintenance_Notes, Modes_of_Introduction, Potential_Mitigations, Related_Attack_Patterns, Research_Gaps</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-03-15</Modification_Date>
+					<Modification_Version>4.4</Modification_Version>
+					<Modification_ReleaseDate>2021-03-15</Modification_ReleaseDate>
+					<Modification_Comment>updated Maintenance_Notes, Research_Gaps</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-07-20</Modification_Date>
+					<Modification_Version>4.5</Modification_Version>
+					<Modification_ReleaseDate>2021-07-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Maintenance_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-10-26</Modification_Date>
+					<Modification_Version>4.13</Modification_Version>
+					<Modification_ReleaseDate>2023-10-26</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples, Description, Observed_Examples, References</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-04-03</Modification_Date>
+					<Modification_Version>4.17</Modification_Version>
+					<Modification_ReleaseDate>2025-04-03</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Description, Potential_Mitigations, Relationships, Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+				<Contribution Type="Content">
+					<Contribution_Name>Chen Chen, Rahul Kande, Jeyavijayan Rajendran</Contribution_Name>
+					<Contribution_Organization>Texas A&amp;M University</Contribution_Organization>
+					<Contribution_Date>2023-06-21</Contribution_Date>
+					<Contribution_Comment>suggested demonstrative example</Contribution_Comment>
+				</Contribution>
+				<Contribution Type="Content">
+					<Contribution_Name>Shaza Zeitouni, Mohamadreza Rostami, Ahmad-Reza Sadeghi</Contribution_Name>
+					<Contribution_Organization>Technical University of Darmstadt</Contribution_Organization>
+					<Contribution_Date>2023-06-21</Contribution_Date>
+					<Contribution_Comment>suggested demonstrative example</Contribution_Comment>
+				</Contribution>
+            </Content_History>
+        </Weakness>
+      

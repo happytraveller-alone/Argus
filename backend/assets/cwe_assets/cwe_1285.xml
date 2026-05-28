@@ -1,0 +1,214 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="1285" Name="Improper Validation of Specified Index, Position, or Offset in Input" Abstraction="Base" Structure="Simple" Status="Incomplete">
+			<Description>The product receives input that is expected to specify an index, position, or offset into an indexable resource such as a buffer or file, but it does not validate or incorrectly validates that the specified index/position/offset has the required properties.</Description>
+			<Extended_Description>
+				<xhtml:p>Often, indexable resources such as memory buffers or files can be accessed using a specific position, index, or offset, such as an index for an array or a position for a file.  When untrusted input is not properly validated before it is used as an index, attackers could access (or attempt to access) unauthorized portions of these resources.  This could be used to cause buffer overflows, excessive resource allocation, or trigger unexpected failures.
+				</xhtml:p>
+			</Extended_Description>
+			<Related_Weaknesses>
+				<Related_Weakness Nature="ChildOf" CWE_ID="20" View_ID="1000" Ordinal="Primary" />
+			</Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+			<Applicable_Platforms>
+				<Language Class="Not Language-Specific" Prevalence="Often" />
+			</Applicable_Platforms>
+			<Modes_Of_Introduction>
+				<Introduction>
+					<Phase>Implementation</Phase>
+				</Introduction>
+			</Modes_Of_Introduction>
+			<Common_Consequences>
+				<Consequence>
+					<Scope>Other</Scope>
+					<Impact>Varies by Context</Impact>
+				</Consequence>
+			</Common_Consequences>
+			<Detection_Methods>
+			  <Detection_Method Detection_Method_ID="DM-14">
+			    <Method>Automated Static Analysis</Method>
+			    <Description>Automated static analysis, commonly referred to as Static Application Security Testing (SAST), can find some instances of this weakness by analyzing source code (or binary/compiled code) without having to execute it. Typically, this is done by building a model of data flow and control flow, then searching for potentially-vulnerable patterns that connect "sources" (origins of input) with "sinks" (destinations where the data interacts with external components, a lower layer such as the OS, etc.)</Description>
+			    <Effectiveness>High</Effectiveness>
+			  </Detection_Method>
+			</Detection_Methods>
+			<Potential_Mitigations>
+            <Mitigation Mitigation_ID="MIT-5">
+               <Phase>Implementation</Phase>
+               <Strategy>Input Validation</Strategy>
+               <Description>
+                  <xhtml:p>Assume all input is malicious. Use an "accept known good" input validation strategy, i.e., use a list of acceptable inputs that strictly conform to specifications. Reject any input that does not strictly conform to specifications, or transform it into something that does.</xhtml:p>
+                  <xhtml:p>When performing input validation, consider all potentially relevant properties, including length, type of input, the full range of acceptable values, missing or extra inputs, syntax, consistency across related fields, and conformance to business rules. As an example of business rule logic, "boat" may be syntactically valid because it only contains alphanumeric characters, but it is not valid if the input is only expected to contain colors such as "red" or "blue."</xhtml:p>
+                  <xhtml:p>Do not rely exclusively on looking for malicious or malformed inputs.  This is likely to miss at least one undesirable input, especially if the code's environment changes. This can give attackers enough room to bypass the intended validation. However, denylists can be useful for detecting potential attacks or determining which inputs are so malformed that they should be rejected outright.</xhtml:p>
+               </Description>
+	       <Effectiveness>High</Effectiveness>
+            </Mitigation>
+			</Potential_Mitigations>
+         <Demonstrative_Examples>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-134">
+               <Intro_Text>The following example retrieves the sizes of messages for a pop3 mail server. The message sizes are retrieved from a socket that returns in a buffer the message number and the message size, the message number (num) and size (size) are extracted from the buffer and the message size is placed into an array using the message number for the array index.</Intro_Text>
+               <Example_Code Nature="Bad" Language="C">
+                  <xhtml:div>
+                     <xhtml:br />
+                     <xhtml:i>/* capture the sizes of all messages */</xhtml:i>
+                     <xhtml:br />int getsizes(int sock, int count, int *sizes) {<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>...<xhtml:br />char buf[BUFFER_SIZE];<xhtml:br />int ok;<xhtml:br />int num, size;<xhtml:br />
+                           <xhtml:br />
+                           <xhtml:i>// read values from socket and added to sizes array</xhtml:i>
+                           <xhtml:br />while ((ok = gen_recv(sock, buf, sizeof(buf))) == 0)<xhtml:br />{<xhtml:div style="margin-left:1em;">
+                              <xhtml:div>
+                                 <xhtml:br />
+                                 <xhtml:i>// continue read from socket until buf only contains '.'</xhtml:i>
+                                 <xhtml:br />if (DOTLINE(buf))<xhtml:div style="margin-left:1em;">break;</xhtml:div>
+                                 <xhtml:br />else if (sscanf(buf, "%d %d", &amp;num, &amp;size) == 2)<xhtml:div style="margin-left:1em;">sizes[num - 1] = size;</xhtml:div>
+                              </xhtml:div>
+                           </xhtml:div>}<xhtml:div style="margin-left:1em;">...</xhtml:div>
+                        </xhtml:div>
+                     </xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>In this example the message number retrieved from the buffer could be a value that is outside the allowable range of indices for the array and could possibly be a negative number. Without proper validation of the value to be used for the array index an array overflow could occur and could potentially lead to unauthorized access to memory addresses and system crashes. The value of the array index should be validated to ensure that it is within the allowable range of indices for the array as in the following code.</Body_Text>
+               <Example_Code Nature="Good" Language="C">
+                  <xhtml:div>
+                     <xhtml:br />
+                     <xhtml:i>/* capture the sizes of all messages */</xhtml:i>
+                     <xhtml:br />int getsizes(int sock, int count, int *sizes) {<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>...<xhtml:br />char buf[BUFFER_SIZE];<xhtml:br />int ok;<xhtml:br />int num, size;<xhtml:br />
+                           <xhtml:br />
+                           <xhtml:i>// read values from socket and added to sizes array</xhtml:i>
+                           <xhtml:br />while ((ok = gen_recv(sock, buf, sizeof(buf))) == 0)<xhtml:br />{<xhtml:div style="margin-left:1em;">
+                              <xhtml:div>
+                                 <xhtml:br />
+                                 <xhtml:i>// continue read from socket until buf only contains '.'</xhtml:i>
+                                 <xhtml:br />if (DOTLINE(buf))<xhtml:div style="margin-left:1em;">break;</xhtml:div>
+                                 <xhtml:br />else if (sscanf(buf, "%d %d", &amp;num, &amp;size) == 2) {<xhtml:div style="margin-left:1em;">
+                                    <xhtml:div>if (num &gt; 0 &amp;&amp; num &lt;= (unsigned)count)<xhtml:div style="margin-left:1em;">sizes[num - 1] = size;</xhtml:div>
+                                       <xhtml:br />else<xhtml:div style="margin-left:1em;">
+                                          <xhtml:div>
+                                             <xhtml:br />
+                                             <xhtml:i>/* warn about possible attempt to induce buffer overflow */</xhtml:i>
+                                             <xhtml:br />report(stderr, "Warning: ignoring bogus data for message sizes returned by server.\n");</xhtml:div>
+                                       </xhtml:div>
+                                    </xhtml:div>
+                                 </xhtml:div>}</xhtml:div>
+                           </xhtml:div>}<xhtml:div style="margin-left:1em;">...</xhtml:div>
+                        </xhtml:div>
+                     </xhtml:div>}</xhtml:div>
+               </Example_Code>
+            </Demonstrative_Example>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-133">
+               <Intro_Text>In the following example the method displayProductSummary is called from a Web service servlet to retrieve product summary information for display to the user. The servlet obtains the integer value of the product number from the user and passes it to the displayProductSummary method. The displayProductSummary method passes the integer value of the product number to the getProductSummary method which obtains the product summary from the array object containing the project summaries using the integer value of the product number as the array index.</Intro_Text>
+               <Example_Code Nature="Bad" Language="Java">
+                  <xhtml:div>
+                     <xhtml:br />
+                     <xhtml:i>// Method called from servlet to obtain product information</xhtml:i>
+                     <xhtml:br />public String displayProductSummary(int index) {<xhtml:br />
+                     <xhtml:div style="margin-left:1em;">
+                        <xhtml:div>String productSummary = new String("");<xhtml:br />
+                           <xhtml:br />try {<xhtml:div style="margin-left:1em;">String productSummary = getProductSummary(index);</xhtml:div>
+                           <xhtml:br />
+                           <xhtml:br />} catch (Exception ex) {...}<xhtml:br />
+                           <xhtml:br />return productSummary;</xhtml:div>
+                     </xhtml:div>}<xhtml:br />
+                     <xhtml:br />public String getProductSummary(int index) {<xhtml:div style="margin-left:1em;">return products[index];</xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>In this example the integer value used as the array index that is provided by the user may be outside the allowable range of indices for the array which may provide unexpected results or cause the application to fail. The integer value used for the array index should be validated to ensure that it is within the allowable range of indices for the array as in the following code.</Body_Text>
+               <Example_Code Nature="Good" Language="Java">
+                  <xhtml:div>
+                     <xhtml:br />
+                     <xhtml:i>// Method called from servlet to obtain product information</xhtml:i>
+                     <xhtml:br />public String displayProductSummary(int index) {<xhtml:br />
+                     <xhtml:div style="margin-left:1em;">
+                        <xhtml:div>String productSummary = new String("");<xhtml:br />
+                           <xhtml:br />try {<xhtml:div style="margin-left:1em;">String productSummary = getProductSummary(index);</xhtml:div>
+                           <xhtml:br />
+                           <xhtml:br />} catch (Exception ex) {...}<xhtml:br />
+                           <xhtml:br />return productSummary;</xhtml:div>
+                     </xhtml:div>}<xhtml:br />
+                     <xhtml:br />public String getProductSummary(int index) {<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>String productSummary = "";<xhtml:br />
+                           <xhtml:br />if ((index &gt;= 0) &amp;&amp; (index &lt; MAX_PRODUCTS)) {<xhtml:div style="margin-left:1em;">productSummary = products[index];</xhtml:div>}<xhtml:br />else {<xhtml:div style="margin-left:1em;">System.err.println("index is out of bounds");<xhtml:br />throw new IndexOutOfBoundsException();</xhtml:div>}<xhtml:br />
+                           <xhtml:br />return productSummary;</xhtml:div>
+                     </xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>An alternative in Java would be to use one of the collection objects such as ArrayList that will automatically generate an exception if an attempt is made to access an array index that is out of bounds.</Body_Text>
+               <Example_Code Nature="Good" Language="Java">
+                  <xhtml:div>ArrayList productArray = new ArrayList(MAX_PRODUCTS);<xhtml:br />...<xhtml:br />try {<xhtml:div style="margin-left:1em;">productSummary = (String) productArray.get(index);</xhtml:div>} catch (IndexOutOfBoundsException ex) {...}</xhtml:div>
+               </Example_Code>
+            </Demonstrative_Example>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-90">
+               <Intro_Text>The following example asks a user for an offset into an array to select an item.</Intro_Text>
+               <Example_Code Nature="Bad" Language="C">
+                  <xhtml:div>
+                     <xhtml:br />int main (int argc, char **argv) {<xhtml:div style="margin-left:1em;">char *items[] = {"boat", "car", "truck", "train"};<xhtml:br />int index = GetUntrustedOffset();<xhtml:br />printf("User selected %s\n", items[index-1]);</xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>The programmer allows the user to specify which element in the list to select, however an attacker can provide an out-of-bounds offset, resulting in a buffer over-read (CWE-126).</Body_Text>
+            </Demonstrative_Example>
+         </Demonstrative_Examples>
+            <Observed_Examples>
+            <Observed_Example>
+               <Reference>CVE-2005-0369</Reference>
+               <Description>large ID in packet used as array index</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2005-0369</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2001-1009</Reference>
+               <Description>negative array index as argument to POP LIST command</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2001-1009</Link>
+            </Observed_Example>
+            </Observed_Examples>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Base level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+            <Notes>
+			    <Note Type="Maintenance">This entry is still under development and will continue to see updates and content improvements.</Note>
+			</Notes>
+			<Content_History>
+				<Submission>
+					<Submission_Name>CWE Content Team</Submission_Name>
+					<Submission_Organization>MITRE</Submission_Organization>
+					<Submission_Date>2020-06-24</Submission_Date>
+					<Submission_Version>4.1</Submission_Version>
+					<Submission_ReleaseDate>2020-02-24</Submission_ReleaseDate>
+				</Submission>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-03-15</Modification_Date>
+					<Modification_Version>4.4</Modification_Version>
+					<Modification_ReleaseDate>2021-03-15</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Detection_Factors, Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+			</Content_History>
+		</Weakness>
+      

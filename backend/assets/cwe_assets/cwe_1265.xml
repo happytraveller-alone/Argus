@@ -1,0 +1,141 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="1265" Name="Unintended Reentrant Invocation of Non-reentrant Code Via Nested Calls" Abstraction="Base" Structure="Simple" Status="Draft">
+         <Description>The product invokes code that is believed to be reentrant, but the code performs a call that unintentionally produces a nested invocation of the non-reentrant code.</Description>
+         <Extended_Description>In a complex product, a single function call may lead to many different possible code paths, some of which may involve deeply nested calls. It may be difficult to foresee all possible code paths that could emanate from a given function call, even if that call is assumed to be reentrant. In some systems, an external actor can manipulate inputs to the system and thereby achieve a wide range of possible control flows. This is frequently a concern in products that execute scripts from untrusted sources. Examples of such products are web browsers and PDF readers. A weakness is present when one of the possible code paths resulting from a function call alters program state that the original caller assumes to be unchanged during the call.</Extended_Description>
+         <Related_Weaknesses>
+            <Related_Weakness Nature="ChildOf" CWE_ID="662" View_ID="1000" Ordinal="Primary" />
+            <Related_Weakness Nature="PeerOf" CWE_ID="663" View_ID="1000" />
+            <Related_Weakness Nature="CanPrecede" CWE_ID="416" View_ID="1000" />
+         </Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+	 <Applicable_Platforms>
+	   <Language Class="Not Language-Specific" Prevalence="Undetermined" />
+	   <Technology Class="Not Technology-Specific" Prevalence="Undetermined" />
+	 </Applicable_Platforms>
+	 <Modes_Of_Introduction>
+	   <Introduction>
+	     <Phase>Implementation</Phase>
+	   </Introduction>
+	 </Modes_Of_Introduction>
+         <Common_Consequences>
+            <Consequence>
+               <Scope>Integrity</Scope>
+               <Impact>Unexpected State</Impact>
+               <Likelihood>Unknown</Likelihood>
+               <Note>Exploitation of this weakness can leave the application in an unexpected state and cause variables to be reassigned before the first invocation has completed. This may eventually result in memory corruption or unexpected code execution.</Note>
+            </Consequence>
+         </Common_Consequences>
+		 <Potential_Mitigations>
+			<Mitigation>
+				<Phase>Architecture and Design</Phase>
+				<Description>When architecting a system that will execute untrusted code in response to events, consider executing the untrusted event handlers asynchronously (asynchronous message passing) as opposed to executing them synchronously at the time each event fires. The untrusted code should execute at the start of the next iteration of the thread's message loop. In this way, calls into non-reentrant code are strictly serialized, so that each operation completes fully before the next operation begins. Special attention must be paid to all places where type coercion may result in script execution. Performing all needed coercions at the very beginning of an operation can help reduce the chance of operations executing at unexpected junctures.</Description>
+				<Effectiveness>High</Effectiveness>
+			</Mitigation>
+			<Mitigation>
+				<Phase>Implementation</Phase>
+				<Description>Make sure the code (e.g., function or class) in question is reentrant by not leveraging non-local data, not modifying its own code, and not calling other non-reentrant code.</Description>
+				<Effectiveness>High</Effectiveness>
+			</Mitigation>
+		 </Potential_Mitigations>
+		 <Demonstrative_Examples>
+			<Demonstrative_Example>
+				<Intro_Text>The implementation of the Widget class in the following C++ code is an example of code that is not designed to be reentrant. If an invocation of a method of Widget inadvertently produces a second nested invocation of a method of Widget, then data member backgroundImage may unexpectedly change during execution of the outer call.</Intro_Text>
+				<Example_Code Language="C++" Nature="Bad"><xhtml:div>class Widget<xhtml:br />{<xhtml:div style="margin-left:1em;">private:<xhtml:div style="margin-left:1em;">Image* backgroundImage;</xhtml:div><xhtml:br />public:<xhtml:div style="margin-left:1em;">void click()<xhtml:br />{<xhtml:div style="margin-left:1em;">if (backgroundImage)<xhtml:br />{<xhtml:div style="margin-left:1em;">backgroundImage-&gt;click();</xhtml:div>}</xhtml:div>}<xhtml:br /><xhtml:br />void changeBackgroundImage(Image* newImage)<xhtml:br />{<xhtml:div style="margin-left:1em;">if (backgroundImage)<xhtml:br />{<xhtml:div style="margin-left:1em;">delete backgroundImage;</xhtml:div>}<xhtml:br />backgroundImage = newImage;</xhtml:div>}</xhtml:div></xhtml:div>}<xhtml:br /><xhtml:br />class Image<xhtml:br />{<xhtml:div style="margin-left:1em;">public:<xhtml:div style="margin-left:1em;">void click()<xhtml:br />{<xhtml:div style="margin-left:1em;">scriptEngine-&gt;fireOnImageClick();<xhtml:br />/* perform some operations using "this" pointer */</xhtml:div>}</xhtml:div></xhtml:div>}</xhtml:div></Example_Code>
+				<Body_Text>Looking closer at this example, Widget::click() calls backgroundImage-&gt;click(), which in turn calls scriptEngine-&gt;fireOnImageClick(). The code within fireOnImageClick() invokes the appropriate script handler routine as defined by the document being rendered. In this scenario this script routine is supplied by an adversary and this malicious script makes a call to Widget::changeBackgroundImage(), deleting the Image object pointed to by backgroundImage. When control returns to Image::click, the function's backgroundImage "this" pointer (which is the former value of backgroundImage) is a dangling pointer. The root of this weakness is that while one operation on Widget (click) is in the midst of executing, a second operation on the Widget object may be invoked (in this case, the second invocation is a call to different method, namely changeBackgroundImage) that modifies the non-local variable.</Body_Text>
+			</Demonstrative_Example>
+			<Demonstrative_Example>
+				<Intro_Text>This is another example of C++ code that is not designed to be reentrant.</Intro_Text>
+				<Example_Code Language="C++" Nature="Bad"><xhtml:div>class Request<xhtml:br />{<xhtml:div style="margin-left:1em;">private:<xhtml:div style="margin-left:1em;">std::string uri;<xhtml:br />/* ... */</xhtml:div><xhtml:br />public:<xhtml:div style="margin-left:1em;">void setup(ScriptObject* _uri)<xhtml:br />{<xhtml:div style="margin-left:1em;">this-&gt;uri = scriptEngine-&gt;coerceToString(_uri);<xhtml:br />/* ... */</xhtml:div>}<xhtml:br /><xhtml:br />void send(ScriptObject* _data)<xhtml:br />{<xhtml:div style="margin-left:1em;">Credentials credentials = GetCredentials(uri);<xhtml:br />std::string data = scriptEngine-&gt;coerceToString(_data);<xhtml:br />doSend(uri, credentials, data);</xhtml:div>}</xhtml:div></xhtml:div>}</xhtml:div></Example_Code>
+				<Body_Text>The expected order of operations is a call to Request::setup(), followed by a call to Request::send(). Request::send() calls scriptEngine-&gt;coerceToString(_data) to coerce a script-provided parameter into a string. This operation may produce script execution. For example, if the script language is ECMAScript, arbitrary script execution may result if _data is an adversary-supplied ECMAScript object having a custom toString method. If the adversary's script makes a new call to Request::setup, then when control returns to Request::send, the field uri and the local variable credentials will no longer be consistent with one another. As a result, credentials for one resource will be shared improperly with a different resource. The root of this weakness is that while one operation on Request (send) is in the midst of executing, a second operation may be invoked (setup).</Body_Text>
+			</Demonstrative_Example>
+		 </Demonstrative_Examples>
+		 <Observed_Examples>
+			<Observed_Example>
+				<Reference>CVE-2014-1772</Reference>
+				<Description>In this vulnerability, by registering a malicious onerror handler, an adversary can produce unexpected re-entrance of a CDOMRange object. [REF-1098]</Description>
+				<Link>https://www.cve.org/CVERecord?id=CVE-2014-1772</Link>
+			</Observed_Example>
+			<Observed_Example>
+				<Reference>CVE-2018-8174</Reference>
+				<Description>This CVE covers several vulnerable scenarios enabled by abuse of the Class_Terminate feature in Microsoft VBScript. In one scenario, Class_Terminate is used to produce an undesirable re-entrance of ScriptingDictionary during execution of that object's destructor. In another scenario, a vulnerable condition results from a recursive entrance of a property setter method. This recursive invocation produces a second, spurious call to the Release method of a reference-counted object, causing a UAF when that object is freed prematurely. This vulnerability pattern has been popularized as "Double Kill". [REF-1099]</Description>
+				<Link>https://www.cve.org/CVERecord?id=CVE-2018-8174</Link>
+			</Observed_Example>
+		 </Observed_Examples>
+         <Related_Attack_Patterns>
+            <Related_Attack_Pattern CAPEC_ID="74" />
+         </Related_Attack_Patterns>
+         <References>
+            <Reference External_Reference_ID="REF-1098" />
+            <Reference External_Reference_ID="REF-1099" />
+         </References>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Base level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+         <Content_History>
+            <Submission>
+               <Submission_Name>Simon Zuckerbraun</Submission_Name>
+               <Submission_Organization>Trend Micro</Submission_Organization>
+               <Submission_Date>2018-12-20</Submission_Date>
+               <Submission_Version>4.1</Submission_Version>
+               <Submission_ReleaseDate>2020-02-24</Submission_ReleaseDate>
+            </Submission>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-08-20</Modification_Date>
+					<Modification_Version>4.2</Modification_Version>
+					<Modification_ReleaseDate>2020-08-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples, Related_Attack_Patterns</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-10-13</Modification_Date>
+					<Modification_Version>4.9</Modification_Version>
+					<Modification_ReleaseDate>2022-10-13</Modification_ReleaseDate>
+					<Modification_Comment>updated References</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-01-31</Modification_Date>
+					<Modification_Version>4.10</Modification_Version>
+					<Modification_ReleaseDate>2023-01-31</Modification_ReleaseDate>
+					<Modification_Comment>updated Description</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated References, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Applicable_Platforms, Description, Relationships, Time_of_Introduction</Modification_Comment>
+				</Modification>
+         </Content_History>
+      </Weakness>
+      

@@ -1,0 +1,395 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="405" Name="Asymmetric Resource Consumption (Amplification)" Abstraction="Class" Structure="Simple" Status="Incomplete">
+         <Description>The product does not properly control situations in which an adversary can cause the product to consume or produce excessive resources without requiring the adversary to invest equivalent work or otherwise prove authorization, i.e., the adversary's influence is "asymmetric."</Description>
+         <Extended_Description>This can lead to poor performance due to "amplification" of resource consumption, typically in a non-linear fashion.  This situation is worsened if the product allows malicious users or attackers to consume more resources than their access level permits.</Extended_Description>
+         <Related_Weaknesses>
+            <Related_Weakness Nature="ChildOf" CWE_ID="400" View_ID="1000" Ordinal="Primary" />
+         </Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Resultant</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+         <Applicable_Platforms>
+            <Language Class="Not Language-Specific" Prevalence="Undetermined" />
+            <Operating_System Class="Not OS-Specific" Prevalence="Undetermined" />
+            <Architecture Class="Not Architecture-Specific" Prevalence="Undetermined" />
+            <Technology Class="Not Technology-Specific" Prevalence="Undetermined" />
+            <Technology Class="Client Server" Prevalence="Undetermined" />
+         </Applicable_Platforms>
+         <Modes_Of_Introduction>
+            <Introduction>
+               <Phase>Architecture and Design</Phase>
+            </Introduction>
+            <Introduction>
+               <Phase>Implementation</Phase>
+            </Introduction>
+            <Introduction>
+               <Phase>Operation</Phase>
+            </Introduction>
+         </Modes_Of_Introduction>
+         <Common_Consequences>
+            <Consequence>
+               <Scope>Availability</Scope>
+               <Impact>DoS: Amplification</Impact>
+               <Impact>DoS: Resource Consumption (CPU)</Impact>
+               <Impact>DoS: Resource Consumption (Memory)</Impact>
+               <Impact>DoS: Resource Consumption (Other)</Impact>
+	       <Likelihood>High</Likelihood>
+               <Note>Sometimes this is a factor in "flood" attacks, but other types of amplification exist.</Note>
+            </Consequence>
+         </Common_Consequences>
+         <Potential_Mitigations>
+            <Mitigation>
+               <Phase>Architecture and Design</Phase>
+               <Description>An application must make resources available to a client commensurate with the client's access level.</Description>
+            </Mitigation>
+            <Mitigation>
+               <Phase>Architecture and Design</Phase>
+               <Description>An application must, at all times, keep track of allocated resources and meter their usage appropriately.</Description>
+            </Mitigation>
+            <Mitigation>
+               <Phase>System Configuration</Phase>
+               <Description>Consider disabling resource-intensive algorithms on the server side, such as Diffie-Hellman key exchange.</Description>
+	       <Effectiveness>High</Effectiveness>
+	       <Effectiveness_Notes>Business requirements may prevent disabling resource-intensive algorithms.</Effectiveness_Notes>
+            </Mitigation>
+         </Potential_Mitigations>
+	 <Demonstrative_Examples>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-113">
+               <Intro_Text>This code listens on a port for DNS requests and sends the result to the requesting address.</Intro_Text>
+               <Example_Code Nature="Bad" Language="Python">
+                  <xhtml:div>sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)<xhtml:br />sock.bind( (UDP_IP,UDP_PORT) )<xhtml:br />while true:<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>data = sock.recvfrom(1024)<xhtml:br />if not data:<xhtml:div style="margin-left:1em;">break</xhtml:div>
+                           <xhtml:br />(requestIP, nameToResolve) = parseUDPpacket(data)<xhtml:br />record = resolveName(nameToResolve)<xhtml:br />sendResponse(requestIP,record)</xhtml:div>
+                     </xhtml:div>
+                  </xhtml:div>
+               </Example_Code>
+               <Body_Text>This code sends a DNS record to a requesting IP address. UDP allows the source IP address to be easily changed ('spoofed'), thus allowing an attacker to redirect responses to a target, which may be then be overwhelmed by the network traffic.</Body_Text>
+            </Demonstrative_Example>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-157">
+               <Intro_Text>This function prints the contents of a specified file requested by a user.</Intro_Text>
+               <Example_Code Nature="Bad" Language="PHP">
+                  <xhtml:div>function printFile($username,$filename){<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>
+                           <xhtml:br />
+                           <xhtml:i>//read file into string</xhtml:i>
+                           <xhtml:br />$file = file_get_contents($filename);<xhtml:br />if ($file &amp;&amp; isOwnerOf($username,$filename)){<xhtml:div style="margin-left:1em;">echo $file;<xhtml:br />return true;</xhtml:div>}<xhtml:br />else{<xhtml:div style="margin-left:1em;">echo 'You are not authorized to view this file';</xhtml:div>}<xhtml:br />return false;</xhtml:div>
+                     </xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>This code first reads a specified file into memory, then prints the file if the user is authorized to see its contents. The read of the file into memory may be resource intensive and is unnecessary if the user is not allowed to see the file anyway.</Body_Text>
+            </Demonstrative_Example>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-53">
+               <Intro_Text>The DTD and the very brief XML below illustrate what is meant by an XML bomb. The ZERO entity contains one character, the letter A. The choice of entity name ZERO is being used to indicate length equivalent to that exponent on two, that is, the length of ZERO is 2^0. Similarly, ONE refers to ZERO twice, therefore the XML parser will expand ONE to a length of 2, or 2^1. Ultimately, we reach entity THIRTYTWO, which will expand to 2^32 characters in length, or 4 GB, probably consuming far more data than expected.</Intro_Text>
+               <Example_Code Nature="Attack" Language="XML">
+                  <xhtml:div>&lt;?xml version="1.0"?&gt;<xhtml:br />&lt;!DOCTYPE MaliciousDTD [<xhtml:br />&lt;!ENTITY ZERO "A"&gt;<xhtml:br />&lt;!ENTITY ONE "&amp;ZERO;&amp;ZERO;"&gt;<xhtml:br />&lt;!ENTITY TWO "&amp;ONE;&amp;ONE;"&gt;<xhtml:br />...<xhtml:br />&lt;!ENTITY THIRTYTWO "&amp;THIRTYONE;&amp;THIRTYONE;"&gt;<xhtml:br />]&gt;<xhtml:br />&lt;data&gt;&amp;THIRTYTWO;&lt;/data&gt;</xhtml:div>
+               </Example_Code>
+            </Demonstrative_Example>
+	   <Demonstrative_Example Demonstrative_Example_ID="DX-158">
+             <Intro_Text>This example attempts to check if an input string is a "sentence" [REF-1164].</Intro_Text>
+             <Example_Code Nature="Bad" Language="JavaScript">
+               var test_string = "Bad characters: $@#";<xhtml:br />
+               var bad_pattern  = /^(\w+\s?)*$/i;<xhtml:br />
+               var result = test_string.search(bad_pattern);
+             </Example_Code>
+             <Body_Text><xhtml:p>The regular expression has a vulnerable backtracking clause inside (\w+\s?)*$ which can be triggered to cause a Denial of Service by processing particular phrases.</xhtml:p>
+	     <xhtml:p>To fix the backtracking problem, backtracking is removed with the ?= portion of the expression which changes it to a lookahead and the \2 which prevents the backtracking. The modified example is:</xhtml:p></Body_Text>
+             <Example_Code Nature="Good" Language="JavaScript">
+               var test_string = "Bad characters: $@#";<xhtml:br />
+               var good_pattern  = /^((?=(\w+))\2\s?)*$/i;<xhtml:br />
+               var result = test_string.search(good_pattern);
+             </Example_Code>
+             <Body_Text>Note that [REF-1164] has a more thorough (and lengthy) explanation of everything going on within the RegEx.</Body_Text>
+	   </Demonstrative_Example>
+	   <Demonstrative_Example>
+	     <Intro_Text>An adversary can cause significant resource
+	     consumption on a server by filtering the cryptographic
+	     algorithms offered by the client to the ones that are the
+	     most resource-intensive on the server side. After
+	     discovering which cryptographic algorithms are supported
+	     by the server, a malicious client can send the initial
+	     cryptographic handshake messages that contains only the
+	     resource-intensive algorithms. For some cryptographic
+	     protocols, these messages can be completely
+	     prefabricated, as the resource-intensive part of the
+	     handshake happens on the server-side first (such as TLS),
+	     rather than on the client side. In the case of
+	     cryptographic protocols where the resource-intensive part
+	     should happen on the client-side first (such as SSH), a
+	     malicious client can send a forged/precalculated
+	     computation result, which seems correct to the server, so
+	     the resource-intensive part of the handshake is going to
+	     happen on the server side. A malicious client is required
+	     to send only the initial messages of a cryptographic
+	     handshake to initiate the resource-consuming part of the
+	     cryptographic handshake. These messages are usually
+	     small, and generating them requires minimal computational
+	     effort, enabling a denial-of-service attack. An
+	     additional risk is the fact that higher key size
+	     increases the effectiveness of the attack. Cryptographic
+	     protocols where the clients have influence over the size
+	     of the used key (such as TLS 1.3 or SSH) are most at
+	     risk, as the client can enforce the highest key size
+	     supported by the server.</Intro_Text>
+	   </Demonstrative_Example>
+	 </Demonstrative_Examples>
+	 <Observed_Examples>
+           <Observed_Example>
+             <Reference>CVE-1999-0513</Reference>
+             <Description>Classic "Smurf" attack, using spoofed ICMP packets to broadcast addresses.</Description>
+             <Link>https://www.cve.org/CVERecord?id=CVE-1999-0513</Link>
+           </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2003-1564</Reference>
+               <Description>Parsing library allows XML bomb</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2003-1564</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2004-2458</Reference>
+               <Description>Tool creates directories before authenticating user.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2004-2458</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2020-10735</Reference>
+               <Description>Python has "quadratic complexity" issue when converting string to int with many digits in unexpected bases</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2020-10735</Link>
+            </Observed_Example>
+            <Observed_Example>
+              <Reference>CVE-2020-5243</Reference>
+              <Description>server allows ReDOS with crafted User-Agent strings, due to overlapping capture groups that cause excessive backtracking.</Description>
+              <Link>https://www.cve.org/CVERecord?id=CVE-2020-5243</Link>
+            </Observed_Example>
+            <Observed_Example>
+              <Reference>CVE-2013-5211</Reference>
+              <Description>composite: NTP feature generates large responses (high amplification factor) with spoofed UDP source addresses.</Description>
+              <Link>https://www.cve.org/CVERecord?id=CVE-2013-5211</Link>
+            </Observed_Example>
+	    <Observed_Example>
+	      <Reference>CVE-2002-20001</Reference>
+	      <Description>Diffie-Hellman (DHE) Key Agreement Protocol allows attackers to send arbitrary numbers that are not public keys, which causes the server to perform expensive, unnecessary computation of modular exponentiation.</Description>
+	      <Link>https://www.cve.org/CVERecord?id=CVE-2002-20001</Link>
+	    </Observed_Example>
+	    <Observed_Example>
+	      <Reference>CVE-2022-40735</Reference>
+	      <Description>The Diffie-Hellman Key Agreement Protocol allows use of long exponents, which are more computationally expensive than using certain "short exponents" with particular properties.</Description>
+	      <Link>https://www.cve.org/CVERecord?id=CVE-2022-40735</Link>
+	    </Observed_Example>
+	 </Observed_Examples>
+         <Taxonomy_Mappings>
+            <Taxonomy_Mapping Taxonomy_Name="PLOVER">
+               <Entry_Name>Asymmetric resource consumption (amplification)</Entry_Name>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="OWASP Top Ten 2004">
+               <Entry_ID>A9</Entry_ID>
+               <Entry_Name>Denial of Service</Entry_Name>
+               <Mapping_Fit>CWE More Specific</Mapping_Fit>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="WASC">
+               <Entry_ID>41</Entry_ID>
+               <Entry_Name>XML Attribute Blowup</Entry_Name>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="The CERT Oracle Secure Coding Standard for Java (2011)">
+               <Entry_ID>TPS00-J</Entry_ID>
+               <Entry_Name>Use thread pools to enable graceful degradation of service during traffic bursts</Entry_Name>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="The CERT Oracle Secure Coding Standard for Java (2011)">
+               <Entry_ID>FIO04-J</Entry_ID>
+               <Entry_Name>Release resources when they are no longer needed</Entry_Name>
+            </Taxonomy_Mapping>
+         </Taxonomy_Mappings>
+         <References>
+           <Reference External_Reference_ID="REF-1164" />
+         </References>
+         <Mapping_Notes>
+            <Usage>Allowed-with-Review</Usage>
+            <Rationale>This CWE entry is a Class and might have Base-level children that would be more appropriate</Rationale>
+            <Comments>Examine children of this entry to see if there is a better fit</Comments>
+            <Reasons>
+               <Reason Type="Abstraction" />
+            </Reasons>
+         </Mapping_Notes>
+         <Content_History>
+            <Submission>
+               <Submission_Name>PLOVER</Submission_Name>
+               <Submission_Date>2006-07-19</Submission_Date>
+               <Submission_Version>Draft 3</Submission_Version>
+               <Submission_ReleaseDate>2006-07-19</Submission_ReleaseDate>
+            </Submission>
+            <Modification>
+               <Modification_Name>Eric Dalci</Modification_Name>
+               <Modification_Organization>Cigital</Modification_Organization>
+               <Modification_Date>2008-07-01</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>updated Time_of_Introduction</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2008-09-08</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships, Other_Notes, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2008-10-14</Modification_Date>
+               <Modification_Version>1.0.1</Modification_Version>
+               <Modification_ReleaseDate>2008-10-14</Modification_ReleaseDate>
+               <Modification_Comment>updated Description</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2009-07-27</Modification_Date>
+               <Modification_Version>1.5</Modification_Version>
+               <Modification_ReleaseDate>2009-07-27</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences, Other_Notes</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2010-02-16</Modification_Date>
+               <Modification_Version>1.8</Modification_Version>
+               <Modification_ReleaseDate>2010-02-16</Modification_ReleaseDate>
+               <Modification_Comment>updated Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2010-12-13</Modification_Date>
+               <Modification_Version>1.11</Modification_Version>
+               <Modification_ReleaseDate>2010-12-13</Modification_ReleaseDate>
+               <Modification_Comment>updated Description</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-06-01</Modification_Date>
+               <Modification_Version>1.13</Modification_Version>
+               <Modification_ReleaseDate>2011-06-01</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences, Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-06-27</Modification_Date>
+               <Modification_Version>2.0</Modification_Version>
+               <Modification_ReleaseDate>2011-06-27</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2012-05-11</Modification_Date>
+               <Modification_Version>2.2</Modification_Version>
+               <Modification_ReleaseDate>2012-05-15</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2012-10-30</Modification_Date>
+               <Modification_Version>2.3</Modification_Version>
+               <Modification_ReleaseDate>2012-10-30</Modification_ReleaseDate>
+               <Modification_Comment>updated Potential_Mitigations</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2014-07-30</Modification_Date>
+               <Modification_Version>2.8</Modification_Version>
+               <Modification_ReleaseDate>2014-07-31</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2015-12-07</Modification_Date>
+               <Modification_Version>2.9</Modification_Version>
+               <Modification_ReleaseDate>2015-12-07</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2017-11-08</Modification_Date>
+               <Modification_Version>3.0</Modification_Version>
+               <Modification_ReleaseDate>2017-11-08</Modification_ReleaseDate>
+               <Modification_Comment>updated Applicable_Platforms, Functional_Areas</Modification_Comment>
+            </Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2019-01-03</Modification_Date>
+					<Modification_Version>3.2</Modification_Version>
+					<Modification_ReleaseDate>2019-01-03</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships, Taxonomy_Mappings</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2019-06-20</Modification_Date>
+					<Modification_Version>3.3</Modification_Version>
+					<Modification_ReleaseDate>2019-06-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-02-24</Modification_Date>
+					<Modification_Version>4.0</Modification_Version>
+					<Modification_ReleaseDate>2020-02-24</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-01-31</Modification_Date>
+					<Modification_Version>4.10</Modification_Version>
+					<Modification_ReleaseDate>2023-01-31</Modification_ReleaseDate>
+					<Modification_Comment>updated Applicable_Platforms, Common_Consequences, Demonstrative_Examples, Description, Observed_Examples, Potential_Mitigations, References, Time_of_Introduction</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2024-02-29</Modification_Date>
+					<Modification_Version>4.14</Modification_Version>
+					<Modification_ReleaseDate>2024-02-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+            <Contribution Type="Content">
+               <Contribution_Name>Szilárd Pfeiffer</Contribution_Name>
+               <Contribution_Organization>Balasys IT Security</Contribution_Organization>
+               <Contribution_Date>2021-11-11</Contribution_Date>
+               <Contribution_Comment>Submitted content that led to modifications in applicable platforms, common consequences, potential mitigations, demonstrative examples, observed examples.</Contribution_Comment>
+            </Contribution>
+         </Content_History>
+      </Weakness>
+      

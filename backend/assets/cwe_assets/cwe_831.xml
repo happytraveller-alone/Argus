@@ -1,0 +1,192 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="831" Name="Signal Handler Function Associated with Multiple Signals" Abstraction="Variant" Structure="Simple" Status="Incomplete">
+         <Description>The product defines a function that is used as a handler for more than one signal.</Description>
+         <Extended_Description>
+            <xhtml:p>While sometimes intentional and safe, when the same function is used to handle multiple signals, a race condition could occur if the function uses any state outside of its local declaration, such as global variables or non-reentrant functions, or has any side effects.</xhtml:p>
+            <xhtml:p>An attacker could send one signal that invokes the handler function; in many OSes, this will typically prevent the same signal from invoking the handler again, at least until the handler function has completed execution. However, the attacker could then send a different signal that is associated with the same handler function. This could interrupt the original handler function while it is still executing. If there is shared state, then the state could be corrupted. This can lead to a variety of potential consequences depending on context, including denial of service and code execution.</xhtml:p>
+            <xhtml:p>Another rarely-explored possibility arises when the signal handler is only designed to be executed once (if at all). By sending multiple signals, an attacker could invoke the function more than once. This may generate extra, unintended side effects. A race condition might not even be necessary; the attacker could send one signal, wait until it is handled, then send the other signal.</xhtml:p>
+         </Extended_Description>
+         <Related_Weaknesses>
+            <Related_Weakness Nature="ChildOf" CWE_ID="364" View_ID="1000" Ordinal="Primary" />
+         </Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+         <Applicable_Platforms>
+            <Language Class="Not Language-Specific" Prevalence="Undetermined" />
+         </Applicable_Platforms>
+         <Modes_Of_Introduction>
+            <Introduction>
+               <Phase>Implementation</Phase>
+			</Introduction>
+		 </Modes_Of_Introduction>
+         <Common_Consequences>
+            <Consequence>
+               <Scope>Availability</Scope>
+               <Scope>Integrity</Scope>
+               <Scope>Confidentiality</Scope>
+               <Scope>Access Control</Scope>
+               <Scope>Other</Scope>
+               <Impact>DoS: Crash, Exit, or Restart</Impact>
+               <Impact>Execute Unauthorized Code or Commands</Impact>
+               <Impact>Read Application Data</Impact>
+               <Impact>Gain Privileges or Assume Identity</Impact>
+               <Impact>Bypass Protection Mechanism</Impact>
+               <Impact>Varies by Context</Impact>
+               <Note>The most common consequence will be a corruption of the state of the product, possibly leading to a crash or exit. However, if the signal handler is operating on state variables for security relevant libraries or protection mechanisms, the consequences can be far more severe, including protection mechanism bypass, privilege escalation, or information exposure.</Note>
+            </Consequence>
+         </Common_Consequences>
+         <Demonstrative_Examples>
+            <Demonstrative_Example>
+               <Intro_Text>This code registers the same signal handler function with two different signals.</Intro_Text>
+               <Example_Code Nature="Bad" Language="C">
+                  <xhtml:div>void handler (int sigNum) {<xhtml:div style="margin-left:1em;">...</xhtml:div>}<xhtml:br />
+                     <xhtml:br />int main (int argc, char* argv[]) {<xhtml:div style="margin-left:1em;">signal(SIGUSR1, handler)<xhtml:br />signal(SIGUSR2, handler)</xhtml:div>}</xhtml:div>
+               </Example_Code>
+            </Demonstrative_Example>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-26">
+               <Intro_Text>This code registers the same signal handler function with two different signals (CWE-831). If those signals are sent to the process, the handler creates a log message (specified in the first argument to the program) and exits.</Intro_Text>
+               <Example_Code Nature="Bad" Language="C">
+                  <xhtml:div>char *logMessage;<xhtml:br />
+                     <xhtml:br />void handler (int sigNum) {<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>syslog(LOG_NOTICE, "%s\n", logMessage);<xhtml:br />free(logMessage);<xhtml:br />
+                           <xhtml:i>/* artificially increase the size of the timing window to make demonstration of this weakness easier. */</xhtml:i>
+                           <xhtml:br />
+                           <xhtml:br />sleep(10);<xhtml:br />exit(0);</xhtml:div>
+                     </xhtml:div>}<xhtml:br />
+                     <xhtml:br />int main (int argc, char* argv[]) {<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>logMessage = strdup(argv[1]);<xhtml:br />
+                           <xhtml:i>/* Register signal handlers. */</xhtml:i>
+                           <xhtml:br />
+                           <xhtml:br />signal(SIGHUP, handler);<xhtml:br />signal(SIGTERM, handler);<xhtml:br />
+                           <xhtml:i>/* artificially increase the size of the timing window to make demonstration of this weakness easier. */</xhtml:i>
+                           <xhtml:br />
+                           <xhtml:br />sleep(10);</xhtml:div>
+                     </xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>The handler function uses global state (globalVar and logMessage), and it can be called by both the SIGHUP and SIGTERM signals. An attack scenario might follow these lines:</Body_Text>
+               <Body_Text>
+                  <xhtml:ul>
+                     <xhtml:li>
+                        <xhtml:div>The program begins execution, initializes logMessage, and registers the signal handlers for SIGHUP and SIGTERM.</xhtml:div>
+                     </xhtml:li>
+                     <xhtml:li>
+                        <xhtml:div>The program begins its "normal" functionality, which is simplified as sleep(), but could be any functionality that consumes some time.</xhtml:div>
+                     </xhtml:li>
+                     <xhtml:li>
+                        <xhtml:div>The attacker sends SIGHUP, which invokes handler (call this "SIGHUP-handler").</xhtml:div>
+                     </xhtml:li>
+                     <xhtml:li>
+                        <xhtml:div>SIGHUP-handler begins to execute, calling syslog().</xhtml:div>
+                     </xhtml:li>
+                     <xhtml:li>
+                        <xhtml:div>syslog() calls malloc(), which is non-reentrant. malloc() begins to modify metadata to manage the heap.</xhtml:div>
+                     </xhtml:li>
+                     <xhtml:li>
+                        <xhtml:div>The attacker then sends SIGTERM.</xhtml:div>
+                     </xhtml:li>
+                     <xhtml:li>
+                        <xhtml:div>SIGHUP-handler is interrupted, but syslog's malloc call is still executing and has not finished modifying its metadata.</xhtml:div>
+                     </xhtml:li>
+                     <xhtml:li>
+                        <xhtml:div>The SIGTERM handler is invoked.</xhtml:div>
+                     </xhtml:li>
+                     <xhtml:li>
+                        <xhtml:div>SIGTERM-handler records the log message using syslog(), then frees the logMessage variable.</xhtml:div>
+                     </xhtml:li>
+                  </xhtml:ul>
+               </Body_Text>
+               <Body_Text>At this point, the state of the heap is uncertain, because malloc is still modifying the metadata for the heap; the metadata might be in an inconsistent state. The SIGTERM-handler call to free() is assuming that the metadata is inconsistent, possibly causing it to write data to the wrong location while managing the heap. The result is memory corruption, which could lead to a crash or even code execution, depending on the circumstances under which the code is running.</Body_Text>
+               <Body_Text>Note that this is an adaptation of a classic example as originally presented by Michal Zalewski [REF-360]; the original example was shown to be exploitable for code execution.</Body_Text>
+               <Body_Text>Also note that the strdup(argv[1]) call contains a potential buffer over-read (CWE-126) if the program is called without any arguments, because argc would be 0, and argv[1] would point outside the bounds of the array.</Body_Text>
+            </Demonstrative_Example>
+         </Demonstrative_Examples>
+         <References>
+            <Reference External_Reference_ID="REF-360" />
+            <Reference External_Reference_ID="REF-361" />
+         </References>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Variant level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+         <Content_History>
+            <Submission>
+               <Submission_Name>CWE Content Team</Submission_Name>
+               <Submission_Organization>MITRE</Submission_Organization>
+               <Submission_Date>2010-12-12</Submission_Date>
+               <Submission_Version>1.11</Submission_Version>
+               <Submission_ReleaseDate>2010-12-13</Submission_ReleaseDate>
+            </Submission>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-06-01</Modification_Date>
+               <Modification_Version>1.13</Modification_Version>
+               <Modification_ReleaseDate>2011-06-01</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-06-27</Modification_Date>
+               <Modification_Version>2.0</Modification_Version>
+               <Modification_ReleaseDate>2011-06-27</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2014-06-23</Modification_Date>
+               <Modification_Version>2.7</Modification_Version>
+               <Modification_ReleaseDate>2014-06-23</Modification_ReleaseDate>
+               <Modification_Comment>updated Demonstrative_Examples, References</Modification_Comment>
+            </Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-02-24</Modification_Date>
+					<Modification_Version>4.0</Modification_Version>
+					<Modification_ReleaseDate>2020-02-24</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-01-31</Modification_Date>
+					<Modification_Version>4.10</Modification_Version>
+					<Modification_ReleaseDate>2023-01-31</Modification_ReleaseDate>
+					<Modification_Comment>updated Common_Consequences, Description</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated References, Relationships, Type</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Applicable_Platforms, Time_of_Introduction, Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+         </Content_History>
+      </Weakness>
+      

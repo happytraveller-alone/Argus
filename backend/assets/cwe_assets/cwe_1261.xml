@@ -1,0 +1,144 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="1261" Name="Improper Handling of Single Event Upsets" Abstraction="Base" Structure="Simple" Status="Draft">
+         <Description>The hardware logic does not effectively handle when single-event upsets (SEUs) occur.</Description>
+         <Extended_Description>
+            <xhtml:p>Technology trends such as CMOS-transistor down-sizing, use of 
+            new materials, and system-on-chip architectures continue to increase the 
+            sensitivity of systems to soft errors. These errors are random, and 
+            their causes might be internal (e.g., interconnect coupling) or external 
+            (e.g., cosmic radiation). These soft errors are not permanent in nature 
+            and cause temporary bit flips known as single-event upsets (SEUs). 
+            SEUs are induced errors in circuits caused when charged particles lose 
+            energy by ionizing the medium through which they pass, leaving behind a 
+            wake of electron-hole pairs that cause temporary failures. If these 
+            failures occur in security-sensitive modules in a chip, it might 
+            compromise the security guarantees of the chip. For instance, these 
+            temporary failures could be bit flips that change the privilege of
+	    a regular user to root.</xhtml:p>
+         </Extended_Description>
+         <Related_Weaknesses>
+				<Related_Weakness Nature="ChildOf" CWE_ID="1384" View_ID="1000" Ordinal="Primary" />
+				<Related_Weakness Nature="PeerOf" CWE_ID="1254" View_ID="1000" Ordinal="Primary" />
+			</Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+         <Applicable_Platforms>	
+				<Language Class="Not Language-Specific" Prevalence="Undetermined" />
+				<Operating_System Class="Not OS-Specific" Prevalence="Undetermined" />
+				<Architecture Class="Not Architecture-Specific" Prevalence="Undetermined" />
+            <Technology Class="Not Technology-Specific" Prevalence="Undetermined" />
+         </Applicable_Platforms>
+         <Modes_Of_Introduction>
+            <Introduction>
+               <Phase>Architecture and Design</Phase>
+            </Introduction>
+            <Introduction>
+               <Phase>Implementation</Phase>
+            </Introduction>
+         </Modes_Of_Introduction>
+         <Common_Consequences>
+            <Consequence>
+               <Scope>Availability</Scope>
+               <Scope>Access Control</Scope>
+               <Impact>DoS: Crash, Exit, or Restart</Impact>
+               <Impact>DoS: Instability</Impact>
+               <Impact>Gain Privileges or Assume Identity</Impact>
+               <Impact>Bypass Protection Mechanism</Impact>
+            </Consequence>
+         </Common_Consequences>
+         <Potential_Mitigations>
+				<Mitigation>
+					<Phase>Architecture and Design</Phase>
+					<Description>
+						<xhtml:p>Implement triple-modular redundancy around security-sensitive modules.</xhtml:p>
+					</Description>
+				</Mitigation>
+				<Mitigation>
+					<Phase>Architecture and Design</Phase>
+					<Description>
+						<xhtml:p>SEUs mostly affect SRAMs.  For SRAMs storing security-critical data, implement Error-Correcting-Codes (ECC) and Address Interleaving.</xhtml:p>
+					</Description>
+				</Mitigation>
+			</Potential_Mitigations>
+         <Demonstrative_Examples>
+            <Demonstrative_Example>
+               <Intro_Text>This is an example from [REF-1089].  See the reference for full details of this issue.</Intro_Text>
+               <Body_Text>Parity is error detecting but not error correcting.</Body_Text>
+               <Example_Code Nature="Bad" Language="Other">Due to single-event upsets, bits are flipped in memories.  As a result, memory-parity checks fail, which results in restart and a temporary denial of service of two to three minutes.</Example_Code>
+               <Example_Code Nature="Good" Language="Other">Using error-correcting codes could have avoided the restart caused by SEUs. </Example_Code>
+            </Demonstrative_Example>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-235">
+               <Intro_Text>In 2016, a security researcher, who was also a patient using a pacemaker, was on an airplane when a bit flip occurred in the pacemaker, likely due to the higher prevalence of cosmic radiation at such heights. The pacemaker was designed to account for bit flips and went into a default safe mode, which still forced the patient to go to a hospital to get it reset. The bit flip also inadvertently enabled the researcher to access the crash file, perform reverse engineering, and detect a hard-coded key. [REF-1101]</Intro_Text>
+            </Demonstrative_Example>
+         </Demonstrative_Examples>
+         <References>
+            <Reference External_Reference_ID="REF-1086" />
+            <Reference External_Reference_ID="REF-1087" />
+            <Reference External_Reference_ID="REF-1088" />
+            <Reference External_Reference_ID="REF-1089" />
+            <Reference External_Reference_ID="REF-1090" />
+            <Reference External_Reference_ID="REF-1091" />
+            <Reference External_Reference_ID="REF-1101" />
+         </References>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Base level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+         <Content_History>
+            <Submission>
+               <Submission_Name>Arun Kanuparthi, Hareesh Khattri, Parbati Kumar Manna, Narasimha Kumar V Mangipudi</Submission_Name>
+               <Submission_Organization>Intel Corporation</Submission_Organization>
+               <Submission_Date>2020-02-12</Submission_Date>
+               <Submission_Version>4.1</Submission_Version>
+               <Submission_ReleaseDate>2020-02-24</Submission_ReleaseDate>
+            </Submission>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-04-28</Modification_Date>
+					<Modification_Version>4.7</Modification_Version>
+					<Modification_ReleaseDate>2022-04-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-06-28</Modification_Date>
+					<Modification_Version>4.8</Modification_Version>
+					<Modification_ReleaseDate>2022-06-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated References, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples, Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+         </Content_History>
+      </Weakness>
+      

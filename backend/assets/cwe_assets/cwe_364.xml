@@ -1,0 +1,387 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="364" Name="Signal Handler Race Condition" Abstraction="Base" Structure="Simple" Status="Incomplete">
+         <Description>The product uses a signal handler that introduces a race condition.</Description>
+         <Extended_Description>
+            <xhtml:p>Race conditions frequently occur in signal handlers, since signal handlers support asynchronous actions. These race conditions have a variety of root causes and symptoms. Attackers may be able to exploit a signal handler race condition to cause the product state to be corrupted, possibly leading to a denial of service or even code execution.</xhtml:p>
+            <xhtml:p>These issues occur when non-reentrant functions, or state-sensitive actions occur in the signal handler, where they may be called at any time. These behaviors can violate assumptions being made by the "regular" code that is interrupted, or by other signal handlers that may also be invoked. If these functions are called at an inopportune moment - such as while a non-reentrant function is already running - memory corruption could occur that may be exploitable for code execution. Another signal race condition commonly found occurs when free is called within a signal handler, resulting in a double free and therefore a write-what-where condition. Even if a given pointer is set to NULL after it has been freed, a race condition still exists between the time the memory was freed and the pointer was set to NULL. This is especially problematic if the same signal handler has been set for more than one signal -- since it means that the signal handler itself may be reentered.</xhtml:p>
+            <xhtml:p>There are several known behaviors related to signal handlers that have received the label of "signal handler race condition":</xhtml:p>
+            <xhtml:ul>
+              <xhtml:li>Shared state (e.g. global data or static variables) that are accessible to both a signal handler and "regular" code</xhtml:li>
+              <xhtml:li>Shared state between a signal handler and other signal handlers</xhtml:li>
+              <xhtml:li>Use of non-reentrant functionality within a signal handler - which generally implies that shared state is being used. For example, malloc() and free() are non-reentrant because they may use global or static data structures for managing memory, and they are indirectly used by innocent-seeming functions such as syslog(); these functions could be exploited for memory corruption and, possibly, code execution.</xhtml:li>
+              <xhtml:li>Association of the same signal handler function with multiple signals - which might imply shared state, since the same code and resources are accessed. For example, this can be a source of double-free and use-after-free weaknesses.</xhtml:li>
+              <xhtml:li>Use of setjmp and longjmp, or other mechanisms that prevent a signal handler from returning control back to the original functionality</xhtml:li>
+              <xhtml:li>While not technically a race condition, some signal handlers are designed to be called at most once, and being called more than once can introduce security problems, even when there are not any concurrent calls to the signal handler. This can be a source of double-free and use-after-free weaknesses.</xhtml:li>
+            </xhtml:ul>
+            <xhtml:p>Signal handler vulnerabilities are often classified based on the absence of a specific protection mechanism, although this style of classification is discouraged in CWE because programmers often have a choice of several different mechanisms for addressing the weakness. Such protection mechanisms may preserve exclusivity of access to the shared resource, and behavioral atomicity for the relevant code:</xhtml:p>
+            <xhtml:ul>
+              <xhtml:li>Avoiding shared state</xhtml:li>
+              <xhtml:li>Using synchronization in the signal handler</xhtml:li>
+              <xhtml:li>Using synchronization in the regular code</xhtml:li>
+              <xhtml:li>Disabling or masking other signals, which provides atomicity (which effectively ensures exclusivity)</xhtml:li>
+            </xhtml:ul>
+         </Extended_Description>
+         <Related_Weaknesses>
+            <Related_Weakness Nature="ChildOf" CWE_ID="362" View_ID="1000" Ordinal="Primary" />
+            <Related_Weakness Nature="CanPrecede" CWE_ID="415" View_ID="1000" />
+            <Related_Weakness Nature="CanPrecede" CWE_ID="416" View_ID="1000" />
+            <Related_Weakness Nature="CanPrecede" CWE_ID="123" View_ID="1000" />
+         </Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+            <Weakness_Ordinality>
+               <Ordinality>Resultant</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+         <Applicable_Platforms>
+            <Language Name="C" Prevalence="Sometimes" />
+            <Language Name="C++" Prevalence="Sometimes" />
+         </Applicable_Platforms>
+         <Modes_Of_Introduction>
+            <Introduction>
+               <Phase>Implementation</Phase>
+            </Introduction>
+         </Modes_Of_Introduction>
+         <Likelihood_Of_Exploit>Medium</Likelihood_Of_Exploit>
+         <Common_Consequences>
+            <Consequence>
+               <Scope>Integrity</Scope>
+               <Scope>Confidentiality</Scope>
+               <Scope>Availability</Scope>
+               <Impact>Modify Application Data</Impact>
+               <Impact>Modify Memory</Impact>
+               <Impact>DoS: Crash, Exit, or Restart</Impact>
+               <Impact>Execute Unauthorized Code or Commands</Impact>
+               <Note>It may be possible to cause data corruption and possibly execute arbitrary code by modifying global variables or data structures at unexpected times, violating the assumptions of code that uses this global data.</Note>
+            </Consequence>
+            <Consequence>
+               <Scope>Access Control</Scope>
+               <Impact>Gain Privileges or Assume Identity</Impact>
+               <Note>If a signal handler interrupts code that is executing with privileges, it may be possible that the signal handler will also be executed with elevated privileges, possibly making subsequent exploits more severe.</Note>
+            </Consequence>
+         </Common_Consequences>
+	 <Detection_Methods>
+	   <Detection_Method Detection_Method_ID="DM-14">
+	     <Method>Automated Static Analysis</Method>
+	     <Description>Automated static analysis, commonly referred to as Static Application Security Testing (SAST), can find some instances of this weakness by analyzing source code (or binary/compiled code) without having to execute it. Typically, this is done by building a model of data flow and control flow, then searching for potentially-vulnerable patterns that connect "sources" (origins of input) with "sinks" (destinations where the data interacts with external components, a lower layer such as the OS, etc.)</Description>
+	   </Detection_Method>
+	 </Detection_Methods>
+         <Potential_Mitigations>
+            <Mitigation Mitigation_ID="MIT-3">
+               <Phase>Requirements</Phase>
+               <Strategy>Language Selection</Strategy>
+               <Description>Use a language that does not allow this weakness to occur or provides constructs that make this weakness easier to avoid.</Description>
+            </Mitigation>
+            <Mitigation>
+               <Phase>Architecture and Design</Phase>
+               <Description>Design signal handlers to only set flags, rather than perform complex functionality. These flags can then be checked and acted upon within the main program loop.</Description>
+            </Mitigation>
+            <Mitigation>
+               <Phase>Implementation</Phase>
+               <Description>Only use reentrant functions within signal handlers. Also, use validation to ensure that state is consistent while performing asynchronous actions that affect the state of execution.</Description>
+            </Mitigation>
+         </Potential_Mitigations>
+         <Demonstrative_Examples>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-26">
+               <Intro_Text>This code registers the same signal handler function with two different signals (CWE-831). If those signals are sent to the process, the handler creates a log message (specified in the first argument to the program) and exits.</Intro_Text>
+               <Example_Code Nature="Bad" Language="C">
+                  <xhtml:div>char *logMessage;<xhtml:br />
+                     <xhtml:br />void handler (int sigNum) {<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>syslog(LOG_NOTICE, "%s\n", logMessage);<xhtml:br />free(logMessage);<xhtml:br />
+                           <xhtml:i>/* artificially increase the size of the timing window to make demonstration of this weakness easier. */</xhtml:i>
+                           <xhtml:br />
+                           <xhtml:br />sleep(10);<xhtml:br />exit(0);</xhtml:div>
+                     </xhtml:div>}<xhtml:br />
+                     <xhtml:br />int main (int argc, char* argv[]) {<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>logMessage = strdup(argv[1]);<xhtml:br />
+                           <xhtml:i>/* Register signal handlers. */</xhtml:i>
+                           <xhtml:br />
+                           <xhtml:br />signal(SIGHUP, handler);<xhtml:br />signal(SIGTERM, handler);<xhtml:br />
+                           <xhtml:i>/* artificially increase the size of the timing window to make demonstration of this weakness easier. */</xhtml:i>
+                           <xhtml:br />
+                           <xhtml:br />sleep(10);</xhtml:div>
+                     </xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>The handler function uses global state (globalVar and logMessage), and it can be called by both the SIGHUP and SIGTERM signals. An attack scenario might follow these lines:</Body_Text>
+               <Body_Text>
+                  <xhtml:ul>
+                     <xhtml:li>
+                        <xhtml:div>The program begins execution, initializes logMessage, and registers the signal handlers for SIGHUP and SIGTERM.</xhtml:div>
+                     </xhtml:li>
+                     <xhtml:li>
+                        <xhtml:div>The program begins its "normal" functionality, which is simplified as sleep(), but could be any functionality that consumes some time.</xhtml:div>
+                     </xhtml:li>
+                     <xhtml:li>
+                        <xhtml:div>The attacker sends SIGHUP, which invokes handler (call this "SIGHUP-handler").</xhtml:div>
+                     </xhtml:li>
+                     <xhtml:li>
+                        <xhtml:div>SIGHUP-handler begins to execute, calling syslog().</xhtml:div>
+                     </xhtml:li>
+                     <xhtml:li>
+                        <xhtml:div>syslog() calls malloc(), which is non-reentrant. malloc() begins to modify metadata to manage the heap.</xhtml:div>
+                     </xhtml:li>
+                     <xhtml:li>
+                        <xhtml:div>The attacker then sends SIGTERM.</xhtml:div>
+                     </xhtml:li>
+                     <xhtml:li>
+                        <xhtml:div>SIGHUP-handler is interrupted, but syslog's malloc call is still executing and has not finished modifying its metadata.</xhtml:div>
+                     </xhtml:li>
+                     <xhtml:li>
+                        <xhtml:div>The SIGTERM handler is invoked.</xhtml:div>
+                     </xhtml:li>
+                     <xhtml:li>
+                        <xhtml:div>SIGTERM-handler records the log message using syslog(), then frees the logMessage variable.</xhtml:div>
+                     </xhtml:li>
+                  </xhtml:ul>
+               </Body_Text>
+               <Body_Text>At this point, the state of the heap is uncertain, because malloc is still modifying the metadata for the heap; the metadata might be in an inconsistent state. The SIGTERM-handler call to free() is assuming that the metadata is inconsistent, possibly causing it to write data to the wrong location while managing the heap. The result is memory corruption, which could lead to a crash or even code execution, depending on the circumstances under which the code is running.</Body_Text>
+               <Body_Text>Note that this is an adaptation of a classic example as originally presented by Michal Zalewski [REF-360]; the original example was shown to be exploitable for code execution.</Body_Text>
+               <Body_Text>Also note that the strdup(argv[1]) call contains a potential buffer over-read (CWE-126) if the program is called without any arguments, because argc would be 0, and argv[1] would point outside the bounds of the array.</Body_Text>
+            </Demonstrative_Example>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-48">
+               <Intro_Text>The following code registers a signal handler with multiple signals in order to log when a specific event occurs and to free associated memory before exiting.</Intro_Text>
+               <Example_Code Nature="Bad" Language="C">
+                  <xhtml:div>#include &lt;signal.h&gt;<xhtml:br />#include &lt;syslog.h&gt;<xhtml:br />#include &lt;string.h&gt;<xhtml:br />#include &lt;stdlib.h&gt;<xhtml:br />
+                     <xhtml:br />void *global1, *global2;<xhtml:br />char *what;<xhtml:br />void sh (int dummy) {<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>syslog(LOG_NOTICE,"%s\n",what);<xhtml:br />free(global2);<xhtml:br />free(global1);<xhtml:br />
+                           <xhtml:i>/* Sleep statements added to expand timing window for race condition */</xhtml:i>
+                           <xhtml:br />
+                           <xhtml:br />sleep(10);<xhtml:br />exit(0);</xhtml:div>
+                     </xhtml:div>}<xhtml:br />
+                     <xhtml:br />int main (int argc,char* argv[]) {<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>what=argv[1];<xhtml:br />global1=strdup(argv[2]);<xhtml:br />global2=malloc(340);<xhtml:br />signal(SIGHUP,sh);<xhtml:br />signal(SIGTERM,sh);<xhtml:br />
+                           <xhtml:i>/* Sleep statements added to expand timing window for race condition */</xhtml:i>
+                           <xhtml:br />
+                           <xhtml:br />sleep(10);<xhtml:br />exit(0);</xhtml:div>
+                     </xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>However, the following sequence of events may result in a double-free (CWE-415):</Body_Text>
+               <Body_Text>
+                  <xhtml:ol>
+                     <xhtml:li>
+                        <xhtml:div>a SIGHUP is delivered to the process</xhtml:div>
+                     </xhtml:li>
+                     <xhtml:li>
+                        <xhtml:div>sh() is invoked to process the SIGHUP</xhtml:div>
+                     </xhtml:li>
+                     <xhtml:li>
+                        <xhtml:div>This first invocation of sh() reaches the point where global1 is freed</xhtml:div>
+                     </xhtml:li>
+                     <xhtml:li>
+                        <xhtml:div>At this point, a SIGTERM is sent to the process</xhtml:div>
+                     </xhtml:li>
+                     <xhtml:li>
+                        <xhtml:div>the second invocation of sh() might do another free of global1</xhtml:div>
+                     </xhtml:li>
+                     <xhtml:li>
+                        <xhtml:div>this results in a double-free (CWE-415)</xhtml:div>
+                     </xhtml:li>
+                  </xhtml:ol>
+               </Body_Text>
+               <Body_Text>This is just one possible exploitation of the above code. As another example, the syslog call may use malloc calls which are not async-signal safe. This could cause corruption of the heap management structures. For more details, consult the example within "Delivering Signals for Fun and Profit" [REF-360].</Body_Text>
+            </Demonstrative_Example>
+         </Demonstrative_Examples>
+         <Observed_Examples>
+            <Observed_Example>
+               <Reference>CVE-1999-0035</Reference>
+               <Description>Signal handler does not disable other signal handlers, allowing it to be interrupted, causing other functionality to access files/etc. with raised privileges</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-1999-0035</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2001-0905</Reference>
+               <Description>Attacker can send a signal while another signal handler is already running, leading to crash or execution with root privileges</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2001-0905</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2001-1349</Reference>
+               <Description>unsafe calls to library functions from signal handler</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2001-1349</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2004-0794</Reference>
+               <Description>SIGURG can be used to remotely interrupt signal handler; other variants exist</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2004-0794</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2004-2259</Reference>
+               <Description>SIGCHLD signal to FTP server can cause crash under heavy load while executing non-reentrant functions like malloc/free.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2004-2259</Link>
+            </Observed_Example>
+         </Observed_Examples>
+         <Functional_Areas>
+            <Functional_Area>Signals</Functional_Area>
+            <Functional_Area>Interprocess Communication</Functional_Area>
+         </Functional_Areas>
+         <Affected_Resources>
+            <Affected_Resource>System Process</Affected_Resource>
+         </Affected_Resources>
+         <Taxonomy_Mappings>
+            <Taxonomy_Mapping Taxonomy_Name="PLOVER">
+               <Entry_Name>Signal handler race condition</Entry_Name>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="7 Pernicious Kingdoms">
+               <Entry_Name>Signal Handling Race Conditions</Entry_Name>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="CLASP">
+               <Entry_Name>Race condition in signal handler</Entry_Name>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="Software Fault Patterns">
+               <Entry_ID>SFP19</Entry_ID>
+               <Entry_Name>Missing Lock</Entry_Name>
+            </Taxonomy_Mapping>
+         </Taxonomy_Mappings>
+         <References>
+            <Reference External_Reference_ID="REF-18" />
+            <Reference External_Reference_ID="REF-360" />
+            <Reference External_Reference_ID="REF-361" />
+            <Reference External_Reference_ID="REF-44" Section="&quot;Sin 13: Race Conditions.&quot; Page 205" />
+            <Reference External_Reference_ID="REF-62" Section="Chapter 13, &quot;Signal Vulnerabilities&quot;, Page 791" />
+         </References>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Base level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+         <Content_History>
+            <Submission>
+               <Submission_Name>PLOVER</Submission_Name>
+               <Submission_Date>2006-07-19</Submission_Date>
+               <Submission_Version>Draft 3</Submission_Version>
+               <Submission_ReleaseDate>2006-07-19</Submission_ReleaseDate>
+            </Submission>
+            <Modification>
+               <Modification_Name>Eric Dalci</Modification_Name>
+               <Modification_Organization>Cigital</Modification_Organization>
+               <Modification_Date>2008-07-01</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>updated Time_of_Introduction</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2008-09-08</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>updated Applicable_Platforms, Common_Consequences, Relationships, Other_Notes, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2010-09-27</Modification_Date>
+               <Modification_Version>1.10</Modification_Version>
+               <Modification_ReleaseDate>2010-09-27</Modification_ReleaseDate>
+               <Modification_Comment>updated Observed_Examples, References</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2010-12-13</Modification_Date>
+               <Modification_Version>1.11</Modification_Version>
+               <Modification_ReleaseDate>2010-12-13</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences, Demonstrative_Examples, Description, Observed_Examples, Other_Notes, Potential_Mitigations, Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-06-01</Modification_Date>
+               <Modification_Version>1.13</Modification_Version>
+               <Modification_ReleaseDate>2011-06-01</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2012-05-11</Modification_Date>
+               <Modification_Version>2.2</Modification_Version>
+               <Modification_ReleaseDate>2012-05-15</Modification_ReleaseDate>
+               <Modification_Comment>updated Demonstrative_Examples, References, Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2014-06-23</Modification_Date>
+               <Modification_Version>2.7</Modification_Version>
+               <Modification_ReleaseDate>2014-06-23</Modification_ReleaseDate>
+               <Modification_Comment>updated Demonstrative_Examples, References</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2014-07-30</Modification_Date>
+               <Modification_Version>2.8</Modification_Version>
+               <Modification_ReleaseDate>2014-07-31</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2017-11-08</Modification_Date>
+               <Modification_Version>3.0</Modification_Version>
+               <Modification_ReleaseDate>2017-11-08</Modification_ReleaseDate>
+               <Modification_Comment>updated Observed_Examples, Relationships</Modification_Comment>
+            </Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-02-24</Modification_Date>
+					<Modification_Version>4.0</Modification_Version>
+					<Modification_ReleaseDate>2020-02-24</Modification_ReleaseDate>
+					<Modification_Comment>updated References, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-03-15</Modification_Date>
+					<Modification_Version>4.4</Modification_Version>
+					<Modification_ReleaseDate>2021-03-15</Modification_ReleaseDate>
+					<Modification_Comment>updated Potential_Mitigations</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-04-28</Modification_Date>
+					<Modification_Version>4.7</Modification_Version>
+					<Modification_ReleaseDate>2022-04-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships, Research_Gaps</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-01-31</Modification_Date>
+					<Modification_Version>4.10</Modification_Version>
+					<Modification_ReleaseDate>2023-01-31</Modification_ReleaseDate>
+					<Modification_Comment>updated Description</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated References, Relationships, Time_of_Introduction</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Detection_Factors, Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+         </Content_History>
+      </Weakness>
+      

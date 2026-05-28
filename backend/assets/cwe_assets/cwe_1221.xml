@@ -1,0 +1,364 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="1221" Name="Incorrect Register Defaults or Module Parameters" Abstraction="Base" Structure="Simple" Status="Incomplete">
+            <Description>Hardware description language code incorrectly defines register defaults or hardware Intellectual Property (IP) parameters to insecure values.</Description>
+            <Extended_Description>
+                <xhtml:p>Integrated circuits and hardware IP software programmable controls and settings are commonly stored in register circuits. These register contents have to be initialized at hardware reset to defined default values that are hard coded in the hardware description language (HDL) code of the hardware unit. Hardware descriptive languages also support definition of parameter variables, which can be defined in code during instantiation of the hardware IP module. Such parameters are generally used to configure a specific instance of a hardware IP in the design.</xhtml:p>
+                <xhtml:p>The system security settings of a hardware design can be affected by incorrectly defined default values or IP parameters. The hardware IP would be in an insecure state at power reset, and this can be exposed or exploited by untrusted software running on the system. Both register defaults and parameters are hardcoded values, which cannot be changed using software or firmware patches but must be changed in hardware silicon. Thus, such security issues are considerably more difficult to address later in the lifecycle. Hardware designs can have a large number of such parameters and register defaults settings, and it is important to have design tool support to check these settings in an automated way and be able to identify which settings are security sensitive.</xhtml:p>
+            </Extended_Description>
+			<Related_Weaknesses>
+				<Related_Weakness Nature="ChildOf" CWE_ID="1419" View_ID="1000" Ordinal="Primary" />
+			</Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+            <Applicable_Platforms>
+                <Language Name="Verilog" Prevalence="Undetermined" />
+                <Language Name="VHDL" Prevalence="Undetermined" />
+                <Technology Class="Not Technology-Specific" Prevalence="Undetermined" />
+            </Applicable_Platforms>
+            <Modes_Of_Introduction>
+                <Introduction>
+                    <Phase>Implementation</Phase>
+                    <Note>Such issues could be introduced during implementation of hardware design, since IP parameters and defaults are defined in HDL code and identified later during Testing or System Configuration phases.</Note>
+                </Introduction>
+            </Modes_Of_Introduction>
+            <Common_Consequences>
+                <Consequence>
+                    <Scope>Confidentiality</Scope>
+                    <Scope>Integrity</Scope>
+                    <Scope>Availability</Scope>
+                    <Scope>Access Control</Scope>
+                    <Impact>Varies by Context</Impact>
+                    <Note>Degradation of system functionality, or loss of access control enforcement can occur.</Note>
+                </Consequence>
+            </Common_Consequences>
+	    <Detection_Methods>
+	      <Detection_Method>
+		<Method>Automated Analysis</Method>
+		<Description>Use automated tools to test that values are configured per design specifications.</Description>
+	      </Detection_Method>
+	    </Detection_Methods>
+            <Potential_Mitigations>
+                <Mitigation>
+                    <Phase>Architecture and Design</Phase>
+                    <Description>During hardware design, all the system parameters and register defaults must be reviewed to identify security sensitive settings.</Description>
+                </Mitigation>
+                <Mitigation>
+                    <Phase>Implementation</Phase>
+                    <Description>The default values of these security sensitive settings need to be defined as part of the design review phase.</Description>
+                </Mitigation>
+            </Potential_Mitigations>
+            <Demonstrative_Examples>
+                <Demonstrative_Example Demonstrative_Example_ID="DX-162">
+                    <Intro_Text>Consider example design module system verilog code shown below. The register_example module is an example parameterized module that defines two parameters, REGISTER_WIDTH and REGISTER_DEFAULT. Register_example module defines a Secure_mode setting, which when set makes the register content read-only and not modifiable by software writes. register_top module instantiates two registers, Insecure_Device_ID_1 and Insecure_Device_ID_2. Generally, registers containing device identifier values are required to be read only to prevent any possibility of software modifying these values. </Intro_Text>
+                    <Example_Code Nature="Bad" Language="Verilog">
+                        // Parameterized Register module example <xhtml:br />
+			// Secure_mode : REGISTER_DEFAULT[0] : When set to 1 register is read only and not writable// <xhtml:br />
+			module register_example <xhtml:br />
+			#( <xhtml:br />
+			parameter REGISTER_WIDTH = 8, // Parameter defines width of register, default 8 bits <xhtml:br />
+			parameter [REGISTER_WIDTH-1:0] REGISTER_DEFAULT = 2**REGISTER_WIDTH -2 // Default value of register computed from Width. Sets all bits to 1s except bit 0 (Secure _mode) <xhtml:br />
+			) <xhtml:br />
+			( <xhtml:br />
+			input [REGISTER_WIDTH-1:0] Data_in, <xhtml:br />
+			input Clk, <xhtml:br />
+			input resetn, <xhtml:br />
+			input write, <xhtml:br />
+			output reg [REGISTER_WIDTH-1:0] Data_out <xhtml:br />
+			); <xhtml:br />
+			<xhtml:br />
+			reg Secure_mode; <xhtml:br />
+			<xhtml:br />
+			always @(posedge Clk or negedge resetn) <xhtml:br />
+			<xhtml:div style="margin-left:1em;">
+			  if (~resetn) <xhtml:br />
+			  begin <xhtml:br />
+			  <xhtml:div style="margin-left:1em;">
+			    Data_out &lt;= REGISTER_DEFAULT; // Register content set to Default at reset <xhtml:br />
+			    Secure_mode &lt;= REGISTER_DEFAULT[0]; // Register Secure_mode set at reset <xhtml:br />
+			  </xhtml:div>
+			  end <xhtml:br />
+			  else if (write &amp; ~Secure_mode) <xhtml:br />
+			  begin <xhtml:br />
+			  <xhtml:div style="margin-left:1em;">
+			    Data_out &lt;= Data_in; <xhtml:br />
+			  </xhtml:div>
+			  end <xhtml:br />
+			</xhtml:div>
+			endmodule <xhtml:br />
+                        <xhtml:br />
+                        <xhtml:br />
+			module register_top <xhtml:br />
+			( <xhtml:br />
+			input Clk, <xhtml:br />
+			input resetn, <xhtml:br />
+			input write, <xhtml:br />
+			input [31:0] Data_in, <xhtml:br />
+			output reg [31:0] Secure_reg, <xhtml:br />
+			output reg [31:0] Insecure_reg <xhtml:br />
+			); <xhtml:br />
+			<xhtml:br />
+			register_example #( <xhtml:br />
+			<xhtml:div style="margin-left:1em;">
+			  .REGISTER_WIDTH (32), <xhtml:br />
+			  .REGISTER_DEFAULT (1224) // Incorrect Default value used bit 0 is 0. <xhtml:br />
+			</xhtml:div>
+			) Insecure_Device_ID_1 ( <xhtml:br />
+			<xhtml:div style="margin-left:1em;">
+			  .Data_in (Data_in), <xhtml:br />
+			  .Data_out (Secure_reg), <xhtml:br />
+			  .Clk (Clk), <xhtml:br />
+			  .resetn (resetn), <xhtml:br />
+			  .write (write) <xhtml:br />
+			</xhtml:div>
+			); <xhtml:br />
+                        <xhtml:br />
+			register_example #(<xhtml:br />
+			<xhtml:div style="margin-left:1em;">
+			  .REGISTER_WIDTH (32) // Default not defined 2^32-2 value will be used as default. <xhtml:br />
+			</xhtml:div>
+			) Insecure_Device_ID_2 ( <xhtml:br />
+			<xhtml:div style="margin-left:1em;">
+			  .Data_in (Data_in), <xhtml:br />
+			  .Data_out (Insecure_reg), <xhtml:br />
+			  .Clk (Clk), <xhtml:br />
+			  .resetn (resetn), <xhtml:br />
+			  .write (write) <xhtml:br />
+			</xhtml:div>
+			); <xhtml:br />
+                        <xhtml:br />
+			endmodule <xhtml:br />
+                    </Example_Code>
+                    <Body_Text>These example instantiations show how, in a hardware design, it would be possible to instantiate the register module with insecure defaults and parameters.</Body_Text>
+                    <Body_Text>In the example design, both registers will be software writable since Secure_mode is defined as zero. </Body_Text>
+                    <Example_Code Nature="Good" Language="Verilog">
+                      register_example #( <xhtml:br />
+		      <xhtml:div style="margin-left:1em;">
+			.REGISTER_WIDTH (32), <xhtml:br />
+			.REGISTER_DEFAULT (1225) // Correct default value set, to enable Secure_mode <xhtml:br />
+		      </xhtml:div>
+		      ) Secure_Device_ID_example ( <xhtml:br />
+		      <xhtml:div style="margin-left:1em;">
+			.Data_in (Data_in), <xhtml:br />
+			.Data_out (Secure_reg), <xhtml:br />
+			.Clk (Clk), <xhtml:br />
+			.resetn (resetn), <xhtml:br />
+			.write (write) <xhtml:br />
+		      </xhtml:div>
+		      );
+                    </Example_Code>
+                </Demonstrative_Example>
+				<Demonstrative_Example>
+					<Intro_Text>The example code is taken from the fuse memory inside the buggy OpenPiton SoC of HACK@DAC'21 [REF-1356]. Fuse memory can be used to store key hashes, password hashes, and configuration information. For example, the password hashes of JTAG and HMAC are stored in the fuse memory in the OpenPiton design.</Intro_Text>
+					<Body_Text>During the firmware setup phase, data in the Fuse memory are transferred into the registers of the corresponding SoC peripherals for initialization. However, if the offset to access the password hash is set incorrectly, programs cannot access the correct password hash from the fuse memory, breaking the functionalities of the peripherals and even exposing sensitive information through other peripherals.</Body_Text>
+					<Example_Code Nature="Bad" Language="Verilog">
+					<xhtml:b>parameter  MEM_SIZE = 100;</xhtml:b><xhtml:br />
+					<xhtml:b>localparam JTAG_OFFSET = 81;</xhtml:b><xhtml:br />
+					<xhtml:br />
+					const logic [MEM_SIZE-1:0][31:0] mem = {<xhtml:br />
+					<xhtml:div style="margin-left:1em;">
+						// JTAG expected hamc hash<xhtml:br />
+						32'h49ac13af, 32'h1276f1b8, 32'h6703193a, 32'h65eb531b,<xhtml:br />
+						32'h3025ccca, 32'h3e8861f4, 32'h329edfe5, 32'h98f763b4,<xhtml:br />
+					</xhtml:div>
+					...<xhtml:br />
+					assign jtag_hash_o = {mem[JTAG_OFFSET-1],mem[JTAG_OFFSET-2],mem[JTAG_OFFSET-3],<xhtml:br />
+					mem[JTAG_OFFSET-4],mem[JTAG_OFFSET-5],mem[JTAG_OFFSET-6],mem[JTAG_OFFSET-7],mem[JTAG_OFFSET-8]};<xhtml:br />
+					...<xhtml:br />
+					</Example_Code>
+					<Body_Text>The following vulnerable code accesses the JTAG password hash from the fuse memory. However, the JTAG_OFFSET is incorrect, and the fuse memory outputs the wrong values to jtag_hash_o. Moreover, setting incorrect offset gives the ability to attackers to access JTAG by knowing other low-privileged peripherals' passwords.</Body_Text>
+					<Body_Text>To mitigate this, change JTAG_OFFSET to the correct address of the JTAG key [REF-1357].<xhtml:br /></Body_Text>
+					<Example_Code Nature="Good" Language="Verilog">
+					parameter  MEM_SIZE = 100;<xhtml:br />
+					<xhtml:b>localparam JTAG_OFFSET = 100;</xhtml:b><xhtml:br />
+					</Example_Code>
+				</Demonstrative_Example>
+				<Demonstrative_Example Demonstrative_Example_ID="DX-222">
+					<Intro_Text>The following example code is excerpted from the Access Control module, acct_wrapper, in the Hack@DAC'21 buggy OpenPiton System-on-Chip (SoC). Within this module, a set of memory-mapped I/O registers, referred to as acct_mem, each 32-bit wide, is utilized to store access control permissions for peripherals [REF-1437]. Access control registers are typically used to define and enforce permissions and access rights for various system resources.</Intro_Text>
+					<Body_Text>However, in the buggy SoC, these registers are all enabled at reset, i.e., essentially granting unrestricted access to all system resources [REF-1438]. This will introduce security vulnerabilities and risks to the system, such as privilege escalation or exposing sensitive information to unauthorized users or processes.</Body_Text>
+					<Example_Code Nature="Bad" Language="Verilog">
+						module acct_wrapper #(<xhtml:br />
+						...<xhtml:br />
+						<xhtml:div style="margin-left:1em;">
+							always @(posedge clk_i)<xhtml:br />
+							<xhtml:div style="margin-left:1em;">
+								begin<xhtml:br />
+								<xhtml:div style="margin-left:1em;">
+									if(~(rst_ni &amp;&amp; ~rst_6))<xhtml:br />
+									<xhtml:div style="margin-left:1em;">
+										begin<xhtml:br />
+										<xhtml:div style="margin-left:1em;">
+											for (j=0; j &lt; AcCt_MEM_SIZE; j=j+1)<xhtml:br />
+												<xhtml:div style="margin-left:1em;">
+													begin<xhtml:br />
+													<xhtml:div style="margin-left:1em;">
+														<xhtml:b>acct_mem[j] &lt;= 32'hffffffff;</xhtml:b><xhtml:br />
+													</xhtml:div>
+													end<xhtml:br />
+												</xhtml:div>
+										</xhtml:div>
+										end<xhtml:br />
+									</xhtml:div>
+								</xhtml:div>
+								...<xhtml:br />
+							</xhtml:div>
+						</xhtml:div>
+					</Example_Code>
+					<Body_Text>To fix this issue, the access control registers must be properly initialized during the reset phase of the SoC. Correct initialization values should be established to maintain the system's integrity, security, predictable behavior, and allow proper control of peripherals. The specifics of what values should be set depend on the SoC's design and the requirements of the system. To address the problem depicted in the bad code example [REF-1438], the default value for "acct_mem" should be set to 32'h00000000 (see good code example [REF-1439]). This ensures that during startup or after any reset, access to protected data is restricted until the system setup is complete and security procedures properly configure the access control settings.</Body_Text>
+					<Example_Code Nature="Good" Language="Verilog">
+						module acct_wrapper #(<xhtml:br />
+						...<xhtml:br />
+						<xhtml:div style="margin-left:1em;">
+							always @(posedge clk_i)<xhtml:br />
+							<xhtml:div style="margin-left:1em;">
+								begin<xhtml:br />
+								<xhtml:div style="margin-left:1em;">
+									if(~(rst_ni &amp;&amp; ~rst_6))
+									<xhtml:div style="margin-left:1em;">
+										begin<xhtml:br />
+										<xhtml:div style="margin-left:1em;">
+											for (j=0; j &lt; AcCt_MEM_SIZE; j=j+1)<xhtml:br />
+											<xhtml:div style="margin-left:1em;">
+												begin<xhtml:br />
+												<xhtml:div style="margin-left:1em;">
+													<xhtml:b>acct_mem[j] &lt;= 32'h00000000;</xhtml:b><xhtml:br />
+												</xhtml:div>
+												end<xhtml:br />
+											</xhtml:div>
+										</xhtml:div>
+										end<xhtml:br />
+									</xhtml:div>
+								</xhtml:div>
+								...<xhtml:br />
+							</xhtml:div>
+						</xhtml:div>
+					</Example_Code>
+				</Demonstrative_Example>
+            </Demonstrative_Examples>
+         <Related_Attack_Patterns>
+            <Related_Attack_Pattern CAPEC_ID="166" />
+         </Related_Attack_Patterns>
+         <References>
+		 	<Reference External_Reference_ID="REF-1356" />
+			<Reference External_Reference_ID="REF-1357" />
+			<Reference External_Reference_ID="REF-1437" />
+			<Reference External_Reference_ID="REF-1438" />
+			<Reference External_Reference_ID="REF-1439" />
+		 </References>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Base level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+         <Content_History>
+                <Submission>
+                    <Submission_Name>Arun Kanuparthi, Hareesh Khattri, Parbati Kumar Manna, Narasimha Kumar V Mangipudi</Submission_Name>
+                    <Submission_Organization>Intel Corporation</Submission_Organization>
+					<Submission_Date>2019-12-12</Submission_Date>
+					<Submission_Version>4.0</Submission_Version>
+					<Submission_ReleaseDate>2020-02-24</Submission_ReleaseDate>
+                </Submission>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-07-20</Modification_Date>
+					<Modification_Version>4.5</Modification_Version>
+					<Modification_ReleaseDate>2021-07-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Related_Attack_Patterns</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-10-28</Modification_Date>
+					<Modification_Version>4.6</Modification_Version>
+					<Modification_ReleaseDate>2021-10-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Common_Consequences</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-10-13</Modification_Date>
+					<Modification_Version>4.9</Modification_Version>
+					<Modification_ReleaseDate>2022-10-13</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-10-26</Modification_Date>
+					<Modification_Version>4.13</Modification_Version>
+					<Modification_ReleaseDate>2023-10-26</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples, Description, References, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2024-02-29</Modification_Date>
+					<Modification_Version>4.14</Modification_Version>
+					<Modification_ReleaseDate>2024-02-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2024-07-16</Modification_Date>
+					<Modification_Version>4.15</Modification_Version>
+					<Modification_ReleaseDate>2024-07-16</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples, References</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Detection_Factors, Potential_Mitigations, Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+				<Contribution Type="Content">
+					<Contribution_Name>Chen Chen, Rahul Kande, Jeyavijayan Rajendran</Contribution_Name>
+					<Contribution_Organization>Texas A&amp;M University</Contribution_Organization>
+					<Contribution_Date>2023-06-21</Contribution_Date>
+					<Contribution_Comment>suggested demonstrative example</Contribution_Comment>
+				</Contribution>
+				<Contribution Type="Content">
+					<Contribution_Name>Shaza Zeitouni, Mohamadreza Rostami, Ahmad-Reza Sadeghi</Contribution_Name>
+					<Contribution_Organization>Technical University of Darmstadt</Contribution_Organization>
+					<Contribution_Date>2023-06-21</Contribution_Date>
+					<Contribution_Comment>suggested demonstrative example</Contribution_Comment>
+				</Contribution>
+				<Contribution Type="Content">
+					<Contribution_Name>Chen Chen, Rahul Kande, Jeyavijayan Rajendran</Contribution_Name>
+					<Contribution_Organization>Texas A&amp;M University</Contribution_Organization>
+					<Contribution_Date>2023-11-07</Contribution_Date>
+					<Contribution_Comment>suggested demonstrative example</Contribution_Comment>
+				</Contribution>
+				<Contribution Type="Content">
+					<Contribution_Name>Shaza Zeitouni, Mohamadreza Rostami, Ahmad-Reza Sadeghi</Contribution_Name>
+					<Contribution_Organization>Technical University of Darmstadt</Contribution_Organization>
+					<Contribution_Date>2023-11-07</Contribution_Date>
+					<Contribution_Comment>suggested demonstrative example</Contribution_Comment>
+				</Contribution>
+            </Content_History>
+        </Weakness>
+      

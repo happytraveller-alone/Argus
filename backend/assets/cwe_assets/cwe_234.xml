@@ -1,0 +1,293 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="234" Name="Failure to Handle Missing Parameter" Abstraction="Variant" Structure="Simple" Status="Incomplete">
+         <Description>If too few arguments are sent to a function, the function will still pop the expected number of arguments from the stack. Potentially, a variable number of arguments could be exhausted in a function as well.</Description>
+         <Related_Weaknesses>
+            <Related_Weakness Nature="ChildOf" CWE_ID="233" View_ID="1000" Ordinal="Primary" />
+         </Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+            <Weakness_Ordinality>
+               <Ordinality>Resultant</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+         <Applicable_Platforms>
+            <Language Class="Not Language-Specific" Prevalence="Undetermined" />
+	    <Technology Class="Not Technology-Specific" Prevalence="Undetermined" />
+         </Applicable_Platforms>
+         <Modes_Of_Introduction>
+            <Introduction>
+               <Phase>Implementation</Phase>
+            </Introduction>
+         </Modes_Of_Introduction>
+         <Likelihood_Of_Exploit>High</Likelihood_Of_Exploit>
+         <Common_Consequences>
+            <Consequence>
+               <Scope>Integrity</Scope>
+               <Scope>Confidentiality</Scope>
+               <Scope>Availability</Scope>
+               <Scope>Access Control</Scope>
+               <Impact>Execute Unauthorized Code or Commands</Impact>
+               <Impact>Gain Privileges or Assume Identity</Impact>
+               <Note>There is the potential for arbitrary code execution with privileges of the vulnerable program if function parameter list is exhausted.</Note>
+            </Consequence>
+            <Consequence>
+               <Scope>Availability</Scope>
+               <Impact>DoS: Crash, Exit, or Restart</Impact>
+               <Note>Potentially a program could fail if it needs more arguments then are available.</Note>
+            </Consequence>
+         </Common_Consequences>
+         <Potential_Mitigations>
+            <Mitigation>
+               <Phase>Build and Compilation</Phase>
+               <Description>This issue can be simply combated with the use of proper build process.</Description>
+            </Mitigation>
+            <Mitigation>
+               <Phase>Implementation</Phase>
+               <Description>Forward declare all functions. This is the recommended solution. Properly forward declaration of all used functions will result in a compiler error if too few arguments are sent to a function.</Description>
+            </Mitigation>
+         </Potential_Mitigations>
+         <Demonstrative_Examples>
+            <Demonstrative_Example>
+               <Intro_Text>The following example demonstrates the weakness.</Intro_Text>
+               <Example_Code Nature="Bad" Language="C">
+                  <xhtml:div>foo_funct(one, two);<xhtml:br />
+                     <xhtml:br />void foo_funct(int one, int two, int three) {<xhtml:div style="margin-left:1em;">printf("1) %d\n2) %d\n3) %d\n", one, two, three);</xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Example_Code Nature="Bad" Language="C">
+                  <xhtml:div>void some_function(int foo, ...) {<xhtml:div style="margin-left:1em;">int a[3], i;<xhtml:br />va_list ap;<xhtml:br />va_start(ap, foo);<xhtml:br />for (i = 0; i &lt; sizeof(a) / sizeof(int); i++) a[i] = va_arg(ap, int);<xhtml:br />va_end(ap);</xhtml:div>}<xhtml:br />
+                     <xhtml:br />int main(int argc, char *argv[]) {<xhtml:div style="margin-left:1em;">some_function(17, 42);</xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>This can be exploited to disclose information with no work whatsoever. In fact, each time this function is run, it will print out the next 4 bytes on the stack after the two numbers sent to it.</Body_Text>
+            </Demonstrative_Example>
+         </Demonstrative_Examples>
+         <Observed_Examples>
+            <Observed_Example>
+               <Reference>CVE-2004-0276</Reference>
+               <Description>Server earlier allows remote attackers to cause a denial of service (crash) via an HTTP request with a sequence of "%" characters and a missing Host field.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2004-0276</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2002-1488</Reference>
+               <Description>Chat client allows remote malicious IRC servers to cause a denial of service (crash) via a PART message with (1) a missing channel or (2) a channel that the user is not in.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2002-1488</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2002-1169</Reference>
+               <Description>Proxy allows remote attackers to cause a denial of service (crash) via an HTTP request to helpout.exe with a missing HTTP version numbers.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2002-1169</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2000-0521</Reference>
+               <Description>Web server allows disclosure of CGI source code via an HTTP request without the version number.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2000-0521</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2001-0590</Reference>
+               <Description>Application server allows a remote attacker to read the source code to arbitrary 'jsp' files via a malformed URL request which does not end with an HTTP protocol specification.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2001-0590</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2003-0239</Reference>
+               <Description>Chat software allows remote attackers to cause a denial of service via malformed GIF89a headers that do not contain a GCT (Global Color Table) or an LCT (Local Color Table) after an Image Descriptor.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2003-0239</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2002-1023</Reference>
+               <Description>Server allows remote attackers to cause a denial of service (crash) via an HTTP GET request without a URI.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2002-1023</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2002-1236</Reference>
+               <Description>CGI crashes when called without any arguments.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2002-1236</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2003-0422</Reference>
+               <Description>CGI crashes when called without any arguments.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2003-0422</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2002-1531</Reference>
+               <Description>Crash in HTTP request without a Content-Length field.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2002-1531</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2002-1077</Reference>
+               <Description>Crash in HTTP request without a Content-Length field.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2002-1077</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2002-1358</Reference>
+               <Description>Empty elements/strings in protocol test suite affect many SSH2 servers/clients.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2002-1358</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2003-0477</Reference>
+               <Description>FTP server crashes in PORT command without an argument.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2003-0477</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2002-0107</Reference>
+               <Description>Resultant infoleak in web server via GET requests without HTTP/1.0 version string.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2002-0107</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2002-0596</Reference>
+               <Description>GET request with empty parameter leads to error message infoleak (path disclosure).</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2002-0596</Link>
+            </Observed_Example>
+         </Observed_Examples>
+         <Taxonomy_Mappings>
+            <Taxonomy_Mapping Taxonomy_Name="PLOVER">
+               <Entry_Name>Missing Parameter Error</Entry_Name>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="CLASP">
+               <Entry_Name>Missing parameter</Entry_Name>
+            </Taxonomy_Mapping>
+         </Taxonomy_Mappings>
+         <Mapping_Notes>
+            <Usage>Discouraged</Usage>
+            <Rationale>This CWE entry could be deprecated in a future version of CWE.</Rationale>
+            <Comments>See maintenance notes.</Comments>
+            <Reasons>
+               <Reason Type="Potential Deprecation" />
+               <Reason Type="Multiple Use" />
+            </Reasons>
+         </Mapping_Notes>
+         <Notes>
+            <Note Type="Maintenance">This entry will be deprecated in a future version of CWE. The term "missing parameter" was used in both PLOVER and CLASP, with completely different meanings. However, data from both taxonomies was merged into this entry. In PLOVER, it was meant to cover malformed inputs that do not contain required parameters, such as a missing parameter in a CGI request. This entry's observed examples and classification came from PLOVER. However, the description, demonstrative example, and other information are derived from CLASP. They are related to an incorrect number of function arguments, which is already covered by CWE-685.</Note>
+         </Notes>
+         <Content_History>
+            <Submission>
+               <Submission_Name>PLOVER</Submission_Name>
+               <Submission_Date>2006-07-19</Submission_Date>
+               <Submission_Version>Draft 3</Submission_Version>
+               <Submission_ReleaseDate>2006-07-19</Submission_ReleaseDate>
+            </Submission>
+            <Modification>
+               <Modification_Name>Eric Dalci</Modification_Name>
+               <Modification_Organization>Cigital</Modification_Organization>
+               <Modification_Date>2008-07-01</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>updated Time_of_Introduction</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2008-09-08</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences, Relationships, Observed_Example, Other_Notes, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2008-11-24</Modification_Date>
+               <Modification_Version>1.1</Modification_Version>
+               <Modification_ReleaseDate>2008-11-25</Modification_ReleaseDate>
+               <Modification_Comment>updated Observed_Examples</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2009-03-09</Modification_Date>
+               <Modification_Version>1.3</Modification_Version>
+               <Modification_ReleaseDate>2009-03-10</Modification_ReleaseDate>
+               <Modification_Importance>Critical</Modification_Importance>
+               <Modification_Comment>added maintenance note: this entry will probably be deprecated</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2009-03-10</Modification_Date>
+               <Modification_Version>1.3</Modification_Version>
+               <Modification_ReleaseDate>2009-03-10</Modification_ReleaseDate>
+               <Modification_Comment>updated Maintenance_Notes, Other_Notes, Potential_Mitigations</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-06-01</Modification_Date>
+               <Modification_Version>1.13</Modification_Version>
+               <Modification_ReleaseDate>2011-06-01</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2012-05-11</Modification_Date>
+               <Modification_Version>2.2</Modification_Version>
+               <Modification_ReleaseDate>2012-05-15</Modification_ReleaseDate>
+               <Modification_Comment>updated Observed_Examples, Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2013-07-17</Modification_Date>
+               <Modification_Version>2.5</Modification_Version>
+               <Modification_ReleaseDate>2013-07-17</Modification_ReleaseDate>
+               <Modification_Comment>updated Type</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2014-07-30</Modification_Date>
+               <Modification_Version>2.8</Modification_Version>
+               <Modification_ReleaseDate>2014-07-31</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2017-11-08</Modification_Date>
+               <Modification_Version>3.0</Modification_Version>
+               <Modification_ReleaseDate>2017-11-08</Modification_ReleaseDate>
+               <Modification_Comment>updated Applicable_Platforms, Demonstrative_Examples</Modification_Comment>
+            </Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-02-24</Modification_Date>
+					<Modification_Version>4.0</Modification_Version>
+					<Modification_ReleaseDate>2020-02-24</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships, Time_of_Introduction</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2024-02-29</Modification_Date>
+					<Modification_Version>4.14</Modification_Version>
+					<Modification_ReleaseDate>2024-02-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Applicable_Platforms, Relationships, Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+            <Previous_Entry_Name Date="2008-04-11">Missing Parameter Error</Previous_Entry_Name>
+         </Content_History>
+      </Weakness>
+      

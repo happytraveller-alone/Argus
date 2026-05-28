@@ -1,0 +1,588 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="252" Name="Unchecked Return Value" Abstraction="Base" Structure="Simple" Status="Draft">
+         <Description>The product does not check the return value from a method or function, which can prevent it from detecting unexpected states and conditions.</Description>
+         <Extended_Description>Two common programmer assumptions are "this function call can never fail" and "it doesn't matter if this function call fails". If an attacker can force the function to fail or otherwise return a value that is not expected, then the subsequent program logic could lead to a vulnerability, because the product is not in a state that the programmer assumes. For example, if the program calls a function to drop privileges but does not check the return code to ensure that privileges were successfully dropped, then the program will continue to operate with the higher privileges.</Extended_Description>
+         <Related_Weaknesses>
+            <Related_Weakness Nature="ChildOf" CWE_ID="754" View_ID="1000" Ordinal="Primary" />
+            <Related_Weakness Nature="ChildOf" CWE_ID="754" View_ID="1003" Ordinal="Primary" />
+            <Related_Weakness Nature="CanPrecede" CWE_ID="476" View_ID="1000" Chain_ID="690" />
+         </Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+         <Applicable_Platforms>
+            <Language Class="Not Language-Specific" Prevalence="Undetermined" />
+         </Applicable_Platforms>
+         <Background_Details>
+            <Background_Detail>Many functions will return some value about the success of their actions. This will alert the program whether or not to handle any errors caused by that function.</Background_Detail>
+         </Background_Details>
+         <Modes_Of_Introduction>
+            <Introduction>
+               <Phase>Implementation</Phase>
+            </Introduction>
+         </Modes_Of_Introduction>
+         <Likelihood_Of_Exploit>Low</Likelihood_Of_Exploit>
+         <Common_Consequences>
+            <Consequence>
+               <Scope>Availability</Scope>
+               <Scope>Integrity</Scope>
+               <Impact>Unexpected State</Impact>
+               <Impact>DoS: Crash, Exit, or Restart</Impact>
+               <Note>An unexpected return value could place the system in a state that could lead to a crash or other unintended behaviors.</Note>
+            </Consequence>
+         </Common_Consequences>
+         <Detection_Methods>
+           <Detection_Method Detection_Method_ID="DM-14">
+             <Method>Automated Static Analysis</Method>
+             <Description>Automated static analysis, commonly referred to as Static Application Security Testing (SAST), can find some instances of this weakness by analyzing source code (or binary/compiled code) without having to execute it. Typically, this is done by building a model of data flow and control flow, then searching for potentially-vulnerable patterns that connect "sources" (origins of input) with "sinks" (destinations where the data interacts with external components, a lower layer such as the OS, etc.)</Description>
+             <Effectiveness>High</Effectiveness>
+           </Detection_Method>
+         </Detection_Methods>
+         <Potential_Mitigations>
+            <Mitigation Mitigation_ID="MIT-53">
+               <Phase>Implementation</Phase>
+               <Description>Check the results of all functions that return a value and verify that the value is expected.</Description>
+               <Effectiveness>High</Effectiveness>
+               <Effectiveness_Notes>Checking the return value of the function will typically be sufficient, however beware of race conditions (CWE-362) in a concurrent environment.</Effectiveness_Notes>
+            </Mitigation>
+            <Mitigation Mitigation_ID="MIT-56">
+               <Phase>Implementation</Phase>
+               <Description>For any pointers that could have been modified or provided from a function that can return NULL, check the pointer for NULL before use. When working with a multithreaded or otherwise asynchronous environment, ensure that proper locking APIs are used to lock before the check, and unlock when it has finished [REF-1484].</Description>
+            </Mitigation>
+            <Mitigation>
+               <Phase>Implementation</Phase>
+               <Description>Ensure that you account for all possible return values from the function.</Description>
+            </Mitigation>
+            <Mitigation>
+               <Phase>Implementation</Phase>
+               <Description>When designing a function, make sure you return a value or throw an exception in case of an error.</Description>
+            </Mitigation>
+         </Potential_Mitigations>
+         <Demonstrative_Examples>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-7">
+               <Intro_Text>Consider the following code segment:</Intro_Text>
+               <Example_Code Nature="Bad" Language="C">
+                  <xhtml:div>char buf[10], cp_buf[10];<xhtml:br />fgets(buf, 10, stdin);<xhtml:br />strcpy(cp_buf, buf);</xhtml:div>
+               </Example_Code>
+               <Body_Text>The programmer expects that when fgets() returns, buf will contain a null-terminated string of length 9 or less. But if an I/O error occurs, fgets() will not null-terminate buf. Furthermore, if the end of the file is reached before any characters are read, fgets() returns without writing anything to buf. In both of these situations, fgets() signals that something unusual has happened by returning NULL, but in this code, the warning will not be noticed. The lack of a null terminator in buf can result in a buffer overflow in the subsequent call to strcpy().</Body_Text>
+            </Demonstrative_Example>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-114">
+               <Intro_Text>In the following example, it is possible to request that memcpy move a much larger segment of memory than assumed:</Intro_Text>
+               <Example_Code Nature="Bad" Language="C">
+                  <xhtml:div>int returnChunkSize(void *) {<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>
+                           <xhtml:br />
+                           <xhtml:i>/* if chunk info is valid, return the size of usable memory,</xhtml:i>
+                           <xhtml:br />
+                           <xhtml:br />
+                           <xhtml:i>* else, return -1 to indicate an error</xhtml:i>
+                           <xhtml:br />
+                           <xhtml:br />
+                           <xhtml:i>*/</xhtml:i>
+                           <xhtml:br />...</xhtml:div>
+                     </xhtml:div>}<xhtml:br />int main() {<xhtml:div style="margin-left:1em;">...<xhtml:br />memcpy(destBuf, srcBuf, (returnChunkSize(destBuf)-1));<xhtml:br />...</xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>If returnChunkSize() happens to encounter an error it will return -1. Notice that the return value is not checked before the memcpy operation (CWE-252), so -1 can be passed as the size argument to memcpy() (CWE-805). Because memcpy() assumes that the value is unsigned, it will be interpreted as MAXINT-1 (CWE-195), and therefore will copy far more memory than is likely available to the destination buffer (CWE-787, CWE-788).</Body_Text>
+            </Demonstrative_Example>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-8">
+               <Intro_Text>The following code does not check to see if memory allocation succeeded before attempting to use the pointer returned by malloc().</Intro_Text>
+               <Example_Code Nature="Bad" Language="C">
+                  <xhtml:div>buf = (char*) malloc(req_size);<xhtml:br />strncpy(buf, xfer, req_size);</xhtml:div>
+               </Example_Code>
+               <Body_Text>The traditional defense of this coding error is: "If my program runs out of memory, it will fail. It doesn't matter whether I handle the error or allow the program to die with a segmentation fault when it tries to dereference the null pointer." This argument ignores three important considerations:</Body_Text>
+               <Body_Text>
+                  <xhtml:ul>
+                     <xhtml:li>
+                        <xhtml:div>Depending upon the type and size of the application, it may be possible to free memory that is being used elsewhere so that execution can continue.</xhtml:div>
+                     </xhtml:li>
+                     <xhtml:li>
+                        <xhtml:div>It is impossible for the program to perform a graceful exit if required. If the program is performing an atomic operation, it can leave the system in an inconsistent state.</xhtml:div>
+                     </xhtml:li>
+                     <xhtml:li>
+                        <xhtml:div>The programmer has lost the opportunity to record diagnostic information. Did the call to malloc() fail because req_size was too large or because there were too many requests being handled at the same time? Or was it caused by a memory leak that has built up over time? Without handling the error, there is no way to know.</xhtml:div>
+                     </xhtml:li>
+                  </xhtml:ul>
+               </Body_Text>
+            </Demonstrative_Example>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-9">
+               <Intro_Text>The following examples read a file into a byte array.</Intro_Text>
+               <Example_Code Nature="Bad" Language="C#">
+                  <xhtml:div>char[] byteArray = new char[1024];<xhtml:br />for (IEnumerator i=users.GetEnumerator(); i.MoveNext() ;i.Current()) {<xhtml:div style="margin-left:1em;">String userName = (String) i.Current();<xhtml:br />String pFileName = PFILE_ROOT + "/" + userName;<xhtml:br />StreamReader sr = new StreamReader(pFileName);<xhtml:br />sr.Read(byteArray,0,1024);//the file is always 1k bytes<xhtml:br />sr.Close();<xhtml:br />processPFile(userName, byteArray);</xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Example_Code Nature="Bad" Language="Java">
+                  <xhtml:div>FileInputStream fis;<xhtml:br />byte[] byteArray = new byte[1024];<xhtml:br />for (Iterator i=users.iterator(); i.hasNext();) {<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>String userName = (String) i.next();<xhtml:br />String pFileName = PFILE_ROOT + "/" + userName;<xhtml:br />FileInputStream fis = new FileInputStream(pFileName);<xhtml:br />fis.read(byteArray); // the file is always 1k bytes<xhtml:br />fis.close();<xhtml:br />processPFile(userName, byteArray);<xhtml:br />
+                        </xhtml:div>
+                     </xhtml:div>
+                  </xhtml:div>
+               </Example_Code>
+               <Body_Text>The code loops through a set of users, reading a private data file for each user. The programmer assumes that the files are always 1 kilobyte in size and therefore ignores the return value from Read(). If an attacker can create a smaller file, the program will recycle the remainder of the data from the previous user and treat it as though it belongs to the attacker.</Body_Text>
+            </Demonstrative_Example>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-10">
+               <Intro_Text>The following code does not check to see if the string returned by getParameter() is null before calling the member function compareTo(), potentially causing a NULL dereference.</Intro_Text>
+               <Example_Code Nature="Bad" Language="Java">
+                  <xhtml:div>String itemName = request.getParameter(ITEM_NAME);<xhtml:br />if (itemName.compareTo(IMPORTANT_ITEM) == 0) {<xhtml:div style="margin-left:1em;">...</xhtml:div>}<xhtml:br />...</xhtml:div>
+               </Example_Code>
+               <Body_Text>The following code does not check to see if the string returned by the Item property is null before calling the member function Equals(), potentially causing a NULL dereference.</Body_Text>
+               <Example_Code Nature="Bad" Language="Java">
+                  <xhtml:div>String itemName = request.Item(ITEM_NAME);<xhtml:br />if (itemName.Equals(IMPORTANT_ITEM)) {<xhtml:div style="margin-left:1em;">...</xhtml:div>}<xhtml:br />...</xhtml:div>
+               </Example_Code>
+               <Body_Text>The traditional defense of this coding error is: "I know the requested value will always exist because.... If it does not exist, the program cannot perform the desired behavior so it doesn't matter whether I handle the error or allow the program to die dereferencing a null value." But attackers are skilled at finding unexpected paths through programs, particularly when exceptions are involved.</Body_Text>
+            </Demonstrative_Example>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-11">
+               <Intro_Text>The following code shows a system property that is set to null and later dereferenced by a programmer who mistakenly assumes it will always be defined.</Intro_Text>
+               <Example_Code Nature="Bad" Language="Java">
+                  <xhtml:div>System.clearProperty("os.name");<xhtml:br />...<xhtml:br />String os = System.getProperty("os.name");<xhtml:br />if (os.equalsIgnoreCase("Windows 95")) System.out.println("Not supported");</xhtml:div>
+               </Example_Code>
+               <Body_Text>The traditional defense of this coding error is: "I know the requested value will always exist because.... If it does not exist, the program cannot perform the desired behavior so it doesn't matter whether I handle the error or allow the program to die dereferencing a null value." But attackers are skilled at finding unexpected paths through programs, particularly when exceptions are involved.</Body_Text>
+            </Demonstrative_Example>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-12">
+               <Intro_Text>The following VB.NET code does not check to make sure that it has read 50 bytes from myfile.txt. This can cause DoDangerousOperation() to operate on an unexpected value.</Intro_Text>
+               <Example_Code Nature="Bad" Language="C#">
+                  <xhtml:div>Dim MyFile As New FileStream("myfile.txt", FileMode.Open, FileAccess.Read, FileShare.Read)<xhtml:br />Dim MyArray(50) As Byte<xhtml:br />MyFile.Read(MyArray, 0, 50)<xhtml:br />DoDangerousOperation(MyArray(20))</xhtml:div>
+               </Example_Code>
+               <Body_Text>In .NET, it is not uncommon for programmers to misunderstand Read() and related methods that are part of many System.IO classes. The stream and reader classes do not consider it to be unusual or exceptional if only a small amount of data becomes available. These classes simply add the small amount of data to the return buffer, and set the return value to the number of bytes or characters read. There is no guarantee that the amount of data returned is equal to the amount of data requested.</Body_Text>
+            </Demonstrative_Example>
+            <Demonstrative_Example>
+               <Intro_Text>It is not uncommon for Java programmers to misunderstand read() and related methods that are part of many java.io classes. Most errors and unusual events in Java result in an exception being thrown. But the stream and reader classes do not consider it unusual or exceptional if only a small amount of data becomes available. These classes simply add the small amount of data to the return buffer, and set the return value to the number of bytes or characters read. There is no guarantee that the amount of data returned is equal to the amount of data requested. This behavior makes it important for programmers to examine the return value from read() and other IO methods to ensure that they receive the amount of data they expect.</Intro_Text>
+            </Demonstrative_Example>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-1">
+               <Intro_Text>This example takes an IP address from a user, verifies that it is well formed and then looks up the hostname and copies it into a buffer.</Intro_Text>
+               <Example_Code Nature="Bad" Language="C">
+                  <xhtml:div>void host_lookup(char *user_supplied_addr){<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>struct hostent *hp;<xhtml:br />in_addr_t *addr;<xhtml:br />char hostname[64];<xhtml:br />in_addr_t inet_addr(const char *cp);<xhtml:br />
+                           <xhtml:br />
+                           <xhtml:i>/*routine that ensures user_supplied_addr is in the right format for conversion */</xhtml:i>
+                           <xhtml:br />
+                           <xhtml:br />validate_addr_form(user_supplied_addr);<xhtml:br />addr = inet_addr(user_supplied_addr);<xhtml:br />hp = gethostbyaddr( addr, sizeof(struct in_addr), AF_INET);<xhtml:br />strcpy(hostname, hp-&gt;h_name);</xhtml:div>
+                     </xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>If an attacker provides an address that appears to be well-formed, but the address does not resolve to a hostname, then the call to gethostbyaddr() will return NULL. Since the code does not check the return value from gethostbyaddr (CWE-252), a NULL pointer dereference
+	       (CWE-476) would then occur in the call to strcpy().</Body_Text>
+               <Body_Text>Note that this code is also vulnerable to a buffer overflow (CWE-119).</Body_Text>
+            </Demonstrative_Example>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-24">
+               <Intro_Text>The following function attempts to acquire a lock in order to perform operations on a shared resource.</Intro_Text>
+               <Example_Code Nature="Bad" Language="C">
+                  <xhtml:div>void f(pthread_mutex_t *mutex) {<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>pthread_mutex_lock(mutex);<xhtml:br />
+                           <xhtml:br />
+                           <xhtml:i>/* access shared resource */</xhtml:i>
+                           <xhtml:br />
+                           <xhtml:br />
+                           <xhtml:br />pthread_mutex_unlock(mutex);</xhtml:div>
+                     </xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>However, the code does not check the value returned by pthread_mutex_lock() for errors. If pthread_mutex_lock() cannot acquire the mutex for any reason, the function may introduce a race condition into the program and result in undefined behavior.</Body_Text>
+               <Body_Text>In order to avoid data races, correctly written programs must check the result of thread synchronization functions and appropriately handle all errors, either by attempting to recover from them or reporting them to higher levels.</Body_Text>
+               <Example_Code Nature="Good" Language="C">
+                  <xhtml:div>int f(pthread_mutex_t *mutex) {<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>int result;<xhtml:br />
+                           <xhtml:br />result = pthread_mutex_lock(mutex);<xhtml:br />if (0 != result)<xhtml:div style="margin-left:1em;">return result;</xhtml:div>
+                           <xhtml:br />
+                           <xhtml:br />
+                           <xhtml:i>/* access shared resource */</xhtml:i>
+                           <xhtml:br />
+                           <xhtml:br />
+                           <xhtml:br />return pthread_mutex_unlock(mutex);</xhtml:div>
+                     </xhtml:div>}</xhtml:div>
+               </Example_Code>
+            </Demonstrative_Example>
+         </Demonstrative_Examples>
+         <Observed_Examples>
+            <Observed_Example>
+               <Reference>CVE-2020-17533</Reference>
+               <Description>Chain: unchecked return value (CWE-252) of some functions for policy enforcement leads to authorization bypass (CWE-862)</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2020-17533</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2020-6078</Reference>
+               <Description>Chain: The return value of a function returning a pointer is not checked for success (CWE-252) resulting in the later use of an uninitialized variable (CWE-456) and a null pointer dereference (CWE-476)</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2020-6078</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2019-15900</Reference>
+               <Description>Chain: sscanf() call is used to check if a username and group exists, but the return value of sscanf() call is not checked (CWE-252), causing an uninitialized variable to be checked (CWE-457), returning success to allow authorization bypass for executing a privileged (CWE-863).</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2019-15900</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2007-3798</Reference>
+               <Description>Unchecked return value leads to resultant integer overflow and code execution.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2007-3798</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2006-4447</Reference>
+               <Description>Program does not check return value when invoking functions to drop privileges, which could leave users with higher privileges than expected by forcing those functions to fail.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2006-4447</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2006-2916</Reference>
+               <Description>Program does not check return value when invoking functions to drop privileges, which could leave users with higher privileges than expected by forcing those functions to fail.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2006-2916</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2008-5183</Reference>
+               <Description>chain: unchecked return value can lead to NULL dereference</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2008-5183</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2010-0211</Reference>
+               <Description>chain: unchecked return value (CWE-252) leads to free of invalid, uninitialized pointer (CWE-824).</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2010-0211</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2017-6964</Reference>
+               <Description>Linux-based device mapper encryption program does not check the return value of setuid and setgid allowing attackers to execute code with unintended privileges.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2017-6964</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2002-1372</Reference>
+               <Description>Chain: Return values of file/socket operations are not checked (CWE-252), allowing resultant consumption of file descriptors (CWE-772).</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2002-1372</Link>
+            </Observed_Example>
+         </Observed_Examples>
+         <Taxonomy_Mappings>
+            <Taxonomy_Mapping Taxonomy_Name="7 Pernicious Kingdoms">
+               <Entry_Name>Unchecked Return Value</Entry_Name>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="CLASP">
+               <Entry_Name>Ignored function return value</Entry_Name>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="OWASP Top Ten 2004">
+               <Entry_ID>A7</Entry_ID>
+               <Entry_Name>Improper Error Handling</Entry_Name>
+               <Mapping_Fit>CWE More Specific</Mapping_Fit>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="CERT C Secure Coding">
+               <Entry_ID>ERR33-C</Entry_ID>
+               <Entry_Name>Detect and handle standard library errors</Entry_Name>
+               <Mapping_Fit>Imprecise</Mapping_Fit>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="CERT C Secure Coding">
+               <Entry_ID>POS54-C</Entry_ID>
+               <Entry_Name>Detect and handle POSIX library errors</Entry_Name>
+               <Mapping_Fit>Imprecise</Mapping_Fit>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="The CERT Oracle Secure Coding Standard for Java (2011)">
+               <Entry_ID>EXP00-J</Entry_ID>
+               <Entry_Name>Do not ignore values returned by methods</Entry_Name>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="SEI CERT Perl Coding Standard">
+               <Entry_ID>EXP32-PL</Entry_ID>
+               <Entry_Name>Do not ignore function return values</Entry_Name>
+               <Mapping_Fit>Exact</Mapping_Fit>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="Software Fault Patterns">
+               <Entry_ID>SFP4</Entry_ID>
+               <Entry_Name>Unchecked Status Condition</Entry_Name>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="OMG ASCSM">
+                <Entry_ID>ASCSM-CWE-252-resource</Entry_ID>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="OMG ASCRM">
+                <Entry_ID>ASCRM-CWE-252-data</Entry_ID>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="OMG ASCRM">
+                <Entry_ID>ASCRM-CWE-252-resource</Entry_ID>
+            </Taxonomy_Mapping>
+         </Taxonomy_Mappings>
+         <References>
+            <Reference External_Reference_ID="REF-6" />
+            <Reference External_Reference_ID="REF-62" Section="Chapter 7, &quot;Program Building Blocks&quot; Page 341" />
+            <Reference External_Reference_ID="REF-7" Section="Chapter 20, &quot;Checking Returns&quot; Page 624" />
+            <Reference External_Reference_ID="REF-44" Section="&quot;Sin 11: Failure to Handle Errors Correctly.&quot; Page 183" />
+            <Reference External_Reference_ID="REF-961" Section="ASCRM-CWE-252-data" />
+            <Reference External_Reference_ID="REF-961" Section="ASCRM-CWE-252-resource" />
+            <Reference External_Reference_ID="REF-962" Section="ASCSM-CWE-252-resource" />
+            <Reference External_Reference_ID="REF-1484" />
+         </References>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Base level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+         <Content_History>
+            <Submission>
+               <Submission_Name>7 Pernicious Kingdoms</Submission_Name>
+               <Submission_Date>2006-07-19</Submission_Date>
+               <Submission_Version>Draft 3</Submission_Version>
+               <Submission_ReleaseDate>2006-07-19</Submission_ReleaseDate>
+            </Submission>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2008-09-08</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences, Relationships, Other_Notes, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2008-11-24</Modification_Date>
+               <Modification_Version>1.1</Modification_Version>
+               <Modification_ReleaseDate>2008-11-25</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2009-01-12</Modification_Date>
+               <Modification_Version>1.2</Modification_Version>
+               <Modification_ReleaseDate>2009-01-12</Modification_ReleaseDate>
+               <Modification_Comment>updated Background_Details, Demonstrative_Examples, Description, Observed_Examples, Other_Notes, Potential_Mitigations</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2009-03-10</Modification_Date>
+               <Modification_Version>1.3</Modification_Version>
+               <Modification_ReleaseDate>2009-03-10</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2009-05-27</Modification_Date>
+               <Modification_Version>1.4</Modification_Version>
+               <Modification_ReleaseDate>2009-05-27</Modification_ReleaseDate>
+               <Modification_Comment>updated Demonstrative_Examples</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2009-07-27</Modification_Date>
+               <Modification_Version>1.5</Modification_Version>
+               <Modification_ReleaseDate>2009-07-27</Modification_ReleaseDate>
+               <Modification_Comment>updated Demonstrative_Examples</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2009-12-28</Modification_Date>
+               <Modification_Version>1.7</Modification_Version>
+               <Modification_ReleaseDate>2009-12-28</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences, Demonstrative_Examples, References</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2010-02-16</Modification_Date>
+               <Modification_Version>1.8</Modification_Version>
+               <Modification_ReleaseDate>2010-02-16</Modification_ReleaseDate>
+               <Modification_Comment>updated Demonstrative_Examples, Potential_Mitigations, References</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2010-04-05</Modification_Date>
+               <Modification_Version>1.8.1</Modification_Version>
+               <Modification_ReleaseDate>2010-04-05</Modification_ReleaseDate>
+               <Modification_Comment>updated Demonstrative_Examples</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2010-06-21</Modification_Date>
+               <Modification_Version>1.9</Modification_Version>
+               <Modification_ReleaseDate>2010-06-21</Modification_ReleaseDate>
+               <Modification_Comment>updated Demonstrative_Examples, References</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2010-09-27</Modification_Date>
+               <Modification_Version>1.10</Modification_Version>
+               <Modification_ReleaseDate>2010-09-27</Modification_ReleaseDate>
+               <Modification_Comment>updated Observed_Examples</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2010-12-13</Modification_Date>
+               <Modification_Version>1.11</Modification_Version>
+               <Modification_ReleaseDate>2010-12-13</Modification_ReleaseDate>
+               <Modification_Comment>updated Demonstrative_Examples</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-06-01</Modification_Date>
+               <Modification_Version>1.13</Modification_Version>
+               <Modification_ReleaseDate>2011-06-01</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences, Demonstrative_Examples, Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-06-27</Modification_Date>
+               <Modification_Version>2.0</Modification_Version>
+               <Modification_ReleaseDate>2011-06-27</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-09-13</Modification_Date>
+               <Modification_Version>2.1</Modification_Version>
+               <Modification_ReleaseDate>2011-09-13</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2012-05-11</Modification_Date>
+               <Modification_Version>2.2</Modification_Version>
+               <Modification_ReleaseDate>2012-05-15</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences, References, Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2014-06-23</Modification_Date>
+               <Modification_Version>2.7</Modification_Version>
+               <Modification_ReleaseDate>2014-06-23</Modification_ReleaseDate>
+               <Modification_Comment>updated Demonstrative_Examples, Potential_Mitigations</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2014-07-30</Modification_Date>
+               <Modification_Version>2.8</Modification_Version>
+               <Modification_ReleaseDate>2014-07-31</Modification_ReleaseDate>
+               <Modification_Comment>updated Demonstrative_Examples, Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2017-11-08</Modification_Date>
+               <Modification_Version>3.0</Modification_Version>
+               <Modification_ReleaseDate>2017-11-08</Modification_ReleaseDate>
+               <Modification_Comment>updated Applicable_Platforms, References, Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2018-03-27</Modification_Date>
+               <Modification_Version>3.1</Modification_Version>
+               <Modification_ReleaseDate>2018-03-27</Modification_ReleaseDate>
+               <Modification_Comment>updated References</Modification_Comment>
+            </Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2019-01-03</Modification_Date>
+					<Modification_Version>3.2</Modification_Version>
+					<Modification_ReleaseDate>2019-01-03</Modification_ReleaseDate>
+					<Modification_Comment>updated References, Relationships, Taxonomy_Mappings</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2019-06-20</Modification_Date>
+					<Modification_Version>3.3</Modification_Version>
+					<Modification_ReleaseDate>2019-06-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-02-24</Modification_Date>
+					<Modification_Version>4.0</Modification_Version>
+					<Modification_ReleaseDate>2020-02-24</Modification_ReleaseDate>
+					<Modification_Comment>updated References</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-06-25</Modification_Date>
+					<Modification_Version>4.1</Modification_Version>
+					<Modification_ReleaseDate>2020-06-25</Modification_ReleaseDate>
+					<Modification_Comment>updated Observed_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-08-20</Modification_Date>
+					<Modification_Version>4.2</Modification_Version>
+					<Modification_ReleaseDate>2020-08-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-03-15</Modification_Date>
+					<Modification_Version>4.4</Modification_Version>
+					<Modification_ReleaseDate>2021-03-15</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples, Observed_Examples, Relationships, Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-07-20</Modification_Date>
+					<Modification_Version>4.5</Modification_Version>
+					<Modification_ReleaseDate>2021-07-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Observed_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-01-31</Modification_Date>
+					<Modification_Version>4.10</Modification_Version>
+					<Modification_ReleaseDate>2023-01-31</Modification_ReleaseDate>
+					<Modification_Comment>updated Description</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Detection_Factors, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-10-26</Modification_Date>
+					<Modification_Version>4.13</Modification_Version>
+					<Modification_ReleaseDate>2023-10-26</Modification_ReleaseDate>
+					<Modification_Comment>updated Observed_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-09-09</Modification_Date>
+					<Modification_Version>4.18</Modification_Version>
+					<Modification_ReleaseDate>2025-09-09</Modification_ReleaseDate>
+					<Modification_Comment>updated Potential_Mitigations, References</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+            <Contribution Type="Content">
+               <Contribution_Name>Martin Sebor</Contribution_Name>
+               <Contribution_Organization>Cisco Systems, Inc.</Contribution_Organization>
+               <Contribution_Date>2010-04-30</Contribution_Date>
+               <Contribution_Comment>Provided Demonstrative Example and suggested CERT reference</Contribution_Comment>
+            </Contribution>
+         </Content_History>
+      </Weakness>
+      

@@ -1,0 +1,632 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="862" Name="Missing Authorization" Abstraction="Class" Structure="Simple" Status="Incomplete" Diagram="/data/images/CWE-862-Diagram.png">
+         <Description>The product does not perform an authorization check when an actor attempts to access a resource or perform an action.</Description>
+         <Related_Weaknesses>
+            <Related_Weakness Nature="ChildOf" CWE_ID="285" View_ID="1000" Ordinal="Primary" />
+			<Related_Weakness Nature="ChildOf" CWE_ID="284" View_ID="1340" Ordinal="Primary" />
+         </Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+         <Applicable_Platforms>
+            <Language Class="Not Language-Specific" Prevalence="Undetermined" />
+	    <Technology Name="AI/ML" Prevalence="Often" />
+            <Technology Name="Web Server" Prevalence="Often" />
+            <Technology Name="Database Server" Prevalence="Often" />
+	    <Technology Class="Not Technology-Specific" Prevalence="Undetermined" />
+         </Applicable_Platforms>
+         <Background_Details>
+            <Background_Detail>An access control list (ACL) represents who/what has permissions to a given object. Different operating systems implement (ACLs) in different ways. In UNIX, there are three types of permissions: read, write, and execute. Users are divided into three classes for file access: owner, group owner, and all other users where each class has a separate set of rights. In Windows NT, there are four basic types of permissions for files: "No access", "Read access", "Change access", and "Full control". Windows NT extends the concept of three types of users in UNIX to include a list of users and groups along with their associated permissions. A user can create an object (file) and assign specified permissions to that object.</Background_Detail>
+         </Background_Details>
+         <Alternate_Terms>
+            <Alternate_Term>
+               <Term>AuthZ</Term>
+               <Description>"AuthZ" is typically used as an abbreviation of "authorization" within the web application security community. It is distinct from "AuthN" (or, sometimes, "AuthC") which is an abbreviation of "authentication." The use of "Auth" as an abbreviation is discouraged, since it could be used for either authentication or authorization.</Description>
+            </Alternate_Term>
+         </Alternate_Terms>
+         <Modes_Of_Introduction>
+            <Introduction>
+               <Phase>Architecture and Design</Phase>
+               <Note>
+                  <xhtml:p>OMISSION: This weakness is caused by missing a security tactic during the architecture and design phase.</xhtml:p>
+                  <xhtml:p>Authorization weaknesses may arise when a single-user application is ported to a multi-user environment.</xhtml:p>
+               </Note>
+            </Introduction>
+            <Introduction>
+               <Phase>Implementation</Phase>
+               <Note>A developer may introduce authorization weaknesses because of a lack of understanding about the underlying technologies. For example, a developer may assume that attackers cannot modify certain inputs such as headers or cookies.</Note>
+            </Introduction>
+            <Introduction>
+               <Phase>Operation</Phase>
+            </Introduction>
+         </Modes_Of_Introduction>
+         <Likelihood_Of_Exploit>High</Likelihood_Of_Exploit>
+         <Common_Consequences>
+            <Consequence>
+               <Scope>Confidentiality</Scope>
+               <Impact>Read Application Data</Impact>
+               <Impact>Read Files or Directories</Impact>
+               <Note>An attacker could read sensitive data, either by reading the data directly from a data store that is not restricted, or by accessing insufficiently-protected, privileged functionality to read the data.</Note>
+            </Consequence>
+            <Consequence>
+               <Scope>Integrity</Scope>
+               <Impact>Modify Application Data</Impact>
+               <Impact>Modify Files or Directories</Impact>
+               <Note>An attacker could modify sensitive data, either by writing the data directly to a data store that is not restricted, or by accessing insufficiently-protected, privileged functionality to write the data.</Note>
+            </Consequence>
+            <Consequence>
+               <Scope>Access Control</Scope>
+               <Impact>Gain Privileges or Assume Identity</Impact>
+               <Impact>Bypass Protection Mechanism</Impact>
+               <Note>An attacker could gain privileges by modifying or reading critical data directly, or by accessing privileged functionality.</Note>
+            </Consequence>
+            <Consequence>
+               <Scope>Availability</Scope>
+               <Impact>DoS: Crash, Exit, or Restart</Impact>
+               <Impact>DoS: Resource Consumption (CPU)</Impact>
+			   <Impact>DoS: Resource Consumption (Memory)</Impact>
+			   <Impact>DoS: Resource Consumption (Other)</Impact>
+               <Note>An attacker could gain unauthorized access to resources on the system and excessively consume those resources, leading to a denial of service.</Note>
+            </Consequence>
+         </Common_Consequences>
+         <Detection_Methods>
+            <Detection_Method Detection_Method_ID="DM-6">
+               <Method>Automated Static Analysis</Method>
+               <Description>
+                  <xhtml:p>Automated static analysis is useful for detecting commonly-used idioms for authorization. A tool may be able to analyze related configuration files, such as .htaccess in Apache web servers, or detect the usage of commonly-used authorization libraries.</xhtml:p>
+                  <xhtml:p>Generally, automated static analysis tools have difficulty detecting custom authorization schemes. In addition, the software's design may include some functionality that is accessible to any user and does not require an authorization check; an automated technique that detects the absence of authorization may report false positives.</xhtml:p>
+               </Description>
+               <Effectiveness>Limited</Effectiveness>
+            </Detection_Method>
+            <Detection_Method>
+               <Method>Automated Dynamic Analysis</Method>
+               <Description>Automated dynamic analysis may find many or all possible interfaces that do not require authorization, but manual analysis is required to determine if the lack of authorization violates business logic.</Description>
+            </Detection_Method>
+            <Detection_Method>
+               <Method>Manual Analysis</Method>
+               <Description>
+                  <xhtml:p>This weakness can be detected using tools and techniques that require manual (human) analysis, such as penetration testing, threat modeling, and interactive tools that allow the tester to record and modify an active session.</xhtml:p>
+                  <xhtml:p>Specifically, manual static analysis is useful for evaluating the correctness of custom authorization mechanisms.</xhtml:p>
+               </Description>
+               <Effectiveness>Moderate</Effectiveness>
+               <Effectiveness_Notes>These may be more effective than strictly automated techniques. This is especially the case with weaknesses that are related to design and business rules. However, manual efforts might not achieve desired code coverage within limited time constraints.</Effectiveness_Notes>
+            </Detection_Method>
+            <Detection_Method>
+               <Method>Manual Static Analysis - Binary or Bytecode</Method>
+               <Description>
+                  <xhtml:p>According to SOAR [REF-1479], the following detection techniques may be useful:</xhtml:p>
+                  <xhtml:div style="margin-left:1em;">
+                     <xhtml:div>Cost effective for partial coverage:</xhtml:div>
+                        <xhtml:ul>
+                           <xhtml:li>Binary / Bytecode disassembler - then use manual analysis for vulnerabilities &amp; anomalies</xhtml:li>
+                        </xhtml:ul>
+                  </xhtml:div>
+               </Description>
+               <Effectiveness>SOAR Partial</Effectiveness>
+            </Detection_Method>
+            <Detection_Method>
+               <Method>Dynamic Analysis with Automated Results Interpretation</Method>
+               <Description>
+                  <xhtml:p>According to SOAR [REF-1479], the following detection techniques may be useful:</xhtml:p>
+                  <xhtml:div style="margin-left:1em;">
+                     <xhtml:div>Cost effective for partial coverage:</xhtml:div>
+                        <xhtml:ul>
+                           <xhtml:li>Web Application Scanner</xhtml:li>
+                           <xhtml:li>Web Services Scanner</xhtml:li>
+                           <xhtml:li>Database Scanners</xhtml:li>
+                        </xhtml:ul>
+                  </xhtml:div>
+               </Description>
+               <Effectiveness>SOAR Partial</Effectiveness>
+            </Detection_Method>
+            <Detection_Method>
+               <Method>Dynamic Analysis with Manual Results Interpretation</Method>
+               <Description>
+                  <xhtml:p>According to SOAR [REF-1479], the following detection techniques may be useful:</xhtml:p>
+                  <xhtml:div style="margin-left:1em;">
+                     <xhtml:div>Cost effective for partial coverage:</xhtml:div>
+                        <xhtml:ul>
+                           <xhtml:li>Host Application Interface Scanner</xhtml:li>
+                           <xhtml:li>Fuzz Tester</xhtml:li>
+                           <xhtml:li>Framework-based Fuzzer</xhtml:li>
+                        </xhtml:ul>
+                  </xhtml:div>
+               </Description>
+               <Effectiveness>SOAR Partial</Effectiveness>
+            </Detection_Method>
+            <Detection_Method>
+               <Method>Manual Static Analysis - Source Code</Method>
+               <Description>
+                  <xhtml:p>According to SOAR [REF-1479], the following detection techniques may be useful:</xhtml:p>
+                  <xhtml:div style="margin-left:1em;">
+                     <xhtml:div>Cost effective for partial coverage:</xhtml:div>
+                        <xhtml:ul>
+                           <xhtml:li>Focused Manual Spotcheck - Focused manual analysis of source</xhtml:li>
+                           <xhtml:li>Manual Source Code Review (not inspections)</xhtml:li>
+                        </xhtml:ul>
+                  </xhtml:div>
+               </Description>
+               <Effectiveness>SOAR Partial</Effectiveness>
+            </Detection_Method>
+            <Detection_Method>
+               <Method>Automated Static Analysis - Source Code</Method>
+               <Description>
+                  <xhtml:p>According to SOAR [REF-1479], the following detection techniques may be useful:</xhtml:p>
+                  <xhtml:div style="margin-left:1em;">
+                     <xhtml:div>Cost effective for partial coverage:</xhtml:div>
+                        <xhtml:ul>
+                           <xhtml:li>Source code Weakness Analyzer</xhtml:li>
+                           <xhtml:li>Context-configured Source Code Weakness Analyzer</xhtml:li>
+                        </xhtml:ul>
+                  </xhtml:div>
+               </Description>
+               <Effectiveness>SOAR Partial</Effectiveness>
+            </Detection_Method>
+            <Detection_Method>
+               <Method>Architecture or Design Review</Method>
+               <Description>
+                  <xhtml:p>According to SOAR [REF-1479], the following detection techniques may be useful:</xhtml:p>
+                  <xhtml:div style="margin-left:1em;">
+                     <xhtml:div>Highly cost effective:</xhtml:div>
+                        <xhtml:ul>
+                           <xhtml:li>Inspection (IEEE 1028 standard) (can apply to requirements, design, source code, etc.)</xhtml:li>
+                           <xhtml:li>Formal Methods / Correct-By-Construction</xhtml:li>
+                        </xhtml:ul>
+                  </xhtml:div>
+               </Description>
+               <Effectiveness>High</Effectiveness>
+            </Detection_Method>
+         </Detection_Methods>
+         <Potential_Mitigations>
+            <Mitigation>
+               <Phase>Architecture and Design</Phase>
+               <Description>
+                  <xhtml:p>Divide the product into anonymous, normal, privileged, and administrative areas. Reduce the attack surface by carefully mapping roles with data and functionality. Use role-based access control (RBAC) [REF-229] to enforce the roles at the appropriate boundaries.</xhtml:p>
+                  <xhtml:p>Note that this approach may not protect against horizontal authorization, i.e., it will not protect a user from attacking others with the same role.</xhtml:p>
+               </Description>
+            </Mitigation>
+            <Mitigation>
+               <Phase>Architecture and Design</Phase>
+               <Description>Ensure that access control checks are performed related to the business logic. These checks may be different than the access control checks that are applied to more generic resources such as files, connections, processes, memory, and database records. For example, a database may restrict access for medical records to a specific database user, but each record might only be intended to be accessible to the patient and the patient's doctor [REF-7].</Description>
+            </Mitigation>
+            <Mitigation Mitigation_ID="MIT-4.4">
+               <Phase>Architecture and Design</Phase>
+               <Strategy>Libraries or Frameworks</Strategy>
+               <Description>
+                  <xhtml:p>Use a vetted library or framework that does not allow this weakness to occur or provides constructs that make this weakness easier to avoid.</xhtml:p>
+                  <xhtml:p>For example, consider using authorization frameworks such as the JAAS Authorization Framework [REF-233] and the OWASP ESAPI Access Control feature [REF-45].</xhtml:p>
+               </Description>
+            </Mitigation>
+            <Mitigation>
+               <Phase>Architecture and Design</Phase>
+               <Description>
+                  <xhtml:p>For web applications, make sure that the access control mechanism is enforced correctly at the server side on every page. Users should not be able to access any unauthorized functionality or information by simply requesting direct access to that page.</xhtml:p>
+                  <xhtml:p>One way to do this is to ensure that all pages containing sensitive information are not cached, and that all such pages restrict access to requests that are accompanied by an active and authenticated session token associated with a user who has the required permissions to access that page.</xhtml:p>
+               </Description>
+            </Mitigation>
+            <Mitigation>
+               <Phase>System Configuration</Phase>
+               <Phase>Installation</Phase>
+               <Description>Use the access control capabilities of your operating system and server environment and define your access control lists accordingly. Use a "default deny" policy when defining these ACLs.</Description>
+            </Mitigation>
+         </Potential_Mitigations>
+         <Demonstrative_Examples>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-95">
+               <Intro_Text>This function runs an arbitrary SQL query on a given database, returning the result of the query.</Intro_Text>
+               <Example_Code Nature="Bad" Language="PHP">
+                  <xhtml:div>function runEmployeeQuery($dbName, $name){<xhtml:div style="margin-left:1em;">mysql_select_db($dbName,$globalDbHandle) or die("Could not open Database".$dbName);<xhtml:br />
+                        <xhtml:i>//Use a prepared statement to avoid CWE-89</xhtml:i>
+                        <xhtml:br />$preparedStatement = $globalDbHandle-&gt;prepare('SELECT * FROM employees WHERE name = :name');<xhtml:br />$preparedStatement-&gt;execute(array(':name' =&gt; $name));<xhtml:br />return $preparedStatement-&gt;fetchAll();</xhtml:div>}<xhtml:br />
+                     <xhtml:i>/.../</xhtml:i>
+                     <xhtml:br />
+                     <xhtml:br />$employeeRecord = runEmployeeQuery('EmployeeDB',$_GET['EmployeeName']);</xhtml:div>
+               </Example_Code>
+               <Body_Text>While this code is careful to avoid SQL Injection, the function does not confirm the user sending the query is authorized to do so. An attacker may be able to obtain sensitive employee information from the database.</Body_Text>
+            </Demonstrative_Example>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-96">
+               <Intro_Text>The following program could be part of a bulletin board system that allows users to send private messages to each other. This program intends to authenticate the user before deciding whether a private message should be displayed. Assume that LookupMessageObject() ensures that the $id argument is numeric, constructs a filename based on that id, and reads the message details from that file. Also assume that the program stores all private messages for all users in the same directory.</Intro_Text>
+               <Example_Code Nature="Bad" Language="Perl">
+                  <xhtml:div>sub DisplayPrivateMessage {<xhtml:div style="margin-left:1em;">my($id) = @_;<xhtml:br />my $Message = LookupMessageObject($id);<xhtml:br />print "From: " . encodeHTML($Message-&gt;{from}) . "&lt;br&gt;\n";<xhtml:br />print "Subject: " . encodeHTML($Message-&gt;{subject}) . "\n";<xhtml:br />print "&lt;hr&gt;\n";<xhtml:br />print "Body: " . encodeHTML($Message-&gt;{body}) . "\n";</xhtml:div>}<xhtml:br />
+                     <xhtml:br />my $q = new CGI;<xhtml:br />
+                     <xhtml:i># For purposes of this example, assume that CWE-309 and</xhtml:i>
+                     <xhtml:br />
+                     <xhtml:br />
+                     <xhtml:br />
+                     <xhtml:i># CWE-523 do not apply.</xhtml:i>
+                     <xhtml:br />if (! AuthenticateUser($q-&gt;param('username'), $q-&gt;param('password'))) {<xhtml:div style="margin-left:1em;">ExitError("invalid username or password");</xhtml:div>}<xhtml:br />
+                     <xhtml:br />my $id = $q-&gt;param('id');<xhtml:br />DisplayPrivateMessage($id);</xhtml:div>
+               </Example_Code>
+               <Body_Text>While the program properly exits if authentication fails, it does not ensure that the message is addressed to the user. As a result, an authenticated attacker could provide any arbitrary identifier and read private messages that were intended for other users.</Body_Text>
+               <Body_Text>One way to avoid this problem would be to ensure that the "to" field in the message object matches the username of the authenticated user.</Body_Text>
+            </Demonstrative_Example>
+         </Demonstrative_Examples>
+         <Observed_Examples>
+            <Observed_Example>
+               <Reference>CVE-2026-32228</Reference>
+               <Description>workflow management product does not check authorization for running a workflow, allowing UI and API users to trigger workflow objects for which they have no access</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2026-32228</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2024-6845</Reference>
+               <Description>chatbot Wordpress plugin does not perform authorization on a REST endpoint, allowing retrieval of an API key</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2024-6845</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2025-2224</Reference>
+               <Description>AI-enabled WordPress plugin has a missing capability check for a particular function, allowing changing public status of posts</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2025-2224</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2022-24730</Reference>
+               <Description>Go-based continuous deployment product does not check that a user has certain privileges to update or create an app, allowing adversaries to read sensitive repository information</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2022-24730</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2009-3168</Reference>
+               <Description>Web application does not restrict access to admin scripts, allowing authenticated users to reset administrative passwords.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2009-3168</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2009-3597</Reference>
+               <Description>Web application stores database file under the web root with insufficient access control (CWE-219), allowing direct request.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2009-3597</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2009-2282</Reference>
+               <Description>Terminal server does not check authorization for guest access.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2009-2282</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2008-5027</Reference>
+               <Description>System monitoring software allows users to bypass authorization by creating custom forms.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2008-5027</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2009-3781</Reference>
+               <Description>Content management system does not check access permissions for private files, allowing others to view those files.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2009-3781</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2008-6548</Reference>
+               <Description>Product does not check the ACL of a page accessed using an "include" directive, allowing attackers to read unauthorized files.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2008-6548</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2009-2960</Reference>
+               <Description>Web application does not restrict access to admin scripts, allowing authenticated users to modify passwords of other users.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2009-2960</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2009-3230</Reference>
+               <Description>Database server does not use appropriate privileges for certain sensitive operations.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2009-3230</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2009-2213</Reference>
+               <Description>Gateway uses default "Allow" configuration for its authorization settings.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2009-2213</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2009-0034</Reference>
+               <Description>Chain: product does not properly interpret a configuration option for a system group, allowing users to gain privileges.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2009-0034</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2008-6123</Reference>
+               <Description>Chain: SNMP product does not properly parse a configuration option for which hosts are allowed to connect, allowing unauthorized IP addresses to connect.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2008-6123</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2008-7109</Reference>
+               <Description>Chain: reliance on client-side security (CWE-602) allows attackers to bypass authorization using a custom client.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2008-7109</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2008-3424</Reference>
+               <Description>Chain: product does not properly handle wildcards in an authorization policy list, allowing unintended access.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2008-3424</Link>
+            </Observed_Example>
+	   <Observed_Example>
+	     <Reference>CVE-2005-1036</Reference>
+	     <Description>Chain: Bypass of access restrictions due to improper authorization (CWE-862) of a user results from an improperly initialized (CWE-909) I/O permission bitmap</Description>
+	     <Link>https://www.cve.org/CVERecord?id=CVE-2005-1036</Link>
+	   </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2008-4577</Reference>
+               <Description>ACL-based protection mechanism treats negative access rights as if they are positive, allowing bypass of intended restrictions.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2008-4577</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2007-2925</Reference>
+               <Description>Default ACL list for a DNS server does not set certain ACLs, allowing unauthorized DNS queries.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2007-2925</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2006-6679</Reference>
+               <Description>Product relies on the X-Forwarded-For HTTP header for authorization, allowing unintended access by spoofing the header.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2006-6679</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2005-3623</Reference>
+               <Description>OS kernel does not check for a certain privilege before setting ACLs for files.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2005-3623</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2005-2801</Reference>
+               <Description>Chain: file-system code performs an incorrect comparison (CWE-697), preventing default ACLs from being properly applied.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2005-2801</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2001-1155</Reference>
+               <Description>Chain: product does not properly check the result of a reverse DNS lookup because of operator precedence (CWE-783), allowing bypass of DNS-based access restrictions.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2001-1155</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2020-17533</Reference>
+               <Description>Chain: unchecked return value (CWE-252) of some functions for policy enforcement leads to authorization bypass (CWE-862)</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2020-17533</Link>
+            </Observed_Example>
+         </Observed_Examples>
+	 <Taxonomy_Mappings>
+	   <Taxonomy_Mapping Taxonomy_Name="ISA/IEC 62443">
+	     <Entry_ID>Part 2-1</Entry_ID>
+	     <Entry_Name>Req 4.3.3.7</Entry_Name>
+	   </Taxonomy_Mapping>
+	   <Taxonomy_Mapping Taxonomy_Name="ISA/IEC 62443">
+	     <Entry_ID>Part 3-3</Entry_ID>
+	     <Entry_Name>Req SR 2.1</Entry_Name>
+	   </Taxonomy_Mapping>
+	   <Taxonomy_Mapping Taxonomy_Name="ISA/IEC 62443">
+	     <Entry_ID>Part 4-2</Entry_ID>
+	     <Entry_Name>Req CR 2.1</Entry_Name>
+	   </Taxonomy_Mapping>
+	 </Taxonomy_Mappings>
+         <Related_Attack_Patterns>
+            <Related_Attack_Pattern CAPEC_ID="665" />
+         </Related_Attack_Patterns>
+         <References>
+            <Reference External_Reference_ID="REF-229" />
+            <Reference External_Reference_ID="REF-7" Section="Chapter 4, &quot;Authorization&quot; Page 114; Chapter 6, &quot;Determining&#10;                  Appropriate Access Control&quot; Page 171" />
+            <Reference External_Reference_ID="REF-231" />
+            <Reference External_Reference_ID="REF-45" />
+            <Reference External_Reference_ID="REF-233" />
+            <Reference External_Reference_ID="REF-62" Section="Chapter 2, &quot;Common Vulnerabilities of Authorization&quot;, Page 39" />
+            <Reference External_Reference_ID="REF-1479" />
+         </References>
+         <Mapping_Notes>
+            <Usage>Allowed-with-Review</Usage>
+            <Rationale>This CWE entry is a Class and might have Base-level children that would be more appropriate</Rationale>
+            <Comments>Examine children of this entry to see if there is a better fit</Comments>
+            <Reasons>
+               <Reason Type="Abstraction" />
+            </Reasons>
+         </Mapping_Notes>
+         <Notes>
+            <Note Type="Terminology">Assuming a user with a given identity, authorization is the process of determining whether that user can access a given resource, based on the user's privileges and any permissions or other access-control specifications that apply to the resource.</Note>
+         </Notes>
+        <Content_History>
+            <Submission>
+               <Submission_Name>CWE Content Team</Submission_Name>
+               <Submission_Organization>MITRE</Submission_Organization>
+               <Submission_Date>2011-05-24</Submission_Date>
+               <Submission_Version>1.13</Submission_Version>
+               <Submission_ReleaseDate>2011-06-01</Submission_ReleaseDate>
+            </Submission>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-06-27</Modification_Date>
+               <Modification_Version>2.0</Modification_Version>
+               <Modification_ReleaseDate>2011-06-27</Modification_ReleaseDate>
+               <Modification_Comment>updated Demonstrative_Examples, Related_Attack_Patterns, Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-09-13</Modification_Date>
+               <Modification_Version>2.1</Modification_Version>
+               <Modification_ReleaseDate>2011-09-13</Modification_ReleaseDate>
+               <Modification_Comment>updated Potential_Mitigations, References, Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2012-05-11</Modification_Date>
+               <Modification_Version>2.2</Modification_Version>
+               <Modification_ReleaseDate>2012-05-15</Modification_ReleaseDate>
+               <Modification_Comment>updated Demonstrative_Examples, Observed_Examples, References, Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2012-10-30</Modification_Date>
+               <Modification_Version>2.3</Modification_Version>
+               <Modification_ReleaseDate>2012-10-30</Modification_ReleaseDate>
+               <Modification_Comment>updated Potential_Mitigations</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2014-02-18</Modification_Date>
+               <Modification_Version>2.6</Modification_Version>
+               <Modification_ReleaseDate>2014-02-19</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2014-07-30</Modification_Date>
+               <Modification_Version>2.8</Modification_Version>
+               <Modification_ReleaseDate>2014-07-31</Modification_ReleaseDate>
+               <Modification_Comment>updated Detection_Factors</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2017-01-19</Modification_Date>
+               <Modification_Version>2.10</Modification_Version>
+               <Modification_ReleaseDate>2017-01-19</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2017-11-08</Modification_Date>
+               <Modification_Version>3.0</Modification_Version>
+               <Modification_ReleaseDate>2017-11-08</Modification_ReleaseDate>
+               <Modification_Comment>updated Applicable_Platforms, Modes_of_Introduction, References, Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2018-03-27</Modification_Date>
+               <Modification_Version>3.1</Modification_Version>
+               <Modification_ReleaseDate>2018-03-27</Modification_ReleaseDate>
+               <Modification_Comment>updated References</Modification_Comment>
+            </Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2019-06-20</Modification_Date>
+					<Modification_Version>3.3</Modification_Version>
+					<Modification_ReleaseDate>2019-06-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-02-24</Modification_Date>
+					<Modification_Version>4.0</Modification_Version>
+					<Modification_ReleaseDate>2020-02-24</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-08-20</Modification_Date>
+					<Modification_Version>4.2</Modification_Version>
+					<Modification_ReleaseDate>2020-08-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-12-10</Modification_Date>
+					<Modification_Version>4.3</Modification_Version>
+					<Modification_ReleaseDate>2020-12-10</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-03-15</Modification_Date>
+					<Modification_Version>4.4</Modification_Version>
+					<Modification_ReleaseDate>2021-03-15</Modification_ReleaseDate>
+					<Modification_Comment>updated Alternate_Terms, Observed_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-07-20</Modification_Date>
+					<Modification_Version>4.5</Modification_Version>
+					<Modification_ReleaseDate>2021-07-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Observed_Examples, Related_Attack_Patterns, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-10-28</Modification_Date>
+					<Modification_Version>4.6</Modification_Version>
+					<Modification_ReleaseDate>2021-10-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-06-28</Modification_Date>
+					<Modification_Version>4.8</Modification_Version>
+					<Modification_ReleaseDate>2022-06-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-10-13</Modification_Date>
+					<Modification_Version>4.9</Modification_Version>
+					<Modification_ReleaseDate>2022-10-13</Modification_ReleaseDate>
+					<Modification_Comment>updated Observed_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-01-31</Modification_Date>
+					<Modification_Version>4.10</Modification_Version>
+					<Modification_ReleaseDate>2023-01-31</Modification_ReleaseDate>
+					<Modification_Comment>updated Description, Potential_Mitigations</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated References, Relationships, Taxonomy_Mappings</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes, Relationships, Taxonomy_Mappings</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2024-11-19</Modification_Date>
+					<Modification_Version>4.16</Modification_Version>
+					<Modification_ReleaseDate>2024-11-19</Modification_ReleaseDate>
+					<Modification_Comment>updated Common_Consequences, Description, Diagram, Relationships, Terminology_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-09-09</Modification_Date>
+					<Modification_Version>4.18</Modification_Version>
+					<Modification_ReleaseDate>2025-09-09</Modification_ReleaseDate>
+					<Modification_Comment>updated Applicable_Platforms, Detection_Factors, Observed_Examples, References</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Applicable_Platforms, Relationships, Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2026-04-30</Modification_Date>
+					<Modification_Version>4.20</Modification_Version>
+					<Modification_ReleaseDate>2026-04-30</Modification_ReleaseDate>
+					<Modification_Comment>updated Applicable_Platforms, Observed_Examples, Relationships</Modification_Comment>
+				</Modification>
+            <Contribution Type="Content">
+               <Contribution_Name>"Mapping CWE to 62443" Sub-Working Group</Contribution_Name>
+               <Contribution_Organization>CWE-CAPEC ICS/OT SIG</Contribution_Organization>
+               <Contribution_Date>2023-04-25</Contribution_Date>
+               <Contribution_Comment>Suggested mappings to ISA/IEC 62443.</Contribution_Comment>
+            </Contribution>
+	    <Contribution Type="Content">
+	      <Contribution_Name>Abhi Balakrishnan</Contribution_Name>
+	      <Contribution_Date>2024-02-29</Contribution_Date>
+	      <Contribution_Version>4.16</Contribution_Version>
+	      <Contribution_ReleaseDate>2024-11-19</Contribution_ReleaseDate>
+	      <Contribution_Comment>Provided diagram to improve CWE usability</Contribution_Comment>
+	    </Contribution>
+         </Content_History>
+      </Weakness>
+      

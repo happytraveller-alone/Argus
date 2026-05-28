@@ -1,0 +1,472 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="359" Name="Exposure of Private Personal Information to an Unauthorized Actor" Abstraction="Base" Structure="Simple" Status="Incomplete" Diagram="/data/images/CWE-359-Diagram.png">
+         <Description>The product does not properly prevent a person's private, personal information from being accessed by actors who either (1) are not explicitly authorized to access the information or (2) do not have the implicit consent of the person about whom the information is collected.</Description>
+         <Related_Weaknesses>
+            <Related_Weakness Nature="ChildOf" CWE_ID="200" View_ID="1000" Ordinal="Primary" />
+         </Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+            <Weakness_Ordinality>
+               <Ordinality>Resultant</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+         <Applicable_Platforms>
+            <Language Class="Not Language-Specific" Prevalence="Undetermined" />
+            <Technology Class="Mobile" Prevalence="Undetermined" />
+         </Applicable_Platforms>
+         <Alternate_Terms>
+            <Alternate_Term>
+               <Term>Privacy violation</Term>
+            </Alternate_Term>
+            <Alternate_Term>
+               <Term>Privacy leak / Privacy leakage</Term>
+            </Alternate_Term>
+            <Alternate_Term>
+               <Term>PPI</Term>
+	       <Description>acronym for Private Personal Information</Description>
+            </Alternate_Term>
+            <Alternate_Term>
+               <Term>PII</Term>
+	       <Description>acronym for Personally Identifiable Information</Description>
+            </Alternate_Term>
+            <Alternate_Term>
+               <Term>PHI</Term>
+	       <Description>acronym for Protected Health Information</Description>
+            </Alternate_Term>
+         </Alternate_Terms>
+         <Modes_Of_Introduction>
+            <Introduction>
+               <Phase>Architecture and Design</Phase>
+               <Note>OMISSION: This weakness is caused by missing a security tactic during the architecture and design phase.</Note>
+            </Introduction>
+            <Introduction>
+               <Phase>Implementation</Phase>
+            </Introduction>
+            <Introduction>
+               <Phase>Operation</Phase>
+            </Introduction>
+         </Modes_Of_Introduction>
+         <Common_Consequences>
+            <Consequence>
+               <Scope>Confidentiality</Scope>
+               <Impact>Read Application Data</Impact>
+            </Consequence>
+         </Common_Consequences>
+         <Detection_Methods>
+            <Detection_Method>
+               <Method>Architecture or Design Review</Method>
+               <Description>
+            <xhtml:p>Private personal data can enter a program in a variety of ways:</xhtml:p>
+               <xhtml:ul>
+                  <xhtml:li>Directly from the user in the form of a password or personal information</xhtml:li>
+                  <xhtml:li>Accessed from a database or other data store by the application</xhtml:li>
+                  <xhtml:li>Indirectly from a partner or other third party</xhtml:li>
+               </xhtml:ul>
+               <xhtml:p>If the data is written to an external location - such as the console, file system, or network - a privacy violation may occur.</xhtml:p>
+               </Description>
+               <Effectiveness>High</Effectiveness>
+            </Detection_Method>
+           <Detection_Method Detection_Method_ID="DM-14">
+             <Method>Automated Static Analysis</Method>
+             <Description>Automated static analysis, commonly referred to as Static Application Security Testing (SAST), can find some instances of this weakness by analyzing source code (or binary/compiled code) without having to execute it. Typically, this is done by building a model of data flow and control flow, then searching for potentially-vulnerable patterns that connect "sources" (origins of input) with "sinks" (destinations where the data interacts with external components, a lower layer such as the OS, etc.)</Description>
+             <Effectiveness>High</Effectiveness>
+           </Detection_Method>
+	   <Detection_Method>
+	     <Method>Automated Static Analysis</Method>
+	     <Description>Tools are available to analyze documents
+	     (such as PDF, Word, etc.) to look for private information
+	     such as names, addresses, etc.
+	     </Description>
+	   </Detection_Method>
+         </Detection_Methods>
+         <Potential_Mitigations>
+            <Mitigation>
+               <Phase>Requirements</Phase>
+               <Description>
+            <xhtml:p>Identify and consult all relevant regulations for personal privacy.  An organization may be required to comply with certain federal and state regulations, depending on its location, the type of business it conducts, and the nature of any private data it handles.  Regulations may include Safe Harbor Privacy Framework [REF-340], Gramm-Leach Bliley Act (GLBA) [REF-341], Health Insurance Portability and Accountability Act (HIPAA) [REF-342], General Data Protection Regulation (GDPR) [REF-1047], California Consumer Privacy Act (CCPA) [REF-1048], and others.</xhtml:p>
+               </Description>
+            </Mitigation>
+            <Mitigation>
+               <Phase>Architecture and Design</Phase>
+               <Description>
+            <xhtml:p>Carefully evaluate how secure design may interfere with privacy, and vice versa.  Security and privacy concerns often seem to compete with each other. From a security perspective, all important operations should be recorded so that any anomalous activity can later be identified. However, when private data is involved, this practice can in fact create risk. Although there are many ways in which private data can be handled unsafely, a common risk stems from misplaced trust. Programmers often trust the operating environment in which a program runs, and therefore believe that it is acceptable store private information on the file system, in the registry, or in other locally-controlled resources. However, even if access to certain resources is restricted, this does not guarantee that the individuals who do have access can be trusted.</xhtml:p>
+               </Description>
+            </Mitigation>
+	    <Mitigation Mitigation_ID="MIT-57">
+	      <Phase>Implementation</Phase>
+	      <Phase>Operation</Phase>
+              <Strategy>Attack Surface Reduction</Strategy>
+	      <Description>
+		<xhtml:p>Some tools can automatically analyze
+		documents to redact, strip, or "sanitize" private
+		information, although some human review might be
+		necessary. Tools may vary in terms of which document
+		formats can be processed. 
+		</xhtml:p>
+		<xhtml:p>
+		  When calling an external program to automatically
+		  generate or convert documents, invoke the program with
+		  any available options that avoid generating sensitive
+		  metadata.  Some formats have well-defined fields that
+		  could contain private data, such as Exchangeable image
+		  file format (Exif), which can contain potentially
+		  sensitive metadata such as geolocation, date, and time
+		  [REF-1515] [REF-1516].
+		</xhtml:p>
+	      </Description>
+	    </Mitigation>
+         </Potential_Mitigations>
+         <Demonstrative_Examples>
+            <Demonstrative_Example>
+               <Intro_Text>The following code contains a logging statement that tracks the contents of records added to a database by storing them in a log file. Among other values that are stored, the getPassword() function returns the user-supplied plaintext password associated with the account.</Intro_Text>
+               <Example_Code Nature="Bad" Language="C#">
+                  <xhtml:div>pass = GetPassword();<xhtml:br />...<xhtml:br />dbmsLog.WriteLine(id + ":" + pass + ":" + type + ":" + tstamp);</xhtml:div>
+               </Example_Code>
+               <Body_Text>The code in the example above logs a plaintext password to the filesystem. Although many developers trust the filesystem as a safe storage location for data, it should not be trusted implicitly, particularly when privacy is a concern.</Body_Text>
+            </Demonstrative_Example>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-111">
+               <Intro_Text>This code uses location to determine the user's current US State location.</Intro_Text>
+               <Body_Text>First the application must declare that it requires the ACCESS_FINE_LOCATION permission in the application's manifest.xml:</Body_Text>
+               <Example_Code Nature="Bad" Language="XML">
+                  <xhtml:div>&lt;uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/&gt;</xhtml:div>
+               </Example_Code>
+               <Body_Text>During execution, a call to getLastLocation() will return a location based on the application's location permissions. In this case the application has permission for the most accurate location possible:</Body_Text>
+               <Example_Code Nature="Bad" Language="Java">
+                  <xhtml:div>locationClient = new LocationClient(this, this, this);<xhtml:br />locationClient.connect();<xhtml:br />Location userCurrLocation;<xhtml:br />userCurrLocation = locationClient.getLastLocation();<xhtml:br />deriveStateFromCoords(userCurrLocation);</xhtml:div>
+               </Example_Code>
+               <Body_Text>While the application needs this information, it does not need to use the ACCESS_FINE_LOCATION permission, as the ACCESS_COARSE_LOCATION permission will be sufficient to identify which US state the user is in.</Body_Text>
+            </Demonstrative_Example>
+            <Demonstrative_Example>
+               <Intro_Text>In 2004, an employee at AOL sold approximately 92 million private customer e-mail addresses to a spammer marketing an offshore gambling web site [REF-338]. In response to such high-profile exploits, the collection and management of private data is becoming increasingly regulated.</Intro_Text>
+            </Demonstrative_Example>
+         </Demonstrative_Examples>
+         <Observed_Examples>
+			<Observed_Example>
+               <Reference>CVE-2023-29850</Reference>
+               <Description>Library management product does not strip Exif data from images</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2023-29850</Link>
+            </Observed_Example>
+			<Observed_Example>
+               <Reference>CVE-2020-26220</Reference>
+               <Description>Customer relationship management (CRM) product does not strip Exif data from images</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2020-26220</Link>
+            </Observed_Example>
+			<Observed_Example>
+               <Reference>CVE-2005-0406</Reference>
+               <Description>Some image editors modify a JPEG image, but the original EXIF thumbnail image is left intact within the JPEG. (Also an interaction error).</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2005-0406</Link>
+            </Observed_Example>
+         </Observed_Examples>
+         <Taxonomy_Mappings>
+            <Taxonomy_Mapping Taxonomy_Name="7 Pernicious Kingdoms">
+               <Entry_Name>Privacy Violation</Entry_Name>
+            </Taxonomy_Mapping>
+            <Taxonomy_Mapping Taxonomy_Name="The CERT Oracle Secure Coding Standard for Java (2011)">
+               <Entry_ID>FIO13-J</Entry_ID>
+               <Entry_Name>Do not log sensitive information outside a trust boundary</Entry_Name>
+            </Taxonomy_Mapping>
+         </Taxonomy_Mappings>
+         <Related_Attack_Patterns>
+            <Related_Attack_Pattern CAPEC_ID="464" />
+            <Related_Attack_Pattern CAPEC_ID="467" />
+            <Related_Attack_Pattern CAPEC_ID="498" />
+            <Related_Attack_Pattern CAPEC_ID="508" />
+         </Related_Attack_Patterns>
+         <References>
+            <Reference External_Reference_ID="REF-6" />
+            <Reference External_Reference_ID="REF-338" />
+            <Reference External_Reference_ID="REF-339" />
+            <Reference External_Reference_ID="REF-340" />
+            <Reference External_Reference_ID="REF-341" />
+            <Reference External_Reference_ID="REF-342" />
+            <Reference External_Reference_ID="REF-343" />
+            <Reference External_Reference_ID="REF-267" />
+            <Reference External_Reference_ID="REF-172" />
+            <Reference External_Reference_ID="REF-1047" />
+            <Reference External_Reference_ID="REF-1048" />
+            <Reference External_Reference_ID="REF-1515" />
+            <Reference External_Reference_ID="REF-1516" />
+         </References>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Base level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+         <Notes>
+            <Note Type="Maintenance">This entry overlaps many other
+            entries that are not organized around the kind of
+            sensitive information that is exposed, such as CWE-212:
+            Improper Removal of Sensitive Information Before Storage
+            or Transfer.  However, because privacy is treated with
+            such importance due to regulations and other factors, and
+            it may be useful for weakness-finding tools to highlight
+            capabilities that detect personal private information
+            instead of system information, it is not clear whether -
+            or how - this entry should be deprecated.</Note>
+            <Note Type="Other">
+               <xhtml:p>There are many types of sensitive information that products must protect from attackers, including system data, communications, configuration, business secrets, intellectual property, and an individual's personal (private) information.  Private personal information (PPI) may include a password, phone number, geographic location, personal messages, credit card number, etc.  Private information is important to consider whether the person is a user of the product, or part of a data set that is processed by the product.  An exposure of private information does not necessarily prevent the product from working properly, and in fact the exposure might be intended by the developer, e.g. as part of data sharing with other organizations.  However, the exposure of personal private information can still be undesirable or explicitly prohibited by law or regulation.</xhtml:p>
+                  <xhtml:p>Some types of private information include:</xhtml:p>
+                     <xhtml:ul>
+                        <xhtml:li>Government identifiers, such as Social Security Numbers</xhtml:li>
+                        <xhtml:li>Contact information, such as home addresses and telephone numbers</xhtml:li>
+                        <xhtml:li>Geographic location - where the user is (or was)</xhtml:li>
+                        <xhtml:li>Employment history</xhtml:li>
+                        <xhtml:li>Financial data - such as credit card numbers, salary, bank accounts, and debts</xhtml:li>
+                        <xhtml:li>Pictures, video, or audio</xhtml:li>
+                        <xhtml:li>Behavioral patterns - such as web surfing history, when certain activities are performed, etc.</xhtml:li>
+                        <xhtml:li>Relationships (and types of relationships) with others - family, friends, contacts, etc.</xhtml:li>
+                        <xhtml:li>Communications - e-mail addresses, private messages, text messages, chat logs, etc.</xhtml:li>
+                        <xhtml:li>Health - medical conditions, insurance status, prescription records</xhtml:li>
+                        <xhtml:li>Account passwords and other credentials</xhtml:li>
+                     </xhtml:ul>
+               <xhtml:p>Some of this information may be characterized as PII (Personally Identifiable Information), Protected Health Information (PHI), etc. Categories of private information may overlap or vary based on the intended usage or the policies and practices of a particular industry.</xhtml:p>
+               <xhtml:p>Sometimes data that is not labeled as private can have a privacy implication in a different context. For example, student identification numbers are usually not considered private because there is no explicit and publicly-available mapping to an individual student's personal information. However, if a school generates identification numbers based on student social security numbers, then the identification numbers should be considered private.</xhtml:p>
+            </Note>
+         </Notes>
+         <Content_History>
+            <Submission>
+               <Submission_Name>7 Pernicious Kingdoms</Submission_Name>
+               <Submission_Date>2006-07-19</Submission_Date>
+               <Submission_Version>Draft 3</Submission_Version>
+               <Submission_ReleaseDate>2006-07-19</Submission_ReleaseDate>
+            </Submission>
+            <Modification>
+               <Modification_Name>Eric Dalci</Modification_Name>
+               <Modification_Organization>Cigital</Modification_Organization>
+               <Modification_Date>2008-07-01</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>updated Time_of_Introduction</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2008-09-08</Modification_Date>
+               <Modification_Version>1.0</Modification_Version>
+               <Modification_ReleaseDate>2008-09-09</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships, Other_Notes, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2009-03-10</Modification_Date>
+               <Modification_Version>1.3</Modification_Version>
+               <Modification_ReleaseDate>2009-03-10</Modification_ReleaseDate>
+               <Modification_Comment>updated Other_Notes</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2009-07-27</Modification_Date>
+               <Modification_Version>1.5</Modification_Version>
+               <Modification_ReleaseDate>2009-07-27</Modification_ReleaseDate>
+               <Modification_Comment>updated Demonstrative_Examples</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2009-12-28</Modification_Date>
+               <Modification_Version>1.7</Modification_Version>
+               <Modification_ReleaseDate>2009-12-28</Modification_ReleaseDate>
+               <Modification_Comment>updated Other_Notes, References</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2010-02-16</Modification_Date>
+               <Modification_Version>1.8</Modification_Version>
+               <Modification_ReleaseDate>2010-02-16</Modification_ReleaseDate>
+               <Modification_Comment>updated Other_Notes, References</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-03-29</Modification_Date>
+               <Modification_Version>1.12</Modification_Version>
+               <Modification_ReleaseDate>2011-03-30</Modification_ReleaseDate>
+               <Modification_Comment>updated Other_Notes</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-06-01</Modification_Date>
+               <Modification_Version>1.13</Modification_Version>
+               <Modification_ReleaseDate>2011-06-01</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences, Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-09-13</Modification_Date>
+               <Modification_Version>2.1</Modification_Version>
+               <Modification_ReleaseDate>2011-09-13</Modification_ReleaseDate>
+               <Modification_Comment>updated Other_Notes, References</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2012-05-11</Modification_Date>
+               <Modification_Version>2.2</Modification_Version>
+               <Modification_ReleaseDate>2012-05-15</Modification_ReleaseDate>
+               <Modification_Comment>updated Related_Attack_Patterns, Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2013-02-21</Modification_Date>
+               <Modification_Version>2.4</Modification_Version>
+               <Modification_ReleaseDate>2013-02-21</Modification_ReleaseDate>
+               <Modification_Comment>updated Applicable_Platforms, References</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2014-02-18</Modification_Date>
+               <Modification_Version>2.6</Modification_Version>
+               <Modification_ReleaseDate>2014-02-19</Modification_ReleaseDate>
+               <Modification_Comment>updated Alternate_Terms, Demonstrative_Examples, Description, Name, Other_Notes, References</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2014-07-30</Modification_Date>
+               <Modification_Version>2.8</Modification_Version>
+               <Modification_ReleaseDate>2014-07-31</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2017-11-08</Modification_Date>
+               <Modification_Version>3.0</Modification_Version>
+               <Modification_ReleaseDate>2017-11-08</Modification_ReleaseDate>
+               <Modification_Comment>updated Modes_of_Introduction, References, Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2018-03-27</Modification_Date>
+               <Modification_Version>3.1</Modification_Version>
+               <Modification_ReleaseDate>2018-03-27</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships</Modification_Comment>
+            </Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2019-01-03</Modification_Date>
+					<Modification_Version>3.2</Modification_Version>
+					<Modification_ReleaseDate>2019-01-03</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships, Taxonomy_Mappings</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-02-24</Modification_Date>
+					<Modification_Version>4.0</Modification_Version>
+					<Modification_ReleaseDate>2020-02-24</Modification_ReleaseDate>
+					<Modification_Comment>updated Alternate_Terms, Applicable_Platforms, Demonstrative_Examples, Description, Detection_Factors, Maintenance_Notes, Name, Potential_Mitigations, References, Relationships, Type</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-08-20</Modification_Date>
+					<Modification_Version>4.2</Modification_Version>
+					<Modification_ReleaseDate>2020-08-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Related_Attack_Patterns</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-12-10</Modification_Date>
+					<Modification_Version>4.3</Modification_Version>
+					<Modification_ReleaseDate>2020-12-10</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-03-15</Modification_Date>
+					<Modification_Version>4.4</Modification_Version>
+					<Modification_ReleaseDate>2021-03-15</Modification_ReleaseDate>
+					<Modification_Comment>updated References</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-10-28</Modification_Date>
+					<Modification_Version>4.6</Modification_Version>
+					<Modification_ReleaseDate>2021-10-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-01-31</Modification_Date>
+					<Modification_Version>4.10</Modification_Version>
+					<Modification_ReleaseDate>2023-01-31</Modification_ReleaseDate>
+					<Modification_Comment>updated Related_Attack_Patterns</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Detection_Factors, References, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2024-11-19</Modification_Date>
+					<Modification_Version>4.16</Modification_Version>
+					<Modification_ReleaseDate>2024-11-19</Modification_ReleaseDate>
+					<Modification_Comment>updated Description, Diagram, Other_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-09-09</Modification_Date>
+					<Modification_Version>4.18</Modification_Version>
+					<Modification_ReleaseDate>2025-09-09</Modification_ReleaseDate>
+					<Modification_Comment>updated References</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Alternate_Terms, Detection_Factors, Maintenance_Notes, Observed_Examples, Other_Notes, Potential_Mitigations, References, Relationships, Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+				<Contribution Type="Content">
+				  <Contribution_Name>Michal Biesiada</Contribution_Name>
+				  <Contribution_Date>2023-02-08</Contribution_Date>
+				  <Contribution_Version>4.19</Contribution_Version>
+				  <Contribution_ReleaseDate>2025-12-11</Contribution_ReleaseDate>
+				  <Contribution_Comment>suggested covering PPI in documents such as PDFs</Contribution_Comment>
+				</Contribution>
+				<Contribution Type="Content">
+				  <Contribution_Name>Michal Biesiada</Contribution_Name>
+				  <Contribution_Date>2023-03-29</Contribution_Date>
+				  <Contribution_Version>4.19</Contribution_Version>
+				  <Contribution_ReleaseDate>2025-12-11</Contribution_ReleaseDate>
+				  <Contribution_Comment>suggested covering Exif in images</Contribution_Comment>
+				</Contribution>
+            <Previous_Entry_Name Date="2014-02-18">Privacy Violation</Previous_Entry_Name>
+			<Previous_Entry_Name Date="2020-02-24">Exposure of Private Information ('Privacy Violation')</Previous_Entry_Name>
+         </Content_History>
+      </Weakness>
+      

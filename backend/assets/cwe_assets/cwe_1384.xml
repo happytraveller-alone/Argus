@@ -1,0 +1,213 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="1384" Name="Improper Handling of Physical or Environmental Conditions" Abstraction="Class" Structure="Simple" Status="Incomplete">
+    <Description>The product does not properly handle unexpected physical or environmental conditions that occur naturally or are artificially induced.</Description>
+    <Extended_Description>
+      <xhtml:p>Hardware products are typically only guaranteed to behave correctly within certain physical limits or environmental conditions. Such products cannot necessarily control the physical or external conditions to which they are subjected. However, the inability to handle such conditions can undermine a product's security. For example, an unexpected physical or environmental condition may cause the flipping of a bit that is used for an authentication decision. This unexpected condition could occur naturally or be induced artificially by an adversary.</xhtml:p>
+      <xhtml:p>Physical or environmental conditions of concern are:</xhtml:p>
+      <xhtml:ul>
+        <xhtml:li>
+          <xhtml:div><xhtml:b>Atmospheric characteristics: </xhtml:b>extreme temperature ranges, etc.</xhtml:div>
+        </xhtml:li>
+        <xhtml:li>
+          <xhtml:div><xhtml:b>Interference: </xhtml:b>electromagnetic interference (EMI), radio frequency interference (RFI), etc.</xhtml:div>
+        </xhtml:li>
+        <xhtml:li>
+          <xhtml:div><xhtml:b>Assorted light sources: </xhtml:b>white light, ultra-violet light (UV), lasers, infrared (IR), etc.</xhtml:div>
+        </xhtml:li>
+        <xhtml:li>
+          <xhtml:div><xhtml:b>Power variances: </xhtml:b>under-voltages, over-voltages, under-current, over-current, etc.</xhtml:div>
+        </xhtml:li>
+        <xhtml:li>
+          <xhtml:div><xhtml:b>Clock variances: </xhtml:b>glitching, overclocking, clock stretching, etc.</xhtml:div>
+        </xhtml:li>
+        <xhtml:li>
+          <xhtml:div><xhtml:b>Component aging and degradation</xhtml:b></xhtml:div>
+        </xhtml:li>
+        <xhtml:li>
+          <xhtml:div><xhtml:b>Materials manipulation: </xhtml:b>focused ion beams (FIB), etc.</xhtml:div>
+        </xhtml:li>
+        <xhtml:li>
+          <xhtml:div><xhtml:b>Exposure to radiation: </xhtml:b>x-rays, cosmic radiation, etc.</xhtml:div>
+        </xhtml:li>
+      </xhtml:ul>
+    </Extended_Description>
+    <Related_Weaknesses>
+      <Related_Weakness Nature="ChildOf" CWE_ID="703" View_ID="1000" Ordinal="Primary" />
+    </Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+    <Applicable_Platforms>
+      <Technology Class="System on Chip" Prevalence="Undetermined" />
+	  <Technology Class="ICS/OT" Prevalence="Undetermined" />
+    </Applicable_Platforms>
+    <Modes_Of_Introduction>
+      <Introduction>
+	<Phase>Architecture and Design</Phase>
+	<Note>The product's design might not consider checking and handling extreme conditions.</Note>
+      </Introduction>
+      <Introduction>
+	<Phase>Manufacturing</Phase>
+	<Note>For hardware manufacturing, sub-par components might be chosen that are not able to handle the expected environmental conditions.</Note>
+      </Introduction>
+    </Modes_Of_Introduction>
+    <Common_Consequences>
+      <Consequence>
+	<Scope>Confidentiality</Scope>
+	<Scope>Integrity</Scope>
+	<Scope>Availability</Scope>
+	<Impact>Varies by Context</Impact>
+	<Impact>Unexpected State</Impact>
+	<Note>Consequences of this weakness are highly dependent on the role of affected components within the larger product.</Note>
+      </Consequence>
+    </Common_Consequences>
+    <Potential_Mitigations>
+      <Mitigation>
+	<Phase>Requirements</Phase>
+	<Description>In requirements, be specific about expectations for how the product will perform when it exceeds physical and environmental boundary conditions, e.g., by shutting down.</Description>
+      </Mitigation>
+      <Mitigation>
+	<Phase>Architecture and Design</Phase>
+	<Phase>Implementation</Phase>
+	<Description>Where possible, include independent components that can detect excess environmental conditions and have the capability to shut down the product.</Description>
+      </Mitigation>
+      <Mitigation>
+	<Phase>Architecture and Design</Phase>
+	<Phase>Implementation</Phase>
+	<Description>Where possible, use shielding or other materials that can increase the adversary's workload and reduce the likelihood of being able to successfully trigger a security-related failure.</Description>
+      </Mitigation>
+    </Potential_Mitigations>
+    <Demonstrative_Examples>
+      <Demonstrative_Example Demonstrative_Example_ID="DX-234">
+        <Intro_Text>Below is a representative snippet of C code that is part of the secure-boot flow. A signature of the runtime-firmware image is calculated and compared against a golden value. If the signatures match, the bootloader loads runtime firmware. If there is no match, an error halt occurs. If the underlying hardware executing this code does not contain any circuitry or sensors to detect voltage or clock glitches, an attacker might launch a fault-injection attack right when the signature check is happening (at the location marked with the comment), causing a bypass of the signature-checking process.</Intro_Text>
+        <Example_Code Nature="Bad" Language="C">
+          ...<xhtml:br />
+          if (signature_matches)  // &lt;-Glitch Here<xhtml:br />
+          {<xhtml:br />
+		  <xhtml:div style="margin-left:1em;">
+            load_runtime_firmware();<xhtml:br />
+		  </xhtml:div>
+          }<xhtml:br />
+          else<xhtml:br />
+          {<xhtml:br />
+		  <xhtml:div style="margin-left:1em;">
+            do_not_load_runtime_firmware();<xhtml:br />
+		  </xhtml:div>
+          }<xhtml:br />
+          <xhtml:br />	
+          ...<xhtml:br />
+        </Example_Code>
+        <Body_Text>After bypassing secure boot, an attacker can gain access to system assets to which the attacker should not have access.</Body_Text>
+        <Example_Code Nature="Good" Language="Other">
+          <xhtml:div>If the underlying hardware detects a voltage or clock glitch, the information can be used to prevent the glitch from being successful.</xhtml:div>
+        </Example_Code>
+      </Demonstrative_Example>
+      <Demonstrative_Example Demonstrative_Example_ID="DX-235">
+        <Intro_Text>In 2016, a security researcher, who was also a patient using a pacemaker, was on an airplane when a bit flip occurred in the pacemaker, likely due to the higher prevalence of cosmic radiation at such heights. The pacemaker was designed to account for bit flips and went into a default safe mode, which still forced the patient to go to a hospital to get it reset. The bit flip also inadvertently enabled the researcher to access the crash file, perform reverse engineering, and detect a hard-coded key. [REF-1101]</Intro_Text>
+      </Demonstrative_Example>
+    </Demonstrative_Examples>
+    <Observed_Examples>
+      <Observed_Example>
+        <Reference>CVE-2019-17391</Reference>
+        <Description>Lack of anti-glitch protections allows an attacker to launch a physical attack to bypass the secure boot and read protected eFuses.</Description>
+        <Link>https://www.cve.org/CVERecord?id=CVE-2019-17391</Link>
+      </Observed_Example>
+    </Observed_Examples>
+    <References>
+      <Reference External_Reference_ID="REF-1248" Section="ICS Communications / 2. Unreliability" />
+      <Reference External_Reference_ID="REF-1255" />
+      <Reference External_Reference_ID="REF-1285" />
+      <Reference External_Reference_ID="REF-1286" Section="1.2" />
+      <Reference External_Reference_ID="REF-1101" />
+    </References>
+         <Mapping_Notes>
+            <Usage>Allowed-with-Review</Usage>
+            <Rationale>This CWE entry is a Class and might have Base-level children that would be more appropriate</Rationale>
+            <Comments>Examine children of this entry to see if there is a better fit</Comments>
+            <Reasons>
+               <Reason Type="Abstraction" />
+            </Reasons>
+         </Mapping_Notes>
+    <Content_History>
+      <Submission>
+	      <Submission_Name>CWE Content Team</Submission_Name>
+	      <Submission_Organization>MITRE</Submission_Organization>
+	      <Submission_Date>2022-04-21</Submission_Date>
+	      <Submission_Version>4.7</Submission_Version>
+	      <Submission_ReleaseDate>2022-04-28</Submission_ReleaseDate>
+      </Submission>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-06-28</Modification_Date>
+					<Modification_Version>4.8</Modification_Version>
+					<Modification_ReleaseDate>2022-06-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Description, Name, Potential_Mitigations, Relationships, Type</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-10-13</Modification_Date>
+					<Modification_Version>4.9</Modification_Version>
+					<Modification_ReleaseDate>2022-10-13</Modification_ReleaseDate>
+					<Modification_Comment>updated References</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-01-31</Modification_Date>
+					<Modification_Version>4.10</Modification_Version>
+					<Modification_ReleaseDate>2023-01-31</Modification_ReleaseDate>
+					<Modification_Comment>updated Applicable_Platforms, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-10-26</Modification_Date>
+					<Modification_Version>4.13</Modification_Version>
+					<Modification_ReleaseDate>2023-10-26</Modification_ReleaseDate>
+					<Modification_Comment>updated Observed_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-09-09</Modification_Date>
+					<Modification_Version>4.18</Modification_Version>
+					<Modification_ReleaseDate>2025-09-09</Modification_ReleaseDate>
+					<Modification_Comment>updated References</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples, References, Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+      <Contribution Type="Feedback">
+	      <Contribution_Name>Members of the Hardware CWE Special Interest Group</Contribution_Name>
+	      <Contribution_Date>2022-05-13</Contribution_Date>
+	      <Contribution_Comment>Provided feedback on descriptions</Contribution_Comment>
+	    </Contribution>
+			<Previous_Entry_Name Date="2022-06-28">Improper Handling of Extreme Physical Environment Conditions</Previous_Entry_Name>
+    </Content_History>
+  </Weakness>
+      

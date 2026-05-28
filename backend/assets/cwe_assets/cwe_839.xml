@@ -1,0 +1,343 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="839" Name="Numeric Range Comparison Without Minimum Check" Abstraction="Base" Structure="Simple" Status="Incomplete">
+         <Description>The product checks a value to ensure that it is less than or equal to a maximum, but it does not also verify that the value is greater than or equal to the minimum.</Description>
+         <Extended_Description>
+            <xhtml:p>Some products use signed integers or floats even when their values are only expected to be positive or 0. An input validation check might assume that the value is positive, and only check for the maximum value. If the value is negative, but the code assumes that the value is positive, this can produce an error. The error may have security consequences if the negative value is used for memory allocation, array access, buffer access, etc. Ultimately, the error could lead to a buffer overflow or other type of memory corruption.</xhtml:p>
+            <xhtml:p>The use of a negative number in a positive-only context could have security implications for other types of resources. For example, a shopping cart might check that the user is not requesting more than 10 items, but a request for -3 items could cause the application to calculate a negative price and credit the attacker's account.</xhtml:p>
+         </Extended_Description>
+         <Related_Weaknesses>
+            <Related_Weakness Nature="ChildOf" CWE_ID="1023" View_ID="1000" Ordinal="Primary" />
+            <Related_Weakness Nature="CanPrecede" CWE_ID="195" View_ID="1000" />
+            <Related_Weakness Nature="CanPrecede" CWE_ID="682" View_ID="1000" />
+            <Related_Weakness Nature="CanPrecede" CWE_ID="119" View_ID="1000" />
+            <Related_Weakness Nature="CanPrecede" CWE_ID="124" View_ID="1000" />
+         </Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+         <Applicable_Platforms>
+            <Language Name="C" Prevalence="Often" />
+            <Language Name="C++" Prevalence="Often" />
+         </Applicable_Platforms>
+         <Alternate_Terms>
+            <Alternate_Term>
+               <Term>Signed comparison</Term>
+               <Description>The "signed comparison" term is often used to describe when the product uses a signed variable and checks it to ensure that it is less than a maximum value (typically a maximum buffer size), but does not verify that it is greater than 0.</Description>
+            </Alternate_Term>
+         </Alternate_Terms>
+		 <Modes_Of_Introduction>
+		   <Introduction>
+			 <Phase>Implementation</Phase>
+		   </Introduction>
+		 </Modes_Of_Introduction>
+         <Common_Consequences>
+            <Consequence>
+               <Scope>Integrity</Scope>
+               <Scope>Confidentiality</Scope>
+               <Scope>Availability</Scope>
+               <Impact>Modify Application Data</Impact>
+               <Impact>Execute Unauthorized Code or Commands</Impact>
+               <Note>An attacker could modify the structure of the message or data being sent to the downstream component, possibly injecting commands.</Note>
+            </Consequence>
+            <Consequence>
+               <Scope>Availability</Scope>
+               <Impact>DoS: Resource Consumption (Other)</Impact>
+               <Note>in some contexts, a negative value could lead to resource consumption.</Note>
+            </Consequence>
+            <Consequence>
+               <Scope>Confidentiality</Scope>
+               <Scope>Integrity</Scope>
+               <Impact>Modify Memory</Impact>
+               <Impact>Read Memory</Impact>
+               <Note>If a negative value is used to access memory, buffers, or other indexable structures, it could access memory outside the bounds of the buffer.</Note>
+            </Consequence>
+         </Common_Consequences>
+	 <Detection_Methods>
+	   <Detection_Method Detection_Method_ID="DM-14">
+	     <Method>Automated Static Analysis</Method>
+	     <Description>Automated static analysis, commonly referred to as Static Application Security Testing (SAST), can find some instances of this weakness by analyzing source code (or binary/compiled code) without having to execute it. Typically, this is done by building a model of data flow and control flow, then searching for potentially-vulnerable patterns that connect "sources" (origins of input) with "sinks" (destinations where the data interacts with external components, a lower layer such as the OS, etc.)</Description>
+	   </Detection_Method>
+	 </Detection_Methods>
+         <Potential_Mitigations>
+            <Mitigation>
+               <Phase>Implementation</Phase>
+               <Strategy>Enforcement by Conversion</Strategy>
+               <Description>If the number to be used is always expected to be positive, change the variable type from signed to unsigned or size_t.</Description>
+            </Mitigation>
+            <Mitigation>
+               <Phase>Implementation</Phase>
+               <Strategy>Input Validation</Strategy>
+               <Description>If the number to be used could have a negative value based on the specification (thus requiring a signed value), but the number should only be positive to preserve code correctness, then include a check to ensure that the value is positive.</Description>
+            </Mitigation>
+         </Potential_Mitigations>
+         <Demonstrative_Examples>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-21">
+               <Intro_Text>The following code is intended to read an incoming packet from a socket and extract one or more headers.</Intro_Text>
+               <Example_Code Nature="Bad" Language="C">
+                  <xhtml:div>DataPacket *packet;<xhtml:br />int numHeaders;<xhtml:br />PacketHeader *headers;<xhtml:br />
+                     <xhtml:br />sock=AcceptSocketConnection();<xhtml:br />ReadPacket(packet, sock);<xhtml:br />numHeaders =packet-&gt;headers;<xhtml:br />
+                     <xhtml:br />if (numHeaders &gt; 100) {<xhtml:div style="margin-left:1em;">ExitError("too many headers!");</xhtml:div>}<xhtml:br />headers = malloc(numHeaders * sizeof(PacketHeader);<xhtml:br />ParsePacketHeaders(packet, headers);</xhtml:div>
+               </Example_Code>
+               <Body_Text>The code performs a check to make sure that the packet does not contain too many headers. However, numHeaders is defined as a signed int, so it could be negative. If the incoming packet specifies a value such as -3, then the malloc calculation will generate a negative number (say, -300 if each header can be a maximum of 100 bytes). When this result is provided to malloc(), it is first converted to a size_t type. This conversion then produces a large value such as 4294966996, which may cause malloc() to fail or to allocate an extremely large amount of memory (CWE-195). With the appropriate negative numbers, an attacker could trick malloc() into using a very small positive number, which then allocates a buffer that is much smaller than expected, potentially leading to a buffer overflow.</Body_Text>
+            </Demonstrative_Example>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-23">
+               <Intro_Text>The following code reads a maximum size and performs a sanity check on that size. It then performs a strncpy, assuming it will not exceed the boundaries of the array. While the use of "short s" is forced in this particular example, short int's are frequently used within real-world code, such as code that processes structured data.</Intro_Text>
+               <Example_Code Nature="Bad" Language="C">
+                  <xhtml:div>int GetUntrustedInt () {<xhtml:div style="margin-left:1em;">return(0x0000FFFF);</xhtml:div>}<xhtml:br />
+                     <xhtml:br />void main (int argc, char **argv) {<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>char path[256];<xhtml:br />char *input;<xhtml:br />int i;<xhtml:br />short s;<xhtml:br />unsigned int sz;<xhtml:br />
+                           <xhtml:br />i = GetUntrustedInt();<xhtml:br />s = i;<xhtml:br />/* s is -1 so it passes the safety check - CWE-697 */<xhtml:br />if (s &gt; 256) {<xhtml:div style="margin-left:1em;">DiePainfully("go away!\n");</xhtml:div>}<xhtml:br />
+                           <xhtml:br />/* s is sign-extended and saved in sz */<xhtml:br />sz = s;<xhtml:br />
+                           <xhtml:br />/* output: i=65535, s=-1, sz=4294967295 - your mileage may vary */<xhtml:br />printf("i=%d, s=%d, sz=%u\n", i, s, sz);<xhtml:br />
+                           <xhtml:br />input = GetUserInput("Enter pathname:");<xhtml:br />
+                           <xhtml:br />/* strncpy interprets s as unsigned int, so it's treated as MAX_INT<xhtml:br />(CWE-195), enabling buffer overflow (CWE-119) */<xhtml:br />strncpy(path, input, s);<xhtml:br />path[255] = '\0'; /* don't want CWE-170 */<xhtml:br />printf("Path is: %s\n", path);</xhtml:div>
+                     </xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>This code first exhibits an example of CWE-839, allowing "s" to be a negative number. When the negative short "s" is converted to an unsigned integer, it becomes an extremely large positive integer. When this converted integer is used by strncpy() it will lead to a buffer overflow (CWE-119).</Body_Text>
+            </Demonstrative_Example>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-100">
+               <Intro_Text>In the following code, the method retrieves a value from an array at a specific array index location that is given as an input parameter to the method</Intro_Text>
+               <Example_Code Nature="Bad" Language="C">
+                  <xhtml:div>int getValueFromArray(int *array, int len, int index) {<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>
+                           <xhtml:br />int value;<xhtml:br />
+                           <xhtml:br />
+                           <xhtml:i>// check that the array index is less than the maximum</xhtml:i>
+                           <xhtml:br />
+                           <xhtml:br />
+                           <xhtml:i>// length of the array</xhtml:i>
+                           <xhtml:br />if (index &lt; len) {<xhtml:div style="margin-left:1em;">
+                              <xhtml:div>
+                                 <xhtml:br />
+                                 <xhtml:i>// get the value at the specified index of the array</xhtml:i>
+                                 <xhtml:br />value = array[index];</xhtml:div>
+                           </xhtml:div>}<xhtml:br />
+                           <xhtml:i>// if array index is invalid then output error message</xhtml:i>
+                           <xhtml:br />
+                           <xhtml:br />
+                           <xhtml:i>// and return value indicating error</xhtml:i>
+                           <xhtml:br />else {<xhtml:div style="margin-left:1em;">printf("Value is: %d\n", array[index]);<xhtml:br />value = -1;</xhtml:div>}<xhtml:br />
+                           <xhtml:br />return value;</xhtml:div>
+                     </xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>However, this method only verifies that the given array index is less than the maximum length of the array but does not check for the minimum value (CWE-839). This will allow a negative value to be accepted as the input array index, which will result in reading data before the beginning of the buffer (CWE-127) and may allow access to sensitive memory. The input array index should be checked to verify that is within the maximum and minimum range required for the array (CWE-129). In this example the if statement should be modified to include a minimum range check, as shown below.</Body_Text>
+               <Example_Code Nature="Good" Language="C">
+                  <xhtml:div>
+                     <xhtml:br />...<xhtml:br />
+                     <xhtml:br />
+                     <xhtml:i>// check that the array index is within the correct</xhtml:i>
+                     <xhtml:br />
+                     <xhtml:br />
+                     <xhtml:i>// range of values for the array</xhtml:i>
+                     <xhtml:br />if (index &gt;= 0 &amp;&amp; index &lt; len) {<xhtml:br />
+                     <xhtml:br />...</xhtml:div>
+               </Example_Code>
+            </Demonstrative_Example>
+            <Demonstrative_Example>
+               <Intro_Text>The following code shows a simple BankAccount class with deposit and withdraw methods.</Intro_Text>
+               <Example_Code Nature="Bad" Language="Java">
+                  <xhtml:div>public class BankAccount {<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>
+                           <xhtml:br />public final int MAXIMUM_WITHDRAWAL_LIMIT = 350;<xhtml:br />
+                           <xhtml:br />
+                           <xhtml:i>// variable for bank account balance</xhtml:i>
+                           <xhtml:br />private double accountBalance;<xhtml:br />
+                           <xhtml:br />
+                           <xhtml:i>// constructor for BankAccount</xhtml:i>
+                           <xhtml:br />public BankAccount() {<xhtml:div style="margin-left:1em;">accountBalance = 0;</xhtml:div>}<xhtml:br />
+                           <xhtml:br />
+                           <xhtml:i>// method to deposit amount into BankAccount</xhtml:i>
+                           <xhtml:br />public void deposit(double depositAmount) {...}<xhtml:br />
+                           <xhtml:br />
+                           <xhtml:i>// method to withdraw amount from BankAccount</xhtml:i>
+                           <xhtml:br />public void withdraw(double withdrawAmount) {<xhtml:div style="margin-left:1em;">
+                              <xhtml:div>
+                                 <xhtml:br />if (withdrawAmount &lt; MAXIMUM_WITHDRAWAL_LIMIT) {<xhtml:div style="margin-left:1em;">
+                                    <xhtml:div>
+                                       <xhtml:br />double newBalance = accountBalance - withdrawAmount;<xhtml:br />accountBalance = newBalance;</xhtml:div>
+                                 </xhtml:div>}<xhtml:br />else {<xhtml:div style="margin-left:1em;">System.err.println("Withdrawal amount exceeds the maximum limit allowed, please try again...");<xhtml:br />...</xhtml:div>}</xhtml:div>
+                           </xhtml:div>}<xhtml:br />
+                           <xhtml:br />
+                           <xhtml:i>// other methods for accessing the BankAccount object</xhtml:i>
+                           <xhtml:br />...</xhtml:div>
+                     </xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>The withdraw method includes a check to ensure that the withdrawal amount does not exceed the maximum limit allowed, however the method does not check to ensure that the withdrawal amount is greater than a minimum value (CWE-129). Performing a range check on a value that does not include a minimum check can have significant security implications, in this case not including a minimum range check can allow a negative value to be used which would cause the financial application using this class to deposit money into the user account rather than withdrawing. In this example the if statement should the modified to include a minimum range check, as shown below.</Body_Text>
+               <Example_Code Nature="Good" Language="Java">
+                  <xhtml:div>public class BankAccount {<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>
+                           <xhtml:br />public final int MINIMUM_WITHDRAWAL_LIMIT = 0;<xhtml:br />public final int MAXIMUM_WITHDRAWAL_LIMIT = 350;<xhtml:br />
+                           <xhtml:br />...<xhtml:br />
+                           <xhtml:br />
+                           <xhtml:i>// method to withdraw amount from BankAccount</xhtml:i>
+                           <xhtml:br />public void withdraw(double withdrawAmount) {<xhtml:div style="margin-left:1em;">
+                              <xhtml:div>
+                                 <xhtml:br />if (withdrawAmount &lt; MAXIMUM_WITHDRAWAL_LIMIT &amp;&amp;<xhtml:br />withdrawAmount &gt; MINIMUM_WITHDRAWAL_LIMIT) {<xhtml:div style="margin-left:1em;">
+                                    <xhtml:div>
+                                       <xhtml:br />...</xhtml:div>
+                                 </xhtml:div>
+                              </xhtml:div>
+                           </xhtml:div>
+                        </xhtml:div>
+                     </xhtml:div>
+                  </xhtml:div>
+               </Example_Code>
+               <Body_Text>Note that this example does not protect against concurrent access to the BankAccount balance variable, see CWE-413 and CWE-362.</Body_Text>
+               <Body_Text>While it is out of scope for this example, note that the use of doubles or floats in financial calculations may be subject to certain kinds of attacks where attackers use rounding errors to steal money.</Body_Text>
+            </Demonstrative_Example>
+         </Demonstrative_Examples>
+         <Observed_Examples>
+            <Observed_Example>
+               <Reference>CVE-2010-1866</Reference>
+               <Description>Chain: integer overflow (CWE-190) causes a negative signed value, which later bypasses a maximum-only check (CWE-839), leading to heap-based buffer overflow (CWE-122).</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2010-1866</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2009-1099</Reference>
+               <Description>Chain: 16-bit counter can be interpreted as a negative value, compared to a 32-bit maximum value, leading to buffer under-write.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2009-1099</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2011-0521</Reference>
+               <Description>Chain: kernel's lack of a check for a negative value leads to memory corruption.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2011-0521</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2010-3704</Reference>
+               <Description>Chain: parser uses atoi() but does not check for a negative value, which can happen on some platforms, leading to buffer under-write.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2010-3704</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2010-2530</Reference>
+               <Description>Chain: Negative value stored in an int bypasses a size check and causes allocation of large amounts of memory.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2010-2530</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2009-3080</Reference>
+               <Description>Chain: negative offset value to IOCTL bypasses check for maximum index, then used as an array index for buffer under-read.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2009-3080</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2008-6393</Reference>
+               <Description>chain: file transfer client performs signed comparison, leading to integer overflow and heap-based buffer overflow.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2008-6393</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2008-4558</Reference>
+               <Description>chain: negative ID in media player bypasses check for maximum index, then used as an array index for buffer under-read.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2008-4558</Link>
+            </Observed_Example>
+         </Observed_Examples>
+         <References>
+            <Reference External_Reference_ID="REF-62" Section="Chapter 6, &quot;Type Conversion Vulnerabilities&quot; Page 246" />
+            <Reference External_Reference_ID="REF-62" Section="Chapter 6, &quot;Comparisons&quot;, Page 265" />
+         </References>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Base level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+         <Content_History>
+            <Submission>
+               <Submission_Name>CWE Content Team</Submission_Name>
+               <Submission_Organization>MITRE</Submission_Organization>
+               <Submission_Date>2011-03-24</Submission_Date>
+               <Submission_Version>1.12</Submission_Version>
+               <Submission_ReleaseDate>2011-03-30</Submission_ReleaseDate>
+            </Submission>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-06-01</Modification_Date>
+               <Modification_Version>1.13</Modification_Version>
+               <Modification_ReleaseDate>2011-06-01</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2012-05-11</Modification_Date>
+               <Modification_Version>2.2</Modification_Version>
+               <Modification_ReleaseDate>2012-05-15</Modification_ReleaseDate>
+               <Modification_Comment>updated Demonstrative_Examples, References, Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2014-02-18</Modification_Date>
+               <Modification_Version>2.6</Modification_Version>
+               <Modification_ReleaseDate>2014-02-19</Modification_ReleaseDate>
+               <Modification_Comment>updated Relationships</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2018-03-27</Modification_Date>
+               <Modification_Version>3.1</Modification_Version>
+               <Modification_ReleaseDate>2018-03-27</Modification_ReleaseDate>
+               <Modification_Comment>updated Description</Modification_Comment>
+            </Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2019-01-03</Modification_Date>
+					<Modification_Version>3.2</Modification_Version>
+					<Modification_ReleaseDate>2019-01-03</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-01-31</Modification_Date>
+					<Modification_Version>4.10</Modification_Version>
+					<Modification_ReleaseDate>2023-01-31</Modification_ReleaseDate>
+					<Modification_Comment>updated Alternate_Terms, Description</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-10-26</Modification_Date>
+					<Modification_Version>4.13</Modification_Version>
+					<Modification_ReleaseDate>2023-10-26</Modification_ReleaseDate>
+					<Modification_Comment>updated Observed_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-09-09</Modification_Date>
+					<Modification_Version>4.18</Modification_Version>
+					<Modification_ReleaseDate>2025-09-09</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Detection_Factors, Time_of_Introduction, Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+         </Content_History>
+      </Weakness>
+      

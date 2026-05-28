@@ -1,0 +1,385 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="835" Name="Loop with Unreachable Exit Condition ('Infinite Loop')" Abstraction="Base" Structure="Simple" Status="Incomplete" Diagram="/data/images/CWE-835-Diagram.png">
+         <Description>The product contains an iteration or loop with an exit condition that cannot be reached, i.e., an infinite loop.</Description>
+         <Related_Weaknesses>
+            <Related_Weakness Nature="ChildOf" CWE_ID="834" View_ID="1000" Ordinal="Primary" />
+            <Related_Weakness Nature="ChildOf" CWE_ID="834" View_ID="1003" Ordinal="Primary" />
+         </Related_Weaknesses>
+         <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+         </Weakness_Ordinalities>
+         <Applicable_Platforms>
+            <Language Class="Not Language-Specific" Prevalence="Undetermined" />
+	    <Technology Class="Not Technology-Specific" Prevalence="Undetermined" />
+         </Applicable_Platforms>
+		 <Modes_Of_Introduction>
+		   <Introduction>
+			 <Phase>Implementation</Phase>
+		   </Introduction>
+		 </Modes_Of_Introduction>
+         <Common_Consequences>
+            <Consequence>
+               <Scope>Availability</Scope>
+               <Impact>DoS: Resource Consumption (CPU)</Impact>
+               <Impact>DoS: Resource Consumption (Memory)</Impact>
+               <Impact>DoS: Amplification</Impact>
+               <Note>An infinite loop will cause unexpected consumption of resources, such as CPU cycles or memory. The software's operation may slow down, or cause a long time to respond.</Note>
+            </Consequence>
+         </Common_Consequences>
+         <Detection_Methods>
+	   <Detection_Method Detection_Method_ID="DM-14">
+	     <Method>Automated Static Analysis</Method>
+	     <Description>Automated static analysis, commonly referred to as Static Application Security Testing (SAST), can find some instances of this weakness by analyzing source code (or binary/compiled code) without having to execute it. Typically, this is done by building a model of data flow and control flow, then searching for potentially-vulnerable patterns that connect "sources" (origins of input) with "sinks" (destinations where the data interacts with external components, a lower layer such as the OS, etc.)</Description>
+	     <Effectiveness>High</Effectiveness>
+	   </Detection_Method>
+         </Detection_Methods>
+         <Demonstrative_Examples>
+            <Demonstrative_Example>
+               <Intro_Text>In the following code the method processMessagesFromServer attempts to establish a connection to a server and read and process messages from the server. The method uses a do/while loop to continue trying to establish the connection to the server when an attempt fails.</Intro_Text>
+               <Example_Code Nature="Bad" Language="C">
+                  <xhtml:div>int processMessagesFromServer(char *hostaddr, int port) {<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>...<xhtml:br />int servsock;<xhtml:br />int connected;<xhtml:br />struct sockaddr_in servaddr;<xhtml:br />
+                           <xhtml:br />
+                           <xhtml:i>// create socket to connect to server</xhtml:i>
+                           <xhtml:br />servsock = socket( AF_INET, SOCK_STREAM, 0);<xhtml:br />memset( &amp;servaddr, 0, sizeof(servaddr));<xhtml:br />servaddr.sin_family = AF_INET;<xhtml:br />servaddr.sin_port = htons(port);<xhtml:br />servaddr.sin_addr.s_addr = inet_addr(hostaddr);<xhtml:br />
+                           <xhtml:br />do {<xhtml:div style="margin-left:1em;">
+                              <xhtml:div>
+                                 <xhtml:br />
+                                 <xhtml:i>// establish connection to server</xhtml:i>
+                                 <xhtml:br />connected = connect(servsock, (struct sockaddr *)&amp;servaddr, sizeof(servaddr));<xhtml:br />
+                                 <xhtml:br />
+                                 <xhtml:i>// if connected then read and process messages from server</xhtml:i>
+                                 <xhtml:br />if (connected &gt; -1) {<xhtml:div style="margin-left:1em;">
+                                    <xhtml:div>
+                                       <xhtml:br />
+                                       <xhtml:i>// read and process messages</xhtml:i>
+                                       <xhtml:br />...</xhtml:div>
+                                 </xhtml:div>}<xhtml:br />
+                              </xhtml:div>
+                           </xhtml:div>
+                           <xhtml:br />
+                           <xhtml:i>// keep trying to establish connection to the server</xhtml:i>
+                           <xhtml:br />} while (connected &lt; 0);<xhtml:br />
+                           <xhtml:br />
+                           <xhtml:i>// close socket and return success or failure</xhtml:i>
+                           <xhtml:br />...</xhtml:div>
+                     </xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>However, this will create an infinite loop if the server does not respond. This infinite loop will consume system resources and can be used to create a denial of service attack. To resolve this a counter should be used to limit the number of attempts to establish a connection to the server, as in the following code.</Body_Text>
+               <Example_Code Nature="Good" Language="C">
+                  <xhtml:div>int processMessagesFromServer(char *hostaddr, int port) {<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>...<xhtml:br />
+                           <xhtml:i>// initialize number of attempts counter</xhtml:i>
+                           <xhtml:br />int count = 0;<xhtml:br />do {<xhtml:div style="margin-left:1em;">
+                              <xhtml:div>
+                                 <xhtml:br />
+                                 <xhtml:i>// establish connection to server</xhtml:i>
+                                 <xhtml:br />connected = connect(servsock, (struct sockaddr *)&amp;servaddr, sizeof(servaddr));<xhtml:br />
+                                 <xhtml:br />
+                                 <xhtml:i>// increment counter</xhtml:i>
+                                 <xhtml:br />count++;<xhtml:br />
+                                 <xhtml:br />
+                                 <xhtml:i>// if connected then read and process messages from server</xhtml:i>
+                                 <xhtml:br />if (connected &gt; -1) {<xhtml:div style="margin-left:1em;">
+                                    <xhtml:div>
+                                       <xhtml:br />
+                                       <xhtml:i>// read and process messages</xhtml:i>
+                                       <xhtml:br />...</xhtml:div>
+                                 </xhtml:div>}<xhtml:br />
+                              </xhtml:div>
+                           </xhtml:div>
+                           <xhtml:br />
+                           <xhtml:i>// keep trying to establish connection to the server</xhtml:i>
+                           <xhtml:br />
+                           <xhtml:br />
+                           <xhtml:i>// up to a maximum number of attempts</xhtml:i>
+                           <xhtml:br />} while (connected &lt; 0 &amp;&amp; count &lt; MAX_ATTEMPTS);<xhtml:br />
+                           <xhtml:br />
+                           <xhtml:i>// close socket and return success or failure</xhtml:i>
+                           <xhtml:br />...</xhtml:div>
+                     </xhtml:div>}</xhtml:div>
+               </Example_Code>
+            </Demonstrative_Example>
+            <Demonstrative_Example Demonstrative_Example_ID="DX-205">
+               <Intro_Text>For this example, the method isReorderNeeded is part of a bookstore application that determines if a particular book needs to be reordered based on the current inventory count and the rate at which the book is being sold.</Intro_Text>
+               <Example_Code Nature="Bad" Language="Java">
+                  <xhtml:div>public boolean isReorderNeeded(String bookISBN, int rateSold) {<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>
+                           <xhtml:br />boolean isReorder = false;<xhtml:br />
+                           <xhtml:br />int minimumCount = 10;<xhtml:br />int days = 0;<xhtml:br />
+                           <xhtml:br />
+                           <xhtml:i>// get inventory count for book</xhtml:i>
+                           <xhtml:br />int inventoryCount = inventory.getIventoryCount(bookISBN);<xhtml:br />
+                           <xhtml:br />
+                           <xhtml:i>// find number of days until inventory count reaches minimum</xhtml:i>
+                           <xhtml:br />while (inventoryCount &gt; minimumCount) {<xhtml:div style="margin-left:1em;">
+                              <xhtml:div>
+                                 <xhtml:br />inventoryCount = inventoryCount - rateSold;<xhtml:br />days++;<xhtml:br />
+                              </xhtml:div>
+                           </xhtml:div>}<xhtml:br />
+                           <xhtml:br />
+                           <xhtml:i>// if number of days within reorder timeframe</xhtml:i>
+                           <xhtml:br />
+                           <xhtml:br />
+                           <xhtml:i>// set reorder return boolean to true</xhtml:i>
+                           <xhtml:br />if (days &gt; 0 &amp;&amp; days &lt; 5) {<xhtml:div style="margin-left:1em;">isReorder = true;</xhtml:div>}<xhtml:br />
+                           <xhtml:br />return isReorder;</xhtml:div>
+                     </xhtml:div>}</xhtml:div>
+               </Example_Code>
+               <Body_Text>However, the while loop will become an infinite loop if the rateSold input parameter has a value of zero since the inventoryCount will never fall below the minimumCount. In this case the input parameter should be validated to ensure that a value of zero does not cause an infinite loop, as in the following code.</Body_Text>
+               <Example_Code Nature="Good" Language="Java">
+                  <xhtml:div>public boolean isReorderNeeded(String bookISBN, int rateSold) {<xhtml:div style="margin-left:1em;">
+                        <xhtml:div>...<xhtml:br />
+                           <xhtml:br />
+                           <xhtml:i>// validate rateSold variable</xhtml:i>
+                           <xhtml:br />if (rateSold &lt; 1) {<xhtml:div style="margin-left:1em;">return isReorder;</xhtml:div>}<xhtml:br />
+                           <xhtml:br />...</xhtml:div>
+                     </xhtml:div>}</xhtml:div>
+               </Example_Code>
+            </Demonstrative_Example>
+         </Demonstrative_Examples>
+         <Observed_Examples>
+	   <Observed_Example>
+	     <Reference>CVE-2025-32399</Reference>
+	     <Description>Chain: library for implementing Profinet devices does not check an input for a loop condition (CWE-606), allowing an infinite loop (CWE-835) via a crafted RPC packet</Description>
+	     <Link>https://www.cve.org/CVERecord?id=CVE-2025-32399</Link>
+	   </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2022-22224</Reference>
+               <Description>Chain: an operating system does not properly process malformed Open Shortest Path First (OSPF) Type/Length/Value Identifiers (TLV) (CWE-703), which can cause the process to enter an infinite loop (CWE-835)</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2022-22224</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2022-25304</Reference>
+               <Description>A Python machine communication platform did not account for receiving a malformed packet with a null size, causing the receiving function to never update the message buffer and be caught in an infinite loop.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2022-25304</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2011-1027</Reference>
+               <Description>Chain: off-by-one error (CWE-193) leads to infinite loop (CWE-835) using invalid hex-encoded characters.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2011-1027</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2011-1142</Reference>
+               <Description>Chain: self-referential values in recursive definitions lead to infinite loop.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2011-1142</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2011-1002</Reference>
+               <Description>NULL UDP packet is never cleared from a queue, leading to infinite loop.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2011-1002</Link>
+            </Observed_Example>
+	    <Observed_Example>
+	      <Reference>CVE-2006-6499</Reference>
+	      <Description>Chain: web browser crashes due to infinite loop - "bad
+	      looping logic [that relies on] floating point math [CWE-1339] to exit
+	      the loop [CWE-835]"</Description>
+	      <Link>https://www.cve.org/CVERecord?id=CVE-2006-6499</Link>
+	    </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2010-4476</Reference>
+               <Description>Floating point conversion routine cycles back and forth between two different values.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2010-4476</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2010-4645</Reference>
+               <Description>Floating point conversion routine cycles back and forth between two different values.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2010-4645</Link>
+            </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2010-2534</Reference>
+               <Description>Chain: improperly clearing a pointer in a linked list leads to infinite loop.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2010-2534</Link>
+            </Observed_Example>
+	    <Observed_Example>
+	      <Reference>CVE-2013-1591</Reference>
+	      <Description>Chain: an integer overflow (CWE-190) in the image size calculation causes an infinite loop (CWE-835) which sequentially allocates buffers without limits (CWE-1325) until the stack is full.</Description>
+	      <Link>https://www.cve.org/CVERecord?id=CVE-2013-1591</Link>
+	    </Observed_Example>
+            <Observed_Example>
+               <Reference>CVE-2008-3688</Reference>
+               <Description>Chain: A denial of service may be caused by an uninitialized variable (CWE-457) allowing an infinite loop (CWE-835) resulting from a connection to an unresponsive server.</Description>
+               <Link>https://www.cve.org/CVERecord?id=CVE-2008-3688</Link>
+            </Observed_Example>
+         </Observed_Examples>
+         <Taxonomy_Mappings>
+            <Taxonomy_Mapping Taxonomy_Name="OMG ASCSM">
+                <Entry_ID>ASCSM-CWE-835</Entry_ID>
+            </Taxonomy_Mapping>
+         </Taxonomy_Mappings>
+         <References>
+            <Reference External_Reference_ID="REF-62" Section="Chapter 7, &quot;Looping Constructs&quot;, Page 327" />
+            <Reference External_Reference_ID="REF-962" Section="ASCSM-CWE-835" />
+         </References>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Base level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+         <Content_History>
+            <Submission>
+               <Submission_Name>CWE Content Team</Submission_Name>
+               <Submission_Organization>MITRE</Submission_Organization>
+               <Submission_Date>2011-03-22</Submission_Date>
+               <Submission_Version>1.12</Submission_Version>
+               <Submission_ReleaseDate>2011-03-30</Submission_ReleaseDate>
+            </Submission>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2011-06-01</Modification_Date>
+               <Modification_Version>1.13</Modification_Version>
+               <Modification_ReleaseDate>2011-06-01</Modification_ReleaseDate>
+               <Modification_Comment>updated Common_Consequences, Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2012-05-11</Modification_Date>
+               <Modification_Version>2.2</Modification_Version>
+               <Modification_ReleaseDate>2012-05-15</Modification_ReleaseDate>
+               <Modification_Comment>updated Demonstrative_Examples, References, Relationships, Taxonomy_Mappings</Modification_Comment>
+            </Modification>
+            <Modification>
+               <Modification_Name>CWE Content Team</Modification_Name>
+               <Modification_Organization>MITRE</Modification_Organization>
+               <Modification_Date>2017-11-08</Modification_Date>
+               <Modification_Version>3.0</Modification_Version>
+               <Modification_ReleaseDate>2017-11-08</Modification_ReleaseDate>
+               <Modification_Comment>updated Demonstrative_Examples</Modification_Comment>
+            </Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2019-01-03</Modification_Date>
+					<Modification_Version>3.2</Modification_Version>
+					<Modification_ReleaseDate>2019-01-03</Modification_ReleaseDate>
+					<Modification_Comment>updated References, Relationships, Taxonomy_Mappings</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2019-06-20</Modification_Date>
+					<Modification_Version>3.3</Modification_Version>
+					<Modification_ReleaseDate>2019-06-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-02-24</Modification_Date>
+					<Modification_Version>4.0</Modification_Version>
+					<Modification_ReleaseDate>2020-02-24</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-08-20</Modification_Date>
+					<Modification_Version>4.2</Modification_Version>
+					<Modification_ReleaseDate>2020-08-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-12-10</Modification_Date>
+					<Modification_Version>4.3</Modification_Version>
+					<Modification_ReleaseDate>2020-12-10</Modification_ReleaseDate>
+					<Modification_Comment>updated Observed_Examples, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-03-15</Modification_Date>
+					<Modification_Version>4.4</Modification_Version>
+					<Modification_ReleaseDate>2021-03-15</Modification_ReleaseDate>
+					<Modification_Comment>updated Observed_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-07-20</Modification_Date>
+					<Modification_Version>4.5</Modification_Version>
+					<Modification_ReleaseDate>2021-07-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Observed_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-01-31</Modification_Date>
+					<Modification_Version>4.10</Modification_Version>
+					<Modification_ReleaseDate>2023-01-31</Modification_ReleaseDate>
+					<Modification_Comment>updated Description, Observed_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-10-26</Modification_Date>
+					<Modification_Version>4.13</Modification_Version>
+					<Modification_ReleaseDate>2023-10-26</Modification_ReleaseDate>
+					<Modification_Comment>updated Observed_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2024-02-29</Modification_Date>
+					<Modification_Version>4.14</Modification_Version>
+					<Modification_ReleaseDate>2024-02-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2024-11-19</Modification_Date>
+					<Modification_Version>4.16</Modification_Version>
+					<Modification_ReleaseDate>2024-11-19</Modification_ReleaseDate>
+					<Modification_Comment>updated Description, Diagram</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-12-11</Modification_Date>
+					<Modification_Version>4.19</Modification_Version>
+					<Modification_ReleaseDate>2025-12-11</Modification_ReleaseDate>
+					<Modification_Comment>updated Applicable_Platforms, Detection_Factors, Time_of_Introduction, Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2026-04-30</Modification_Date>
+					<Modification_Version>4.20</Modification_Version>
+					<Modification_ReleaseDate>2026-04-30</Modification_ReleaseDate>
+					<Modification_Comment>updated Observed_Examples</Modification_Comment>
+				</Modification>
+	    <Contribution Type="Content">
+	      <Contribution_Name>Abhi Balakrishnan</Contribution_Name>
+	      <Contribution_Date>2024-09-29</Contribution_Date>
+	      <Contribution_Version>4.16</Contribution_Version>
+	      <Contribution_ReleaseDate>2024-11-19</Contribution_ReleaseDate>
+	      <Contribution_Comment>Contributed usability diagram concepts used by the CWE team</Contribution_Comment>
+	    </Contribution>
+         </Content_History>
+      </Weakness>
+      

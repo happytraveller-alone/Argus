@@ -1,0 +1,245 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Weakness xmlns="http://cwe.mitre.org/cwe-7" xmlns:xhtml="http://www.w3.org/1999/xhtml" ID="1233" Name="Security-Sensitive Hardware Controls with Missing Lock Bit Protection" Abstraction="Base" Structure="Simple" Status="Stable">
+         <Description>The product uses a register lock bit protection mechanism, but it does not ensure that the lock bit prevents modification of system registers or controls that perform changes to important hardware system configuration.</Description>
+         <Extended_Description>
+         	<xhtml:p>Integrated circuits and hardware intellectual properties (IPs) might provide device configuration controls that need to be programmed after device power reset by a trusted firmware or software module, commonly set by BIOS/bootloader. After reset, there can be an expectation that the controls cannot be used to perform any further modification. This behavior is commonly implemented using a trusted lock bit, which can be set to disable writes to a protected set of registers or address regions. The lock protection is intended to prevent modification of certain system configuration (e.g., memory/memory protection unit configuration).</xhtml:p>
+		<xhtml:p>However, if the lock bit does not effectively write-protect all system registers or controls that could modify the protected system configuration, then an adversary may be able to use software to access the registers/controls and modify the protected hardware configuration.</xhtml:p>
+		</Extended_Description>
+			<Related_Weaknesses>
+			  <Related_Weakness Nature="ChildOf" CWE_ID="284" View_ID="1000" Ordinal="Primary" />
+			  <Related_Weakness Nature="ChildOf" CWE_ID="667" View_ID="1000" />
+			</Related_Weaknesses>
+		 <Weakness_Ordinalities>
+            <Weakness_Ordinality>
+               <Ordinality>Primary</Ordinality>
+            </Weakness_Ordinality>
+		 </Weakness_Ordinalities>
+         <Applicable_Platforms>
+            <Language Class="Not Language-Specific" Prevalence="Undetermined" />
+			<Operating_System Class="Not OS-Specific" Prevalence="Undetermined" />
+			<Architecture Class="Not Architecture-Specific" Prevalence="Undetermined" />
+			<Technology Class="Not Technology-Specific" Prevalence="Undetermined" />
+         </Applicable_Platforms>
+         <Modes_Of_Introduction>
+            <Introduction>
+               <Phase>Architecture and Design</Phase>
+               <Note>Such issues could be introduced during hardware architecture and design and identified later during Testing or System Configuration phases.</Note>
+            </Introduction>
+            <Introduction>
+               <Phase>Implementation</Phase>
+               <Note>Such issues could be introduced during implementation and identified later during Testing or System Configuration phases.</Note>
+            </Introduction>
+         </Modes_Of_Introduction>
+         <Common_Consequences>
+            <Consequence>
+               <Scope>Access Control</Scope>
+			   <Impact>Modify Memory</Impact>
+               <Note>System Configuration protected by the lock bit can be modified even when the lock is set.</Note>
+            </Consequence>
+         </Common_Consequences>
+	 <Detection_Methods>
+	   <Detection_Method>
+	     <Method>Manual Analysis</Method>
+	     <Description>Set the lock bit. Attempt to modify the
+	     information protected by the lock bit. If the information
+	     is changed, implement a design fix. Retest. Also, attempt
+	     to indirectly clear the lock bit or bypass
+	     it.</Description>
+	     <Effectiveness>High</Effectiveness>
+	   </Detection_Method>
+	 </Detection_Methods>
+         <Potential_Mitigations>
+            <Mitigation>
+               <Phase>Architecture and Design</Phase>
+                    <Phase>Implementation</Phase>
+                    <Phase>Testing</Phase>
+                    <Description>
+                        <xhtml:ul>
+                            <xhtml:li>Security lock bit protections must be reviewed for design inconsistency and common weaknesses.</xhtml:li>
+			    <xhtml:li>Security lock programming flow and lock properties must be tested in pre-silicon and post-silicon testing.</xhtml:li>
+                        </xhtml:ul>
+                    </Description>
+            </Mitigation>
+         </Potential_Mitigations>
+         <Demonstrative_Examples>
+            <Demonstrative_Example>
+               <Intro_Text>Consider the example design below for a digital thermal sensor that detects overheating of the silicon and triggers system shutdown. The system critical temperature limit (CRITICAL_TEMP_LIMIT) and thermal sensor calibration (TEMP_SENSOR_CALIB) data have to be programmed by the firmware. 
+               </Intro_Text>
+               <Example_Code Nature="Bad" Language="Other">
+				<xhtml:table>
+				    <xhtml:tr>
+				        <xhtml:th>Register</xhtml:th>
+				        <xhtml:th>Field description</xhtml:th>
+				    </xhtml:tr>
+				<xhtml:tr>
+				  <xhtml:td>CRITICAL_TEMP_LIMIT
+				  </xhtml:td>
+				  <xhtml:td>[31:8] Reserved field; Read only; Default 0<xhtml:br />[7:0] Critical temp 0-255 Centigrade; Read-write-lock; Default 125
+				  </xhtml:td>
+				  </xhtml:tr>
+				  <xhtml:tr>
+				  <xhtml:td>TEMP_SENSOR_CALIB
+				  </xhtml:td>
+				  <xhtml:td>[31:0] Thermal sensor calibration data. A slope value used to map sensor reading to a degree Centigrade. Read-write; Default 25
+				  </xhtml:td>
+				  </xhtml:tr>
+				  <xhtml:tr>
+				  <xhtml:td>TEMP_SENSOR_LOCK
+				  </xhtml:td>
+				  <xhtml:td>[31:1] Reserved field; Read only; Default 0<xhtml:br />[0] Lock bit, locks CRITICAL_TEMP_LIMIT register; Write-1-once; Default 0
+				  </xhtml:td>
+				  </xhtml:tr>
+				  <xhtml:tr>
+				  <xhtml:td>TEMP_HW_SHUTDOWN
+				  </xhtml:td>
+				  <xhtml:td>[31:2] Reserved field; Read only; Default 0<xhtml:br />[1] Enable hardware shutdown on a critical temperature detection; Read-write; Default 0
+				  </xhtml:td>
+				  </xhtml:tr>
+				  <xhtml:tr>
+				  <xhtml:td>CURRENT_TEMP
+				  </xhtml:td>
+				  <xhtml:td>[31:8] Reserved field; Read only; Default 0<xhtml:br />[7:0]   Current Temp 0-255 Centigrade; Read-only; Default 0 
+				  </xhtml:td>
+				  </xhtml:tr>
+				  </xhtml:table>
+               </Example_Code>				  
+			   <Body_Text>
+			   <xhtml:p>In this example note that only the CRITICAL_TEMP_LIMIT register is protected by the TEMP_SENSOR_LOCK bit, while the security design intent is to protect any modification of the critical temperature detection and response. 
+			   </xhtml:p>
+			   <xhtml:p>The response of the system, if the system heats to a critical temperature, is controlled by TEMP_HW_SHUTDOWN bit [1], which is not lockable. Also, the TEMP_SENSOR_CALIB register is not protected by the lock bit.
+			   </xhtml:p>
+			   <xhtml:p>By modifying the temperature sensor calibration, the conversion of the sensor data to a degree centigrade can be changed, such that the current temperature will never be detected to exceed critical temperature value programmed by the protected lock.
+			   </xhtml:p>
+			   <xhtml:p>Similarly, by modifying the TEMP_HW_SHUTDOWN.Enable bit, the system response detection of the current temperature exceeding critical temperature can be disabled.
+			   </xhtml:p>
+			   </Body_Text>
+			   <Example_Code Nature="Good" Language="Other"><xhtml:p>Change TEMP_HW_SHUTDOWN and TEMP_SENSOR_CALIB controls to be locked by TEMP_SENSOR_LOCK.
+			   </xhtml:p>
+			   <xhtml:table>
+				<xhtml:tr>
+				  <xhtml:td>TEMP_SENSOR_CALIB
+				  </xhtml:td>
+				  <xhtml:td>[31:0] Thermal sensor calibration data. A slope value used to map sensor reading to a degree Centigrade. Read-write-Lock; Default 25; Locked by TEMP_SENSOR_LOCK bit[0]
+				  </xhtml:td>
+				  </xhtml:tr>
+				  <xhtml:tr>
+				  <xhtml:td>TEMP_HW_SHUTDOWN
+				  </xhtml:td>
+				  <xhtml:td>[31:2] Reserved field; Read only; Default 0<xhtml:p />[1] Enable hardware shutdown on critical temperature detection; Read-write-Lock; Default 0; Locked by TEMP_SENSOR_LOCK bit[0]
+				  </xhtml:td>
+				  </xhtml:tr>
+				  </xhtml:table>
+               </Example_Code>
+            </Demonstrative_Example>
+         </Demonstrative_Examples>
+	    <Observed_Examples>
+	      <Observed_Example>
+		<Reference>CVE-2018-9085</Reference>
+		<Description>Certain servers leave a write protection lock bit
+		unset after boot, potentially allowing modification of
+		parts of flash memory.</Description>
+		<Link>https://www.cve.org/CVERecord?id=CVE-2018-9085</Link>
+	      </Observed_Example>
+		<Observed_Example>
+		  <Reference>CVE-2014-8273</Reference>
+		  <Description>Chain: chipset has a race condition (CWE-362) between when an interrupt handler detects an attempt to write-enable the BIOS (in violation of the lock bit), and when the handler resets the write-enable bit back to 0, allowing attackers to issue BIOS writes during the timing window [REF-1237].</Description>
+		  <Link>https://www.cve.org/CVERecord?id=CVE-2014-8273</Link>
+		</Observed_Example>
+	      </Observed_Examples>
+         <Related_Attack_Patterns>
+            <Related_Attack_Pattern CAPEC_ID="176" />
+            <Related_Attack_Pattern CAPEC_ID="680" />
+         </Related_Attack_Patterns>
+         <References>
+		<Reference External_Reference_ID="REF-1237" />
+	      </References>
+         <Mapping_Notes>
+            <Usage>Allowed</Usage>
+            <Rationale>This CWE entry is at the Base level of abstraction, which is a preferred level of abstraction for mapping to the root causes of vulnerabilities.</Rationale>
+            <Comments>Carefully read both the name and description to ensure that this mapping is an appropriate fit. Do not try to 'force' a mapping to a lower-level Base/Variant simply to comply with this preferred level of abstraction.</Comments>
+            <Reasons>
+               <Reason Type="Acceptable-Use" />
+            </Reasons>
+         </Mapping_Notes>
+         <Content_History>
+            <Submission>
+                <Submission_Name>Arun Kanuparthi, Hareesh Khattri, Parbati Kumar Manna, Narasimha Kumar V Mangipudi</Submission_Name>
+                <Submission_Organization>Intel Corporation</Submission_Organization>
+                <Submission_Date>2020-01-15</Submission_Date>
+                <Submission_Version>4.0</Submission_Version>
+                <Submission_ReleaseDate>2020-02-24</Submission_ReleaseDate>
+            </Submission>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2020-08-20</Modification_Date>
+					<Modification_Version>4.2</Modification_Version>
+					<Modification_ReleaseDate>2020-08-20</Modification_ReleaseDate>
+					<Modification_Comment>updated Related_Attack_Patterns</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-03-15</Modification_Date>
+					<Modification_Version>4.4</Modification_Version>
+					<Modification_ReleaseDate>2021-03-15</Modification_ReleaseDate>
+					<Modification_Comment>updated Maintenance_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2021-10-28</Modification_Date>
+					<Modification_Version>4.6</Modification_Version>
+					<Modification_ReleaseDate>2021-10-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples, Description, Detection_Factors, Maintenance_Notes, Name, Observed_Examples, Potential_Mitigations, References, Relationships, Weakness_Ordinalities</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2022-04-28</Modification_Date>
+					<Modification_Version>4.7</Modification_Version>
+					<Modification_ReleaseDate>2022-04-28</Modification_ReleaseDate>
+					<Modification_Comment>updated Related_Attack_Patterns, Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-04-27</Modification_Date>
+					<Modification_Version>4.11</Modification_Version>
+					<Modification_ReleaseDate>2023-04-27</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2023-06-29</Modification_Date>
+					<Modification_Version>4.12</Modification_Version>
+					<Modification_ReleaseDate>2023-06-29</Modification_ReleaseDate>
+					<Modification_Comment>updated Mapping_Notes</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-04-03</Modification_Date>
+					<Modification_Version>4.17</Modification_Version>
+					<Modification_ReleaseDate>2025-04-03</Modification_ReleaseDate>
+					<Modification_Comment>updated Demonstrative_Examples</Modification_Comment>
+				</Modification>
+				<Modification>
+					<Modification_Name>CWE Content Team</Modification_Name>
+					<Modification_Organization>MITRE</Modification_Organization>
+					<Modification_Date>2025-09-09</Modification_Date>
+					<Modification_Version>4.18</Modification_Version>
+					<Modification_ReleaseDate>2025-09-09</Modification_ReleaseDate>
+					<Modification_Comment>updated Relationships</Modification_Comment>
+				</Modification>
+				<Contribution Type="Feedback">
+				  <Contribution_Name>Narasimha Kumar V Mangipudi</Contribution_Name>
+				  <Contribution_Organization>Lattice Semiconductor</Contribution_Organization>
+				  <Contribution_Date>2021-10-20</Contribution_Date>
+				  <Contribution_Comment>reviewed content changes</Contribution_Comment>
+				</Contribution>
+			<Previous_Entry_Name Date="2021-10-28">Improper Hardware Lock Protection for Security Sensitive Controls</Previous_Entry_Name>
+         </Content_History>
+      </Weakness>
+      
