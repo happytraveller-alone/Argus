@@ -20,6 +20,22 @@ export interface PocResult {
 	reproduced: boolean;
 }
 
+export interface EvidenceCodeSnippet {
+	file?: string | null;
+	lineStart?: number | null;
+	lineEnd?: number | null;
+	code: string;
+	language?: string | null;
+}
+
+export interface CallHop {
+	file?: string | null;
+	line?: number | null;
+	function?: string | null;
+	snippet?: string | null;
+	language?: string | null;
+}
+
 export interface IntelligentTaskFinding {
 	id: string;
 	severity: string;
@@ -42,6 +58,10 @@ export interface IntelligentTaskFinding {
 	scopeType?: "file" | "module";
 	module?: string | null;
 	resolvedFilePath?: string | null;
+	evidenceCodeSnippets?: EvidenceCodeSnippet[];
+	evidenceProse?: string;
+	reachabilityChain?: CallHop[];
+	reachabilityEntryPoint?: string;
 }
 
 export interface IntelligentTaskEventLogEntry {

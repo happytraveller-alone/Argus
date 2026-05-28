@@ -1911,7 +1911,7 @@ esac
             mount_plan: Some(minimal_test_mount_plan(&workspace_dir)),
         });
 
-        assert!(result.success);
+        assert!(result.success, "result={:?}", result);
         assert_eq!(result.exit_code, 0);
     }
 

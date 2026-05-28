@@ -262,3 +262,32 @@ test("agentSnapshot.projectName — snapshot builder passes llmModel into naviga
 test("agentSnapshot.projectName — snapshot builder passes projectRoot into navigation state", () => {
 	assert.match(source, /record\.projectRoot/);
 });
+
+// ---------------------------------------------------------------------------
+// G-F11: snapshot propagation — 4 new fields  (AC13)
+// ---------------------------------------------------------------------------
+
+test("agentSnapshot — buildAgentFindingSnapshot propagates evidenceCodeSnippets", () => {
+	assert.match(source, /evidenceCodeSnippets:\s*finding\.evidenceCodeSnippets/);
+});
+
+test("agentSnapshot — buildAgentFindingSnapshot propagates evidenceProse", () => {
+	assert.match(source, /evidenceProse:\s*finding\.evidenceProse/);
+});
+
+test("agentSnapshot — buildAgentFindingSnapshot propagates reachabilityChain", () => {
+	assert.match(source, /reachabilityChain:\s*finding\.reachabilityChain/);
+});
+
+test("agentSnapshot — buildAgentFindingSnapshot propagates reachabilityEntryPoint", () => {
+	assert.match(source, /reachabilityEntryPoint:\s*finding\.reachabilityEntryPoint/);
+});
+
+test("agentSnapshot — buildAgentFindingSnapshot uses evidenceProse ?? evidence for description body", () => {
+	// AC13 conformance: parallels intelligentFindingSnapshot.ts:16 — must prefer
+	// structured evidenceProse over the legacy evidence string when both are present.
+	assert.match(
+		source,
+		/const evidence = String\(finding\.evidenceProse \?\? finding\.evidence \?\? ""\)\.trim\(\);/,
+	);
+});

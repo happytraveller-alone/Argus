@@ -341,6 +341,34 @@ pub struct DismissalEvidence {
     pub rationale: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct EvidenceCodeSnippet {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub file: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub line_start: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub line_end: Option<u32>,
+    #[serde(default)]
+    pub code: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub language: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct CallHop {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub file: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub line: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub function: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub snippet: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub language: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AuditFinding {
@@ -374,6 +402,10 @@ pub struct AuditFinding {
     )]
     pub evidence: String,
     #[serde(default)]
+    pub evidence_code_snippets: Vec<EvidenceCodeSnippet>,
+    #[serde(default, deserialize_with = "deserialize_evidence_prose_compat")]
+    pub evidence_prose: Option<String>,
+    #[serde(default)]
     pub confidence: Option<f64>,
     #[serde(default, deserialize_with = "deserialize_option_string_lenient")]
     pub task_id: Option<String>,
@@ -403,6 +435,8 @@ impl Default for AuditFinding {
             severity: default_severity(),
             description: String::new(),
             evidence: String::new(),
+            evidence_code_snippets: vec![],
+            evidence_prose: None,
             confidence: None,
             task_id: None,
             poc_code: None,
@@ -491,6 +525,10 @@ pub struct TraceResult {
     pub confidence: Option<f64>,
     #[serde(default)]
     pub rationale: String,
+    #[serde(default)]
+    pub call_chain: Vec<CallHop>,
+    #[serde(default)]
+    pub entry_point: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -557,6 +595,16 @@ pub(crate) fn normalize_resolved_path(raw: &str, project_root: Option<&str>) -> 
     trimmed.to_string()
 }
 
+fn deserialize_evidence_prose_compat<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    // Read evidence_prose as Option<String>; serde's #[serde(default)] handles absent
+    // value at the struct-field level by skipping this deserializer entirely. When this
+    // deserializer IS invoked, the JSON key is present — we accept null or string.
+    Option::<String>::deserialize(deserializer)
+}
+
 /// Construct an `IntelligentTaskFinding` from the canonical `AuditFinding` plus
 /// optional trace/validation overlays. Centralises every field assignment so
 /// the 3 conversion sites in `PipelineOutputs` cannot drift out of sync (Phase B).
@@ -588,6 +636,12 @@ fn build_intelligent_finding(
             .as_ref()
             .map(|p| serde_json::to_value(p).unwrap_or_default()),
         user_verdict: None,
+        evidence_code_snippets: finding.evidence_code_snippets.clone(),
+        evidence_prose: finding.evidence_prose.clone(),
+        reachability_chain: trace
+            .map(|t| t.call_chain.clone())
+            .filter(|v| !v.is_empty()),
+        reachability_entry_point: trace.and_then(|t| t.entry_point.clone()),
     }
 }
 
@@ -741,6 +795,10 @@ mod tests {
             trace_summary: None,
             poc_result: None,
             user_verdict: None,
+            evidence_code_snippets: vec![],
+            evidence_prose: None,
+            reachability_chain: None,
+            reachability_entry_point: None,
         }
     }
 
@@ -1597,5 +1655,141 @@ mod tests_canonical {
         .with_project_root(root);
 
         assert_eq!(record.project_root, Some("/storage/projects/myproject".to_string()));
+    }
+
+    // ── Phase G backend serde tests (G-B1 … G-B6) ──────────────────────────
+
+    /// G-B1: new `AuditFinding` shape with `evidence_code_snippets` + `evidence_prose`.
+    #[test]
+    fn g_b1_audit_finding_deserializes_new_shape() {
+        let json = r#"{
+          "findingId": "f1",
+          "vulnClass": "SQL Injection",
+          "severity": "high",
+          "description": "...",
+          "file": "src/a.rs",
+          "lineStart": 10,
+          "evidence": "",
+          "evidenceCodeSnippets": [
+            {"file": "src/a.rs", "line_start": 10, "line_end": 15, "code": "fn foo() {}", "language": "rust"}
+          ],
+          "evidenceProse": "Unsanitized input flows to query"
+        }"#;
+        let finding: AuditFinding = serde_json::from_str(json).expect("G-B1 deserialize");
+        assert_eq!(finding.evidence_code_snippets.len(), 1);
+        assert_eq!(finding.evidence_code_snippets[0].file.as_deref(), Some("src/a.rs"));
+        assert_eq!(finding.evidence_code_snippets[0].line_start, Some(10));
+        assert_eq!(finding.evidence_code_snippets[0].code, "fn foo() {}");
+        assert_eq!(finding.evidence_prose.as_deref(), Some("Unsanitized input flows to query"));
+        // Round-trip: key fields survive serialize → deserialize
+        let serialized = serde_json::to_string(&finding).expect("G-B1 serialize");
+        let rt: AuditFinding = serde_json::from_str(&serialized).expect("G-B1 round-trip");
+        assert_eq!(rt.evidence_prose.as_deref(), Some("Unsanitized input flows to query"));
+        assert_eq!(rt.evidence_code_snippets.len(), 1);
+    }
+
+    /// G-B2: legacy `AuditFinding` JSON (only `evidence` key, no `evidenceProse`/snippets).
+    /// `evidence` round-trips; `evidence_prose` is None; snippets list is empty.
+    #[test]
+    fn g_b2_audit_finding_legacy_shape_still_works() {
+        let json = r#"{
+          "findingId": "f1",
+          "vulnClass": "xss",
+          "severity": "low",
+          "description": "...",
+          "file": "src/x.rs",
+          "lineStart": 42,
+          "evidence": "Old narrative with `code` and src/x.rs:42"
+        }"#;
+        let finding: AuditFinding = serde_json::from_str(json).expect("G-B2 legacy deserialize");
+        assert_eq!(finding.evidence, "Old narrative with `code` and src/x.rs:42");
+        assert_eq!(finding.evidence_code_snippets.len(), 0);
+        assert_eq!(finding.evidence_prose, None);
+    }
+
+    /// G-B3: `TraceResult` with `callChain` (PASS1 path).
+    #[test]
+    fn g_b3_trace_result_call_chain_deserializes() {
+        let json = r#"{
+          "findingId": "f1",
+          "reachable": true,
+          "confidence": 0.8,
+          "rationale": "...",
+          "entryPoint": "http_handler",
+          "callChain": [
+            {"file": "src/x.rs", "line": 42, "function": "handler", "snippet": "return user.input"}
+          ]
+        }"#;
+        let trace: TraceResult = serde_json::from_str(json).expect("G-B3 deserialize");
+        assert_eq!(trace.call_chain.len(), 1);
+        assert_eq!(trace.call_chain[0].file.as_deref(), Some("src/x.rs"));
+        assert_eq!(trace.call_chain[0].line, Some(42));
+        assert_eq!(trace.call_chain[0].function.as_deref(), Some("handler"));
+        assert_eq!(trace.entry_point.as_deref(), Some("http_handler"));
+    }
+
+    /// G-B4: `TraceResult` PASS2 schema — `callChain` + `entryPoint` both present.
+    /// Confirms the struct supports both PASS1 and PASS2 JSON identically.
+    #[test]
+    fn g_b4_trace_result_pass2_round_trip() {
+        let json = r#"{
+          "findingId": "f2",
+          "reachable": true,
+          "confidence": 0.95,
+          "rationale": "attacker controlled",
+          "entryPoint": "api_route",
+          "callChain": [
+            {"file": "src/api.rs", "line": 5, "function": "route_handler", "snippet": "handle(req)"},
+            {"file": "src/db.rs", "line": 99, "function": "exec_query", "snippet": "db.query(sql)"}
+          ]
+        }"#;
+        let trace: TraceResult = serde_json::from_str(json).expect("G-B4 deserialize");
+        assert_eq!(trace.call_chain.len(), 2);
+        assert_eq!(trace.entry_point.as_deref(), Some("api_route"));
+        // Round-trip
+        let serialized = serde_json::to_string(&trace).expect("G-B4 serialize");
+        let rt: TraceResult = serde_json::from_str(&serialized).expect("G-B4 round-trip");
+        assert_eq!(rt.call_chain.len(), 2);
+        assert_eq!(rt.entry_point.as_deref(), Some("api_route"));
+    }
+
+    /// G-B5: 12 hops deserialize without truncation (AC12).
+    #[test]
+    fn g_b5_trace_result_supports_more_than_eight_hops() {
+        let hops_json: Vec<String> = (0..12)
+            .map(|i| format!(r#"{{"file":"f{i}.rs","line":{i},"function":"fn{i}","snippet":""}}"#))
+            .collect();
+        let json = format!(
+            r#"{{"findingId":"f1","reachable":true,"confidence":0.9,"rationale":"...","callChain":[{}]}}"#,
+            hops_json.join(",")
+        );
+        let trace: TraceResult = serde_json::from_str(&json).expect("G-B5 deserialize 12 hops");
+        assert_eq!(trace.call_chain.len(), 12);
+    }
+
+    /// G-B6: ellipsis hop `{file:null,line:null,function:"…(4 hops omitted)…",snippet:null}`
+    /// round-trips cleanly (AC12).
+    #[test]
+    fn g_b6_trace_result_accepts_ellipsis_hop() {
+        let json = r#"{
+          "findingId": "f1",
+          "reachable": true,
+          "confidence": 0.7,
+          "rationale": "...",
+          "callChain": [
+            {"file": null, "line": null, "function": "…(4 hops omitted)…", "snippet": null}
+          ]
+        }"#;
+        let trace: TraceResult = serde_json::from_str(json).expect("G-B6 ellipsis hop");
+        assert_eq!(trace.call_chain.len(), 1);
+        assert_eq!(trace.call_chain[0].file, None);
+        assert_eq!(
+            trace.call_chain[0].function.as_deref(),
+            Some("…(4 hops omitted)…")
+        );
+        // Round-trip preserves the ellipsis marker
+        let serialized = serde_json::to_string(&trace).expect("G-B6 serialize");
+        let rt: TraceResult = serde_json::from_str(&serialized).expect("G-B6 round-trip");
+        assert_eq!(rt.call_chain[0].function.as_deref(), Some("…(4 hops omitted)…"));
     }
 }

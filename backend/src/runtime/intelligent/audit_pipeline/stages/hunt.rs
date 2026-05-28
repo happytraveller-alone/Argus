@@ -104,7 +104,8 @@ pub async fn run(
                         "vulnClass":"string",
                         "severity":"low|medium|high|critical",
                         "description":"string",
-                        "evidence":"string",
+                        "evidence_prose":"Natural-language description of the vulnerability mechanism. MUST NOT contain code blocks, file paths, or line numbers.",
+                        "evidence_code_snippets":[{"file":"relative/path or null","line_start":1,"line_end":1,"code":"exact code text","language":"rust"}],
                         "confidence":0.0
                     }]
                 }

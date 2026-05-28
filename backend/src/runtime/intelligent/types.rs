@@ -112,6 +112,14 @@ pub struct IntelligentTaskFinding {
     /// `Some("false_positive")` = false positive.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub user_verdict: Option<String>,
+    #[serde(default, rename = "evidenceCodeSnippets", skip_serializing_if = "Vec::is_empty")]
+    pub evidence_code_snippets: Vec<crate::runtime::intelligent::audit_pipeline::types::EvidenceCodeSnippet>,
+    #[serde(default, rename = "evidenceProse", skip_serializing_if = "Option::is_none")]
+    pub evidence_prose: Option<String>,
+    #[serde(default, rename = "reachabilityChain", skip_serializing_if = "Option::is_none")]
+    pub reachability_chain: Option<Vec<crate::runtime::intelligent::audit_pipeline::types::CallHop>>,
+    #[serde(default, rename = "reachabilityEntryPoint", skip_serializing_if = "Option::is_none")]
+    pub reachability_entry_point: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

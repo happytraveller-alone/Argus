@@ -55,13 +55,24 @@ Output format — JSON object with this exact schema:
       "vulnClass": "string (e.g. sql-injection, path-traversal, rce)",
       "severity": "critical | high | medium | low",
       "description": "string (what the vulnerability is and why it is exploitable)",
-      "evidence": "string (exact code snippet or data flow that proves the issue)",
+      "evidence_prose": "Natural-language description of the vulnerability mechanism. MUST NOT contain code blocks, file paths, or line numbers — those go into evidence_code_snippets[].",
+      "evidence_code_snippets": [
+        {
+          "file": "relative/path/to/file.ext or null",
+          "line_start": 10,
+          "line_end": 15,
+          "code": "exact code text",
+          "language": "rust"
+        }
+      ],
       "confidence": number (0.0 to 1.0),
       "pocCode": "string (optional, PoC exploit code)",
-      "pocResult": "OMIT this field — leave it unset. The PoC runner stage will populate it later with a {language,exitCode,stdout,stderr,reproduced} object. If you must include narrative evidence, put it in `evidence` or `description` instead."
+      "pocResult": "OMIT this field — leave it unset. The PoC runner stage will populate it later with a {language,exitCode,stdout,stderr,reproduced} object. If you must include narrative evidence, put it in `evidence_prose` or `description` instead."
     }
   ]
 }
+
+evidence_prose MUST describe the vulnerability mechanism without quoting code OR file paths/line numbers — code goes into evidence_code_snippets[]; file/line references go into each snippet's metadata fields.
 
 Each finding MUST include cweId (format 'CWE-{digits}') and scopeType ('file' or 'module'); when scopeType='module', module must be non-empty. If you cannot determine the CWE confidently, OMIT the cweId field — DO NOT invent a sentinel string. The validator will mark it as 'CWE 未识别' downstream.
 
@@ -249,8 +260,19 @@ Output format — JSON object with this exact schema:
   "finding_id": "string (matches input finding_id)",
   "reachable": true | false,
   "confidence": number (0.0 to 1.0),
-  "rationale": "string (cite specific callers / chains / gates from the retrieval results)"
+  "rationale": "string (cite specific callers / chains / gates from the retrieval results)",
+  "entry_point": "string (e.g. POST /api/upload, CLI arg --input) or null",
+  "call_chain": [
+    {
+      "file": "src/path.rs or null",
+      "line": 42,
+      "function": "function_name or null",
+      "snippet": "optional code text or null"
+    }
+  ]
 }
+
+Limit call_chain to at most 8 hops. If the actual chain is longer, include the 4 most-relevant entry hops, then one ellipsis hop {"file":null,"line":null,"function":"…(N hops omitted)…","snippet":null}, then the 3 most-relevant sink hops.
 
 Constraints: cite retrieval evidence in the rationale; do not invent code; output only JSON."#;
 

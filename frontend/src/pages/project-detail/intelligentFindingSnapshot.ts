@@ -13,7 +13,7 @@ export function buildProjectDetailAgentFindingSnapshot(
 	finding: IntelligentTaskFinding,
 	record: IntelligentTaskRecord,
 ): AgentFinding {
-	const evidence = String(finding.evidence ?? "").trim();
+	const evidence = String(finding.evidenceProse ?? finding.evidence ?? "").trim();
 	const traceSummary = String(finding.traceSummary ?? "").trim();
 	const validationStatus = String(finding.validationStatus ?? "").trim();
 	const isFalsePositive = finding.userVerdict === "false_positive";
@@ -56,5 +56,9 @@ export function buildProjectDetailAgentFindingSnapshot(
 		projectName: record.projectName ?? null,
 		llmModel: record.llmModel,
 		projectRoot: record.projectRoot ?? null,
+		evidenceCodeSnippets: finding.evidenceCodeSnippets,
+		evidenceProse: finding.evidenceProse,
+		reachabilityChain: finding.reachabilityChain,
+		reachabilityEntryPoint: finding.reachabilityEntryPoint,
 	};
 }

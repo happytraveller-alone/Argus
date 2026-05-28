@@ -9,8 +9,81 @@ use super::super::{
     context::{AuditRunContext, AuditStage, PipelineEventSink},
     json::invoke_json,
     stage_prompt,
-    types::{HuntOutput, ValidatedFinding, ValidationOutput},
+    types::{HuntOutput, TraceOutput, ValidatedFinding, ValidationOutput},
 };
+
+/// Return true if the string looks like it contains a `path:linenum` token
+/// (e.g. `src/foo.rs:42` or `lib/bar.py:100`) — a sign that the LLM placed
+/// file/line references inside `evidence_prose` instead of the snippet fields.
+/// Heuristic: any word-char sequence containing `/` or `.` followed by `:digits`.
+fn evidence_prose_has_path_token(s: &str) -> bool {
+    // Walk byte-by-byte looking for the pattern  <word><colon><digits>
+    // where <word> contains at least one '/' or '.'.
+    let bytes = s.as_bytes();
+    let len = bytes.len();
+    let mut i = 0;
+    while i < len {
+        // Find a colon
+        if bytes[i] == b':' && i > 0 {
+            // Scan digits after the colon
+            let mut j = i + 1;
+            while j < len && bytes[j].is_ascii_digit() {
+                j += 1;
+            }
+            if j > i + 1 {
+                // There is at least one digit after ':'; scan word before ':'
+                let mut k = i;
+                let mut has_slash_or_dot = false;
+                while k > 0 {
+                    let b = bytes[k - 1];
+                    if b.is_ascii_alphanumeric() || b == b'_' || b == b'-' || b == b'/' || b == b'.' {
+                        if b == b'/' || b == b'.' {
+                            has_slash_or_dot = true;
+                        }
+                        k -= 1;
+                    } else {
+                        break;
+                    }
+                }
+                if has_slash_or_dot && k < i {
+                    return true;
+                }
+            }
+        }
+        i += 1;
+    }
+    false
+}
+
+/// B.3: Emit `chain.hop_malformed` WARN events for any CallHop that has both
+/// `file == None` AND `function == None` and is not an ellipsis placeholder.
+/// Called from the trace stage after TraceOutput is produced.
+pub fn emit_hop_malformed_events(
+    trace_output: &TraceOutput,
+    events: &PipelineEventSink,
+    stage_name: &str,
+) {
+    for trace in &trace_output.traces {
+        for (idx, hop) in trace.call_chain.iter().enumerate() {
+            let is_ellipsis = hop
+                .function
+                .as_deref()
+                .map_or(false, |f| f.contains('\u{2026}') || f.contains("..."));
+            if hop.file.is_none() && hop.function.is_none() && !is_ellipsis {
+                events.emit(
+                    crate::runtime::intelligent::types::IntelligentTaskEvent::new(
+                        "chain.hop_malformed",
+                    )
+                    .with_data(serde_json::json!({
+                        "stage": stage_name,
+                        "findingId": trace.finding_id,
+                        "hopIndex": idx,
+                    })),
+                );
+            }
+        }
+    }
+}
 
 /// Validate `cwe_id` matches the canonical `CWE-{digits}` shape without
 /// pulling in a regex crate dependency. Equivalent to `^CWE-\d+$`.
@@ -131,6 +204,24 @@ pub async fn run(
                 );
             }
         }
+
+        // ── B.3: evidence_prose_dirty ────────────────────────────────────────
+        // Warn when evidence_prose contains a path:line token — the LLM ignored
+        // the prompt instruction to keep code/file refs in evidence_code_snippets.
+        if let Some(prose) = vf.finding.evidence_prose.as_deref() {
+            if evidence_prose_has_path_token(prose) {
+                let finding_id = vf.finding.finding_id.clone();
+                events.emit(
+                    crate::runtime::intelligent::types::IntelligentTaskEvent::new(
+                        "finding.evidence_prose_dirty",
+                    )
+                    .with_data(serde_json::json!({
+                        "stage": stage.as_str(),
+                        "findingId": finding_id,
+                    })),
+                );
+            }
+        }
     }
 
     let confirmed = output
@@ -176,7 +267,9 @@ pub async fn run(
 #[cfg(test)]
 mod tests_validate {
     use super::*;
-    use crate::runtime::intelligent::audit_pipeline::types::{AuditFinding, ValidatedFinding};
+    use crate::runtime::intelligent::audit_pipeline::types::{
+        AuditFinding, CallHop, TraceOutput, TraceResult, ValidatedFinding,
+    };
 
     fn make_validated_finding(cwe_id: Option<&str>, scope_type: Option<FindingScopeType>, module: Option<&str>) -> ValidatedFinding {
         ValidatedFinding {
@@ -313,5 +406,100 @@ mod tests_validate {
             Some(FindingScopeType::File),
             "whitespace-only module must be treated as missing"
         );
+    }
+
+    // ── G-B7: chain.hop_malformed ───────────────────────────────────────────
+
+    fn make_test_sink() -> (
+        crate::runtime::intelligent::audit_pipeline::context::PipelineEventSink,
+        tokio::sync::mpsc::UnboundedReceiver<crate::runtime::intelligent::types::IntelligentTaskEvent>,
+    ) {
+        use tokio::sync::broadcast;
+        let (tx, _) = broadcast::channel(64);
+        crate::runtime::intelligent::audit_pipeline::context::PipelineEventSink::new(tx)
+    }
+
+    fn make_trace_output(hops: Vec<CallHop>) -> TraceOutput {
+        TraceOutput {
+            traces: vec![TraceResult {
+                finding_id: "F-001".to_string(),
+                reachable: true,
+                confidence: Some(0.9),
+                rationale: "test".to_string(),
+                call_chain: hops,
+                entry_point: None,
+            }],
+        }
+    }
+
+    /// G-B7: hop with both file=None and function=None emits chain.hop_malformed.
+    #[test]
+    fn g_b7_hop_malformed_emits_event() {
+        let (sink, mut rx) = make_test_sink();
+        let bad_hop = CallHop {
+            file: None,
+            line: Some(10),
+            function: None,
+            snippet: None,
+            language: None,
+        };
+        let trace_output = make_trace_output(vec![bad_hop]);
+        emit_hop_malformed_events(&trace_output, &sink, "trace");
+
+        // Drain all emitted events
+        let mut found = false;
+        while let Ok(event) = rx.try_recv() {
+            if event.kind == "chain.hop_malformed" {
+                found = true;
+                let data = event.data.expect("data must be present").clone();
+                let obj = data.as_object().expect("data must be object");
+                assert_eq!(obj["findingId"].as_str(), Some("F-001"));
+                assert_eq!(obj["hopIndex"].as_u64(), Some(0));
+            }
+        }
+        assert!(found, "chain.hop_malformed event must be emitted for null file+function hop");
+    }
+
+    /// G-B7: ellipsis hop (function contains "…") must NOT emit chain.hop_malformed.
+    #[test]
+    fn g_b7_ellipsis_hop_not_flagged() {
+        let (sink, mut rx) = make_test_sink();
+        let ellipsis_hop = CallHop {
+            file: None,
+            line: None,
+            function: Some("…(4 hops omitted)…".to_string()),
+            snippet: None,
+            language: None,
+        };
+        let trace_output = make_trace_output(vec![ellipsis_hop]);
+        emit_hop_malformed_events(&trace_output, &sink, "trace");
+
+        let events: Vec<_> = std::iter::from_fn(|| rx.try_recv().ok()).collect();
+        let malformed: Vec<_> = events.iter().filter(|e| e.kind == "chain.hop_malformed").collect();
+        assert!(malformed.is_empty(), "ellipsis hop must not trigger chain.hop_malformed");
+    }
+
+    // ── G-B8: finding.evidence_prose_dirty ─────────────────────────────────
+
+    #[test]
+    fn g_b8_evidence_prose_clean_no_event() {
+        assert!(!evidence_prose_has_path_token(
+            "The function allows unsanitized input to reach the SQL sink directly."
+        ));
+    }
+
+    #[test]
+    fn g_b8_evidence_prose_dirty_path_line_detected() {
+        assert!(evidence_prose_has_path_token("See src/auth/login.rs:42 for the sink."));
+        assert!(evidence_prose_has_path_token("lib/parser.py:100 is vulnerable."));
+        assert!(evidence_prose_has_path_token("routes/api/upload.js:7"));
+    }
+
+    #[test]
+    fn g_b8_evidence_prose_dirty_no_false_positive_on_version() {
+        // "v1.2.3" or "2026-05-28" should not trigger (no slash/dot before colon)
+        assert!(!evidence_prose_has_path_token("version 1:2 ratio"));
+        // URL-style colons without path separators should not trigger
+        assert!(!evidence_prose_has_path_token("see https://example.com for details"));
     }
 }

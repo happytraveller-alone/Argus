@@ -524,6 +524,26 @@ function extractMarkdownSections(sourceText: string): Map<string, string> {
   return sections;
 }
 
+function stripFencedCodeBlocks(text: string): string {
+  return text.replace(/```[\s\S]*?```/g, "").replace(/\n{3,}/g, "\n\n");
+}
+
+function stripPathSentences(text: string): string {
+  const PATH_TOKEN = /\b[\w./-]+(?:\.\w{1,8}):\d+\b/;
+  const parts = text.split(/([。;\n]+)/);
+  const out: string[] = [];
+  for (let i = 0; i < parts.length; i += 2) {
+    const sentence = parts[i] ?? "";
+    const delim = parts[i + 1] ?? "";
+    if (sentence.length > 0 && PATH_TOKEN.test(sentence)) {
+      continue;
+    }
+    out.push(sentence);
+    out.push(delim);
+  }
+  return out.join("").trim();
+}
+
 function buildAgentMarkdownNarrativeSections(
   finding: AgentFinding,
 ): FindingDetailNarrativeSection[] {
@@ -532,16 +552,27 @@ function buildAgentMarkdownNarrativeSections(
   const remediation = String(
     finding.remediation || finding.suggestion || sections.get("修复建议") || "",
   ).trim();
-  const verification = String(
+  let verification = String(
     finding.verification || sections.get("验证结论") || "",
   ).trim();
+
+  // E.2 Step 1+2: 根因解释 body from structured field with fence+path-sentence stripping
+  const rawRootCause = String(finding.evidenceProse ?? finding.evidence ?? sections.get("根因解释") ?? "");
+  const rootCauseBody = stripPathSentences(stripFencedCodeBlocks(rawRootCause));
+
+  // E.2 Step 3: append chain-pointer paragraph to 验证结论 when chain non-empty
+  if (finding.reachabilityChain && finding.reachabilityChain.length > 0) {
+    const entryLabel = finding.reachabilityEntryPoint ?? "未知";
+    verification += `\n调用链证据已列于关联代码面板（共 ${finding.reachabilityChain.length} hops，入口：${entryLabel}）`;
+    verification = verification.trim();
+  }
 
   const narrativeSections = [
     buildNarrativeSection({
       id: `agent:${finding.id}:root-cause`,
       title: "根因说明",
       emphasis: "primary",
-      content: sections.get("根因解释"),
+      content: rootCauseBody || sections.get("根因解释"),
       emptyBody: MISSING_MARKDOWN_SECTION,
     }),
   ];
@@ -871,7 +902,7 @@ export function buildAgentFindingCodeViews(finding: AgentFinding): FindingDetail
     ? finding.context_end_line
     : finding.line_end;
 
-  return [
+  const modules: FindingDetailCodeView[] = [
     {
       id: `agent:${finding.id}`,
       title: contextCode ? "命中代码" : "命中片段",
@@ -884,6 +915,62 @@ export function buildAgentFindingCodeViews(finding: AgentFinding): FindingDetail
       focusLine: resolvedStartLine ?? lineStart ?? null,
     },
   ];
+
+  // E.1 Group 1: evidence snippet modules
+  for (let i = 0; i < (finding.evidenceCodeSnippets ?? []).length; i++) {
+    const snippet = (finding.evidenceCodeSnippets ?? [])[i]!;
+    const hasFile = snippet.file != null;
+    const hasLineStart = snippet.lineStart != null;
+    let title: string;
+    if (hasFile && hasLineStart) {
+      const lineRange =
+        snippet.lineEnd != null && snippet.lineEnd !== snippet.lineStart
+          ? `${snippet.lineStart}-${snippet.lineEnd}`
+          : `${snippet.lineStart}`;
+      title = `漏洞证据 · ${snippet.file}:${lineRange}`;
+    } else {
+      title = `漏洞证据 #${i + 1}`;
+    }
+    modules.push({
+      id: `agent:${finding.id}:evidence:${i}`,
+      title,
+      filePath: snippet.file ?? null,
+      code: snippet.code,
+      lineStart: snippet.lineStart ?? null,
+      lineEnd: snippet.lineEnd ?? null,
+      highlightStartLine: snippet.lineStart ?? null,
+      highlightEndLine: snippet.lineEnd ?? snippet.lineStart ?? null,
+      focusLine: snippet.lineStart ?? null,
+    });
+  }
+
+  // E.1 Group 2: reachability chain hop modules
+  for (let i = 0; i < (finding.reachabilityChain ?? []).length; i++) {
+    const hop = (finding.reachabilityChain ?? [])[i]!;
+    let title: string;
+    if (hop.function != null && hop.file != null && hop.line != null) {
+      title = `可达性 hop ${i + 1} · ${hop.function} @ ${hop.file}:${hop.line}`;
+    } else if (hop.function == null && hop.file != null && hop.line != null) {
+      title = `可达性 hop ${i + 1} · unknown @ ${hop.file}:${hop.line}`;
+    } else if (hop.function != null) {
+      title = `可达性 hop ${i + 1} · ${hop.function}`;
+    } else {
+      title = `可达性 hop ${i + 1}`;
+    }
+    modules.push({
+      id: `agent:${finding.id}:chain:${i}`,
+      title,
+      filePath: hop.file ?? null,
+      code: hop.snippet ?? "",
+      lineStart: hop.line ?? null,
+      lineEnd: hop.line ?? null,
+      highlightStartLine: hop.line ?? null,
+      highlightEndLine: hop.line ?? null,
+      focusLine: hop.line ?? null,
+    });
+  }
+
+  return modules;
 }
 
 const DISMISSAL_CATEGORY_LABELS: Record<DismissalEvidence["category"], string> = {

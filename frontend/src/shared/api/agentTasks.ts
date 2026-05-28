@@ -1,3 +1,5 @@
+import type { EvidenceCodeSnippet, CallHop } from "./intelligentTasks";
+
 export interface AgentTaskDefectSummary {
 	scope?: string | null;
 	total_count?: number | null;
@@ -117,5 +119,9 @@ export interface AgentFinding {
 	projectName?: string | null;
 	llmModel?: string | null;
 	projectRoot?: string | null;
+	evidenceCodeSnippets?: EvidenceCodeSnippet[];
+	evidenceProse?: string;
+	reachabilityChain?: CallHop[];
+	reachabilityEntryPoint?: string;
 	[key: string]: unknown;
 }

@@ -135,15 +135,21 @@ pub async fn run(
             );
         }
     }
+
+    let trace_output = TraceOutput { traces };
+
+    // B.3: Emit chain.hop_malformed WARN events for structurally invalid hops.
+    super::validate::emit_hop_malformed_events(&trace_output, &events, stage.as_str());
+
     events.stage_completed(
         stage,
         json!({
             "reachableCount": reachable,
-            "traceCount": traces.len(),
+            "traceCount": trace_output.traces.len(),
             "discardedCount": unreachable,
         }),
     );
-    Ok(TraceOutput { traces })
+    Ok(trace_output)
 }
 
 /// Decide single-pass vs two-pass for one finding and execute.
@@ -527,6 +533,8 @@ async fn single_pass_for_finding(
             reachable: false,
             confidence: Some(0.0),
             rationale: "单轮 LLM 未返回匹配的可达性结论，默认按不可达处理。".to_string(),
+            call_chain: vec![],
+            entry_point: None,
         });
     Ok(trace)
 }
@@ -546,6 +554,8 @@ async fn single_pass_for_id(
         reachable: false,
         confidence: Some(0.0),
         rationale: "无对应验证阶段元数据，默认按不可达处理。".to_string(),
+        call_chain: vec![],
+        entry_point: None,
     })
 }
 
