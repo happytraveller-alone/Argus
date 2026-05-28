@@ -130,6 +130,10 @@ pub struct AppConfig {
     pub joern_runner_cpu_limit: f64,
     pub joern_runner_pids_limit: u64,
     pub joern_network_disabled: bool,
+    /// Maximum chars per prompt / response preview embedded in the
+    /// intelligent-audit `llm_attempt` event log. Default 16384.
+    /// Legal range: 256..=1_048_576. Env: `INTELLIGENT_LLM_PREVIEW_CHARS`.
+    pub intelligent_llm_preview_chars: usize,
 }
 
 impl AppConfig {
@@ -271,6 +275,9 @@ impl AppConfig {
             joern_runner_cpu_limit: parse_f64_env("JOERN_RUNNER_CPU_LIMIT", 0.0),
             joern_runner_pids_limit: parse_u64_env("JOERN_RUNNER_PIDS_LIMIT", 1024),
             joern_network_disabled: parse_bool_env("JOERN_NETWORK_DISABLED", true),
+            intelligent_llm_preview_chars: parse_preview_chars(
+                env::var("INTELLIGENT_LLM_PREVIEW_CHARS").ok().as_deref(),
+            ),
         })
     }
 
@@ -362,6 +369,7 @@ impl AppConfig {
             joern_runner_cpu_limit: 0.0,
             joern_runner_pids_limit: 1024,
             joern_network_disabled: true,
+            intelligent_llm_preview_chars: 16_384,
         }
     }
 }
@@ -442,11 +450,21 @@ fn parse_f64_env(key: &str, default: f64) -> f64 {
         .unwrap_or(default)
 }
 
+/// Parse `INTELLIGENT_LLM_PREVIEW_CHARS` with clamping.
+/// Default 16384; legal range 256..=1_048_576. Invalid / out-of-range falls
+/// back to the default. Pure function so it can be unit-tested without
+/// env-var coupling.
+pub(crate) fn parse_preview_chars(s: Option<&str>) -> usize {
+    s.and_then(|s| s.trim().parse::<usize>().ok())
+        .filter(|&n| (256..=1_048_576).contains(&n))
+        .unwrap_or(16_384)
+}
+
 #[cfg(test)]
 mod tests {
     use std::sync::Mutex;
 
-    use super::{normalize_opengrep_runner_runtime, AppConfig};
+    use super::{normalize_opengrep_runner_runtime, parse_preview_chars, AppConfig};
 
     static ENV_LOCK: Mutex<()> = Mutex::new(());
 
@@ -530,5 +548,59 @@ mod tests {
         assert_eq!(config.joern_runner_cpu_limit, 2.5);
         assert_eq!(config.joern_runner_pids_limit, 2048);
         assert!(!config.joern_network_disabled);
+    }
+
+    /// Test 2 (Plan Step 10) — `parse_preview_chars` must clamp every
+    /// out-of-band input (negative, zero, non-numeric, above the upper
+    /// bound, missing) to the 16_384 default, and pass through valid
+    /// values including the inclusive lower (256) and upper (1_048_576)
+    /// bounds. Pure-function test — no env access, no global state.
+    #[test]
+    fn parse_preview_chars_clamps_invalid() {
+        // Invalid / out-of-band inputs all collapse to the default.
+        assert_eq!(parse_preview_chars(None), 16_384, "missing → default");
+        assert_eq!(
+            parse_preview_chars(Some("-1")),
+            16_384,
+            "negative (parse fails on usize) → default"
+        );
+        assert_eq!(
+            parse_preview_chars(Some("0")),
+            16_384,
+            "below lower clamp → default"
+        );
+        assert_eq!(
+            parse_preview_chars(Some("255")),
+            16_384,
+            "one below lower clamp → default"
+        );
+        assert_eq!(
+            parse_preview_chars(Some("1048577")),
+            16_384,
+            "one above upper clamp → default"
+        );
+        assert_eq!(
+            parse_preview_chars(Some("999999999")),
+            16_384,
+            "well above clamp → default"
+        );
+        assert_eq!(
+            parse_preview_chars(Some("abc")),
+            16_384,
+            "non-numeric → default"
+        );
+
+        // Valid inputs pass through, including inclusive bounds.
+        assert_eq!(
+            parse_preview_chars(Some("256")),
+            256,
+            "inclusive lower bound passes"
+        );
+        assert_eq!(
+            parse_preview_chars(Some("1048576")),
+            1_048_576,
+            "inclusive upper bound passes"
+        );
+        assert_eq!(parse_preview_chars(Some("32768")), 32_768, "mid-range value passes");
     }
 }

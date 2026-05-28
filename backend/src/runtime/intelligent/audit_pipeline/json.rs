@@ -106,6 +106,10 @@ where
             repair_used: false,
         }),
         Err(first_error) => {
+            // First-shot terminal extract+deserialize failure. Emit before
+            // attempting the repair shot so the timeline shows the parse fault
+            // even when the repair shot subsequently succeeds.
+            emit_parse_failure(events, "first_shot", &first_error);
             let repair_prompt = build_repair_prompt(stage, &first_error, &invocation.content);
             let repair_invocation = match invoker.invoke(&repair_prompt, config).await {
                 Ok(inv) => {
@@ -117,8 +121,14 @@ where
                     return Err(StageInvokeError::Llm(err));
                 }
             };
-            let payload =
-                parse_json::<T>(&repair_invocation.content).map_err(StageInvokeError::Json)?;
+            let payload = match parse_json::<T>(&repair_invocation.content) {
+                Ok(p) => p,
+                Err(repair_error) => {
+                    // Repair-shot also failed — all extraction tiers exhausted.
+                    emit_parse_failure(events, "repair_shot", &repair_error);
+                    return Err(StageInvokeError::Json(repair_error));
+                }
+            };
             Ok(StageInvokeResult {
                 payload,
                 invocation: repair_invocation,
@@ -126,6 +136,20 @@ where
             })
         }
     }
+}
+
+/// Emit a `parse_failure` event when `extract_json_value` exhausts every
+/// fallback tier (plain, fenced, balanced) and the subsequent `from_value`
+/// also fails. `stage` is `"first_shot"` or `"repair_shot"` to distinguish
+/// which LLM invocation produced the unparseable content. The error message
+/// is truncated to 256 chars to bound event size on long serde diagnostics.
+fn emit_parse_failure(events: &PipelineEventSink, stage: &str, err_msg: &str) {
+    let summary: String = err_msg.chars().take(256).collect();
+    events.emit(IntelligentTaskEvent::new("parse_failure").with_data(json!({
+        "stage": stage,
+        "fallbackTier": "all_exhausted",
+        "errorSummary": summary,
+    })));
 }
 
 /// Build a repair prompt that names the parse error and the most common LLM

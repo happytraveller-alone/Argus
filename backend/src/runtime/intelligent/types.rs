@@ -201,6 +201,7 @@ impl IntelligentTaskRecord {
         let now = now_rfc3339();
         self.status = IntelligentTaskStatus::Completed;
         self.completed_at = Some(now);
+        self.emit_task_summary();
         Ok(())
     }
 
@@ -210,6 +211,39 @@ impl IntelligentTaskRecord {
         self.completed_at = Some(now);
         self.failure_stage = Some(stage.into());
         self.failure_reason = Some(reason.into());
+        self.emit_task_summary();
+    }
+
+    /// Append a `task_summary` event whose counters are derived from
+    /// `event_log` so no struct fields / serde migration are needed. Called
+    /// from `mark_completed` (after `can_complete()?` passes and status
+    /// flips to `Completed`) and `mark_failed` (after status flips to
+    /// `Failed`). Per ralplan AC-B7 R3-2: emission strictly after status
+    /// transition prevents orphan summaries on validation-rejected
+    /// completions.
+    fn emit_task_summary(&mut self) {
+        let llm_attempt_count = self
+            .event_log
+            .iter()
+            .filter(|e| e.kind == "llm_attempt")
+            .count() as u32;
+        let parse_failure_count = self
+            .event_log
+            .iter()
+            .filter(|e| e.kind == "parse_failure")
+            .count() as u32;
+        let rate = if llm_attempt_count == 0 {
+            0.0
+        } else {
+            f64::from(parse_failure_count) / f64::from(llm_attempt_count)
+        };
+        self.append_event(
+            IntelligentTaskEvent::new("task_summary").with_data(serde_json::json!({
+                "llmAttemptCount": llm_attempt_count,
+                "parseFailureCount": parse_failure_count,
+                "parseFailureRate": rate,
+            })),
+        );
     }
 
     pub fn mark_cancelled(&mut self) {
@@ -298,5 +332,80 @@ mod tests {
         // fingerprint already set in new_pending
         assert!(r.mark_completed().is_ok());
         assert_eq!(r.status, IntelligentTaskStatus::Completed);
+    }
+
+    /// Helper: build a record whose proof fields all satisfy `can_complete`
+    /// so the only signal under test is the `task_summary` derivation.
+    fn ready_to_complete_record() -> IntelligentTaskRecord {
+        let mut r = IntelligentTaskRecord::new_pending(
+            "t-sum".to_string(),
+            "p-sum".to_string(),
+            "model".to_string(),
+            "sha256:fp".to_string(),
+        );
+        r.input_summary = "files".to_string();
+        r.report_summary = "summary".to_string();
+        r.duration_ms = Some(1000);
+        r
+    }
+
+    /// Test 7 (Plan Step 10) — `mark_completed` must append a `task_summary`
+    /// event whose counters are derived from `event_log` (no extra struct
+    /// fields). The summary lands strictly AFTER the status flip so a
+    /// validation-rejected completion never leaves an orphan summary.
+    #[test]
+    fn task_summary_emitted_with_derived_counters() {
+        let mut r = ready_to_complete_record();
+        r.append_event(IntelligentTaskEvent::new("llm_attempt"));
+        r.append_event(IntelligentTaskEvent::new("llm_attempt"));
+        r.append_event(IntelligentTaskEvent::new("llm_attempt"));
+        r.append_event(IntelligentTaskEvent::new("parse_failure"));
+
+        r.mark_completed().expect("mark_completed must succeed");
+
+        assert_eq!(r.status, IntelligentTaskStatus::Completed);
+        let last = r
+            .event_log
+            .last()
+            .expect("event_log must contain task_summary as the final event");
+        assert_eq!(last.kind, "task_summary");
+        let data = last
+            .data
+            .as_ref()
+            .expect("task_summary must carry derived counters in data");
+        assert_eq!(data["llmAttemptCount"], 3);
+        assert_eq!(data["parseFailureCount"], 1);
+        let rate = data["parseFailureRate"]
+            .as_f64()
+            .expect("parseFailureRate must be a float");
+        assert!(
+            (rate - (1.0 / 3.0)).abs() < 1e-9,
+            "expected ~1/3, got {rate}"
+        );
+    }
+
+    /// Test 7b (Plan Step 10) — `mark_failed` also appends `task_summary` so
+    /// failure-path runs surface the same observability counters as
+    /// successful runs.
+    #[test]
+    fn task_summary_emitted_on_mark_failed() {
+        let mut r = ready_to_complete_record();
+        r.append_event(IntelligentTaskEvent::new("llm_attempt"));
+        r.append_event(IntelligentTaskEvent::new("parse_failure"));
+        r.append_event(IntelligentTaskEvent::new("parse_failure"));
+
+        r.mark_failed("hunt", "test");
+
+        assert_eq!(r.status, IntelligentTaskStatus::Failed);
+        let last = r
+            .event_log
+            .last()
+            .expect("event_log must contain task_summary even on failure");
+        assert_eq!(last.kind, "task_summary");
+        let data = last.data.as_ref().expect("task_summary must carry data");
+        assert_eq!(data["llmAttemptCount"], 1);
+        assert_eq!(data["parseFailureCount"], 2);
+        let rate = data["parseFailureRate"].as_f64().unwrap();
+        assert!((rate - 2.0).abs() < 1e-9, "expected 2.0, got {rate}");
     }
 }

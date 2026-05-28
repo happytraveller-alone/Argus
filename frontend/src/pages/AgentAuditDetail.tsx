@@ -1,4 +1,4 @@
-import { ArrowLeft, RefreshCw, Terminal } from "lucide-react";
+import { ArrowLeft, Download, RefreshCw, Terminal } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -32,6 +32,7 @@ import {
 	buildFindingDetailLocationState,
 	buildFindingDetailPath,
 } from "@/shared/utils/findingRoute";
+import { downloadBlob } from "@/shared/utils/download";
 import { buildCanonicalDisplay } from "@/pages/finding-detail/viewModel";
 
 const TERMINAL_STATUSES: Set<IntelligentTaskStatus> = new Set([
@@ -764,6 +765,19 @@ export default function AgentAuditDetail() {
 		navigate(-1);
 	};
 
+	const handleExportLog = () => {
+		try {
+			const blob = new Blob([JSON.stringify(activeEvents, null, 2)], { type: "application/json" });
+			const ts = new Date().toISOString().replace(/[:.]/g, "-");
+			const filename = `agent-audit-${taskId}-${ts}.json`;
+			downloadBlob(blob, filename);
+			toast.success("已导出时间日志");
+		} catch (err) {
+			const msg = err instanceof Error ? err.message : String(err);
+			toast.error(`导出失败: ${msg}`);
+		}
+	};
+
 	return (
 		<div className="relative flex min-h-screen flex-col gap-6 bg-background p-6 font-mono">
 			<div className="absolute inset-0 cyber-grid-subtle pointer-events-none" />
@@ -890,7 +904,18 @@ export default function AgentAuditDetail() {
 			<Dialog open={showLlmLog} onOpenChange={setShowLlmLog}>
 				<DialogContent className="max-w-4xl max-h-[80vh] overflow-hidden flex flex-col">
 					<DialogHeader>
-						<DialogTitle>时间日志 ({activeEvents.length})</DialogTitle>
+						<div className="flex items-center justify-between gap-2">
+							<DialogTitle>时间日志 ({activeEvents.length})</DialogTitle>
+							<Button
+								variant="ghost"
+								size="icon"
+								aria-label="导出时间日志"
+								onClick={handleExportLog}
+								disabled={activeEvents.length === 0}
+							>
+								<Download className="h-4 w-4" />
+							</Button>
+						</div>
 					</DialogHeader>
 					<div className="flex-1 overflow-y-auto">
 						<div className="flex flex-col gap-0">

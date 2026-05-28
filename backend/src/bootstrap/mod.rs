@@ -16,6 +16,7 @@ const REQUIRED_RUST_TABLES: &[&str] = &[
     "rust_projects",
     "rust_project_archives",
     "rust_scan_rule_assets",
+    "rust_cwe_catalog",
     "rust_prompt_skills",
     "rust_prompt_skill_builtin_states",
 ];
@@ -171,6 +172,7 @@ async fn check_database(pool: &PgPool) -> DatabaseBootstrapStatus {
                     'rust_projects',
                     'rust_project_archives',
                     'rust_scan_rule_assets',
+                    'rust_cwe_catalog',
                     'rust_prompt_skills',
                     'rust_prompt_skill_builtin_states'
                )",
@@ -300,6 +302,50 @@ async fn ensure_rust_schema(pool: &PgPool) -> Result<()> {
         r#"
         create index if not exists ix_rust_scan_rule_assets_engine_kind
             on rust_scan_rule_assets (engine, source_kind, is_active)
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    sqlx::query(
+        r#"
+        create table if not exists rust_cwe_catalog (
+            cwe_id text primary key,
+            numeric_id integer not null unique,
+            name_en_official text not null,
+            name_en_short text not null default '',
+            name_zh text not null,
+            source_version text not null,
+            source_date text not null,
+            source_sha256 text not null,
+            translation_source text not null default 'agent_curated_self_reviewed',
+            translation_reviewed_at timestamptz not null,
+            is_active boolean not null default true,
+            created_at timestamptz not null default now(),
+            updated_at timestamptz not null default now(),
+            constraint rust_cwe_catalog_cwe_id_format check (cwe_id ~ '^CWE-[0-9]+$'),
+            constraint rust_cwe_catalog_numeric_positive check (numeric_id > 0),
+            constraint rust_cwe_catalog_name_en_not_blank check (length(trim(name_en_official)) > 0),
+            constraint rust_cwe_catalog_name_zh_not_blank check (length(trim(name_zh)) > 0)
+        )
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    sqlx::query(
+        r#"
+        create index if not exists ix_rust_cwe_catalog_active_numeric
+            on rust_cwe_catalog (is_active, numeric_id)
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    sqlx::query(
+        r#"
+        create index if not exists ix_rust_cwe_catalog_active_cwe_id
+            on rust_cwe_catalog (is_active, cwe_id)
         "#,
     )
     .execute(pool)
@@ -476,6 +522,7 @@ mod tests {
                 "rust_projects",
                 "rust_project_archives",
                 "rust_scan_rule_assets",
+                "rust_cwe_catalog",
                 "rust_prompt_skills",
                 "rust_prompt_skill_builtin_states",
             ]
@@ -489,6 +536,7 @@ mod tests {
             "rust_projects".to_string(),
             "rust_project_archives".to_string(),
             "rust_scan_rule_assets".to_string(),
+            "rust_cwe_catalog".to_string(),
             "rust_prompt_skills".to_string(),
             "rust_prompt_skill_builtin_states".to_string(),
         ];

@@ -15,20 +15,14 @@ const MAX_HTTP_ATTEMPTS: u32 = 3;
 /// log volume bounded when the gateway returns a multi-megabyte HTML error page.
 const RAW_BODY_PREVIEW_BYTES: usize = 2048;
 
-/// Hard upper bound on chars copied from the prompt sent to the LLM. The
-/// event log shows just enough to identify which call is which without
-/// embedding the entire payload (which may include source code).
-const PROMPT_PREVIEW_CHARS: usize = 480;
-
-/// Hard upper bound on chars copied from the LLM-returned content. The full
-/// content is fed back into the audit pipeline; the preview is purely for
-/// human inspection of the time log.
-const RESPONSE_PREVIEW_CHARS: usize = 800;
-
 /// Build a truncated preview of a text payload that is safe to embed in an
 /// event-log JSON object. Indicates truncation with a trailing marker so a
 /// human reading the log knows the string is not the full content.
-fn build_text_preview(text: &str, max_chars: usize) -> String {
+///
+/// The cap is supplied per-call via `IntelligentLlmConfig.preview_chars`,
+/// which is threaded from `AppConfig.intelligent_llm_preview_chars` and
+/// defaults to 16384 (env: `INTELLIGENT_LLM_PREVIEW_CHARS`).
+pub(crate) fn build_text_preview(text: &str, max_chars: usize) -> String {
     let total = text.chars().count();
     if total <= max_chars {
         return text.to_string();
@@ -70,6 +64,71 @@ fn compute_retry_wait(attempt: u32, retry_after_secs: Option<u64>) -> std::time:
 /// transient server error).
 fn is_retryable_status(status: reqwest::StatusCode) -> bool {
     status.as_u16() == 429 || status.is_server_error()
+}
+
+/// Stitch the leading `{` back onto an Anthropic prefill response if the model
+/// continued the prefill without re-emitting the brace. Idempotent across three
+/// shapes:
+///   1. Content already starts with `{` → return as-is (already object-shaped).
+///   2. Content starts AND ends with `"` (a string-encoded / double-encoded
+///      JSON literal such as `"{\"k\":1}"`) → return as-is so downstream
+///      `unwrap_stringified_json` still applies.
+///   3. Otherwise the model continued the prefill `{` without echoing it →
+///      prepend `{`. This is the common case for Anthropic prefill: the
+///      assistant turn ends with `{`, and the model continues with the inner
+///      object content (typically a key literal such as `"key":"value"}`).
+///      Without the start+end discriminator in case 2, that continuation
+///      would be mis-classified as already-encoded and the leading `{` would
+///      never be restored.
+/// Build the OpenAI-compatible request body. Extracted as a pure helper so the
+/// `response_format: {"type": "json_object"}` constraint can be unit-tested
+/// without spinning up an HTTP client. See AC-B3 — JSON-mode enforcement is
+/// load-bearing for the prompt's contract that the response is a JSON object.
+pub(crate) fn build_openai_body(
+    model: &str,
+    prompt: &str,
+    max_tokens: i64,
+    temperature: f64,
+) -> serde_json::Value {
+    json!({
+        "model": model,
+        "messages": [{"role": "user", "content": prompt}],
+        "max_tokens": max_tokens,
+        "temperature": temperature,
+        "stream": false,
+        "response_format": {"type": "json_object"},
+    })
+}
+
+/// Build the Anthropic-compatible request body with the prefill assistant turn
+/// that seeds the response with `{`. Extracted as a pure helper so the prefill
+/// shape can be unit-tested without spinning up an HTTP client. See AC-B4 —
+/// the prefill is what makes `stitch_prefill` necessary downstream.
+pub(crate) fn build_anthropic_body(
+    model: &str,
+    prompt: &str,
+    max_tokens: i64,
+) -> serde_json::Value {
+    json!({
+        "model": model,
+        "system": "You are a security audit assistant. Respond ONLY with the requested JSON object. Do not use any tools. Do not call any functions. Output raw JSON text directly.",
+        "messages": [
+            {"role": "user", "content": prompt},
+            {"role": "assistant", "content": "{"},
+        ],
+        "max_tokens": max_tokens,
+    })
+}
+
+pub(crate) fn stitch_prefill(raw: String) -> String {
+    let trimmed = raw.trim();
+    if trimmed.starts_with('{') {
+        return raw;
+    }
+    if trimmed.starts_with('"') && trimmed.ends_with('"') {
+        return raw;
+    }
+    format!("{{{raw}")
 }
 
 #[derive(Clone, Debug)]
@@ -216,7 +275,7 @@ fn build_invocation_result(
 
     let prompt_chars = prompt.chars().count();
     let prompt_preview =
-        redact_for_logging(&build_text_preview(prompt, PROMPT_PREVIEW_CHARS), config);
+        redact_for_logging(&build_text_preview(prompt, config.preview_chars), config);
 
     let mut data = json!({
         "provider": format!("{:?}", config.provider),
@@ -240,7 +299,7 @@ fn build_invocation_result(
     if success {
         let response_chars = outcome.content.chars().count();
         let response_preview = redact_for_logging(
-            &build_text_preview(&outcome.content, RESPONSE_PREVIEW_CHARS),
+            &build_text_preview(&outcome.content, config.preview_chars),
             config,
         );
         data["responseChars"] = json!(response_chars);
@@ -288,13 +347,12 @@ impl HttpIntelligentLlmInvoker {
             }
         };
 
-        let body = json!({
-            "model": config.model,
-            "messages": [{"role": "user", "content": prompt}],
-            "max_tokens": config.max_tokens_per_call,
-            "temperature": config.temperature,
-            "stream": false,
-        });
+        let body = build_openai_body(
+            &config.model,
+            prompt,
+            config.max_tokens_per_call,
+            config.temperature,
+        );
 
         let mut last_err = String::new();
         let mut last_status: Option<u16> = None;
@@ -436,12 +494,7 @@ impl HttpIntelligentLlmInvoker {
             }
         };
 
-        let body = json!({
-            "model": config.model,
-            "system": "You are a security audit assistant. Respond ONLY with the requested JSON object. Do not use any tools. Do not call any functions. Output raw JSON text directly.",
-            "messages": [{"role": "user", "content": prompt}],
-            "max_tokens": config.max_tokens_per_call,
-        });
+        let body = build_anthropic_body(&config.model, prompt, config.max_tokens_per_call);
 
         let mut last_err = String::new();
         let mut last_status: Option<u16> = None;
@@ -576,7 +629,7 @@ impl HttpIntelligentLlmInvoker {
             .unwrap_or_default();
 
         // Fallback: if proxy injected tools and model put output in tool_use input
-        let content = if text_content.is_empty() {
+        let content_raw = if text_content.is_empty() {
             let tool_content = content_array
                 .and_then(|arr| {
                     arr.iter()
@@ -605,6 +658,12 @@ impl HttpIntelligentLlmInvoker {
         } else {
             text_content
         };
+
+        // Anthropic prefill mode: we sent assistant `{` as the seed turn; the
+        // model continues from there and typically does NOT echo the brace.
+        // Restore it here so downstream `parse_json` sees a complete object.
+        // Idempotent for the (1) already-object and (2) double-encoded shapes.
+        let content = stitch_prefill(content_raw);
 
         AttemptOutcome {
             content,
@@ -647,6 +706,7 @@ mod tests {
             stream_timeout_seconds: 60,
             custom_header_names: vec![],
             auth_kind: "openai_compatible_bearer",
+            preview_chars: 16_384,
         }
     }
 
@@ -709,6 +769,7 @@ mod tests {
             stream_timeout_seconds: 10,
             custom_header_names: vec![],
             auth_kind: "openai_compatible_bearer",
+            preview_chars: 16_384,
         };
 
         let invoker = HttpIntelligentLlmInvoker::default();
@@ -748,6 +809,7 @@ mod tests {
             stream_timeout_seconds: 10,
             custom_header_names: vec![],
             auth_kind: "openai_compatible_bearer",
+            preview_chars: 16_384,
         };
 
         let invoker = HttpIntelligentLlmInvoker::default();
@@ -819,5 +881,106 @@ mod tests {
         let base = Url::parse("https://api.anthropic.com/v1").unwrap();
         let url = build_endpoint_url(&base, "messages").unwrap();
         assert_eq!(url.as_str(), "https://api.anthropic.com/v1/messages");
+    }
+
+    // ── Plan Step 10 ───────────────────────────────────────────────────────
+
+    /// Test 1 — `build_text_preview` truncates at the configured cap and
+    /// appends the truncation marker so the event log shows the document
+    /// was elided rather than misrepresenting it as complete.
+    #[test]
+    fn build_text_preview_respects_cap() {
+        // Under cap: no truncation, no marker.
+        assert_eq!(build_text_preview("abc", 10), "abc");
+
+        // Over cap: keep `max_chars` chars, append marker with elided count.
+        let out = build_text_preview("abcdefghijklmno", 10);
+        assert!(
+            out.starts_with("abcdefghij"),
+            "first 10 chars must be preserved verbatim, got {out:?}"
+        );
+        assert!(
+            out.contains("…[truncated 5 chars]"),
+            "must indicate 5 chars were dropped, got {out:?}"
+        );
+    }
+
+    /// Test 3 — `build_openai_body` always carries the
+    /// `response_format: {"type": "json_object"}` constraint so the upstream
+    /// gateway never returns prose around the JSON object.
+    #[test]
+    fn invoke_openai_body_contains_response_format() {
+        let body = build_openai_body("gpt-test", "hello", 100, 0.0);
+        assert_eq!(body["response_format"]["type"], "json_object");
+        assert_eq!(body["model"], "gpt-test");
+        assert_eq!(body["stream"], false);
+        assert_eq!(body["max_tokens"], 100);
+        assert_eq!(body["messages"][0]["role"], "user");
+        assert_eq!(body["messages"][0]["content"], "hello");
+    }
+
+    /// Test 4 — `build_anthropic_body` ends `messages` with an assistant
+    /// prefill turn whose content is exactly `"{"`, which is what
+    /// `stitch_prefill` later relies on to know it must restore the leading
+    /// brace if the model continued without echoing it.
+    #[test]
+    fn invoke_anthropic_body_contains_prefill() {
+        let body = build_anthropic_body("claude-test", "hello", 200);
+        let messages = body["messages"]
+            .as_array()
+            .expect("messages must be an array");
+        assert_eq!(messages.len(), 2, "expected 2 messages, got {messages:?}");
+        assert_eq!(messages[0]["role"], "user");
+        assert_eq!(messages[0]["content"], "hello");
+        assert_eq!(messages[1]["role"], "assistant");
+        assert_eq!(
+            messages[1]["content"], "{",
+            "prefill content must be exactly the open brace, got {:?}",
+            messages[1]["content"]
+        );
+        assert_eq!(body["model"], "claude-test");
+        assert_eq!(body["max_tokens"], 200);
+    }
+
+    /// Test 5 — `stitch_prefill` is idempotent across the three shapes the
+    /// Anthropic prefill flow produces (refined post-iter2: case (a) below
+    /// would have been mis-classified as case (c) under the original
+    /// `starts_with('"')` discriminator because Anthropic continuations
+    /// after `{` typically open with a key literal `"…`, not a bare key).
+    #[test]
+    fn prefill_stitch_handles_all_shapes() {
+        // Shape (a) — model continued the prefill `{` with `"key":"val"}`
+        // (begins with `"`, ends with `}`). The original branch logic mistook
+        // this for the string-encoded case and skipped stitching, leaving
+        // downstream `parse_json` with `"key":"val"}` which has no leading
+        // brace. The refined start+end discriminator restores the brace and
+        // yields a parseable object.
+        let continuation = "\"key\":\"val\"}".to_string();
+        let stitched = stitch_prefill(continuation);
+        assert_eq!(stitched, "{\"key\":\"val\"}");
+        let value: serde_json::Value =
+            serde_json::from_str(&stitched).expect("stitched continuation must parse");
+        assert_eq!(value["key"], "val");
+
+        // Shape (b) — content already starts with `{` (model echoed the
+        // brace). Pass through unchanged so we do not double-stitch into
+        // `{{...`.
+        let already_object = "{\"key\":\"val\"}".to_string();
+        assert_eq!(
+            stitch_prefill(already_object.clone()),
+            already_object,
+            "already-object shape must round-trip unchanged"
+        );
+
+        // Shape (c) — string-encoded JSON literal (starts AND ends with `"`).
+        // Pass through unchanged so the downstream `unwrap_stringified_json`
+        // path in `parse_json` can unwrap it. Stitching `{` here would yield
+        // invalid JSON.
+        let stringified = "\"{\\\"k\\\":1}\"".to_string();
+        assert_eq!(
+            stitch_prefill(stringified.clone()),
+            stringified,
+            "string-encoded JSON must round-trip unchanged"
+        );
     }
 }

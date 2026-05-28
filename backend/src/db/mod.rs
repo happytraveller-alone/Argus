@@ -1,4 +1,5 @@
 pub mod codeql_build_plans;
+pub mod cwe_catalog;
 pub mod intelligent_task_state;
 pub mod projects;
 pub mod prompt_skills;

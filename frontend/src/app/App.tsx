@@ -1,10 +1,12 @@
-import { Suspense } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { BrowserRouter, Routes, Route, Outlet } from "react-router-dom";
 import { Toaster } from "sonner";
 import TopNavigation from "@/components/layout/TopNavigation";
 import routes from "./routes";
 import NotFound from "@/pages/NotFound";
 import TaskRouteFallback from "@/components/performance/TaskRouteFallback";
+import { CweCatalogBootstrap } from "@/shared/security/CweCatalogBootstrap";
+import { subscribeCweCatalogHydration } from "@/shared/security/cweCatalog";
 
 function AppLayout() {
     return (
@@ -18,11 +20,22 @@ function AppLayout() {
 }
 
 function App() {
+    const [catalogVersion, setCatalogVersion] = useState(0);
+
+    useEffect(
+        () =>
+            subscribeCweCatalogHydration(() => {
+                setCatalogVersion((version) => version + 1);
+            }),
+        [],
+    );
+
     return (
         <BrowserRouter>
+            <CweCatalogBootstrap />
             <Toaster position="top-right" />
             <Suspense fallback={<TaskRouteFallback />}>
-                <Routes>
+                <Routes key={catalogVersion}>
                     <Route element={<AppLayout />}>
                         {routes.map((route) => (
                             <Route

@@ -1,3 +1,4 @@
+pub mod cwe_catalog;
 pub mod intelligent_tasks;
 pub mod llm_config_set;
 pub mod projects;
@@ -17,6 +18,7 @@ pub fn owned_routes() -> Router<AppState> {
         .route("/health", get(health))
         .nest("/api/v1/intelligent-tasks", intelligent_tasks::router())
         .nest("/api/v1/system-config", system_config::router())
+        .nest("/api/v1/cwe-catalog", cwe_catalog::router())
         .nest("/api/v1/projects", projects::router())
         .nest("/api/v1/search", search::router())
         .nest("/api/v1/skills", skills::router())

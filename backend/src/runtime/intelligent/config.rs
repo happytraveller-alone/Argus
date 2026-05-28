@@ -46,6 +46,9 @@ pub struct IntelligentLlmConfig {
     pub stream_timeout_seconds: i64,
     pub custom_header_names: Vec<String>,
     pub auth_kind: &'static str,
+    /// Per-call preview cap for prompt/response text embedded in
+    /// `llm_attempt` events. Threaded from `AppConfig.intelligent_llm_preview_chars`.
+    pub preview_chars: usize,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -87,6 +90,7 @@ pub fn resolve_intelligent_llm_config(
         selected.runtime,
         selected.fingerprint,
         provider,
+        app_config.intelligent_llm_preview_chars,
     )
 }
 
@@ -118,6 +122,7 @@ pub fn config_from_runtime(
     runtime: RuntimeLlmConfig,
     fingerprint: String,
     provider: IntelligentLlmProvider,
+    preview_chars: usize,
 ) -> Result<IntelligentLlmConfig, IntelligentLlmConfigError> {
     let base_url = parse_absolute_base_url(&runtime.base_url, &provider)?;
     let model = if runtime.model.trim().is_empty() {
@@ -142,6 +147,7 @@ pub fn config_from_runtime(
         stream_timeout_seconds: runtime.llm_stream_timeout,
         custom_header_names,
         auth_kind,
+        preview_chars,
     })
 }
 
@@ -361,6 +367,7 @@ mod tests {
             runtime.runtime,
             fingerprint,
             IntelligentLlmProvider::OpenAiCompatible,
+            16_384,
         )
         .unwrap();
 

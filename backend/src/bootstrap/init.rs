@@ -3,7 +3,7 @@ use serde_json::json;
 
 use crate::{
     bootstrap::legacy_mirror_schema,
-    db::{projects, prompt_skills, scan_rule_assets, system_config},
+    db::{cwe_catalog, projects, prompt_skills, scan_rule_assets, system_config},
     state::{AppState, BootstrapStatus, StartupInitPolicy, StartupInitStatus},
 };
 
@@ -14,6 +14,7 @@ fn startup_init_policy() -> StartupInitPolicy {
             "empty_rust_project_store".to_string(),
             "rust_prompt_skill_compat_backfill".to_string(),
             "rust_scan_rule_asset_sync".to_string(),
+            "rust_cwe_catalog_sync".to_string(),
             "legacy_control_plane_mirror_schema_sync".to_string(),
         ],
         forbidden_at_startup: vec![
@@ -104,6 +105,17 @@ pub async fn run(state: &AppState, rust_db_ready: bool) -> Result<StartupInitSta
             summary.skipped,
             summary.deactivated
         ));
+
+        let summary = cwe_catalog::ensure_initialized(state).await?;
+        actions.push(format!(
+            "cwe catalog synced: discovered={} inserted={} updated={} skipped={} deactivated={} active_total={}",
+            summary.discovered,
+            summary.inserted,
+            summary.updated,
+            summary.skipped,
+            summary.deactivated,
+            summary.active_total
+        ));
     } else {
         actions.push("scan rule asset import skipped without rust db".to_string());
     }
@@ -131,6 +143,7 @@ mod tests {
                 "empty_rust_project_store",
                 "rust_prompt_skill_compat_backfill",
                 "rust_scan_rule_asset_sync",
+                "rust_cwe_catalog_sync",
                 "legacy_control_plane_mirror_schema_sync"
             ]
         );

@@ -12,7 +12,43 @@ type CweCatalogPayload = {
   contentVersion?: string;
   contentDate?: string;
   generatedAt?: string;
+  reviewedAt?: string;
+  source?: string;
+  translationSource?: string;
+  entryCount?: number;
   entries?: CweCatalogEntry[];
+};
+
+export type CweCatalogHydrationPayload = {
+  data?: CweCatalogEntry[];
+  entries?: CweCatalogEntry[];
+  total?: number;
+  limit?: number;
+  offset?: number;
+  sourceVersion?: string;
+  sourceDate?: string;
+  sourceSha256?: string;
+  translationSource?: string;
+  translationReviewedAt?: string;
+  contentVersion?: string;
+  contentDate?: string;
+  generatedAt?: string;
+  reviewedAt?: string;
+  entryCount?: number;
+};
+
+type CweCatalogHydrationListener = () => void;
+
+export type CweCatalogMetadata = {
+  contentVersion: string;
+  contentDate: string;
+  generatedAt: string;
+  reviewedAt: string;
+  entryCount: number;
+  source: "static" | "backend";
+  sourceSha256?: string;
+  translationSource?: string;
+  translationReviewedAt?: string;
 };
 
 export type CweDisplay = {
@@ -26,9 +62,29 @@ export type CweDisplay = {
 
 const payload = catalog as CweCatalogPayload;
 const entries = Array.isArray(payload.entries) ? payload.entries : [];
-const entryMap = new Map(
-  entries.map((entry) => [String(entry.id || "").toUpperCase(), entry]),
-);
+const entryMap = buildEntryMap(entries);
+const staticMetadata: CweCatalogMetadata = {
+  contentVersion: String(payload.contentVersion || ""),
+  contentDate: String(payload.contentDate || ""),
+  generatedAt: String(payload.generatedAt || ""),
+  reviewedAt: String(payload.reviewedAt || ""),
+  entryCount: Number(payload.entryCount || entries.length || 0),
+  source: "static",
+  translationSource:
+    typeof payload.translationSource === "string"
+      ? payload.translationSource
+      : undefined,
+  translationReviewedAt:
+    typeof payload.reviewedAt === "string" ? payload.reviewedAt : undefined,
+};
+
+let runtimeEntryMap: Map<string, CweCatalogEntry> | null = null;
+let runtimeMetadata: CweCatalogMetadata | null = null;
+const hydrationListeners = new Set<CweCatalogHydrationListener>();
+
+function buildEntryMap(items: CweCatalogEntry[]): Map<string, CweCatalogEntry> {
+  return new Map(items.map((entry) => [entry.id.toUpperCase(), entry]));
+}
 
 function extractFirstCweText(value: unknown): string {
   if (value == null) return "";
@@ -63,7 +119,9 @@ function buildCatalogMissLabel(
   if (!normalizedFallback) return normalizedCweId;
   if (
     normalizedFallback.toUpperCase() === normalizedCweId.toUpperCase() ||
-    normalizedFallback.toUpperCase().startsWith(`${normalizedCweId.toUpperCase()} `)
+    normalizedFallback
+      .toUpperCase()
+      .startsWith(`${normalizedCweId.toUpperCase()} `)
   ) {
     return normalizedFallback;
   }
@@ -113,7 +171,11 @@ export function normalizeCweId(value: unknown): string | null {
 export function resolveCweEntry(cwe: unknown): CweCatalogEntry | null {
   const normalizedCweId = normalizeCweId(cwe);
   if (!normalizedCweId) return null;
-  return entryMap.get(normalizedCweId.toUpperCase()) || null;
+  return (
+    runtimeEntryMap?.get(normalizedCweId.toUpperCase()) ||
+    entryMap.get(normalizedCweId.toUpperCase()) ||
+    null
+  );
 }
 
 export function resolveCweDisplay(input: {
@@ -169,11 +231,108 @@ export function formatCweDisplayTooltip(cwe: unknown): string | null {
   return resolveCweDisplay({ cwe }).tooltip;
 }
 
-export function getCweCatalogMetadata() {
+export function getCweCatalogMetadata(): CweCatalogMetadata {
+  return runtimeMetadata || staticMetadata;
+}
+
+export function hydrateCweCatalog(payload: unknown): boolean {
+  const validated = validateHydrationPayload(payload);
+  if (!validated) return false;
+  runtimeEntryMap = buildEntryMap(validated.entries);
+  runtimeMetadata = validated.metadata;
+  notifyHydrationListeners();
+  return true;
+}
+
+export function subscribeCweCatalogHydration(
+  listener: CweCatalogHydrationListener,
+): () => void {
+  hydrationListeners.add(listener);
+  return () => hydrationListeners.delete(listener);
+}
+
+export function resetCweCatalogForTests(): void {
+  runtimeEntryMap = null;
+  runtimeMetadata = null;
+  notifyHydrationListeners();
+}
+
+function notifyHydrationListeners(): void {
+  for (const listener of hydrationListeners) {
+    listener();
+  }
+}
+
+function validateHydrationPayload(payloadValue: unknown):
+  | {
+      entries: CweCatalogEntry[];
+      metadata: CweCatalogMetadata;
+    }
+  | null {
+  if (!payloadValue || typeof payloadValue !== "object") return null;
+  const payload = payloadValue as CweCatalogHydrationPayload;
+  const candidateEntries = Array.isArray(payload.data)
+    ? payload.data
+    : Array.isArray(payload.entries)
+      ? payload.entries
+      : null;
+  if (!candidateEntries || candidateEntries.length === 0) return null;
+  const total = Number(payload.total ?? payload.entryCount ?? candidateEntries.length);
+  if (!Number.isInteger(total) || total !== candidateEntries.length) return null;
+
+  const seen = new Set<string>();
+  const normalizedEntries: CweCatalogEntry[] = [];
+  for (const candidate of candidateEntries) {
+    const entry = normalizeHydrationEntry(candidate);
+    if (!entry) return null;
+    const key = entry.id.toUpperCase();
+    if (seen.has(key)) return null;
+    seen.add(key);
+    normalizedEntries.push(entry);
+  }
+
   return {
-    contentVersion: String(payload.contentVersion || ""),
-    contentDate: String(payload.contentDate || ""),
-    generatedAt: String(payload.generatedAt || ""),
-    entryCount: entries.length,
+    entries: normalizedEntries,
+    metadata: {
+      contentVersion: String(payload.sourceVersion || payload.contentVersion || ""),
+      contentDate: String(payload.sourceDate || payload.contentDate || ""),
+      generatedAt: String(payload.generatedAt || ""),
+      reviewedAt: String(payload.translationReviewedAt || payload.reviewedAt || ""),
+      entryCount: total,
+      source: "backend",
+      sourceSha256:
+        typeof payload.sourceSha256 === "string" ? payload.sourceSha256 : undefined,
+      translationSource:
+        typeof payload.translationSource === "string"
+          ? payload.translationSource
+          : undefined,
+      translationReviewedAt:
+        typeof payload.translationReviewedAt === "string"
+          ? payload.translationReviewedAt
+          : undefined,
+    },
+  };
+}
+
+function normalizeHydrationEntry(value: unknown): CweCatalogEntry | null {
+  if (!value || typeof value !== "object") return null;
+  const raw = value as Partial<CweCatalogEntry>;
+  const id = normalizeCweId(raw.id);
+  const numericId = Number(raw.numericId);
+  if (!id || !Number.isInteger(numericId) || numericId < 1) return null;
+  if (Number.parseInt(id.replace("CWE-", ""), 10) !== numericId) return null;
+
+  const nameEnOfficial = String(raw.nameEnOfficial || "").trim();
+  const nameEnShort = String(raw.nameEnShort || nameEnOfficial).trim();
+  const nameZh = String(raw.nameZh || "").trim();
+  if (!nameEnOfficial || !nameEnShort || !nameZh) return null;
+  if (!/[\u4e00-\u9fff]/.test(nameZh)) return null;
+
+  return {
+    id,
+    numericId,
+    nameEnOfficial,
+    nameEnShort,
+    nameZh,
   };
 }
