@@ -94,6 +94,145 @@ fn is_valid_cwe_id(s: &str) -> bool {
     !rest.is_empty() && rest.bytes().all(|b| b.is_ascii_digit())
 }
 
+/// Min length for a token to count as a "code-like" identifier worth checking
+/// against the snippet corpus. Below this we hit too many false positives on
+/// natural-language words.
+const CODE_TOKEN_MIN_LEN: usize = 4;
+
+/// Extract code-like identifiers from a piece of LLM prose. A token qualifies
+/// when it is:
+///   - wrapped in backticks (` `like_this` `), OR
+///   - an alphanumeric/underscore run that contains an underscore or mixed
+///     case (snake_case / camelCase / PascalCase), and is ≥ CODE_TOKEN_MIN_LEN.
+///
+/// The result is deduplicated and lower-cased for case-insensitive matching
+/// against the snippet corpus.
+pub(crate) fn extract_code_tokens(prose: &str) -> Vec<String> {
+    let mut tokens: Vec<String> = Vec::new();
+    let bytes = prose.as_bytes();
+    let len = bytes.len();
+
+    // 1) Backtick-quoted segments — always treated as code references.
+    let mut i = 0;
+    while i < len {
+        if bytes[i] == b'`' {
+            let start = i + 1;
+            let mut j = start;
+            while j < len && bytes[j] != b'`' {
+                j += 1;
+            }
+            if j < len && j > start {
+                let token = prose[start..j].trim();
+                if !token.is_empty() {
+                    tokens.push(token.to_string());
+                }
+                i = j + 1;
+                continue;
+            }
+        }
+        i += 1;
+    }
+
+    // 2) Bare identifiers (snake_case / camelCase).
+    let mut k = 0;
+    while k < len {
+        let b = bytes[k];
+        if b.is_ascii_alphanumeric() || b == b'_' {
+            let start = k;
+            while k < len {
+                let bb = bytes[k];
+                if bb.is_ascii_alphanumeric() || bb == b'_' {
+                    k += 1;
+                } else {
+                    break;
+                }
+            }
+            let token = &prose[start..k];
+            if token.len() >= CODE_TOKEN_MIN_LEN && is_code_like_identifier(token) {
+                tokens.push(token.to_string());
+            }
+        } else {
+            k += 1;
+        }
+    }
+
+    // Dedup case-insensitively.
+    let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+    tokens.retain(|t| seen.insert(t.to_ascii_lowercase()));
+    tokens
+}
+
+fn is_code_like_identifier(token: &str) -> bool {
+    let has_underscore = token.contains('_');
+    let mut saw_lower = false;
+    let mut saw_upper = false;
+    for c in token.chars() {
+        if c.is_ascii_lowercase() {
+            saw_lower = true;
+        }
+        if c.is_ascii_uppercase() {
+            saw_upper = true;
+        }
+    }
+    let mixed_case = saw_lower && saw_upper;
+    // Pure lowercase words like "user" don't qualify — too many natural-language
+    // collisions. Pure uppercase like "API" also too noisy. Need either
+    // underscore or a case mix.
+    has_underscore || mixed_case
+}
+
+/// Check that every code-like token mentioned in the finding's prose fields
+/// (`evidence_prose`, `description`, `evidence`) appears in at least one of
+/// the `evidence_code_snippets[*].code` blocks. Returns the list of tokens
+/// that are *missing* (empty Vec = aligned). Match is case-insensitive
+/// substring.
+pub(crate) fn evidence_misalignment(
+    finding: &crate::runtime::intelligent::audit_pipeline::types::AuditFinding,
+) -> Vec<String> {
+    // Gather all snippet bodies + the per-snippet file paths into one haystack
+    // (file paths often contain identifiers the prose legitimately references).
+    let mut haystack = String::new();
+    for snippet in &finding.evidence_code_snippets {
+        haystack.push_str(&snippet.code);
+        haystack.push('\n');
+        if let Some(file) = snippet.file.as_deref() {
+            haystack.push_str(file);
+            haystack.push('\n');
+        }
+    }
+    // Also let the finding's own file path satisfy references to it.
+    haystack.push_str(&finding.file);
+    haystack.push('\n');
+    let haystack_lower = haystack.to_ascii_lowercase();
+
+    let mut prose_concat = String::new();
+    if let Some(prose) = finding.evidence_prose.as_deref() {
+        prose_concat.push_str(prose);
+        prose_concat.push('\n');
+    }
+    prose_concat.push_str(&finding.description);
+    prose_concat.push('\n');
+    prose_concat.push_str(&finding.evidence);
+
+    let mut missing: Vec<String> = Vec::new();
+    for token in extract_code_tokens(&prose_concat) {
+        // Strip non-identifier tail like `()` or trailing `:` so we match the
+        // bare name in the snippet.
+        let bare: String = token
+            .chars()
+            .take_while(|c| c.is_ascii_alphanumeric() || *c == '_' || *c == '.')
+            .collect();
+        let probe = if bare.is_empty() { token.as_str() } else { bare.as_str() };
+        if probe.len() < CODE_TOKEN_MIN_LEN {
+            continue;
+        }
+        if !haystack_lower.contains(&probe.to_ascii_lowercase()) {
+            missing.push(token);
+        }
+    }
+    missing
+}
+
 pub async fn run(
     ctx: &AuditRunContext,
     hunt: &HuntOutput,
@@ -218,6 +357,34 @@ pub async fn run(
                     .with_data(serde_json::json!({
                         "stage": stage.as_str(),
                         "findingId": finding_id,
+                    })),
+                );
+            }
+        }
+
+        // ── Evidence alignment ───────────────────────────────────────────────
+        // Confirmed findings must have their root-cause prose grounded in the
+        // attached evidence_code_snippets. The frontend displays the snippets
+        // as the right-side "related code" panel, so any identifier mentioned
+        // in the prose that is absent from those snippets produces a panel a
+        // reviewer can't cross-check. Emit a per-finding event with the
+        // missing tokens — the reflection predicate in mod.rs translates the
+        // same condition into a GateFailure so the LLM gets a forced retry.
+        if vf.validation_status == "confirmed" {
+            let missing = evidence_misalignment(&vf.finding);
+            if !missing.is_empty() {
+                let finding_id = vf.finding.finding_id.clone();
+                let cap: usize = 10;
+                let preview: Vec<String> = missing.iter().take(cap).cloned().collect();
+                events.emit(
+                    crate::runtime::intelligent::types::IntelligentTaskEvent::new(
+                        "finding.evidence_misaligned",
+                    )
+                    .with_data(serde_json::json!({
+                        "stage": stage.as_str(),
+                        "findingId": finding_id,
+                        "missingTokens": preview,
+                        "missingTokenCount": missing.len(),
                     })),
                 );
             }
@@ -501,5 +668,111 @@ mod tests_validate {
         assert!(!evidence_prose_has_path_token("version 1:2 ratio"));
         // URL-style colons without path separators should not trigger
         assert!(!evidence_prose_has_path_token("see https://example.com for details"));
+    }
+
+    // ── Evidence alignment helpers ─────────────────────────────────────────
+    use crate::runtime::intelligent::audit_pipeline::types::EvidenceCodeSnippet;
+
+    #[test]
+    fn extract_code_tokens_picks_up_backticked_and_identifiers() {
+        let prose = "The handler `process_request` forwards `userInput` straight to \
+                     execute_query without sanitization. The vulnerability is in render_html.";
+        let tokens = extract_code_tokens(prose);
+        let lc: Vec<String> = tokens.iter().map(|t| t.to_ascii_lowercase()).collect();
+        assert!(lc.contains(&"process_request".to_string()));
+        assert!(lc.contains(&"userinput".to_string()));
+        assert!(lc.contains(&"execute_query".to_string()));
+        assert!(lc.contains(&"render_html".to_string()));
+    }
+
+    #[test]
+    fn extract_code_tokens_skips_plain_english_words() {
+        let prose = "The user input flows directly to the database without checks.";
+        let tokens = extract_code_tokens(prose);
+        assert!(tokens.is_empty(), "got unexpected tokens: {tokens:?}");
+    }
+
+    fn finding_with(
+        prose: Option<&str>,
+        snippets: Vec<EvidenceCodeSnippet>,
+    ) -> AuditFinding {
+        AuditFinding {
+            finding_id: "F1".to_string(),
+            file: "src/main.rs".to_string(),
+            line_start: 10,
+            line_end: 20,
+            vuln_class: "sqli".to_string(),
+            severity: "medium".to_string(),
+            description: "".to_string(),
+            evidence: "".to_string(),
+            evidence_code_snippets: snippets,
+            evidence_prose: prose.map(|s| s.to_string()),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn evidence_misalignment_empty_when_all_tokens_present() {
+        let finding = finding_with(
+            Some("The `process_request` handler calls `execute_query` directly."),
+            vec![EvidenceCodeSnippet {
+                file: Some("src/main.rs".to_string()),
+                line_start: Some(10),
+                line_end: Some(20),
+                code: "fn process_request() { execute_query(input); }".to_string(),
+                language: Some("rust".to_string()),
+            }],
+        );
+        let missing = evidence_misalignment(&finding);
+        assert!(missing.is_empty(), "expected no missing tokens, got: {missing:?}");
+    }
+
+    #[test]
+    fn evidence_misalignment_reports_unsnippeted_identifiers() {
+        let finding = finding_with(
+            Some("The `process_request` handler calls `execute_query` directly."),
+            vec![EvidenceCodeSnippet {
+                file: Some("src/main.rs".to_string()),
+                line_start: Some(10),
+                line_end: Some(20),
+                // Only `process_request` is in the snippet; `execute_query` is missing.
+                code: "fn process_request() { /* body */ }".to_string(),
+                language: Some("rust".to_string()),
+            }],
+        );
+        let missing = evidence_misalignment(&finding);
+        let lc: Vec<String> = missing.iter().map(|t| t.to_ascii_lowercase()).collect();
+        assert!(lc.contains(&"execute_query".to_string()));
+        assert!(!lc.contains(&"process_request".to_string()));
+    }
+
+    #[test]
+    fn evidence_misalignment_empty_snippets_flags_every_code_token() {
+        let finding = finding_with(
+            Some("The `process_request` handler calls `execute_query` directly."),
+            vec![],
+        );
+        let missing = evidence_misalignment(&finding);
+        let lc: Vec<String> = missing.iter().map(|t| t.to_ascii_lowercase()).collect();
+        assert!(lc.contains(&"process_request".to_string()));
+        assert!(lc.contains(&"execute_query".to_string()));
+    }
+
+    #[test]
+    fn evidence_misalignment_accepts_filename_satisfying_tokens() {
+        // A token can be satisfied by the finding's file path too — many rationales
+        // reference a module by its file basename.
+        let finding = finding_with(
+            Some("The vulnerability is in `auth_router`."),
+            vec![EvidenceCodeSnippet {
+                file: Some("src/auth_router.rs".to_string()),
+                line_start: Some(1),
+                line_end: Some(2),
+                code: "".to_string(),
+                language: None,
+            }],
+        );
+        let missing = evidence_misalignment(&finding);
+        assert!(missing.is_empty(), "filename should satisfy token; got: {missing:?}");
     }
 }

@@ -893,7 +893,6 @@ export function buildAgentFindingCodeViews(finding: AgentFinding): FindingDetail
   const contextCode = String(finding.code_context || "").trim();
   const snippetCode = String(finding.code_snippet || "").trim();
   const code = contextCode || snippetCode;
-  if (!code) return [];
 
   const lineStart = isFiniteLineNumber(finding.context_start_line)
     ? finding.context_start_line
@@ -902,8 +901,19 @@ export function buildAgentFindingCodeViews(finding: AgentFinding): FindingDetail
     ? finding.context_end_line
     : finding.line_end;
 
-  const modules: FindingDetailCodeView[] = [
-    {
+  const evidenceSnippets = finding.evidenceCodeSnippets ?? [];
+  const modules: FindingDetailCodeView[] = [];
+
+  // Track which evidence-snippet index (if any) was already merged into the
+  // primary module so the per-snippet loop below skips it. This prevents the
+  // right panel from rendering the same content twice when the LLM omits
+  // `code_context`/`code_snippet` and the backend synthesizes the snippet from
+  // the canonical file:line — matching the user-reported merge spec.
+  let mergedEvidenceIndex: number | null = null;
+
+  if (code) {
+    // Inline LLM-provided snippet is the primary module.
+    modules.push({
       id: `agent:${finding.id}`,
       title: contextCode ? "命中代码" : "命中片段",
       filePath: resolvedFilePath,
@@ -913,12 +923,48 @@ export function buildAgentFindingCodeViews(finding: AgentFinding): FindingDetail
       highlightStartLine: resolvedStartLine ?? lineStart ?? null,
       highlightEndLine: finding.line_end ?? lineEnd ?? lineStart ?? null,
       focusLine: resolvedStartLine ?? lineStart ?? null,
-    },
-  ];
+    });
+  } else if (evidenceSnippets.length > 0) {
+    // No inline snippet from the LLM, but the backend's
+    // `synthesize_evidence_snippet` produced one from the canonical file
+    // location. Promote it to the primary "命中代码" module so the right
+    // panel shows ONE merged article — file header + code lines numbered at
+    // their real file positions (e.g. 125-275 instead of 1-N).
+    const snippet = evidenceSnippets[0]!;
+    const snippetLineEnd = snippet.lineEnd ?? snippet.lineStart ?? null;
+    modules.push({
+      id: `agent:${finding.id}`,
+      title: "命中代码",
+      filePath: snippet.file ?? resolvedFilePath,
+      code: snippet.code,
+      lineStart: snippet.lineStart ?? null,
+      lineEnd: snippetLineEnd,
+      highlightStartLine: resolvedStartLine ?? snippet.lineStart ?? null,
+      highlightEndLine: finding.line_end ?? resolvedStartLine ?? snippetLineEnd,
+      focusLine: resolvedStartLine ?? snippet.lineStart ?? null,
+    });
+    mergedEvidenceIndex = 0;
+  } else if (resolvedFilePath) {
+    // Last-resort placeholder: no inline code, no evidence snippet — anchor
+    // the panel on the summary's file location so the user at least sees
+    // where the finding lives.
+    modules.push({
+      id: `agent:${finding.id}`,
+      title: "命中位置",
+      filePath: resolvedFilePath,
+      code: "",
+      lineStart: lineStart ?? null,
+      lineEnd: lineEnd ?? lineStart ?? null,
+      highlightStartLine: resolvedStartLine ?? lineStart ?? null,
+      highlightEndLine: finding.line_end ?? lineEnd ?? lineStart ?? null,
+      focusLine: resolvedStartLine ?? lineStart ?? null,
+    });
+  }
 
   // E.1 Group 1: evidence snippet modules
-  for (let i = 0; i < (finding.evidenceCodeSnippets ?? []).length; i++) {
-    const snippet = (finding.evidenceCodeSnippets ?? [])[i]!;
+  for (let i = 0; i < evidenceSnippets.length; i++) {
+    if (i === mergedEvidenceIndex) continue;
+    const snippet = evidenceSnippets[i]!;
     const hasFile = snippet.file != null;
     const hasLineStart = snippet.lineStart != null;
     let title: string;

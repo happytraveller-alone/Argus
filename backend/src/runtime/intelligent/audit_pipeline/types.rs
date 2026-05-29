@@ -342,12 +342,16 @@ pub struct DismissalEvidence {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
 pub struct EvidenceCodeSnippet {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub file: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    // Aliases preserve compatibility with LLM outputs / persisted records that
+    // emit snake_case keys (the original serialization shape before the
+    // camelCase rename was applied).
+    #[serde(default, skip_serializing_if = "Option::is_none", alias = "line_start")]
     pub line_start: Option<u32>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none", alias = "line_end")]
     pub line_end: Option<u32>,
     #[serde(default)]
     pub code: String,
@@ -356,6 +360,7 @@ pub struct EvidenceCodeSnippet {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
 pub struct CallHop {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub file: Option<String>,
@@ -1686,6 +1691,43 @@ mod tests_canonical {
         let rt: AuditFinding = serde_json::from_str(&serialized).expect("G-B1 round-trip");
         assert_eq!(rt.evidence_prose.as_deref(), Some("Unsanitized input flows to query"));
         assert_eq!(rt.evidence_code_snippets.len(), 1);
+    }
+
+    /// Wire-format regression guard: `EvidenceCodeSnippet` MUST serialize keys
+    /// as `lineStart`/`lineEnd` (camelCase) so the frontend's typed reader
+    /// (`shared/api/intelligentTasks.ts: interface EvidenceCodeSnippet`) gets
+    /// non-undefined values. The original snake_case shape silently broke
+    /// related-code line numbering in the vulnerability-detail view — see
+    /// `frontend/src/pages/finding-detail/viewModel.ts:buildFullFileDisplayLines`
+    /// which falls back to line 1 when lineStart is undefined.
+    #[test]
+    fn evidence_code_snippet_serializes_camelcase_keys() {
+        let snippet = EvidenceCodeSnippet {
+            file: Some("src/a.rs".to_string()),
+            line_start: Some(122),
+            line_end: Some(278),
+            code: "fn foo() {}".to_string(),
+            language: Some("rust".to_string()),
+        };
+        let json = serde_json::to_string(&snippet).expect("serialize");
+        assert!(
+            json.contains("\"lineStart\":122"),
+            "expected camelCase lineStart on wire, got: {json}",
+        );
+        assert!(
+            json.contains("\"lineEnd\":278"),
+            "expected camelCase lineEnd on wire, got: {json}",
+        );
+        assert!(
+            !json.contains("\"line_start\""),
+            "snake_case line_start leaked onto the wire: {json}",
+        );
+        // Snake-case input still deserializes (alias guard for LLM-emitted snippets).
+        let legacy_json = r#"{"file":"src/a.rs","line_start":1,"line_end":2,"code":""}"#;
+        let parsed: EvidenceCodeSnippet =
+            serde_json::from_str(legacy_json).expect("legacy snake_case still deserializes");
+        assert_eq!(parsed.line_start, Some(1));
+        assert_eq!(parsed.line_end, Some(2));
     }
 
     /// G-B2: legacy `AuditFinding` JSON (only `evidence` key, no `evidenceProse`/snippets).

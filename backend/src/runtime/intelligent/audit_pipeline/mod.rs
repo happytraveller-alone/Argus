@@ -89,6 +89,47 @@ pub struct AuditPipelineResult {
     pub events: Vec<IntelligentTaskEvent>,
 }
 
+/// Evidence alignment gate: every confirmed finding's prose must reference
+/// only code identifiers that ship inside its `evidence_code_snippets`.
+/// Returns `Some(GateFailure)` when at least one confirmed finding is
+/// misaligned — caller folds this into the validate reflection predicate
+/// so the LLM is forced to retry. Returns `None` when all confirmed findings
+/// are well-grounded.
+fn evidence_alignment_gate(out: &types::ValidationOutput) -> Option<GateFailure> {
+    let mut misaligned: Vec<serde_json::Value> = Vec::new();
+    for vf in &out.findings {
+        if vf.validation_status != "confirmed" {
+            continue;
+        }
+        let missing = stages::validate::evidence_misalignment(&vf.finding);
+        if !missing.is_empty() {
+            let cap: usize = 10;
+            let preview: Vec<String> = missing.iter().take(cap).cloned().collect();
+            misaligned.push(json!({
+                "findingId": vf.finding.finding_id,
+                "missingTokens": preview,
+                "missingTokenCount": missing.len(),
+            }));
+        }
+    }
+    if misaligned.is_empty() {
+        return None;
+    }
+    let n = misaligned.len();
+    Some(
+        GateFailure::new(
+            "evidence_prose references code missing from evidence_code_snippets",
+            format!(
+                "{n} confirmed findings have prose/snippet misalignment; \
+                 for each, either expand evidence_code_snippets to include the cited \
+                 identifiers OR rewrite evidence_prose to only reference code already \
+                 present in the snippets"
+            ),
+        )
+        .with_metadata(json!({"misaligned": misaligned})),
+    )
+}
+
 pub async fn run_pipeline(
     state: &AppState,
     task_id: &str,
@@ -368,17 +409,19 @@ pub async fn run_pipeline_with_config(
                 )
                 .with_metadata(json!({"violated_paths": violations})));
             }
-            if out.findings.len() >= hunt_input_findings {
-                Ok(())
-            } else {
-                Err(GateFailure::new(
+            if out.findings.len() < hunt_input_findings {
+                return Err(GateFailure::new(
                     "validate produced fewer findings than hunt provided",
                     format!(
                         "validate_findings={} hunt_findings={hunt_input_findings}",
                         out.findings.len()
                     ),
-                ))
+                ));
             }
+            if let Some(failure) = evidence_alignment_gate(out) {
+                return Err(failure);
+            }
+            Ok(())
         };
         outputs.validate = run_stage_with_reflection(
             &config.stage_gates.validate,
@@ -555,17 +598,19 @@ pub async fn run_pipeline_with_config(
                         )
                         .with_metadata(json!({"violated_paths": violations})));
                     }
-                    if out.findings.len() >= gap_validate_input {
-                        Ok(())
-                    } else {
-                        Err(GateFailure::new(
+                    if out.findings.len() < gap_validate_input {
+                        return Err(GateFailure::new(
                             "validate produced fewer findings than hunt provided",
                             format!(
                                 "validate_findings={} hunt_findings={gap_validate_input}",
                                 out.findings.len()
                             ),
-                        ))
+                        ));
                     }
+                    if let Some(failure) = evidence_alignment_gate(out) {
+                        return Err(failure);
+                    }
+                    Ok(())
                 };
             outputs.validate = run_stage_with_reflection(
                 &config.stage_gates.validate,
@@ -840,17 +885,19 @@ pub async fn run_pipeline_with_config(
                         )
                         .with_metadata(json!({"violated_paths": violations})));
                     }
-                    if out.findings.len() >= fb_validate_input {
-                        Ok(())
-                    } else {
-                        Err(GateFailure::new(
+                    if out.findings.len() < fb_validate_input {
+                        return Err(GateFailure::new(
                             "validate produced fewer findings than hunt provided",
                             format!(
                                 "validate_findings={} hunt_findings={fb_validate_input}",
                                 out.findings.len()
                             ),
-                        ))
+                        ));
                     }
+                    if let Some(failure) = evidence_alignment_gate(out) {
+                        return Err(failure);
+                    }
+                    Ok(())
                 };
             outputs.validate = run_stage_with_reflection(
                 &config.stage_gates.validate,
