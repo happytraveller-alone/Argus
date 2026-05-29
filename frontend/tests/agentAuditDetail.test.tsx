@@ -271,6 +271,10 @@ test("agentSnapshot — buildAgentFindingSnapshot propagates evidenceCodeSnippet
 	assert.match(source, /evidenceCodeSnippets:\s*finding\.evidenceCodeSnippets/);
 });
 
+test("agentSnapshot — buildAgentFindingSnapshot propagates resolvedFilePath for code browser deep links", () => {
+	assert.match(source, /resolved_file_path:\s*finding\.resolvedFilePath \?\? null/);
+});
+
 test("agentSnapshot — buildAgentFindingSnapshot propagates evidenceProse", () => {
 	assert.match(source, /evidenceProse:\s*finding\.evidenceProse/);
 });
@@ -286,8 +290,7 @@ test("agentSnapshot — buildAgentFindingSnapshot propagates reachabilityEntryPo
 test("agentSnapshot — buildAgentFindingSnapshot uses evidenceProse ?? evidence for description body", () => {
 	// AC13 conformance: parallels intelligentFindingSnapshot.ts:16 — must prefer
 	// structured evidenceProse over the legacy evidence string when both are present.
-	assert.match(
-		source,
-		/const evidence = String\(finding\.evidenceProse \?\? finding\.evidence \?\? ""\)\.trim\(\);/,
-	);
+	assert.match(source, /const evidenceProse = String\(finding\.evidenceProse \?\? ""\)\.trim\(\);/);
+	assert.match(source, /const evidenceFallback = String\(finding\.evidence \?\? ""\)\.trim\(\);/);
+	assert.match(source, /const rootCauseBody = evidenceProse \|\| summary \|\| evidenceFallback;/);
 });

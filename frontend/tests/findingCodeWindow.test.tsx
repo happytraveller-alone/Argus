@@ -174,6 +174,46 @@ test("FindingCodeWindow keeps project-browser full-height shell in project-brows
 	assert.match(markup, /flex h-full min-h-0 flex-col/);
 });
 
+test("FindingCodeWindow uses neutral dark backgrounds in project-browser preset", async () => {
+	const module = await importOrFail<any>(
+		"../src/pages/AgentAudit/components/FindingCodeWindow.tsx",
+	);
+
+	const markup = renderToStaticMarkup(
+		createElement(module.default, {
+			code: "alpha\nbeta",
+			filePath: "src/project.ts",
+			displayPreset: "project-browser",
+			displayLines: [
+				{ lineNumber: 1, content: "alpha", kind: "code" },
+				{ lineNumber: 2, content: "beta", kind: "code" },
+			],
+			highlightStartLine: 1,
+			highlightEndLine: 1,
+			focusLine: 2,
+		}),
+	);
+
+	assert.match(markup, /bg-\[\#050505\]/);
+	assert.match(markup, /bg-\[\#111111\]/);
+	assert.match(markup, /bg-\[\#1a1a1a\]/);
+	assert.doesNotMatch(markup, /bg-\[\#101720\]/);
+	assert.doesNotMatch(markup, /bg-\[\#151d27\]/);
+});
+
+test("FindingCodeWindow exposes a scroll container ref for focus-line deep links", async () => {
+	const source = await import("node:fs").then(({ readFileSync }) =>
+		readFileSync(
+			new URL("../src/pages/AgentAudit/components/FindingCodeWindow.tsx", import.meta.url),
+			"utf8",
+		),
+	);
+
+	assert.match(source, /scrollContainerRef/);
+	assert.match(source, /querySelector<HTMLElement>\(\s*`\[data-line-number="\$\{focusLine\}"\]`/);
+	assert.match(source, /scrollIntoView\(\{\s*block:\s*"center"/);
+});
+
 test("FindingCodeWindow only auto-scrolls when the focus target changes", async () => {
 	const module = await importOrFail<any>(
 		"../src/pages/AgentAudit/components/FindingCodeWindow.tsx",

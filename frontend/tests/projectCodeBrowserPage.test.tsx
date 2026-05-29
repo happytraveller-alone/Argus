@@ -405,7 +405,9 @@ test("ProjectCodeBrowserContent renders highlighted search results and preview f
 	assert.match(markup, /第 2 行/);
 	assert.match(markup, /<mark[^>]*>danger<\/mark>/);
 	assert.match(markup, /data-line-number="2"/);
-	assert.match(markup, /bg-white\/\[0\.08\]/);
+	assert.match(markup, /bg-white\/\[0\.06\]/);
+	assert.match(markup, /bg-\[\#1a1a1a\]/);
+	assert.doesNotMatch(markup, /bg-\[\#151d27\]/);
 });
 
 test("ProjectCodeBrowserContent strengthens pane borders and code browser readability", async () => {
@@ -453,5 +455,6 @@ test("ProjectCodeBrowserContent strengthens pane borders and code browser readab
 	);
 	assert.match(markup, /text-\[15px\] leading-7/);
 	assert.match(markup, /data-appearance="native-explorer"/);
-	assert.match(markup, /bg-slate-950/);
+	assert.match(markup, /bg-\[\#050505\]/);
+	assert.doesNotMatch(markup, /bg-slate-950/);
 });

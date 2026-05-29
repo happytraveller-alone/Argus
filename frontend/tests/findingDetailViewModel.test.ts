@@ -335,6 +335,28 @@ test("buildAgentFindingDetailModel 在非 ZIP 项目下禁用全文查看", () =
   assert.equal(model.codeSections[0]?.fullFileRequest, null);
 });
 
+test("buildAgentFindingDetailModel 为智能审计代码浏览目标优先使用 resolved_file_path", () => {
+  const model = buildAgentFindingDetailModel({
+    finding: {
+      ...agentFinding,
+      file_path: "/workspace/demo/src/main/java/demo/JdbcController.java",
+      resolved_file_path: "src/main/java/demo/JdbcController.java",
+      line_start: 12,
+      resolved_line_start: 69,
+    },
+    taskId: "task-agent",
+    findingId: "finding-agent",
+    projectId: "project-zip",
+    projectSourceType: "zip",
+    projectName: "demo",
+  });
+
+  assert.deepEqual(model.codeBrowserTarget, {
+    filePath: "src/main/java/demo/JdbcController.java",
+    line: 69,
+  });
+});
+
 test("isFindingDetailFullFilePathSupported 仅接受 ZIP 内相对路径", () => {
   assert.equal(isFindingDetailFullFilePathSupported("src/main.py"), true);
   assert.equal(isFindingDetailFullFilePathSupported("./src/main.py"), true);

@@ -319,6 +319,7 @@ function buildAgentFindingSnapshot(
 		file_path: finding.file ?? null,
 		line_start: finding.lineStart ?? null,
 		line_end: finding.lineEnd ?? null,
+		resolved_file_path: finding.resolvedFilePath ?? null,
 		code_snippet: null,
 		code_context: null,
 		cwe_id: finding.cweId ?? null,

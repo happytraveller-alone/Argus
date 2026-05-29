@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { FindingCodeWindowDisplayLine } from "@/shared/code-highlighting/types";
 import type { PocResult } from "@/shared/api/intelligentTasks";
 import { cn } from "@/shared/utils/utils";
@@ -171,13 +171,52 @@ export default function FindingCodeWindow({
 	});
 	const fileTitle = formatFileTitle(filePath, lineStart, lineEnd);
 	const isProjectBrowser = displayPreset === "project-browser";
+	const shellBackgroundClassName = isProjectBrowser
+		? "bg-[#050505] text-slate-100"
+		: "bg-slate-950 text-slate-100";
+	const highlightedLineClassName = isProjectBrowser
+		? "bg-[#111111] bg-white/[0.035]"
+		: "bg-[#101720] bg-white/[0.04]";
+	const focusedLineClassName = isProjectBrowser
+		? "bg-[#1a1a1a] bg-white/[0.06]"
+		: "bg-[#151d27] bg-white/[0.08]";
+	const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+	const previousFocusTargetRef = useRef<string | null>(null);
+	const focusTarget = useMemo(() => {
+		if (typeof focusLine !== "number" || !Number.isFinite(focusLine)) {
+			return null;
+		}
+		return `${fileTitle || String(filePath || "").trim() || "unknown"}::${focusLine}`;
+	}, [filePath, fileTitle, focusLine]);
+
+	useEffect(() => {
+		if (
+			!shouldAutoScrollToFocusTarget(
+				previousFocusTargetRef.current,
+				focusTarget,
+			)
+		) {
+			previousFocusTargetRef.current = focusTarget;
+			return;
+		}
+		previousFocusTargetRef.current = focusTarget;
+		if (typeof focusLine !== "number" || !Number.isFinite(focusLine)) {
+			return;
+		}
+		const container = scrollContainerRef.current;
+		const target = container?.querySelector<HTMLElement>(
+			`[data-line-number="${focusLine}"]`,
+		);
+		target?.scrollIntoView({ block: "center", behavior: "smooth" });
+	}, [focusLine, focusTarget]);
 
 	return (
 		<div
 			data-appearance={appearance}
 			data-display-preset={displayPreset}
 			className={cn(
-				"overflow-hidden rounded-md border border-border/60 bg-slate-950 text-slate-100",
+				"overflow-hidden rounded-md border border-border/60",
+				shellBackgroundClassName,
 				isProjectBrowser && "flex h-full min-h-0 flex-col",
 				className,
 			)}
@@ -204,6 +243,7 @@ export default function FindingCodeWindow({
 				</div>
 			)}
 			<div
+				ref={scrollContainerRef}
 				className={cn(
 					isProjectBrowser
 						? "min-h-0 flex-1 max-h-none overflow-auto overflow-x-auto custom-scrollbar-dark"
@@ -219,8 +259,8 @@ export default function FindingCodeWindow({
 					const focused = isLineFocus(line, focusLine);
 					const lineClassName = [
 						"grid grid-cols-[minmax(56px,max-content)_minmax(0,1fr)] font-mono text-[15px] leading-7",
-						highlighted ? "bg-[#101720] bg-white/[0.04]" : "",
-						focused ? "bg-[#151d27] bg-white/[0.08]" : "",
+						highlighted ? highlightedLineClassName : "",
+						focused ? focusedLineClassName : "",
 						line.kind === "placeholder" ? "text-slate-500" : "",
 					]
 						.filter(Boolean)

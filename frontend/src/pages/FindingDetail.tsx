@@ -212,11 +212,14 @@ export default function FindingDetail() {
           }
         } else if (agentFindingSnapshot) {
           setAgentFinding(agentFindingSnapshot);
-          // Defensive fallback: if snapshot lacks projectName but carries projectId,
-          // fetch project so the model can display correct project label and path.
-          // Phase F builders will embed projectName directly; this handles old snapshots.
-          if (!agentFindingSnapshot.projectName && agentFindingSnapshot.projectId) {
-            const nextProject = await databaseApi.getProjectById(agentFindingSnapshot.projectId);
+          // Intelligent finding detail is snapshot-backed, but the code-browser
+          // button still needs the live project record for source_type gating and
+          // the canonical project id. Fetch whenever a snapshot carries projectId;
+          // older logic only fetched when projectName was missing, which left the
+          // unified intelligent-detail "代码浏览" action disabled for normal rows.
+          const projectId = String(agentFindingSnapshot.projectId || "").trim();
+          if (projectId) {
+            const nextProject = await databaseApi.getProjectById(projectId);
             if (!cancelled) setProject(nextProject);
           }
         } else {

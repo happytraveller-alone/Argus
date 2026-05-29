@@ -55,3 +55,12 @@ test("ProjectTaskFindingsDialog 静态审计漏洞类型按命中规则展示", 
 	assert.match(source, /width:\s*260/);
 	assert.match(source, /maxWidth:\s*320/);
 });
+
+test("ProjectTaskFindingsDialog intelligent snapshot carries resolvedFilePath for code browser", () => {
+	const source = readFileSync(
+		path.join(frontendDir, "src/pages/project-detail/intelligentFindingSnapshot.ts"),
+		"utf8",
+	);
+
+	assert.match(source, /resolved_file_path:\s*finding\.resolvedFilePath \?\? null/);
+});
