@@ -1,4 +1,11 @@
-use std::{collections::HashMap, sync::Arc, time::Instant};
+use std::{
+    collections::HashMap,
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Arc,
+    },
+    time::Instant,
+};
 
 use anyhow::Result;
 use serde_json::json;
@@ -13,7 +20,7 @@ use crate::{
     runtime::intelligent::{
         audit_pipeline,
         audit_pipeline::{types::AuditConfigOverride, AuditPipelineConfig},
-        config::resolve_intelligent_llm_config,
+        config::{resolve_intelligent_llm_config, StageEngineSelection},
         llm::{HttpIntelligentLlmInvoker, IntelligentLlmInvoker},
         types::{IntelligentTaskEvent, IntelligentTaskFinding, IntelligentTaskRecord},
     },
@@ -37,7 +44,42 @@ pub async fn flush_findings_to_record(
     Ok(())
 }
 
+/// Incrementally persist the accumulated pipeline `event_log` mid-run so a
+/// reconnect/restart can replay history (plan §1A.3). `prefix_len` is the
+/// number of lifecycle events the record already held before the pipeline
+/// started emitting (today exactly the single `run_started`). The record's
+/// event_log is truncated back to that prefix then re-extended with the
+/// in-order `snapshot` of pipeline events collected so far. This is
+/// **idempotent**: calling it again with a longer snapshot (or the terminal
+/// path doing the same truncate+extend) never duplicates events, so there is
+/// no double-write at terminal. Event ORDER is preserved identically to the
+/// terminal layout `[run_started, ...pipeline events...]`.
+///
+/// `.await`-ed synchronously — do NOT `tokio::spawn` it.
+pub async fn flush_event_log_to_record(
+    state: &AppState,
+    task_id: &str,
+    prefix_len: usize,
+    snapshot: &[IntelligentTaskEvent],
+) -> Result<()> {
+    intelligent_task_state::update_record(state, task_id, |record| {
+        record.event_log.truncate(prefix_len);
+        record.event_log.extend_from_slice(snapshot);
+    })
+    .await?;
+    Ok(())
+}
+
 const BROADCAST_CAPACITY: usize = 256;
+
+/// Number of lifecycle events the task record holds in `event_log` before the
+/// audit pipeline begins emitting (today exactly `run_started`). Incremental
+/// and terminal event-log flushes truncate back to this prefix before
+/// re-extending with the pipeline event set, so persistence is idempotent and
+/// never double-writes (plan §1A.3). The broadcast-only `step_*` events are NOT
+/// persisted, so they do not count toward this prefix. Shared with
+/// `audit_pipeline::mod` so its stage-boundary flushes use the same prefix.
+pub(crate) const PIPELINE_EVENT_PREFIX_LEN: usize = 1;
 
 type IntelligentTaskHandle = (JoinHandle<()>, broadcast::Sender<IntelligentTaskEvent>);
 
@@ -87,6 +129,13 @@ impl IntelligentTaskManager {
 
         // Resolve LLM config early — on failure save a failed record and return Ok
         let system_cfg = system_config::load_current(&state).await;
+        // Phase 0.5 seam: resolve the per-stage engine selection from the same
+        // stored config. Absent/unknown `intelligentEngine` config → all-Rust,
+        // so the pipeline behaves identically to baseline (AC2).
+        let engine_selection = match &system_cfg {
+            Ok(Some(cfg)) => StageEngineSelection::from_stored(cfg),
+            _ => StageEngineSelection::all_rust(),
+        };
         let (config_result, config_err_msg) = match &system_cfg {
             Ok(Some(cfg)) => match resolve_intelligent_llm_config(cfg, &state.config) {
                 Ok(c) => (Some(c), None),
@@ -136,6 +185,7 @@ impl IntelligentTaskManager {
                             config,
                             tx_for_task,
                             audit_config_override,
+                            engine_selection,
                         )
                         .await;
                 });
@@ -158,7 +208,7 @@ impl IntelligentTaskManager {
         intelligent_task_state::update_record(state, task_id, |record| {
             if record.status.is_cancellable() {
                 record.mark_cancelled();
-                record.append_event(IntelligentTaskEvent::new("cancelled"));
+                record.append_event_with_next_seq(IntelligentTaskEvent::new("cancelled"));
             }
         })
         .await
@@ -178,6 +228,13 @@ impl IntelligentTaskManager {
     }
 
     pub async fn reconcile_orphans(&self, state: &AppState) -> Result<()> {
+        // TODO(phase-1.5/3): once sidecar sessions exist, reconcile_orphans
+        // should resume each orphaned in-progress task from its last completed
+        // stage (via the persisted `session_checkpoint`) and signal the sidecar
+        // to abort any orphaned in-flight `/run-stage` run, instead of the
+        // blanket cancel-on-restart below. The incremental event_log now lets a
+        // reconnect replay history (plan §1A.3); restart-resume orchestration is
+        // intentionally NOT built yet (no consumer). Current behavior unchanged.
         let live = self.live_tasks.lock().await;
         let live_ids: Vec<String> = live.keys().cloned().collect();
         drop(live);
@@ -188,7 +245,7 @@ impl IntelligentTaskManager {
                 let task_id = record.task_id.clone();
                 let _ = intelligent_task_state::update_record(state, &task_id, |r| {
                     r.mark_cancelled();
-                    r.append_event(
+                    r.append_event_with_next_seq(
                         IntelligentTaskEvent::new("cancelled").with_message("backend_restarted"),
                     );
                 })
@@ -206,13 +263,23 @@ impl IntelligentTaskManager {
         config: crate::runtime::intelligent::config::IntelligentLlmConfig,
         tx: broadcast::Sender<IntelligentTaskEvent>,
         audit_config_override: Option<AuditConfigOverride>,
+        engine_selection: StageEngineSelection,
     ) {
         let started = Instant::now();
 
-        // Helper: emit event to both persisted log and broadcast channel
+        // Single per-task `seq` authority. Both the lifecycle emits below and
+        // the pipeline's `PipelineEventSink` stamp `seq` from THIS counter, so
+        // `seq` is globally monotonic within the task and the broadcast copy
+        // matches the persisted copy of every event (plan §1A.1).
+        let seq_counter = Arc::new(AtomicU64::new(1));
+
+        // Helper: stamp the shared monotonic `seq`, broadcast, and return the
+        // stamped event so the persisted `append_event` copy carries the same
+        // `seq` as the broadcast copy.
         macro_rules! emit {
             ($evt:expr) => {{
-                let evt: IntelligentTaskEvent = $evt;
+                let mut evt: IntelligentTaskEvent = $evt;
+                evt.seq = seq_counter.fetch_add(1, Ordering::SeqCst);
                 let _ = tx.send(evt.clone());
                 evt
             }};
@@ -225,20 +292,21 @@ impl IntelligentTaskManager {
         })
         .await;
 
-        // --- config_resolve step ---
-        let _ = tx.send(
+        // --- config_resolve step --- (broadcast-only, not persisted; still
+        // seq-stamped so the live stream stays monotonic).
+        let _ = emit!(
             IntelligentTaskEvent::new("step_started")
-                .with_data(json!({ "step": "config_resolve" })),
+                .with_data(json!({ "step": "config_resolve" }))
         );
-        let _ = tx.send(
+        let _ = emit!(
             IntelligentTaskEvent::new("step_completed")
-                .with_data(json!({ "step": "config_resolve" })),
+                .with_data(json!({ "step": "config_resolve" }))
         );
 
         // --- 8-agent audit pipeline step ---
-        let _ = tx.send(
+        let _ = emit!(
             IntelligentTaskEvent::new("step_started")
-                .with_data(json!({ "step": "audit_pipeline" })),
+                .with_data(json!({ "step": "audit_pipeline" }))
         );
 
         let invoker = Arc::clone(&self.invoker);
@@ -255,6 +323,8 @@ impl IntelligentTaskManager {
             invoker,
             &tx,
             &audit_cfg,
+            engine_selection,
+            Arc::clone(&seq_counter),
         )
         .await;
 
@@ -262,18 +332,23 @@ impl IntelligentTaskManager {
 
         match pipeline_result {
             Ok(result) => {
-                let _ = tx.send(
+                let _ = emit!(
                     IntelligentTaskEvent::new("step_completed")
-                        .with_data(json!({ "step": "audit_pipeline" })),
+                        .with_data(json!({ "step": "audit_pipeline" }))
                 );
                 let _ = intelligent_task_state::update_record(&state, &task_id, |r| {
                     r.duration_ms = Some(duration_ms);
                     r.input_summary = result.input_summary.clone();
                     r.report_summary = result.report_summary.clone();
                     r.findings = result.findings.clone();
-                    for event in result.events.clone() {
-                        r.append_event(event);
-                    }
+                    // Idempotent terminal reconcile of the pipeline event region:
+                    // incremental flushes (mod.rs stage boundaries) already wrote
+                    // these events with their stamped `seq`. Truncate to the
+                    // lifecycle prefix (run_started) then re-extend with the
+                    // authoritative final set so we never double-write. ORDER is
+                    // identical to the legacy append path.
+                    r.event_log.truncate(PIPELINE_EVENT_PREFIX_LEN);
+                    r.event_log.extend(result.events.clone());
                     if let Err(validation_err) = r.mark_completed() {
                         r.mark_failed("completion_validation", validation_err);
                     }
@@ -289,10 +364,9 @@ impl IntelligentTaskManager {
                 } else {
                     "audit_pipeline"
                 };
-                let fail_evt = IntelligentTaskEvent::new("audit_pipeline_failed")
+                let fail_evt = emit!(IntelligentTaskEvent::new("audit_pipeline_failed")
                     .with_message(error_message.clone())
-                    .with_data(json!({ "stage": failure_stage }));
-                let _ = tx.send(fail_evt.clone());
+                    .with_data(json!({ "stage": failure_stage })));
                 let _ = intelligent_task_state::update_record(&state, &task_id, |r| {
                     r.duration_ms = Some(duration_ms);
                     r.append_event(fail_evt.clone());

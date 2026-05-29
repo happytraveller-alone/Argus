@@ -20,9 +20,9 @@ use crate::{
     db::{intelligent_task_state, projects},
     runtime::intelligent::{
         code_intel::{cache::CodeGraphCache, codegraph_client::CodeGraphClient, CodeIntelligence},
-        config::IntelligentLlmConfig,
+        config::{IntelligentLlmConfig, StageEngine, StageEngineSelection},
         llm::IntelligentLlmInvoker,
-        task::flush_findings_to_record,
+        task::{flush_event_log_to_record, flush_findings_to_record, PIPELINE_EVENT_PREFIX_LEN},
         types::{IntelligentTaskEvent, IntelligentTaskFinding},
     },
     state::AppState,
@@ -130,6 +130,55 @@ fn evidence_alignment_gate(out: &types::ValidationOutput) -> Option<GateFailure>
     )
 }
 
+/// Phase 0.5 dispatch seam (NO-OP by default).
+///
+/// Inspects the pre-resolved per-stage engine selection. The Rust arm is the
+/// only path wired today: every stage flagged [`StageEngine::Rust`] simply
+/// flows on to its existing in-process `run()` below. A stage flagged
+/// [`StageEngine::Sidecar`] has no implementation yet, so this returns a clear
+/// `not yet implemented` error before any work begins — surfaced via a
+/// `stage_engine_unsupported` event so the operator sees why the run stopped.
+///
+/// With no `intelligentEngine` config present, [`StageEngineSelection`] is
+/// all-Rust, so this function emits nothing, returns `Ok(())`, and the
+/// pipeline behaves identically to baseline (AC2). It is intentionally the
+/// single point a per-stage out-of-process dispatch slots into later — the 8
+/// stages are NOT individually patched.
+fn dispatch_engine_seam(
+    selection: &StageEngineSelection,
+    events: &PipelineEventSink,
+) -> Result<()> {
+    for stage in [
+        AuditStage::Recon,
+        AuditStage::Hunt,
+        AuditStage::Validate,
+        AuditStage::Gapfill,
+        AuditStage::Dedupe,
+        AuditStage::Trace,
+        AuditStage::Feedback,
+        AuditStage::Report,
+    ] {
+        match selection.engine(stage) {
+            // Wired path: nothing to do here, the existing in-process stage runs.
+            StageEngine::Rust => {}
+            StageEngine::Sidecar => {
+                events.emit(
+                    IntelligentTaskEvent::new("stage_engine_unsupported").with_data(json!({
+                        "stage": stage.as_str(),
+                        "engine": "sidecar",
+                        "reason": "sidecar engine not yet implemented",
+                    })),
+                );
+                return Err(anyhow::anyhow!(
+                    "stage '{}' is configured for the sidecar engine, which is not yet implemented",
+                    stage.as_str()
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
 pub async fn run_pipeline(
     state: &AppState,
     task_id: &str,
@@ -146,11 +195,15 @@ pub async fn run_pipeline(
         invoker,
         tx,
         &AuditPipelineConfig::default(),
+        StageEngineSelection::all_rust(),
+        // Standalone callers (no task-level lifecycle emitter) get a private
+        // counter; seq is still monotonic within the pipeline.
+        Arc::new(AtomicU64::new(1)),
     )
     .await
 }
 
-#[allow(clippy::field_reassign_with_default)]
+#[allow(clippy::field_reassign_with_default, clippy::too_many_arguments)]
 pub async fn run_pipeline_with_config(
     state: &AppState,
     task_id: &str,
@@ -159,6 +212,11 @@ pub async fn run_pipeline_with_config(
     invoker: Arc<dyn IntelligentLlmInvoker + Send + Sync>,
     tx: &tokio::sync::broadcast::Sender<IntelligentTaskEvent>,
     config: &AuditPipelineConfig,
+    engine_selection: StageEngineSelection,
+    // Shared per-task `seq` authority (plan §1A.1). The sink stamps `seq` from
+    // this same counter the task-level lifecycle emitter uses, so `seq` is
+    // globally monotonic within the task across both emit paths.
+    seq_counter: Arc<AtomicU64>,
 ) -> Result<AuditPipelineResult> {
     let project = projects::get_project(state, project_id)
         .await
@@ -201,15 +259,43 @@ pub async fn run_pipeline_with_config(
     let input_summary = repo::build_inventory_summary(&entries);
 
     // Channel-based event collection: sink clones go to concurrent tasks,
-    // collector task drains them into a Vec for the final result.
+    // collector task drains them into a shared buffer. The buffer doubles as
+    // the snapshot source for incremental event_log persistence at stage
+    // boundaries (plan §1A.3) — the collector preserves emit order, so a
+    // mid-run flush writes exactly the events seen so far, in order.
     let (event_sink, mut collect_rx) = PipelineEventSink::new(tx.clone());
+    let event_sink = event_sink.with_seq_counter(Arc::clone(&seq_counter));
+    let collected: Arc<tokio::sync::Mutex<Vec<IntelligentTaskEvent>>> =
+        Arc::new(tokio::sync::Mutex::new(Vec::new()));
+    let collected_for_task = Arc::clone(&collected);
     let collector = tokio::spawn(async move {
-        let mut events = Vec::new();
         while let Some(ev) = collect_rx.recv().await {
-            events.push(ev);
+            collected_for_task.lock().await.push(ev);
         }
-        events
     });
+
+    // Snapshot the in-order collected events and persist them as the pipeline
+    // region of the task record. Idempotent (truncate-to-prefix + extend), so
+    // repeated calls and the terminal write never duplicate events. ORDER is
+    // preserved identically to the terminal layout.
+    let flush_event_log = |state: &AppState, task_id: &str| {
+        let collected = Arc::clone(&collected);
+        let state = state.clone();
+        let task_id = task_id.to_string();
+        async move {
+            let snapshot = collected.lock().await.clone();
+            if let Err(err) =
+                flush_event_log_to_record(&state, &task_id, PIPELINE_EVENT_PREFIX_LEN, &snapshot)
+                    .await
+            {
+                tracing::warn!(
+                    task_id = %task_id,
+                    error = %err,
+                    "incremental event_log flush failed; terminal write will reconcile"
+                );
+            }
+        }
+    };
 
     event_sink.emit(
         IntelligentTaskEvent::new("pipeline_started").with_data(json!({
@@ -226,7 +312,8 @@ pub async fn run_pipeline_with_config(
         entries,
         llm_config.clone(),
         invoker,
-    );
+    )
+    .with_engine_selection(engine_selection);
 
     // ── CodeGraph code intelligence bring-up (best-effort) ───────────────────
     // Per plan §Step 2.7. archive_meta.sha256 already exists at ingest, so this
@@ -293,6 +380,15 @@ pub async fn run_pipeline_with_config(
         let ctx = &ctx;
         let event_sink = &event_sink;
 
+        // ── Phase 0.5 dispatch seam ───────────────────────────────────────
+        // Resolve each stage's execution engine before any stage runs. Today
+        // only `StageEngine::Rust` is wired; this guard returns a clear
+        // `not yet implemented` error for any stage flagged `sidecar`. With no
+        // `intelligentEngine` config present every stage is Rust, so the guard
+        // is a NO-OP and the existing in-process path below runs unchanged
+        // (AC2). A later phase replaces the Sidecar arm with real dispatch.
+        dispatch_engine_seam(&ctx.engine_selection, event_sink)?;
+
         // ── Phase 1: recon ────────────────────────────────────────────────
         let mut outputs = PipelineOutputs::default();
         outputs.set_project_root(Some(project_root_anchor.clone()));
@@ -314,6 +410,9 @@ pub async fn run_pipeline_with_config(
             },
         )
         .await?;
+        // Incremental event_log checkpoint at the recon boundary (plan §1A.3) so a
+        // mid-run reconnect after recon already replays its events from the DB.
+        flush_event_log(state, task_id).await;
 
         // ── Phase 2: hunt → validate → gapfill loop ───────────────────────────────
         let mut hunt_tasks = outputs.recon.initial_tasks.clone();
@@ -384,6 +483,8 @@ pub async fn run_pipeline_with_config(
         // Flush hunt findings before validate starts (AC6: findings immediately
         // visible after Hunt completes).
         let _ = flush_findings_to_record(state, task_id, &outputs.to_incremental_findings()).await;
+        // Incremental event_log checkpoint at the hunt boundary (plan §1A.3).
+        flush_event_log(state, task_id).await;
 
         let hunt_input_findings = outputs.hunt.findings.len();
         let validate_blacklist = config.path_blacklist_extra.clone();
@@ -456,6 +557,8 @@ pub async fn run_pipeline_with_config(
 
         // Flush after validate (AC7: findings updated with validation status).
         let _ = flush_findings_to_record(state, task_id, &outputs.to_incremental_findings()).await;
+        // Incremental event_log checkpoint at the validate boundary (plan §1A.3).
+        flush_event_log(state, task_id).await;
 
         for gap_iter in 0..config.gapfill_iterations {
             // Budget check (best-effort).
@@ -754,6 +857,8 @@ pub async fn run_pipeline_with_config(
 
         // Flush after trace (AC7: findings updated with trace summary).
         let _ = flush_findings_to_record(state, task_id, &outputs.to_incremental_findings()).await;
+        // Incremental event_log checkpoint at the dedupe→trace boundary (plan §1A.3).
+        flush_event_log(state, task_id).await;
 
         // ── Phase 4: feedback → hunt → validate → dedupe → trace loop ────────────
         for fb_iter in 0..config.feedback_iterations {
@@ -1079,9 +1184,14 @@ pub async fn run_pipeline_with_config(
         })),
     );
 
-    // Drop the sink so the collector task can finish draining.
+    // Drop the sink so the collector task can finish draining, then read the
+    // authoritative in-order event set from the shared buffer. This is the same
+    // buffer the incremental flushes snapshot, so the terminal `result.events`
+    // and any mid-run persisted prefix are consistent. The collector has
+    // finished (awaited above) so the lock is uncontended.
     drop(event_sink);
-    let events = collector.await.unwrap_or_default();
+    let _ = collector.await;
+    let events = collected.lock().await.clone();
 
     Ok(AuditPipelineResult {
         input_summary,

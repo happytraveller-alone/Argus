@@ -1,13 +1,16 @@
 use std::{
     fmt,
-    sync::{atomic::AtomicBool, Arc},
+    sync::{
+        atomic::{AtomicBool, AtomicU64, Ordering},
+        Arc,
+    },
 };
 
 use serde_json::json;
 
 use crate::runtime::intelligent::{
     agent_runner::AgentRunner, code_intel::CodeIntelligence, config::IntelligentLlmConfig,
-    llm::IntelligentLlmInvoker, types::IntelligentTaskEvent,
+    config::StageEngineSelection, llm::IntelligentLlmInvoker, types::IntelligentTaskEvent,
 };
 
 use super::repo::{ArchiveEntry, ProjectArchive};
@@ -63,6 +66,12 @@ pub struct AuditRunContext {
     /// two-pass to single-pass. Surfaced in the final task record so users
     /// know the scan ran in degraded mode.
     pub partial_analysis: Arc<AtomicBool>,
+    /// Per-stage execution-engine selection (Phase 0.5 dispatch seam). Defaults
+    /// to all-Rust; the orchestrator consults it before each stage so a future
+    /// Node sidecar can own a stage out-of-process. With no `intelligentEngine`
+    /// config present every stage stays Rust and the existing in-process path
+    /// runs unchanged (AC2).
+    pub engine_selection: StageEngineSelection,
 }
 
 impl AuditRunContext {
@@ -86,6 +95,7 @@ impl AuditRunContext {
             agent_runner: None,
             code_intel: None,
             partial_analysis: Arc::new(AtomicBool::new(false)),
+            engine_selection: StageEngineSelection::all_rust(),
         }
     }
 
@@ -97,19 +107,41 @@ impl AuditRunContext {
         self.code_intel = Some(intel);
         self
     }
+
+    /// Builder method to set the per-stage engine selection (Phase 0.5 seam).
+    /// Defaults to all-Rust when unset, preserving the baseline behavior.
+    #[must_use]
+    pub fn with_engine_selection(mut self, selection: StageEngineSelection) -> Self {
+        self.engine_selection = selection;
+        self
+    }
 }
 
 /// Channel-based event sink. `emit` takes `&self` so it can be shared across concurrent tasks.
 /// The broadcast sender forwards events to external subscribers; the mpsc sender collects them
 /// for the final `into_events()` drain.
+///
+/// **Single `seq` authority:** every event is stamped with a monotonic `seq`
+/// from `seq_counter` *before* it is split into the broadcast copy and the
+/// collected copy, so the live SSE event and the persisted event always carry
+/// the same `seq`. The counter is shared (via `with_seq_counter`) with the
+/// task-level lifecycle emitter in `task.rs`, so `seq` is globally monotonic
+/// across both the `run_started`/`step_*`/`audit_pipeline_failed` lifecycle
+/// events and the per-stage pipeline events of one task.
 #[derive(Clone)]
 pub struct PipelineEventSink {
     broadcast_tx: tokio::sync::broadcast::Sender<IntelligentTaskEvent>,
     collect_tx: tokio::sync::mpsc::UnboundedSender<IntelligentTaskEvent>,
+    seq_counter: Arc<AtomicU64>,
 }
 
 impl PipelineEventSink {
     /// Create a new sink. Returns the sink and a receiver that drains all emitted events.
+    ///
+    /// The sink starts with a private `seq` counter (seeded at 1). Production
+    /// callers in `task.rs` immediately replace it via [`with_seq_counter`] so
+    /// the task-level lifecycle events and the pipeline events share one
+    /// monotonic counter. Test callers can use the private counter as-is.
     pub fn new(
         broadcast_tx: tokio::sync::broadcast::Sender<IntelligentTaskEvent>,
     ) -> (
@@ -121,12 +153,24 @@ impl PipelineEventSink {
             Self {
                 broadcast_tx,
                 collect_tx,
+                seq_counter: Arc::new(AtomicU64::new(1)),
             },
             collect_rx,
         )
     }
 
-    pub fn emit(&self, event: IntelligentTaskEvent) {
+    /// Share an externally-owned `seq` counter so pipeline events interleave
+    /// monotonically with the task-level lifecycle events emitted in `task.rs`.
+    #[must_use]
+    pub fn with_seq_counter(mut self, counter: Arc<AtomicU64>) -> Self {
+        self.seq_counter = counter;
+        self
+    }
+
+    pub fn emit(&self, mut event: IntelligentTaskEvent) {
+        // Stamp seq from the shared counter BEFORE cloning so the broadcast and
+        // collected copies carry the same monotonic value (single authority).
+        event.seq = self.seq_counter.fetch_add(1, Ordering::SeqCst);
         let _ = self.broadcast_tx.send(event.clone());
         let _ = self.collect_tx.send(event);
     }

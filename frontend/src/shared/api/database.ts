@@ -1007,5 +1007,20 @@ export const api = {
   }> {
     const res = await apiClient.post('/system-config/fetch-llm-models', params);
     return res.data;
-  }
+  },
+
+  async getModelCatalog(): Promise<{
+    models: Array<{
+      id: string;
+      provider: string;
+      displayName?: string;
+      costPer1kInputTokens?: number | null;
+      costPer1kOutputTokens?: number | null;
+      contextWindow?: number | null;
+      supportsThinking?: boolean;
+    }>;
+  }> {
+    const res = await apiClient.get('/models');
+    return res.data;
+  },
 };

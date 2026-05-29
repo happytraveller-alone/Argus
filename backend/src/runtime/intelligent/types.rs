@@ -39,6 +39,14 @@ impl IntelligentTaskStatus {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct IntelligentTaskEvent {
+    /// Monotonic per-task sequence number, stamped by Rust (the sole `seq`
+    /// authority) at the single broadcast/collect choke point so the live SSE
+    /// copy and the persisted copy of an event always share the same value.
+    /// `serde(default)` keeps `seq` at `0` when deserializing records persisted
+    /// before this field existed, and for in-flight events not yet stamped.
+    /// SSE replay/de-dup keys on `seq` (see `routes/intelligent_tasks.rs`).
+    #[serde(default)]
+    pub seq: u64,
     pub kind: String,
     pub timestamp: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -57,6 +65,7 @@ impl IntelligentTaskEvent {
     // - "BLACKLIST_VIOLATION" is a GateFailure.reason string, not a separate event kind
     pub fn new(kind: impl Into<String>) -> Self {
         Self {
+            seq: 0,
             kind: kind.into(),
             timestamp: now_rfc3339(),
             message: None,
@@ -154,6 +163,14 @@ pub struct IntelligentTaskRecord {
     /// based reasoning was unavailable. See `.omc/plans/ralplan-codegraph-integration-v2.md` §AC5.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub partial_analysis: bool,
+    /// Nullable per-stage session checkpoint for future sidecar session storage
+    /// (Phase 1.5/3). Stores `{ serialized pi session, last completed stage }`
+    /// so a mid-run reconnect/restart can resume-from-last-completed-stage once
+    /// sidecar sessions exist. UNUSED today: defaulted to `None`, never written
+    /// by the current Rust pipeline. `serde(default)` keeps existing persisted
+    /// records deserializing unchanged. See plan §1A.3.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session_checkpoint: Option<serde_json::Value>,
 }
 
 impl IntelligentTaskRecord {
@@ -182,6 +199,7 @@ impl IntelligentTaskRecord {
             failure_reason: None,
             failure_stage: None,
             partial_analysis: false,
+            session_checkpoint: None,
         }
     }
 
@@ -237,7 +255,7 @@ impl IntelligentTaskRecord {
         } else {
             f64::from(parse_failure_count) / f64::from(llm_attempt_count)
         };
-        self.append_event(
+        self.append_event_with_next_seq(
             IntelligentTaskEvent::new("task_summary").with_data(serde_json::json!({
                 "llmAttemptCount": llm_attempt_count,
                 "parseFailureCount": parse_failure_count,
@@ -253,6 +271,22 @@ impl IntelligentTaskRecord {
     }
 
     pub fn append_event(&mut self, event: IntelligentTaskEvent) {
+        self.event_log.push(event);
+    }
+
+    /// Append an event stamped with a `seq` one past the current max in
+    /// `event_log`, keeping the persisted log monotonic. Used by out-of-band
+    /// emitters (cancel, restart reconcile) that do not hold the per-task
+    /// `seq` counter. Events already carrying a non-zero `seq` (stamped at the
+    /// broadcast choke point) must use `append_event` instead.
+    pub fn append_event_with_next_seq(&mut self, mut event: IntelligentTaskEvent) {
+        let next = self
+            .event_log
+            .iter()
+            .map(|e| e.seq)
+            .max()
+            .map_or(1, |m| m + 1);
+        event.seq = next;
         self.event_log.push(event);
     }
 

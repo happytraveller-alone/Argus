@@ -174,7 +174,12 @@ async fn stream_task(
         .as_ref()
         .map(|r| r.status.is_terminal())
         .unwrap_or(false);
-    let replay_count = replay_events.len();
+    // Highest `seq` covered by the replay. Live events with `seq <= this` were
+    // already delivered via replay and are dropped to de-dup. seq-based de-dup
+    // (plan §1A.2) replaces the fragile count-based skip: it is correct even
+    // when the broadcast lags and drops events, and even when incremental
+    // persistence means replay already covers some still-live events.
+    let max_replayed_seq = replay_events.iter().map(|e| e.seq).max().unwrap_or(0);
 
     let output = stream! {
         // Replay all persisted events.
@@ -194,14 +199,12 @@ async fn stream_task(
             return;
         };
 
-        // Drain live broadcast, skipping the first `replay_count` events that
-        // were already covered by the replay above.
-        let mut skipped = 0usize;
+        // Drain live broadcast, de-duping on `seq`: skip any event already
+        // covered by the replay above (seq <= max_replayed_seq).
         loop {
             match rx.recv().await {
                 Ok(evt) => {
-                    if skipped < replay_count {
-                        skipped += 1;
+                    if evt.seq != 0 && evt.seq <= max_replayed_seq {
                         continue;
                     }
                     if let Ok(data) = serde_json::to_string(&evt) {
@@ -210,8 +213,16 @@ async fn stream_task(
                 }
                 Err(broadcast::error::RecvError::Closed) => break,
                 Err(broadcast::error::RecvError::Lagged(n)) => {
-                    // Missed some events due to slow consumer; adjust skip counter.
-                    skipped = skipped.saturating_sub(n as usize);
+                    // Slow consumer dropped `n` broadcast events. With seq-based
+                    // de-dup there is no skip counter to corrupt, so just log
+                    // and continue; any events lost here remain recoverable on
+                    // the next reconnect via the incremental DB replay.
+                    tracing::warn!(
+                        task_id = %task_id,
+                        lagged = n,
+                        "intelligent task SSE broadcast lagged; \
+                         continuing with seq-based de-dup"
+                    );
                 }
             }
         }

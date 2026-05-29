@@ -134,6 +134,17 @@ pub struct AppConfig {
     /// intelligent-audit `llm_attempt` event log. Default 16384.
     /// Legal range: 256..=1_048_576. Env: `INTELLIGENT_LLM_PREVIEW_CHARS`.
     pub intelligent_llm_preview_chars: usize,
+
+    // ── Node sidecar (agent-engine) plumbing — Phase 0.5 ──────────────────────
+    // Read-but-unused today. A future phase routes per-stage reasoning to the
+    // Node sidecar over the internal docker network using these. Absent → None.
+    /// Internal base URL of the agent-engine sidecar (e.g.
+    /// `http://agent-engine:8787`). Env: `AGENT_ENGINE_URL`.
+    pub agent_engine_url: Option<String>,
+    /// Shared-secret bearer token required on `/internal/*` + `/run-stage`
+    /// callbacks. Mounted via env, never baked into the image, never logged.
+    /// Env: `AGENT_ENGINE_SHARED_SECRET`.
+    pub agent_engine_shared_secret: Option<String>,
 }
 
 impl AppConfig {
@@ -278,6 +289,8 @@ impl AppConfig {
             intelligent_llm_preview_chars: parse_preview_chars(
                 env::var("INTELLIGENT_LLM_PREVIEW_CHARS").ok().as_deref(),
             ),
+            agent_engine_url: optional_env("AGENT_ENGINE_URL"),
+            agent_engine_shared_secret: optional_env("AGENT_ENGINE_SHARED_SECRET"),
         })
     }
 
@@ -370,6 +383,8 @@ impl AppConfig {
             joern_runner_pids_limit: 1024,
             joern_network_disabled: true,
             intelligent_llm_preview_chars: 16_384,
+            agent_engine_url: None,
+            agent_engine_shared_secret: None,
         }
     }
 }

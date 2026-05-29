@@ -16,6 +16,8 @@ interface UseSseStreamResult {
   isConnected: boolean;
   isComplete: boolean;
   error: string | null;
+  /** Accumulated LLM token text from "token" events (seq-ordered, deduplicated). Empty string when no token events received. */
+  tokenText: string;
 }
 
 const TERMINAL_KINDS = ["completed", "failed", "cancelled"];
@@ -34,6 +36,9 @@ export function useSseStream(
   const [isConnected, setIsConnected] = useState(false);
   const [isComplete, setIsComplete] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [tokenText, setTokenText] = useState("");
+  // seq-based dedup for token events
+  const lastTokenSeqRef = useRef<number>(-1);
 
   const abortRef = useRef<AbortController | null>(null);
 
@@ -47,6 +52,8 @@ export function useSseStream(
     setIsConnected(false);
     setIsComplete(false);
     setError(null);
+    setTokenText("");
+    lastTokenSeqRef.current = -1;
 
     void (async () => {
       try {
@@ -94,6 +101,15 @@ export function useSseStream(
               if (isTerminalKind(parsed.kind)) {
                 setIsComplete(true);
               }
+              // Accumulate token deltas defensively — no-op if event absent or malformed
+              if (parsed.kind === "token" && parsed.data != null) {
+                const seq = typeof parsed.data.seq === "number" ? parsed.data.seq : -1;
+                const text = typeof parsed.data.text === "string" ? parsed.data.text : "";
+                if (text && seq > lastTokenSeqRef.current) {
+                  lastTokenSeqRef.current = seq;
+                  setTokenText((prev) => prev + text);
+                }
+              }
             } catch {
               // skip malformed json
             }
@@ -115,5 +131,5 @@ export function useSseStream(
     };
   }, [url, enabled]);
 
-  return { events, isConnected, isComplete, error };
+  return { events, isConnected, isComplete, error, tokenText };
 }

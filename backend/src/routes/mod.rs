@@ -1,6 +1,8 @@
 pub mod cwe_catalog;
+pub mod internal;
 pub mod intelligent_tasks;
 pub mod llm_config_set;
+pub mod models;
 pub mod projects;
 pub mod search;
 pub mod skills;
@@ -23,6 +25,8 @@ pub fn owned_routes() -> Router<AppState> {
         .nest("/api/v1/search", search::router())
         .nest("/api/v1/skills", skills::router())
         .nest("/api/v1/static-tasks", static_tasks::router())
+        .nest("/api/v1/models", models::router())
+        .nest("/internal", internal::router())
 }
 
 async fn health(State(state): State<AppState>) -> Json<serde_json::Value> {

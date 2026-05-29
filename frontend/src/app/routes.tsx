@@ -22,6 +22,7 @@ const ScanConfigIntelligentEngine = lazy(
 const ScanConfigExternalTools = lazy(
 	() => import("@/pages/ScanConfigExternalTools"),
 );
+const ScanConfigModels = lazy(() => import("@/pages/ScanConfigModels"));
 const ScanConfigExternalToolDetail = lazy(
 	() => import("@/pages/ScanConfigExternalToolDetail"),
 );
@@ -186,6 +187,15 @@ const routes: RouteConfig[] = [
 		navVisible: true,
 		navGroup: "scanConfig",
 		navOrder: 30,
+	},
+	{
+		name: "阶段模型",
+		path: "/scan-config/models",
+		element: <ScanConfigModels />,
+		visible: true,
+		navVisible: true,
+		navGroup: "scanConfig",
+		navOrder: 35,
 	},
 	{
 		name: "外部工具详情",

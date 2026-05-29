@@ -1,0 +1,26 @@
+{
+  "name": "argus-agent-engine",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "argus intelligent-audit agent engine sidecar (reuses pi packages/ai + packages/agent). Runs per-stage reasoning, model routing, compaction, and cross-stage session; Rust backend owns lifecycle, persistence, SSE, codegraph, and keys.",
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "main": "./dist/server.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/server.js",
+    "dev": "tsx watch src/server.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@earendil-works/pi-ai": "^0.77.0",
+    "@earendil-works/pi-agent-core": "^0.77.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  }
+}

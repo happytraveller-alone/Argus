@@ -53,6 +53,8 @@ import {
 	Zap,
 } from "lucide-react";
 import { toast } from "sonner";
+import { IntelligentStageModelSelector } from "@/components/system/IntelligentStageModelSelector";
+import { Cpu } from "lucide-react";
 import { api } from "@/shared/api/database";
 import { runSaveThenBatchValidateAction } from "@/components/scan-config/intelligentEngineActionFlow";
 import {
@@ -71,7 +73,7 @@ import {
 } from "@/components/system/llmModelStatsSummary";
 import { parseLlmCustomHeadersInput } from "@/shared/llm/providerCatalog";
 
-type ConfigSection = "llm" | "analysis";
+type ConfigSection = "llm" | "analysis" | "stageModels";
 type LlmSecretSource = "saved" | "imported" | "entered" | "none";
 type DialogMode = "create" | "edit";
 
@@ -657,6 +659,7 @@ export function SystemConfig({
 					<TabsList className={`grid w-full ${tabsGridClass} bg-muted border border-border p-1 h-auto gap-1 rounded-lg mb-6`}>
 						{sections.includes("llm") && <TabsTrigger value="llm" className="data-[state=active]:bg-primary data-[state=active]:text-foreground font-mono font-bold uppercase py-2.5 text-muted-foreground transition-all rounded text-xs flex items-center gap-2"><Zap className="w-3 h-3" /> LLM 配置</TabsTrigger>}
 						{sections.includes("analysis") && <TabsTrigger value="analysis" className="data-[state=active]:bg-primary data-[state=active]:text-foreground font-mono font-bold uppercase py-2.5 text-muted-foreground transition-all rounded text-xs flex items-center gap-2"><Settings className="w-3 h-3" /> 分析参数</TabsTrigger>}
+						{sections.includes("stageModels") && <TabsTrigger value="stageModels" className="data-[state=active]:bg-primary data-[state=active]:text-foreground font-mono font-bold uppercase py-2.5 text-muted-foreground transition-all rounded text-xs flex items-center gap-2"><Cpu className="w-3 h-3" /> 阶段模型</TabsTrigger>}
 					</TabsList>
 				)}
 				{sections.includes("llm") && (
@@ -717,6 +720,18 @@ export function SystemConfig({
 				{!mergedView && sections.includes("analysis") && (
 					<TabsContent value="analysis" className="space-y-6"><div className="cyber-card p-6 space-y-6"><div className="grid grid-cols-1 md:grid-cols-3 gap-6">{([["maxAnalyzeFiles", "最大分析文件数"], ["llmConcurrency", "LLM 并发数"], ["llmGapMs", "请求间隔 (毫秒)"]] as Array<[keyof Pick<SystemConfigData, "maxAnalyzeFiles" | "llmConcurrency" | "llmGapMs">, string]>).map(([key, label]) => <label key={key} className="space-y-2"><span className="text-xs font-bold text-muted-foreground uppercase">{label}</span><Input type="number" value={config[key]} onChange={(event) => { setConfig((prev) => prev ? { ...prev, [key]: Number(event.target.value) } : prev); setHasChanges(true); }} className="h-10 cyber-input" /></label>)}</div></div></TabsContent>
 				)}
+					{sections.includes("stageModels") && (
+						<TabsContent value="stageModels" className="space-y-6">
+							<div className="cyber-card p-6">
+								<IntelligentStageModelSelector
+									rawOtherConfig={config.rawOtherConfig}
+									onSaved={(nextOtherConfig) => {
+										setConfig((prev) => prev ? { ...prev, rawOtherConfig: nextOtherConfig } : prev);
+									}}
+								/>
+							</div>
+						</TabsContent>
+					)}
 			</Tabs>
 			{hasChanges && !dialogOpen && showFloatingSaveButton && <div className="fixed bottom-6 right-6 cyber-card p-4 z-50"><Button onClick={() => persistConfig()} className="cyber-btn-primary h-12"><Save className="w-4 h-4 mr-2" /> 保存所有更改</Button></div>}
 		</div>
